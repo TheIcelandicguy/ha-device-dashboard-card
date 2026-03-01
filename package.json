@@ -1,0 +1,36 @@
+{
+  "name": "shelly-dashboard-card",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Home Assistant Lovelace card for Shelly devices — single device and fleet dashboard modes",
+  "license": "MIT",
+  "main": "dist/shelly-dashboard-card.js",
+  "scripts": {
+    "start": "rollup -c rollup.config.js --watch",
+    "build": "rollup -c rollup.config.js",
+    "lint": "eslint src --ext .ts"
+  },
+  "keywords": [
+    "home-assistant",
+    "lovelace",
+    "shelly",
+    "custom-card",
+    "hacs"
+  ],
+  "dependencies": {
+    "custom-card-helpers": "^1.9.0",
+    "lit": "^3.0.0"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^25.0.0",
+    "@rollup/plugin-node-resolve": "^15.0.0",
+    "@rollup/plugin-typescript": "^11.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "rollup": "^4.0.0",
+    "@rollup/plugin-terser": "^0.4.0",
+    "tslib": "^2.6.0",
+    "typescript": "^5.0.0"
+  }
+}
