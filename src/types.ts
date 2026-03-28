@@ -17,11 +17,15 @@ export interface AreaStyle {
   headerBgColor2?: string;       // second gradient color; when set creates linear-gradient
   headerBgDir?: string;          // CSS gradient direction, e.g. 'to right', '135deg'
   headerTextColor?: string;      // overrides the orange area-name colour
-  // Text / typography
-  textColor?: string;            // all body text in the area
-  fontSize?: number;             // px
+  // Text / typography (applies to the area header name)
+  textColor?: string;            // area name text colour (overrides orange default)
+  fontSize?: number;             // area name font size, px
   fontWeight?: 'normal' | 'bold';
   fontStyle?: 'normal' | 'italic';
+  // Tiles
+  tileBgColor?: string;          // override tile background colour within the area
+  tileBorderColor?: string;      // override tile border colour within the area
+  columns?: number;              // override column count for this area (1-6)
   // Effects
   boxShadow?: 'none' | 'soft' | 'medium' | 'strong';
 }
@@ -50,6 +54,8 @@ export interface ShellyDashboardConfig extends LovelaceCardConfig {
   power_bar_max?: number;                 // W at 100% fill (default: 2000)
   device_styles?: Record<string, { color?: string }>; // per-device accent color (keyed by device_id)
   show_glow?: boolean;                    // pulsing orange glow on active tiles (default: true)
+  graph_sensors?: string[];               // device_class keys to graph: ['temperature','power',…]; empty = no graphs
+  graph_hours?: number;                   // history window in hours (default: 24)
 }
 
 // ─── HA-level device classification ──────────────────────────────────────────
@@ -64,6 +70,7 @@ export type ShellyDeviceType =
   | 'rgb'          // light.* with rgb/rgbw modes — RGBW2, Plus RGBW, Duo RGBW …
   | 'plug'         // switch.* — smart plug (Plug S, Plus Plug S, Outdoor Plug S …)
   | 'cover'        // cover.* — roller/shutter mode (2.5, Plus 2PM, Pro 2PM …)
+  | 'valve'        // valve.* — water/heating valve (Shelly Valve)
   | 'energy'       // sensor-only power monitor (EM, 3EM, Pro 3EM, Pro EM-50 …)
   | 'sensor'       // environmental / alert sensor (H&T, Flood, Smoke, Motion …)
   | 'input'        // binary_sensor inputs (i3, Plus i4, Button1, BLU Button …)

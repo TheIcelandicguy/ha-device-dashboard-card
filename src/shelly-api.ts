@@ -316,7 +316,8 @@ export class ShellyLocalClient {
     try {
       if (gen === 1) return await gen1GetStatus(this.ip);
       return await gen23GetStatus(this.ip, gen as 2 | 3);
-    } catch {
+    } catch (err) {
+      console.warn(`[ShellyDashboard] Failed to get status for ${this.ip}:`, err);
       return { online: false, relays: [], temperatures: [] };
     }
   }
@@ -344,8 +345,10 @@ export class ShellyLocalClient {
 const _clientCache = new Map<string, ShellyLocalClient>();
 
 export function getShellyClient(ip: string): ShellyLocalClient {
-  if (!_clientCache.has(ip)) {
-    _clientCache.set(ip, new ShellyLocalClient(ip));
+  let client = _clientCache.get(ip);
+  if (!client) {
+    client = new ShellyLocalClient(ip);
+    _clientCache.set(ip, client);
   }
-  return _clientCache.get(ip)!;
+  return client;
 }

@@ -9,6 +9,13 @@ export class ShellyCardEditor extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
   @state() private _config!: ShellyDashboardConfig;
   @state() private _bgEditArea: string | null = null;
+  @state() private _openSections: Set<string> = new Set(['rooms']);
+
+  private _toggleSection(id: string) {
+    const next = new Set(this._openSections);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    this._openSections = next;
+  }
 
   setConfig(config: ShellyDashboardConfig) {
     this._config = config;
@@ -36,6 +43,26 @@ export class ShellyCardEditor extends LitElement {
       : [...currentSensors, key];
     this._valueChanged('sensors', next);
   }
+
+  private _toggleGraph(key: string, current: string[]) {
+    const next = current.includes(key)
+      ? current.filter((s) => s !== key)
+      : [...current, key];
+    this._valueChanged('graph_sensors', next);
+  }
+
+  private static readonly GRAPH_TYPES = [
+    { key: 'temperature',    label: 'Temperature' },
+    { key: 'humidity',       label: 'Humidity' },
+    { key: 'power',          label: 'Power' },
+    { key: 'energy',         label: 'Energy (kWh)' },
+    { key: 'voltage',        label: 'Voltage' },
+    { key: 'current',        label: 'Current' },
+    { key: 'apparent_power', label: 'App. Power' },
+    { key: 'illuminance',    label: 'Illuminance' },
+    { key: 'carbon_dioxide', label: 'CO₂' },
+    { key: 'battery',        label: 'Battery' },
+  ];
 
   private _getDiscoveredDevices(): Array<{ device_id: string; name: string; area?: string }> {
     if (!this.hass) return [];
@@ -258,10 +285,47 @@ export class ShellyCardEditor extends LitElement {
           min=${min}
           max=${max}
           .value=${String(value ?? '')}
-          @change=${(e: Event) =>
-            this._valueChanged(key, parseInt((e.target as HTMLInputElement).value, 10))}
+          @change=${(e: Event) => {
+            const v = parseInt((e.target as HTMLInputElement).value, 10);
+            this._valueChanged(key, isNaN(v) ? undefined : v);
+          }}
         />
       </div>
+    `;
+  }
+
+  private _renderSection(id: string, title: string, content: TemplateResult, badge?: string): TemplateResult {
+    const isOpen = this._openSections.has(id);
+    return html`
+      <div class="acc-section">
+        <div class="acc-header ${isOpen ? 'open' : ''}" @click=${() => this._toggleSection(id)}>
+          <span class="acc-title">${title}</span>
+          ${badge ? html`<span class="acc-badge">${badge}</span>` : nothing}
+          <span class="acc-chevron">▼</span>
+        </div>
+        ${isOpen ? html`<div class="acc-body">${content}</div>` : nothing}
+      </div>
+    `;
+  }
+
+  private _renderSensorGroupContent(groupKey: string, selectedSensors: string[]): TemplateResult {
+    const group = ShellyCardEditor.SENSOR_GROUPS.find((g) => g.group === groupKey);
+    if (!group) return html``;
+    const groupSelected = group.items.filter((i) => selectedSensors.includes(i.key));
+    return html`
+      <p class="hint">Select which sensors to show. Leave all unselected to show all.</p>
+      <div class="area-picker">
+        ${group.items.map(({ key, label }) => html`
+          <div class="area-chip ${selectedSensors.includes(key) ? 'selected' : ''}"
+            @click=${() => this._toggleSensor(key, selectedSensors)}>${label}</div>
+        `)}
+      </div>
+      ${groupSelected.length ? html`
+        <button class="clear-btn" style="margin-top:6px"
+          @click=${() => this._valueChanged('sensors',
+            selectedSensors.filter((s) => !group.items.find((i) => i.key === s))
+          )}>Clear group</button>
+      ` : nothing}
     `;
   }
 
@@ -298,293 +362,395 @@ export class ShellyCardEditor extends LitElement {
     const selectedSensors = c.sensors ?? [];
     const allAreas = this._getAreas();
     const areaStyles = c.area_styles ?? {};
+    const hiddenDevices = c.hidden_devices ?? [];
+
+    // Badge helpers
+    const roomsBadge = selectedAreas.length ? `${selectedAreas.length}` : 'All';
+    const sensorBadge = (groupKey: string) => {
+      const group = ShellyCardEditor.SENSOR_GROUPS.find((g) => g.group === groupKey)!;
+      const n = group.items.filter((i) => selectedSensors.includes(i.key)).length;
+      return n ? `${n}` : 'All';
+    };
+    const styledAreaCount = Object.keys(areaStyles).length;
+    const hiddenBadge = hiddenDevices.length ? `${hiddenDevices.length}` : undefined;
+
+    // Room Styles body (kept intact, just moved inside accordion)
+    const roomStylesBody = html`
+      <p class="hint">Pick a room to customise its background, text colour, and font.</p>
+      ${allAreas.length ? html`
+        <div class="area-picker">
+          ${allAreas.map((area) => {
+            const hasStyle = !!areaStyles[area.name];
+            const isEditing = this._bgEditArea === area.name;
+            return html`
+              <div
+                class="area-chip ${isEditing ? 'selected' : ''} ${hasStyle ? 'has-bg' : ''}"
+                @click=${() => { this._bgEditArea = isEditing ? null : area.name; }}
+              >${area.name}${hasStyle ? ' ●' : ''}</div>
+            `;
+          })}
+        </div>
+
+        ${this._bgEditArea ? (() => {
+          const name = this._bgEditArea;
+          const st: AreaStyle = areaStyles[name] ?? {};
+          return html`
+            <div class="area-bg-group">
+              <div class="area-bg-label">${name}</div>
+
+              <div class="style-group-label">Background</div>
+
+              <div class="style-row">
+                <span class="style-lbl">Color</span>
+                <input type="color" class="style-color ${st.bgColor ? 'active' : ''}"
+                  .value=${st.bgColor ?? '#ffffff'}
+                  @change=${(e: Event) =>
+                    this._setAreaStyle(name, 'bgColor', (e.target as HTMLInputElement).value)}
+                />
+                ${st.bgColor ? html`
+                  <button class="style-clr" title="Clear"
+                    @click=${() => this._setAreaStyle(name, 'bgColor', undefined)}>✕</button>
+                ` : nothing}
+                <span class="style-hint">${st.bgColor ?? 'default'}</span>
+              </div>
+
+              <div class="style-row style-row--full">
+                <span class="style-lbl">Image</span>
+                <input type="file" accept="image/*" hidden
+                  data-area-upload="${name}"
+                  @change=${(e: Event) => this._handleBgImageUpload(name, e)}
+                />
+                <button class="upload-btn" title="Upload image from device"
+                  @click=${() => this._triggerBgImageUpload(name)}>
+                  ↑ Upload
+                </button>
+                <input type="text" class="style-text"
+                  .value=${st.bgImage?.startsWith('data:') ? '(embedded image)' : (st.bgImage ?? '')}
+                  placeholder="/local/images/room.jpg or https://..."
+                  @change=${(e: Event) => {
+                    const v = (e.target as HTMLInputElement).value;
+                    this._setAreaStyle(name, 'bgImage', v && v !== '(embedded image)' ? v : undefined);
+                  }}
+                />
+                ${st.bgImage ? html`
+                  <button class="style-clr" title="Clear"
+                    @click=${() => this._clearAreaStyleKeys(name, ['bgImage', 'bgImageSize'])}>✕</button>
+                ` : nothing}
+              </div>
+
+              ${st.bgImage ? html`
+                <div class="style-row">
+                  <span class="style-lbl">Size</span>
+                  <div class="style-btn-group">
+                    ${([
+                      { val: 'contain', lbl: 'Fit' },
+                      { val: 'cover',   lbl: 'Fill' },
+                      { val: 'stretch', lbl: 'Stretch' },
+                    ] as const).map(({ val, lbl }) => html`
+                      <button
+                        class="style-btn ${(st.bgImageSize ?? 'contain') === val ? 'active' : ''}"
+                        @click=${() => this._setAreaStyle(name, 'bgImageSize', val)}
+                      >${lbl}</button>
+                    `)}
+                  </div>
+                </div>
+              ` : nothing}
+
+              <div class="style-group-label">Border</div>
+
+              <div class="style-row">
+                <span class="style-lbl">Color</span>
+                <input type="color" class="style-color ${st.borderColor ? 'active' : ''}"
+                  .value=${st.borderColor ?? '#ffffff'}
+                  @change=${(e: Event) =>
+                    this._setAreaStyle(name, 'borderColor', (e.target as HTMLInputElement).value)}
+                />
+                ${st.borderColor ? html`
+                  <button class="style-clr" title="Clear"
+                    @click=${() => this._setAreaStyle(name, 'borderColor', undefined)}>✕</button>
+                ` : nothing}
+                <span class="style-hint">${st.borderColor ?? 'default'}</span>
+              </div>
+
+              <div class="style-row">
+                <span class="style-lbl">Width</span>
+                <input type="number" class="style-num"
+                  min="0" max="10" step="1"
+                  .value=${String(st.borderWidth ?? '')}
+                  placeholder="1"
+                  @change=${(e: Event) => {
+                    const v = parseInt((e.target as HTMLInputElement).value, 10);
+                    this._setAreaStyle(name, 'borderWidth', isNaN(v) ? undefined : v);
+                  }}
+                />
+                <span class="style-unit">px</span>
+              </div>
+
+              <div class="style-row">
+                <span class="style-lbl">Radius</span>
+                <input type="number" class="style-num"
+                  min="0" max="32" step="1"
+                  .value=${String(st.borderRadius ?? '')}
+                  placeholder="0"
+                  @change=${(e: Event) => {
+                    const v = parseInt((e.target as HTMLInputElement).value, 10);
+                    this._setAreaStyle(name, 'borderRadius', isNaN(v) ? undefined : v);
+                  }}
+                />
+                <span class="style-unit">px</span>
+              </div>
+
+              <div class="style-row">
+                <span class="style-lbl">Style</span>
+                <div class="style-btn-group">
+                  ${(['solid', 'dashed', 'dotted'] as const).map((s) => html`
+                    <button class="style-btn ${(st.borderStyle ?? 'solid') === s ? 'active' : ''}"
+                      @click=${() => this._setAreaStyle(name, 'borderStyle', s)}>${s}</button>
+                  `)}
+                </div>
+              </div>
+
+              <div class="style-group-label">Header</div>
+
+              <div class="style-row">
+                <span class="style-lbl">Bg</span>
+                <input type="color" class="style-color ${st.headerBgColor ? 'active' : ''}"
+                  title="Color 1"
+                  .value=${st.headerBgColor ?? '#ffffff'}
+                  @change=${(e: Event) =>
+                    this._setAreaStyle(name, 'headerBgColor', (e.target as HTMLInputElement).value)}
+                />
+                <span class="style-hint style-hint--mid">→</span>
+                <input type="color" class="style-color ${st.headerBgColor2 ? 'active' : ''}"
+                  title="Color 2 (gradient)"
+                  .value=${st.headerBgColor2 ?? '#ffffff'}
+                  @change=${(e: Event) =>
+                    this._setAreaStyle(name, 'headerBgColor2', (e.target as HTMLInputElement).value)}
+                />
+                ${st.headerBgColor ? html`
+                  <button class="style-clr" title="Clear both"
+                    @click=${() => {
+                      this._setAreaStyle(name, 'headerBgColor', undefined);
+                      this._setAreaStyle(name, 'headerBgColor2', undefined);
+                      this._setAreaStyle(name, 'headerBgDir', undefined);
+                    }}>✕</button>
+                ` : nothing}
+              </div>
+
+              ${st.headerBgColor && st.headerBgColor2 ? html`
+                <div class="style-row">
+                  <span class="style-lbl">Dir</span>
+                  <div class="style-btn-group">
+                    ${([
+                      { val: 'to right',  lbl: '→' },
+                      { val: 'to left',   lbl: '←' },
+                      { val: 'to bottom', lbl: '↓' },
+                      { val: 'to top',    lbl: '↑' },
+                      { val: '135deg',    lbl: '↘' },
+                      { val: '45deg',     lbl: '↗' },
+                    ] as const).map(({ val, lbl }) => html`
+                      <button class="style-btn style-btn--icon ${(st.headerBgDir ?? 'to right') === val ? 'active' : ''}"
+                        @click=${() => this._setAreaStyle(name, 'headerBgDir', val)}>${lbl}</button>
+                    `)}
+                  </div>
+                </div>
+              ` : nothing}
+
+              <div class="style-row">
+                <span class="style-lbl">Text Color</span>
+                <input type="color" class="style-color ${st.headerTextColor ? 'active' : ''}"
+                  .value=${st.headerTextColor ?? '#ffffff'}
+                  @change=${(e: Event) =>
+                    this._setAreaStyle(name, 'headerTextColor', (e.target as HTMLInputElement).value)}
+                />
+                ${st.headerTextColor ? html`
+                  <button class="style-clr" title="Clear"
+                    @click=${() => this._setAreaStyle(name, 'headerTextColor', undefined)}>✕</button>
+                ` : nothing}
+                <span class="style-hint">${st.headerTextColor ?? 'default'}</span>
+              </div>
+
+              <div class="style-group-label">Name Text</div>
+
+              <div class="style-row">
+                <span class="style-lbl">Color</span>
+                <input type="color" class="style-color ${st.textColor ? 'active' : ''}"
+                  .value=${st.textColor ?? '#ff6a00'}
+                  @change=${(e: Event) =>
+                    this._setAreaStyle(name, 'textColor', (e.target as HTMLInputElement).value)}
+                />
+                ${st.textColor ? html`
+                  <button class="style-clr" title="Clear"
+                    @click=${() => this._setAreaStyle(name, 'textColor', undefined)}>✕</button>
+                ` : nothing}
+                <span class="style-hint">${st.textColor ?? 'default'}</span>
+              </div>
+
+              <div class="style-row">
+                <span class="style-lbl">Size</span>
+                <input type="number" class="style-num"
+                  min="8" max="48" step="1"
+                  .value=${String(st.fontSize ?? '')}
+                  placeholder="—"
+                  @change=${(e: Event) => {
+                    const v = parseInt((e.target as HTMLInputElement).value, 10);
+                    this._setAreaStyle(name, 'fontSize', isNaN(v) ? undefined : v);
+                  }}
+                />
+                <span class="style-unit">px</span>
+              </div>
+
+              <div class="style-row">
+                <span class="style-lbl">Weight</span>
+                <div class="style-btn-group">
+                  <button class="style-btn ${!st.fontWeight || st.fontWeight === 'normal' ? 'active' : ''}"
+                    @click=${() => this._setAreaStyle(name, 'fontWeight', 'normal')}>Normal</button>
+                  <button class="style-btn ${st.fontWeight === 'bold' ? 'active' : ''}"
+                    @click=${() => this._setAreaStyle(name, 'fontWeight', 'bold')}>Bold</button>
+                </div>
+              </div>
+
+              <div class="style-row">
+                <span class="style-lbl">Style</span>
+                <div class="style-btn-group">
+                  <button class="style-btn ${!st.fontStyle || st.fontStyle === 'normal' ? 'active' : ''}"
+                    @click=${() => this._setAreaStyle(name, 'fontStyle', 'normal')}>Normal</button>
+                  <button class="style-btn ${st.fontStyle === 'italic' ? 'active' : ''}"
+                    @click=${() => this._setAreaStyle(name, 'fontStyle', 'italic')}>Italic</button>
+                </div>
+              </div>
+
+              <div class="style-group-label">Tiles</div>
+
+              <div class="style-row">
+                <span class="style-lbl">Bg Color</span>
+                <input type="color" class="style-color ${st.tileBgColor ? 'active' : ''}"
+                  .value=${st.tileBgColor ?? '#1c1c1e'}
+                  @change=${(e: Event) =>
+                    this._setAreaStyle(name, 'tileBgColor', (e.target as HTMLInputElement).value)}
+                />
+                ${st.tileBgColor ? html`
+                  <button class="style-clr" title="Clear"
+                    @click=${() => this._setAreaStyle(name, 'tileBgColor', undefined)}>✕</button>
+                ` : nothing}
+                <span class="style-hint">${st.tileBgColor ?? 'default'}</span>
+              </div>
+
+              <div class="style-row">
+                <span class="style-lbl">Border</span>
+                <input type="color" class="style-color ${st.tileBorderColor ? 'active' : ''}"
+                  .value=${st.tileBorderColor ?? '#ffffff'}
+                  @change=${(e: Event) =>
+                    this._setAreaStyle(name, 'tileBorderColor', (e.target as HTMLInputElement).value)}
+                />
+                ${st.tileBorderColor ? html`
+                  <button class="style-clr" title="Clear"
+                    @click=${() => this._setAreaStyle(name, 'tileBorderColor', undefined)}>✕</button>
+                ` : nothing}
+                <span class="style-hint">${st.tileBorderColor ?? 'default'}</span>
+              </div>
+
+              <div class="style-row">
+                <span class="style-lbl">Columns</span>
+                <input type="number" class="style-num"
+                  min="1" max="6" step="1"
+                  .value=${String(st.columns ?? '')}
+                  placeholder="—"
+                  @change=${(e: Event) => {
+                    const v = parseInt((e.target as HTMLInputElement).value, 10);
+                    this._setAreaStyle(name, 'columns', isNaN(v) ? undefined : v);
+                  }}
+                />
+                <span class="style-hint" style="margin-left:4px">overrides global</span>
+              </div>
+
+              <div class="style-group-label">Effects</div>
+
+              <div class="style-row">
+                <span class="style-lbl">Shadow</span>
+                <div class="style-btn-group">
+                  ${(['none', 'soft', 'medium', 'strong'] as const).map((s) => html`
+                    <button class="style-btn ${(st.boxShadow ?? 'none') === s ? 'active' : ''}"
+                      @click=${() => this._setAreaStyle(name, 'boxShadow', s)}>${s}</button>
+                  `)}
+                </div>
+              </div>
+
+              ${Object.keys(st).length ? html`
+                <button class="clear-btn" @click=${() => this._clearAreaStyle(name)}>
+                  Clear all styles
+                </button>
+              ` : nothing}
+            </div>
+          `;
+        })() : nothing}
+      ` : html`<p class="hint">No areas found in Home Assistant.</p>`}
+    `;
 
     return html`
       <div class="editor">
-        <div class="section-title">Rooms to display</div>
-        <p class="hint">Select rooms to show. Leave all unselected to show every room.</p>
-        ${this._renderAreaPicker(selectedAreas)}
+        ${this._renderSection('rooms', 'Rooms to display',
+          html`
+            <p class="hint">Select which rooms to show. Leave all unselected to show every room.</p>
+            ${this._renderAreaPicker(selectedAreas)}
+          `,
+          roomsBadge
+        )}
 
-        <div class="section-title">Sensors to display</div>
-        <p class="hint">Choose which sensor types appear in expanded device tiles. Leave all unselected to show every sensor.</p>
-        ${this._renderSensorPicker(selectedSensors)}
+        ${this._renderSection('electrical', 'Electrical',
+          this._renderSensorGroupContent('Electrical', selectedSensors),
+          sensorBadge('Electrical')
+        )}
 
-        <div class="section-title">Room Styles</div>
-        <p class="hint">Pick a room to customise its background, text colour, and font.</p>
-        ${allAreas.length ? html`
-          <div class="area-picker">
-            ${allAreas.map((area) => {
-              const hasStyle = !!areaStyles[area.name];
-              const isEditing = this._bgEditArea === area.name;
-              return html`
-                <div
-                  class="area-chip ${isEditing ? 'selected' : ''} ${hasStyle ? 'has-bg' : ''}"
-                  @click=${() => { this._bgEditArea = isEditing ? null : area.name; }}
-                >${area.name}${hasStyle ? ' ●' : ''}</div>
-              `;
-            })}
-          </div>
+        ${this._renderSection('environmental', 'Environmental',
+          this._renderSensorGroupContent('Environmental', selectedSensors),
+          sensorBadge('Environmental')
+        )}
 
-          ${this._bgEditArea ? (() => {
-            const name = this._bgEditArea;
-            const st: AreaStyle = areaStyles[name] ?? {};
-            return html`
-              <div class="area-bg-group">
-                <div class="area-bg-label">${name}</div>
+        ${this._renderSection('device', 'Devices',
+          this._renderSensorGroupContent('Device', selectedSensors),
+          sensorBadge('Device')
+        )}
 
-                <div class="style-group-label">Background</div>
+        ${this._renderSection('alerts', 'Alerts',
+          this._renderSensorGroupContent('Alerts', selectedSensors),
+          sensorBadge('Alerts')
+        )}
 
-                <div class="style-row">
-                  <span class="style-lbl">Color</span>
-                  <input type="color" class="style-color ${st.bgColor ? 'active' : ''}"
-                    .value=${st.bgColor ?? '#ffffff'}
-                    @change=${(e: Event) =>
-                      this._setAreaStyle(name, 'bgColor', (e.target as HTMLInputElement).value)}
-                  />
-                  ${st.bgColor ? html`
-                    <button class="style-clr" title="Clear"
-                      @click=${() => this._setAreaStyle(name, 'bgColor', undefined)}>✕</button>
-                  ` : nothing}
-                  <span class="style-hint">${st.bgColor ?? 'default'}</span>
-                </div>
+        ${(() => {
+          const selectedGraphs: string[] = c.graph_sensors ?? [];
+          const graphBadge = selectedGraphs.length ? `${selectedGraphs.length}` : undefined;
+          return this._renderSection('graphs', 'Graphs', html`
+            <p class="hint">Select which sensor types show as mini graphs on tiles. Each selected type appears as its own labeled row.</p>
+            <div class="area-picker">
+              ${ShellyCardEditor.GRAPH_TYPES.map(({ key, label }) => html`
+                <div class="area-chip ${selectedGraphs.includes(key) ? 'selected' : ''}"
+                  @click=${() => this._toggleGraph(key, selectedGraphs)}>${label}</div>
+              `)}
+            </div>
+            ${selectedGraphs.length ? this._numberInput('History window (hours)', 'graph_hours', c.graph_hours ?? 24, 1, 168) : nothing}
+          `, graphBadge);
+        })()}
 
-                <div class="style-row style-row--full">
-                  <span class="style-lbl">Image</span>
-                  <input type="file" accept="image/*" hidden
-                    data-area-upload="${name}"
-                    @change=${(e: Event) => this._handleBgImageUpload(name, e)}
-                  />
-                  <button class="upload-btn" title="Upload image from device"
-                    @click=${() => this._triggerBgImageUpload(name)}>
-                    ↑ Upload
-                  </button>
-                  <input type="text" class="style-text"
-                    .value=${st.bgImage?.startsWith('data:') ? '(embedded image)' : (st.bgImage ?? '')}
-                    placeholder="/local/images/room.jpg or https://..."
-                    @change=${(e: Event) => {
-                      const v = (e.target as HTMLInputElement).value;
-                      this._setAreaStyle(name, 'bgImage', v && v !== '(embedded image)' ? v : undefined);
-                    }}
-                  />
-                  ${st.bgImage ? html`
-                    <button class="style-clr" title="Clear"
-                      @click=${() => this._clearAreaStyleKeys(name, ['bgImage', 'bgImageSize'])}>✕</button>
-                  ` : nothing}
-                </div>
+        ${this._renderSection('room-styles', 'Room Styles',
+          roomStylesBody,
+          styledAreaCount ? `${styledAreaCount}` : undefined
+        )}
 
-                ${st.bgImage ? html`
-                  <div class="style-row">
-                    <span class="style-lbl">Size</span>
-                    <div class="style-btn-group">
-                      ${([
-                        { val: 'contain', lbl: 'Fit' },
-                        { val: 'cover',   lbl: 'Fill' },
-                        { val: 'stretch', lbl: 'Stretch' },
-                      ] as const).map(({ val, lbl }) => html`
-                        <button
-                          class="style-btn ${(st.bgImageSize ?? 'contain') === val ? 'active' : ''}"
-                          @click=${() => this._setAreaStyle(name, 'bgImageSize', val)}
-                        >${lbl}</button>
-                      `)}
-                    </div>
-                  </div>
-                ` : nothing}
+        ${this._renderSection('hidden', 'Hidden Devices',
+          html`
+            <p class="hint">Click a device to hide it from the dashboard. Click again to show it.</p>
+            ${this._renderDevicePicker(hiddenDevices)}
+          `,
+          hiddenBadge
+        )}
 
-                <div class="style-group-label">Border</div>
-
-                <div class="style-row">
-                  <span class="style-lbl">Color</span>
-                  <input type="color" class="style-color ${st.borderColor ? 'active' : ''}"
-                    .value=${st.borderColor ?? '#ffffff'}
-                    @change=${(e: Event) =>
-                      this._setAreaStyle(name, 'borderColor', (e.target as HTMLInputElement).value)}
-                  />
-                  ${st.borderColor ? html`
-                    <button class="style-clr" title="Clear"
-                      @click=${() => this._setAreaStyle(name, 'borderColor', undefined)}>✕</button>
-                  ` : nothing}
-                  <span class="style-hint">${st.borderColor ?? 'default'}</span>
-                </div>
-
-                <div class="style-row">
-                  <span class="style-lbl">Width</span>
-                  <input type="number" class="style-num"
-                    min="0" max="10" step="1"
-                    .value=${String(st.borderWidth ?? '')}
-                    placeholder="1"
-                    @change=${(e: Event) => {
-                      const v = parseInt((e.target as HTMLInputElement).value, 10);
-                      this._setAreaStyle(name, 'borderWidth', isNaN(v) ? undefined : v);
-                    }}
-                  />
-                  <span class="style-unit">px</span>
-                </div>
-
-                <div class="style-row">
-                  <span class="style-lbl">Radius</span>
-                  <input type="number" class="style-num"
-                    min="0" max="32" step="1"
-                    .value=${String(st.borderRadius ?? '')}
-                    placeholder="0"
-                    @change=${(e: Event) => {
-                      const v = parseInt((e.target as HTMLInputElement).value, 10);
-                      this._setAreaStyle(name, 'borderRadius', isNaN(v) ? undefined : v);
-                    }}
-                  />
-                  <span class="style-unit">px</span>
-                </div>
-
-                <div class="style-row">
-                  <span class="style-lbl">Style</span>
-                  <div class="style-btn-group">
-                    ${(['solid', 'dashed', 'dotted'] as const).map((s) => html`
-                      <button class="style-btn ${(st.borderStyle ?? 'solid') === s ? 'active' : ''}"
-                        @click=${() => this._setAreaStyle(name, 'borderStyle', s)}>${s}</button>
-                    `)}
-                  </div>
-                </div>
-
-                <div class="style-group-label">Header</div>
-
-                <div class="style-row">
-                  <span class="style-lbl">Bg</span>
-                  <input type="color" class="style-color ${st.headerBgColor ? 'active' : ''}"
-                    title="Color 1"
-                    .value=${st.headerBgColor ?? '#ffffff'}
-                    @change=${(e: Event) =>
-                      this._setAreaStyle(name, 'headerBgColor', (e.target as HTMLInputElement).value)}
-                  />
-                  <span class="style-hint style-hint--mid">→</span>
-                  <input type="color" class="style-color ${st.headerBgColor2 ? 'active' : ''}"
-                    title="Color 2 (gradient)"
-                    .value=${st.headerBgColor2 ?? '#ffffff'}
-                    @change=${(e: Event) =>
-                      this._setAreaStyle(name, 'headerBgColor2', (e.target as HTMLInputElement).value)}
-                  />
-                  ${st.headerBgColor ? html`
-                    <button class="style-clr" title="Clear both"
-                      @click=${() => {
-                        this._setAreaStyle(name, 'headerBgColor', undefined);
-                        this._setAreaStyle(name, 'headerBgColor2', undefined);
-                        this._setAreaStyle(name, 'headerBgDir', undefined);
-                      }}>✕</button>
-                  ` : nothing}
-                </div>
-
-                ${st.headerBgColor && st.headerBgColor2 ? html`
-                  <div class="style-row">
-                    <span class="style-lbl">Dir</span>
-                    <div class="style-btn-group">
-                      ${([
-                        { val: 'to right',  lbl: '→' },
-                        { val: 'to left',   lbl: '←' },
-                        { val: 'to bottom', lbl: '↓' },
-                        { val: 'to top',    lbl: '↑' },
-                        { val: '135deg',    lbl: '↘' },
-                        { val: '45deg',     lbl: '↗' },
-                      ] as const).map(({ val, lbl }) => html`
-                        <button class="style-btn style-btn--icon ${(st.headerBgDir ?? 'to right') === val ? 'active' : ''}"
-                          @click=${() => this._setAreaStyle(name, 'headerBgDir', val)}>${lbl}</button>
-                      `)}
-                    </div>
-                  </div>
-                ` : nothing}
-
-                <div class="style-row">
-                  <span class="style-lbl">Text Color</span>
-                  <input type="color" class="style-color ${st.headerTextColor ? 'active' : ''}"
-                    .value=${st.headerTextColor ?? '#ffffff'}
-                    @change=${(e: Event) =>
-                      this._setAreaStyle(name, 'headerTextColor', (e.target as HTMLInputElement).value)}
-                  />
-                  ${st.headerTextColor ? html`
-                    <button class="style-clr" title="Clear"
-                      @click=${() => this._setAreaStyle(name, 'headerTextColor', undefined)}>✕</button>
-                  ` : nothing}
-                  <span class="style-hint">${st.headerTextColor ?? 'default'}</span>
-                </div>
-
-                <div class="style-group-label">Text</div>
-
-                <div class="style-row">
-                  <span class="style-lbl">Color</span>
-                  <input type="color" class="style-color ${st.textColor ? 'active' : ''}"
-                    .value=${st.textColor ?? '#ffffff'}
-                    @change=${(e: Event) =>
-                      this._setAreaStyle(name, 'textColor', (e.target as HTMLInputElement).value)}
-                  />
-                  ${st.textColor ? html`
-                    <button class="style-clr" title="Clear"
-                      @click=${() => this._setAreaStyle(name, 'textColor', undefined)}>✕</button>
-                  ` : nothing}
-                  <span class="style-hint">${st.textColor ?? 'default'}</span>
-                </div>
-
-                <div class="style-row">
-                  <span class="style-lbl">Size</span>
-                  <input type="number" class="style-num"
-                    min="8" max="48" step="1"
-                    .value=${String(st.fontSize ?? '')}
-                    placeholder="—"
-                    @change=${(e: Event) => {
-                      const v = parseInt((e.target as HTMLInputElement).value, 10);
-                      this._setAreaStyle(name, 'fontSize', isNaN(v) ? undefined : v);
-                    }}
-                  />
-                  <span class="style-unit">px</span>
-                </div>
-
-                <div class="style-row">
-                  <span class="style-lbl">Weight</span>
-                  <div class="style-btn-group">
-                    <button class="style-btn ${!st.fontWeight || st.fontWeight === 'normal' ? 'active' : ''}"
-                      @click=${() => this._setAreaStyle(name, 'fontWeight', 'normal')}>Normal</button>
-                    <button class="style-btn ${st.fontWeight === 'bold' ? 'active' : ''}"
-                      @click=${() => this._setAreaStyle(name, 'fontWeight', 'bold')}>Bold</button>
-                  </div>
-                </div>
-
-                <div class="style-row">
-                  <span class="style-lbl">Style</span>
-                  <div class="style-btn-group">
-                    <button class="style-btn ${!st.fontStyle || st.fontStyle === 'normal' ? 'active' : ''}"
-                      @click=${() => this._setAreaStyle(name, 'fontStyle', 'normal')}>Normal</button>
-                    <button class="style-btn ${st.fontStyle === 'italic' ? 'active' : ''}"
-                      @click=${() => this._setAreaStyle(name, 'fontStyle', 'italic')}>Italic</button>
-                  </div>
-                </div>
-
-                <div class="style-group-label">Effects</div>
-
-                <div class="style-row">
-                  <span class="style-lbl">Shadow</span>
-                  <div class="style-btn-group">
-                    ${(['none', 'soft', 'medium', 'strong'] as const).map((s) => html`
-                      <button class="style-btn ${(st.boxShadow ?? 'none') === s ? 'active' : ''}"
-                        @click=${() => this._setAreaStyle(name, 'boxShadow', s)}>${s}</button>
-                    `)}
-                  </div>
-                </div>
-
-                ${Object.keys(st).length ? html`
-                  <button class="clear-btn" @click=${() => this._clearAreaStyle(name)}>
-                    Clear all styles
-                  </button>
-                ` : nothing}
-              </div>
-            `;
-          })() : nothing}
-        ` : html`<p class="hint">No areas found in Home Assistant.</p>`}
-
-        <div class="section-title">Hidden Devices</div>
-        <p class="hint">Click a device to hide it from the dashboard. Click again to show it.</p>
-        ${this._renderDevicePicker(c.hidden_devices ?? [])}
-
-        <div class="section-title">Layout</div>
-        ${this._numberInput('Columns per row', 'columns', c.columns, 1, 6)}
-        ${this._toggle('Show offline devices', 'show_offline', c.show_offline ?? true)}
-        ${this._toggle('Show all HA devices (not just Shelly)', 'include_all', c.include_all ?? false)}
-        ${this._toggle('Hide Shelly devices', 'hide_shelly', c.hide_shelly ?? false)}
+        ${this._renderSection('layout', 'Layout', html`
+          ${this._numberInput('Columns per row', 'columns', c.columns, 1, 6)}
+          ${this._toggle('Show offline devices', 'show_offline', c.show_offline ?? true)}
+          ${this._toggle('Show all HA devices (not just Shelly)', 'include_all', c.include_all ?? false)}
+          ${this._toggle('Hide Shelly devices', 'hide_shelly', c.hide_shelly ?? false)}
+        `)}
       </div>
     `;
   }
@@ -592,17 +758,51 @@ export class ShellyCardEditor extends LitElement {
   static styles = css`
     .editor { padding: 8px 0; }
 
-    .section-title {
-      font-size: 0.8em;
-      font-weight: 600;
+    /* ── Accordion sections ──────────────────────────────────────────────── */
+    .acc-section {
+      border: 1px solid var(--divider-color, rgba(0,0,0,.12));
+      border-radius: 8px;
+      margin-bottom: 8px;
+      overflow: hidden;
+    }
+    .acc-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      cursor: pointer;
+      user-select: none;
+      background: var(--secondary-background-color);
+      transition: filter 0.15s;
+    }
+    .acc-header:hover { filter: brightness(1.06); }
+    .acc-header.open {
+      border-bottom: 1px solid var(--divider-color, rgba(0,0,0,.08));
+    }
+    .acc-title {
+      flex: 1;
+      font-size: 0.82em;
+      font-weight: 700;
+      color: var(--primary-text-color);
       text-transform: uppercase;
       letter-spacing: 0.06em;
-      color: var(--primary-text-color);
-      margin: 14px 0 4px;
-      padding-top: 8px;
-      border-top: 1px solid var(--divider-color, rgba(0,0,0,.08));
     }
-    .section-title:first-child { border-top: none; margin-top: 0; }
+    .acc-badge {
+      font-size: 0.72em;
+      background: var(--primary-color);
+      color: white;
+      border-radius: 10px;
+      padding: 1px 8px;
+      font-weight: 700;
+      line-height: 1.6;
+    }
+    .acc-chevron {
+      font-size: 0.65em;
+      color: var(--secondary-text-color);
+      transition: transform 0.2s;
+    }
+    .acc-header.open .acc-chevron { transform: rotate(180deg); }
+    .acc-body { padding: 10px 14px 12px; }
 
     .hint {
       font-size: 0.82em;

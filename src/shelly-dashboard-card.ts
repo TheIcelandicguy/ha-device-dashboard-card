@@ -40,6 +40,13 @@ export class ShellyDashboardCard extends LitElement {
   @state() private _sortBy: 'name' | 'power' | 'online' = 'name';
   @state() private _viewMode: 'grid' | 'list' = 'grid';
   @state() private _glowEnabled = true;
+  // Graph history: entity_id → array of {t: epoch-ms, v: numeric-value}
+  @state() private _graphData = new Map<string, Array<{ t: number; v: number }>>();
+  private readonly _graphFetching = new Set<string>();
+  private readonly _graphFetchedAt = new Map<string, number>();
+
+  /** HA brightness attribute is 0-255; card UI uses 0-100 % */
+  private static readonly BRIGHTNESS_MAX = 255;
 
   static getConfigElement() {
     return document.createElement('shelly-card-editor');
@@ -58,6 +65,16 @@ export class ShellyDashboardCard extends LitElement {
 
   getCardSize() {
     return 6;
+  }
+
+  // Sections dashboard: default span + minimum span
+  static getLayoutOptions() {
+    return {
+      grid_columns: 4,
+      grid_rows: 6,
+      grid_min_columns: 2,
+      grid_min_rows: 3,
+    };
   }
 
   // ─── Data helpers ───────────────────────────────────────────────────────────
@@ -131,8 +148,8 @@ export class ShellyDashboardCard extends LitElement {
       const attrs = s.attributes as Record<string, any>;
       // From switch/plug attributes
       if (attrs.current_power_w != null) {
-        total += Number(attrs.current_power_w);
-        found = true;
+        const p = Number(attrs.current_power_w);
+        if (!isNaN(p)) { total += p; found = true; }
         continue;
       }
       // From dedicated power sensor
@@ -157,7 +174,7 @@ export class ShellyDashboardCard extends LitElement {
         const attrs = s.attributes as any;
         const brightness = e.domain === 'light'
           ? (s.state === 'on' && attrs?.brightness != null
-              ? Math.round((attrs.brightness / 255) * 100)
+              ? Math.round((attrs.brightness / ShellyDashboardCard.BRIGHTNESS_MAX) * 100)
               : 0)
           : undefined;
         let colorModes: string[] | undefined;
@@ -200,7 +217,7 @@ export class ShellyDashboardCard extends LitElement {
 
         if (e.domain === 'light') {
           brightness = s?.state === 'on' && attrs?.brightness != null
-            ? Math.round((attrs.brightness / 255) * 100)
+            ? Math.round((attrs.brightness / ShellyDashboardCard.BRIGHTNESS_MAX) * 100)
             : 0;
           const modes: string[] = attrs?.supported_color_modes ?? [];
           if (modes.some((m) => ['rgb', 'rgbw', 'rgbww', 'hs', 'xy'].includes(m))) {
@@ -429,7 +446,7 @@ export class ShellyDashboardCard extends LitElement {
   }
 
   private async _setWhite(entityId: string, pct: number, rgbColor?: [number, number, number]) {
-    const w = Math.round(Math.max(0, Math.min(100, pct)) * 2.55);
+    const w = Math.round(Math.max(0, Math.min(100, pct)) * ShellyDashboardCard.BRIGHTNESS_MAX / 100);
     const rgb = rgbColor ?? [255, 255, 255];
     await this.hass.callService('light', 'turn_on', {
       entity_id: entityId,
@@ -484,6 +501,230 @@ export class ShellyDashboardCard extends LitElement {
     });
   }
 
+  /** Valve entity for a device, or null. Reads position from entity attributes or a dedicated sensor. */
+  private _getValve(device: ShellyHADevice): {
+    entityId: string;
+    state: string;
+    position?: number;
+    temperature?: number;
+  } | null {
+    const ent = device.entities.find((e) => e.domain === 'valve');
+    if (!ent) return null;
+    const s = this.hass.states[ent.entity_id];
+    if (!s) return null;
+
+    // Position: from valve attributes, or a dedicated position sensor
+    let position: number | undefined = (s.attributes as Record<string, any>)?.current_position;
+    if (position == null) {
+      const posEnt = device.entities.find(
+        (e) => e.domain === 'sensor' &&
+          (e.entity_id.includes('posision') || e.entity_id.includes('position'))
+      );
+      if (posEnt) {
+        const v = parseFloat(this.hass.states[posEnt.entity_id]?.state ?? '');
+        if (!isNaN(v)) position = v;
+      }
+    }
+
+    // Temperature: from a dedicated sensor
+    let temperature: number | undefined;
+    const tempEnt = device.entities.find((e) => {
+      if (e.domain !== 'sensor') return false;
+      const ts = this.hass.states[e.entity_id];
+      return (ts?.attributes as Record<string, any>)?.device_class === 'temperature'
+        || e.entity_id.includes('temperture') || e.entity_id.includes('temperature');
+    });
+    if (tempEnt) {
+      const v = parseFloat(this.hass.states[tempEnt.entity_id]?.state ?? '');
+      if (!isNaN(v)) temperature = v;
+    }
+
+    return { entityId: ent.entity_id, state: s.state, position, temperature };
+  }
+
+  private async _valveAction(entityId: string, action: 'open' | 'close' | 'stop', e: Event): Promise<void> {
+    e.stopPropagation();
+    const svc = { open: 'open_valve', close: 'close_valve', stop: 'stop_valve' } as const;
+    await this.hass.callService('valve', svc[action], { entity_id: entityId });
+  }
+
+  private async _setValvePosition(entityId: string, position: number): Promise<void> {
+    await this.hass.callService('valve', 'set_valve_position', {
+      entity_id: entityId,
+      position: Math.round(Math.max(0, Math.min(100, position))),
+    });
+  }
+
+  /** Returns input channels (binary_sensor inputs) for i3/i4 and similar input-only devices */
+  private _getInputChannels(device: ShellyHADevice): Array<{
+    entityId: string;
+    label: string;
+    fullName: string;
+    isOn: boolean;
+    channel: number;
+  }> {
+    return device.entities
+      .filter((e) => {
+        if (e.domain !== 'binary_sensor') return false;
+        const dc = e.attributes?.device_class;
+        // Input channels: entity_id contains 'input'/'button', or device_class is null/undefined
+        return e.entity_id.includes('input') || e.entity_id.includes('button') || dc == null;
+      })
+      .map((e) => {
+        const s = this.hass.states[e.entity_id];
+        const friendly: string = (s?.attributes as Record<string, any>)?.friendly_name ?? '';
+        // Extract channel number from entity_id or friendly name
+        const numMatch =
+          e.entity_id.match(/(?:input|channel|button)[_\s]*(\d+)/i) ??
+          friendly.match(/(\d+)\s*$/);
+        const channel = numMatch ? parseInt(numMatch[1]) : 0;
+        const label = numMatch ? `${channel}` : (friendly.split(' ').pop() ?? '?');
+        return { entityId: e.entity_id, label, fullName: friendly || label, isOn: s?.state === 'on', channel };
+      })
+      .sort((a, b) => a.channel - b.channel);
+  }
+
+  // ─── Sparkline / history graph ──────────────────────────────────────────────
+
+  /** Human-readable label for each graphable device_class */
+  private static readonly GRAPH_DC_LABELS: Record<string, string> = {
+    temperature:    'Temp',
+    humidity:       'Hum',
+    power:          'Power',
+    energy:         'Energy',
+    voltage:        'Volt',
+    current:        'Curr',
+    illuminance:    'Light',
+    carbon_dioxide: 'CO₂',
+    battery:        'Batt',
+    apparent_power: 'App.P',
+    reactive_power: 'Re.P',
+    frequency:      'Freq',
+    power_factor:   'PF',
+    gas:            'Gas',
+  };
+
+  /** Returns one entry per selected graph_sensor that the device actually has. */
+  private _getGraphEntities(device: ShellyHADevice): Array<{
+    entityId: string; label: string; dc: string; unit: string;
+  }> {
+    const enabled = this._config.graph_sensors;
+    if (!enabled?.length) return [];
+    const results: Array<{ entityId: string; label: string; dc: string; unit: string }> = [];
+    for (const dc of enabled) {
+      const ent = device.entities.find((e) => {
+        if (e.domain !== 'sensor') return false;
+        const attrDc =
+          (this.hass.states[e.entity_id]?.attributes as Record<string, any>)?.device_class ??
+          (e.attributes as Record<string, any>)?.device_class;
+        return attrDc === dc;
+      });
+      if (ent) {
+        const unit: string =
+          (this.hass.states[ent.entity_id]?.attributes as Record<string, any>)?.unit_of_measurement ?? '';
+        results.push({
+          entityId: ent.entity_id,
+          label: ShellyDashboardCard.GRAPH_DC_LABELS[dc] ?? dc,
+          dc,
+          unit,
+        });
+      }
+    }
+    return results;
+  }
+
+  /** Requests a history fetch unless already fresh (< 5 min old). */
+  private _requestGraphData(entityId: string): void {
+    if (this._graphFetching.has(entityId)) return;
+    const age = Date.now() - (this._graphFetchedAt.get(entityId) ?? 0);
+    if (age < 5 * 60 * 1000 && this._graphData.has(entityId)) return;
+    this._fetchGraphData(entityId);
+  }
+
+  /** Fetches HA history for an entity and stores result in _graphData. */
+  private async _fetchGraphData(entityId: string): Promise<void> {
+    this._graphFetching.add(entityId);
+    try {
+      const hours = this._config.graph_hours ?? 24;
+      const start = new Date(Date.now() - hours * 60 * 60 * 1000);
+      const path = `history/period/${start.toISOString()}?filter_entity_id=${entityId}&minimal_response=true&no_attributes=true`;
+      const raw = await (this.hass as any).callApi('GET', path) as Array<Array<{ state: string; last_changed: string }>>;
+      if (raw?.[0]) {
+        const points = raw[0]
+          .map((p) => ({ t: new Date(p.last_changed).getTime(), v: parseFloat(p.state) }))
+          .filter((p) => !isNaN(p.v));
+        const next = new Map(this._graphData);
+        next.set(entityId, points);
+        this._graphData = next;
+        this._graphFetchedAt.set(entityId, Date.now());
+      }
+    } catch (err) {
+      console.warn('[shelly-card] history fetch failed for', entityId, err);
+    } finally {
+      this._graphFetching.delete(entityId);
+    }
+  }
+
+  /** Renders one labeled sparkline row per selected graph_sensor found on the device. */
+  private _renderSparklines(device: ShellyHADevice): TemplateResult {
+    const entities = this._getGraphEntities(device);
+    if (!entities.length) return nothing as unknown as TemplateResult;
+
+    const W = 200, H = 32, pad = 2;
+
+    const rows = entities.map(({ entityId, label, unit }) => {
+      this._requestGraphData(entityId);
+      const points = this._graphData.get(entityId);
+
+      if (!points || points.length < 2) {
+        return html`
+          <div class="spark-row">
+            <span class="spark-lbl">${label}</span>
+            <div class="sparkline-loading"></div>
+            <span class="spark-val">—</span>
+          </div>`;
+      }
+
+      const vals = points.map((p) => p.v);
+      const min = Math.min(...vals), max = Math.max(...vals);
+      const range = max - min || 1;
+      const tMin = points[0].t;
+      const tRange = (points[points.length - 1].t - tMin) || 1;
+
+      const coords = points.map((p) => {
+        const x = ((p.t - tMin) / tRange) * W;
+        const y = H - pad - ((p.v - min) / range) * (H - pad * 2);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(' ');
+
+      const gId = `sg-${entityId.replace(/[^a-z0-9]/gi, '')}`;
+      const firstX = ((points[0].t - tMin) / tRange * W).toFixed(1);
+      const lastVal = vals[vals.length - 1];
+      const disp = lastVal % 1 === 0 ? `${lastVal}` : lastVal.toFixed(1);
+
+      return html`
+        <div class="spark-row">
+          <span class="spark-lbl">${label}</span>
+          <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="sparkline-svg">
+            <defs>
+              <linearGradient id="${gId}" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="var(--shelly-orange)" stop-opacity="0.3"/>
+                <stop offset="100%" stop-color="var(--shelly-orange)" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <polygon points="${coords} ${W},${H - pad} ${firstX},${H - pad}"
+              fill="url(#${gId})"/>
+            <polyline points="${coords}" fill="none"
+              stroke="var(--shelly-orange)" stroke-width="1.5"
+              stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span class="spark-val">${disp} ${unit}</span>
+        </div>`;
+    });
+
+    return html`<div class="sparklines-block" @click=${(e: Event) => e.stopPropagation()}>${rows}</div>`;
+  }
+
   private _clickTile(device: ShellyHADevice, e: Event) {
     if (this._bulkMode) {
       e.stopPropagation();
@@ -504,12 +745,13 @@ export class ShellyDashboardCard extends LitElement {
   }
 
   private _toggleArea(area: string) {
-    if (this._closedAreas.has(area)) {
-      this._closedAreas.delete(area);
+    const next = new Set(this._closedAreas);
+    if (next.has(area)) {
+      next.delete(area);
     } else {
-      this._closedAreas.add(area);
+      next.add(area);
     }
-    this._closedAreas = new Set(this._closedAreas); // trigger reactivity
+    this._closedAreas = next;
   }
 
   /** Returns active alert types for a device (overtemp, overpower) */
@@ -611,8 +853,8 @@ export class ShellyDashboardCard extends LitElement {
     const isClosed = this._closedAreas.has(area);
     const onlineCount = filtered.filter((d) => this._isOnline(d)).length;
     const areaPower = filtered.reduce((s, d) => s + (this._getPower(d) ?? 0), 0);
-    const cols = this._config.columns ?? 3;
     const areaStyle = this._config.area_styles?.[label];
+    const cols = areaStyle?.columns ?? this._config.columns ?? 3;
     const styleObj: Record<string, string> = {};
     if (areaStyle) {
       // Background
@@ -645,11 +887,14 @@ export class ShellyDashboardCard extends LitElement {
           : areaStyle.headerBgColor;
       }
       if (areaStyle.headerTextColor) styleObj['--area-header-color'] = areaStyle.headerTextColor;
-      // Text / typography
-      if (areaStyle.textColor)  styleObj['color']      = areaStyle.textColor;
-      if (areaStyle.fontSize)   styleObj['fontSize']   = `${areaStyle.fontSize}px`;
-      if (areaStyle.fontWeight) styleObj['fontWeight'] = areaStyle.fontWeight;
-      if (areaStyle.fontStyle)  styleObj['fontStyle']  = areaStyle.fontStyle;
+      // Text / typography — routed through CSS variables so they reach the right elements
+      if (areaStyle.textColor)  styleObj['--area-header-color']  = areaStyle.textColor;
+      if (areaStyle.fontSize)   styleObj['--area-name-size']     = `${areaStyle.fontSize}px`;
+      if (areaStyle.fontWeight) styleObj['--area-name-weight']   = areaStyle.fontWeight;
+      if (areaStyle.fontStyle)  styleObj['--area-name-style']    = areaStyle.fontStyle;
+      // Tile overrides
+      if (areaStyle.tileBgColor)     styleObj['--sc-tile-bg']     = areaStyle.tileBgColor;
+      if (areaStyle.tileBorderColor) styleObj['--sc-tile-border'] = areaStyle.tileBorderColor;
       // Effects
       const SHADOWS: Record<string, string> = {
         soft:   '0 2px 8px rgba(0,0,0,.18)',
@@ -662,7 +907,7 @@ export class ShellyDashboardCard extends LitElement {
     }
 
     return html`
-      <div class="area-section" style=${styleMap(styleObj)}>
+      <div class="area-section ${isClosed ? 'closed' : ''}" style=${styleMap(styleObj)}>
         <div class="area-header" @click=${() => this._toggleArea(area)}>
           <span class="area-name">${label}</span>
           <div class="area-meta">
@@ -686,6 +931,7 @@ export class ShellyDashboardCard extends LitElement {
     const sw = this._getPrimarySwitch(device);
     const trv = this._getTrv(device);
     const cover = this._getCover(device);
+    const valve = this._getValve(device);
     const profile = getDeviceProfile(device);
     const isExpanded = this._expandedDevice === device.device_id;
     const fw = this._getFirmware(device);
@@ -699,6 +945,13 @@ export class ShellyDashboardCard extends LitElement {
     const isHeating = trv?.hvacMode === 'heat';
     const isCoverMoving = cover?.state === 'opening' || cover?.state === 'closing';
     const isCoverOpen = cover ? (cover.state === 'open' || (cover.position ?? 0) > 0) : false;
+    const isValveMoving = valve?.state === 'opening' || valve?.state === 'closing';
+    const isValveOpen = valve ? (valve.state === 'open' || (valve.position ?? 0) > 0) : false;
+    const inputs = profile.type === 'input' ? this._getInputChannels(device) : [];
+    const valveEntityName = valve
+      ? ((this.hass.states[valve.entityId]?.attributes as Record<string, any>)?.friendly_name
+          ?? valve.entityId.split('.')[1].replace(/_/g, ' '))
+      : '';
     const genLabel = profile.gen === 'ble' ? 'BLE' : `G${profile.gen}`;
     const alerts = this._getAlerts(device);
     const tileSize = this._config.tile_size ?? 'md';
@@ -712,7 +965,7 @@ export class ShellyDashboardCard extends LitElement {
 
     return html`
       <div
-        class="tile ${isExpanded ? 'expanded' : ''} ${!online ? 'offline' : ''} ${this._glowEnabled && (sw?.isOn || isHeating || isCoverOpen) ? 'glow-on' : ''} ${isSelected ? 'selected' : ''} tile-${tileSize}"
+        class="tile ${isExpanded ? 'expanded' : ''} ${!online ? 'offline' : ''} ${this._glowEnabled && (sw?.isOn || isHeating || isCoverOpen || isValveOpen) ? 'glow-on' : ''} ${isSelected ? 'selected' : ''} tile-${tileSize}"
         style=${styleMap(tileStyle)}
         @click=${(e: Event) => this._clickTile(device, e)}
       >
@@ -769,6 +1022,62 @@ export class ShellyDashboardCard extends LitElement {
           </div>
         ` : nothing}
 
+        <!-- Valve body: matches expanded Water Valve section -->
+        ${valve ? html`
+          <div class="tile-valve-body" @click=${(e: Event) => e.stopPropagation()}>
+            <div class="tile-valve-ename">${valveEntityName}</div>
+            <div class="trv-mode-row" style="margin-bottom:0">
+              <button class="tog sm ${valve.state === 'open' ? 'on' : 'off'}" style="flex:1"
+                @click=${(e: Event) => this._valveAction(valve.entityId, 'open', e)}>Open</button>
+              <button class="tog sm off" style="flex:1"
+                @click=${(e: Event) => this._valveAction(valve.entityId, 'stop', e)}>Stop</button>
+              <button class="tog sm ${valve.state === 'closed' ? 'on' : 'off'}" style="flex:1"
+                @click=${(e: Event) => this._valveAction(valve.entityId, 'close', e)}>Close</button>
+            </div>
+            ${valve.position != null ? html`
+              <div class="dim-wrap" style="margin-top:4px">
+                <span class="trv-range-lbl">0%</span>
+                <input type="range" class="dim-slider"
+                  min="0" max="100" step="1"
+                  style="accent-color: var(--shelly-orange)"
+                  .value=${String(valve.position)}
+                  @input=${(e: Event) => {
+                    const inp = e.target as HTMLInputElement;
+                    const disp = inp.closest('.tile-valve-body')?.querySelector('.cov-pos-disp');
+                    if (disp) disp.textContent = `${inp.value}%`;
+                  }}
+                  @change=${(e: Event) => {
+                    e.stopPropagation();
+                    this._setValvePosition(valve.entityId, parseFloat((e.target as HTMLInputElement).value));
+                  }}
+                />
+                <span class="trv-range-lbl">100%</span>
+              </div>
+              <div style="text-align:center; font-size:12px; color: var(--sc-text-secondary); margin-top:2px">
+                Position: <span class="cov-pos-disp">${Math.round(valve.position)}%</span>
+              </div>
+            ` : nothing}
+            ${valve.temperature != null ? html`
+              <div class="trv-valve-row" style="margin-top:4px">
+                <span class="sensor-label">Temperature</span>
+                <span class="sensor-value">${valve.temperature.toFixed(1)} °C</span>
+              </div>
+            ` : nothing}
+          </div>
+        ` : nothing}
+
+        <!-- Input channels for i3/i4 devices -->
+        ${inputs.length ? html`
+          <div class="tile-inputs" @click=${(e: Event) => e.stopPropagation()}>
+            ${inputs.map((ch) => html`
+              <div class="input-chip ${ch.isOn ? 'active' : ''}">
+                <span class="input-dot"></span>
+                <span class="input-lbl">${ch.label}</span>
+              </div>
+            `)}
+          </div>
+        ` : nothing}
+
         <div class="tile-bot">
           ${power != null ? html`<span class="tile-power">${formatPower(power)}</span>` : nothing}
           <div class="tile-badges">
@@ -793,9 +1102,6 @@ export class ShellyDashboardCard extends LitElement {
             ${trv.hvacAction === 'heating'
               ? html`<span class="trv-flame" title="Heating">🔥</span>`
               : nothing}
-            ${trv.valvePosition != null
-              ? html`<span class="trv-valve-pct">${Math.round(trv.valvePosition)}%</span>`
-              : nothing}
             <div class="trv-step-btns">
               <button class="trv-step" title="Decrease"
                 @click=${() => trv.targetTemp != null && this._setTemp(trv.entityId, trv.targetTemp - trv.step)}>−</button>
@@ -803,6 +1109,32 @@ export class ShellyDashboardCard extends LitElement {
                 @click=${() => trv.targetTemp != null && this._setTemp(trv.entityId, trv.targetTemp + trv.step)}>+</button>
             </div>
           </div>
+          <div class="tile-dim-row tile-trv-slider" @click=${(e: Event) => e.stopPropagation()}>
+            <input
+              type="range"
+              class="dim-slider"
+              min=${trv.minTemp} max=${trv.maxTemp} step=${trv.step}
+              style="accent-color: var(--shelly-orange)"
+              .value=${String(trv.targetTemp ?? trv.minTemp)}
+              @input=${(e: Event) => {
+                const inp = e.target as HTMLInputElement;
+                const disp = inp.closest('.tile-trv-slider')?.querySelector('.dim-pct');
+                if (disp) disp.textContent = `${parseFloat(inp.value).toFixed(1)}°`;
+              }}
+              @change=${(e: Event) => {
+                this._setTemp(trv.entityId, parseFloat((e.target as HTMLInputElement).value));
+              }}
+            />
+            <span class="dim-pct">${trv.targetTemp != null ? trv.targetTemp.toFixed(1) : '—'}°</span>
+          </div>
+          ${trv.valvePosition != null ? html`
+            <div class="cov-pos-row" @click=${(e: Event) => e.stopPropagation()}>
+              <div class="cov-bar">
+                <div class="cov-fill" style="width: ${Math.min(100, trv.valvePosition)}%"></div>
+              </div>
+              <span class="cov-pct">V: ${Math.round(trv.valvePosition)}%</span>
+            </div>
+          ` : nothing}
         ` : nothing}
 
         ${sw && isDimmable ? html`
@@ -855,7 +1187,7 @@ export class ShellyDashboardCard extends LitElement {
               type="range"
               class="dim-slider white-slider"
               min="0" max="100" step="1"
-              .value=${String(Math.round((sw.whiteValue ?? 0) / 2.55))}
+              .value=${String(Math.round((sw.whiteValue ?? 0) / ShellyDashboardCard.BRIGHTNESS_MAX * 100))}
               ?disabled=${!sw.isOn}
               @input=${(e: Event) => {
                 const inp = e.target as HTMLInputElement;
@@ -866,10 +1198,11 @@ export class ShellyDashboardCard extends LitElement {
                 this._setWhite(sw!.entityId, parseInt((e.target as HTMLInputElement).value, 10), sw!.rgbColor);
               }}
             />
-            <span class="dim-pct">${Math.round((sw.whiteValue ?? 0) / 2.55)}%</span>
+            <span class="dim-pct">${Math.round((sw.whiteValue ?? 0) / ShellyDashboardCard.BRIGHTNESS_MAX * 100)}%</span>
           </div>
         ` : nothing}
 
+        ${this._renderSparklines(device)}
         ${this._renderPowerBar(device)}
         ${isExpanded ? this._renderExpanded(device) : nothing}
       </div>
@@ -953,6 +1286,9 @@ export class ShellyDashboardCard extends LitElement {
     const fw = this._getFirmware(device);
     const trv = this._getTrv(device);
     const cover = this._getCover(device);
+    const valve = this._getValve(device);
+    const profile = getDeviceProfile(device);
+    const inputs = profile.type === 'input' ? this._getInputChannels(device) : [];
     const ip = device.ip;
     const hasDimmable = switches.some((sw) => sw.brightness !== undefined);
     const showChannels = switches.length > 1 || hasDimmable;
@@ -994,6 +1330,49 @@ export class ShellyDashboardCard extends LitElement {
               </div>
               <div style="text-align:center; font-size:12px; color: var(--sc-text-secondary); margin-top: 2px;">
                 Position: <span class="cov-pos-disp">${Math.round(cover.position)}%</span>
+              </div>
+            ` : nothing}
+          </div>
+        ` : nothing}
+
+        ${valve ? html`
+          <div class="exp-section exp-section--cover">
+            <div class="exp-label">Water Valve</div>
+            <div class="trv-mode-row">
+              <button class="tog sm ${valve.state === 'open' ? 'on' : 'off'}"
+                @click=${(e: Event) => this._valveAction(valve.entityId, 'open', e)}>Open</button>
+              <button class="tog sm off"
+                @click=${(e: Event) => this._valveAction(valve.entityId, 'stop', e)}>Stop</button>
+              <button class="tog sm ${valve.state === 'closed' ? 'on' : 'off'}"
+                @click=${(e: Event) => this._valveAction(valve.entityId, 'close', e)}>Close</button>
+            </div>
+            ${valve.position != null ? html`
+              <div class="dim-wrap" style="margin-top: 8px;">
+                <span class="trv-range-lbl">0%</span>
+                <input type="range" class="dim-slider"
+                  min="0" max="100" step="1"
+                  style="accent-color: var(--shelly-orange)"
+                  .value=${String(valve.position)}
+                  @input=${(e: Event) => {
+                    const inp = e.target as HTMLInputElement;
+                    const disp = inp.closest('.exp-section--cover')?.querySelector('.cov-pos-disp');
+                    if (disp) disp.textContent = `${inp.value}%`;
+                  }}
+                  @change=${(e: Event) => {
+                    e.stopPropagation();
+                    this._setValvePosition(valve.entityId, parseFloat((e.target as HTMLInputElement).value));
+                  }}
+                />
+                <span class="trv-range-lbl">100%</span>
+              </div>
+              <div style="text-align:center; font-size:12px; color: var(--sc-text-secondary); margin-top: 2px;">
+                Position: <span class="cov-pos-disp">${Math.round(valve.position)}%</span>
+              </div>
+            ` : nothing}
+            ${valve.temperature != null ? html`
+              <div class="trv-valve-row" style="margin-top: 8px;">
+                <span class="sensor-label">Temperature</span>
+                <span class="sensor-value">${valve.temperature.toFixed(1)} °C</span>
               </div>
             ` : nothing}
           </div>
@@ -1078,6 +1457,21 @@ export class ShellyDashboardCard extends LitElement {
                 <span class="sensor-value">${Math.round(trv.valvePosition)}%</span>
               </div>
             ` : nothing}
+          </div>
+        ` : nothing}
+
+        ${inputs.length ? html`
+          <div class="exp-section">
+            <div class="exp-label">Inputs</div>
+            <div class="input-grid">
+              ${inputs.map((ch) => html`
+                <div class="input-row">
+                  <span class="input-row-dot ${ch.isOn ? 'active' : ''}"></span>
+                  <span class="input-row-name">${ch.fullName}</span>
+                  <span class="input-row-state ${ch.isOn ? 'active' : ''}">${ch.isOn ? 'ON' : 'OFF'}</span>
+                </div>
+              `)}
+            </div>
           </div>
         ` : nothing}
 
@@ -1202,6 +1596,7 @@ export class ShellyDashboardCard extends LitElement {
     const power = this._getPower(device);
     const sw = this._getPrimarySwitch(device);
     const trv = this._getTrv(device);
+    const valve = this._getValve(device);
     const profile = getDeviceProfile(device);
     const alerts = this._getAlerts(device);
     const isExpanded = this._expandedDevice === device.device_id;
@@ -1234,6 +1629,11 @@ export class ShellyDashboardCard extends LitElement {
             </button>
           ` : trv ? html`
             <span class="list-temp">${trv.currentTemp ?? '—'}°→${trv.targetTemp ?? '—'}°</span>
+          ` : valve ? html`
+            <button class="tog sm ${valve.state === 'open' ? 'on' : 'off'}"
+              @click=${(e: Event) => this._valveAction(valve.entityId, valve.state === 'open' ? 'close' : 'open', e)}>
+              ${valve.state === 'open' ? 'OPEN' : valve.state === 'closed' ? 'CLOSED' : valve.state.toUpperCase()}
+            </button>
           ` : nothing}
         </div>
         <button class="list-expand ${isExpanded ? 'active' : ''}"
@@ -1308,6 +1708,8 @@ export class ShellyDashboardCard extends LitElement {
     ha-card {
       overflow: hidden;
       background: var(--ha-card-background, var(--card-background-color, #1c1c1e));
+      container-type: inline-size;
+      container-name: shelly-card;
     }
 
     /* ── Animated header background ─────────────────────────────────────── */
@@ -1398,27 +1800,34 @@ export class ShellyDashboardCard extends LitElement {
 
     /* ── Area sections ──────────────────────────────────────────────────── */
     .area-section {
-      border-bottom: 1px solid var(--divider-color, var(--sc-tile-border));
       position: relative;
       overflow: hidden;
+      margin: 6px 10px 2px;
+      border: 1px solid var(--sc-tile-border);
+      border-radius: 10px;
     }
-    .area-section:last-child { border-bottom: none; }
 
     .area-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      background: var(--area-header-bg, transparent);
-      padding: 10px 16px 8px;
+      background: var(--area-header-bg, rgba(255,255,255,0.04));
+      padding: 8px 14px;
       cursor: pointer;
       user-select: none;
-      transition: background 0.15s;
+      border-radius: 10px;
+      transition: background 0.15s, filter 0.15s;
     }
-    .area-header:hover { background: var(--area-header-bg, var(--sc-area-hover-bg)); filter: brightness(1.08); }
+    .area-header:hover { filter: brightness(1.08); }
+    .area-section:not(.closed) .area-header {
+      border-radius: 10px 10px 0 0;
+      border-bottom: 1px solid var(--sc-tile-border);
+    }
 
     .area-name {
-      font-size: 0.78em;
-      font-weight: 700;
+      font-size: var(--area-name-size, 0.78em);
+      font-weight: var(--area-name-weight, 700);
+      font-style: var(--area-name-style, normal);
       text-transform: uppercase;
       letter-spacing: 0.08em;
       color: var(--area-header-color, var(--shelly-orange));
@@ -1443,8 +1852,8 @@ export class ShellyDashboardCard extends LitElement {
       gap: 10px;
       padding: 4px 12px 14px;
     }
-    @media (max-width: 600px) { .device-grid { grid-template-columns: repeat(2, 1fr); } }
-    @media (max-width: 360px) { .device-grid { grid-template-columns: 1fr; } }
+    @container shelly-card (max-width: 600px) { .device-grid { --cols: 2; } }
+    @container shelly-card (max-width: 380px) { .device-grid { --cols: 1; } }
 
     /* ── Device tile ────────────────────────────────────────────────────── */
     .tile {
@@ -2041,6 +2450,31 @@ export class ShellyDashboardCard extends LitElement {
       margin-bottom: 6px;
     }
 
+    .tile-valve-body {
+      padding: 4px 0 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .tile-valve-body .trv-mode-row {
+      gap: 4px;
+      margin-bottom: 0;
+    }
+
+    .tile-valve-ename {
+      font-size: 11px;
+      color: var(--sc-text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .tile-valve-temp {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--sc-text-primary);
+    }
+
     .trv-preset-row {
       display: flex;
       flex-wrap: wrap;
@@ -2169,6 +2603,76 @@ export class ShellyDashboardCard extends LitElement {
     .type-sensor       { background: rgba(20,184,166,.20);  color: #5eead4; }
     .type-input        { background: rgba(168,85,247,.20);  color: #d8b4fe; }
     .type-trv          { background: rgba(239,68,68,.22);   color: #fca5a5; }
+
+    /* ── Input channels (i3 / i4) ───────────────────────────────────────── */
+    .tile-inputs {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+      padding: 4px 0 2px;
+    }
+    .input-chip {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px 4px 8px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.05);
+      font-size: 12px;
+      color: var(--sc-text-muted);
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .input-chip.active {
+      background: rgba(255,106,0,0.20);
+      color: var(--shelly-orange);
+      border-color: rgba(255,106,0,0.40);
+    }
+    .input-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      flex-shrink: 0;
+    }
+    .input-lbl { font-weight: 600; }
+
+    /* Expanded inputs section */
+    .input-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .input-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .input-row-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--sc-text-muted);
+      flex-shrink: 0;
+      transition: background 0.15s;
+    }
+    .input-row-dot.active { background: var(--shelly-orange); }
+    .input-row-name {
+      flex: 1;
+      font-size: 13px;
+      color: var(--sc-text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .input-row-state {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--sc-text-muted);
+      letter-spacing: 0.04em;
+    }
+    .input-row-state.active { color: var(--shelly-orange); }
     .type-wall_display { background: rgba(99,102,241,.25);  color: #c4b5fd; }
     .type-uni          { background: rgba(156,163,175,.20); color: #d1d5db; }
     .type-unknown      { display: none; }
@@ -2242,6 +2746,58 @@ export class ShellyDashboardCard extends LitElement {
       background: linear-gradient(90deg, var(--shelly-orange), #f97316);
       border-radius: inherit;
       transition: width 0.4s ease;
+    }
+
+    /* ── Sparkline graphs ────────────────────────────────────────────────── */
+    .sparklines-block {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 4px 8px 2px;
+    }
+    .spark-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 32px;
+    }
+    .spark-lbl {
+      font-size: 0.62em;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--sc-text-muted);
+      width: 34px;
+      flex-shrink: 0;
+      text-align: right;
+    }
+    .sparkline-svg {
+      flex: 1;
+      height: 32px;
+      display: block;
+    }
+    .spark-val {
+      font-size: 0.75em;
+      font-weight: 600;
+      color: var(--sc-text-secondary);
+      white-space: nowrap;
+      min-width: 44px;
+      text-align: right;
+    }
+    @keyframes shimmer {
+      0%   { background-position: -200% 0; }
+      100% { background-position:  200% 0; }
+    }
+    .sparkline-loading {
+      flex: 1;
+      height: 32px;
+      border-radius: 4px;
+      background: linear-gradient(90deg,
+        rgba(255,255,255,.03) 0%,
+        rgba(255,255,255,.08) 50%,
+        rgba(255,255,255,.03) 100%);
+      background-size: 200% 100%;
+      animation: shimmer 1.6s ease-in-out infinite;
     }
 
     /* ── Expand button (tile_click=toggle mode) ──────────────────────────── */

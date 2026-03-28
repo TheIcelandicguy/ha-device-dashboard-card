@@ -32,8 +32,8 @@ export function getShellyEntities(hass: HomeAssistant): ShellyHAEntity[] {
         }
         return false;
       }
-      // No entity registry available — fall back to device manufacturer only
-      return false;
+      // No entity registry available — fall back to entity_id heuristic
+      return s.entity_id.toLowerCase().includes('shelly');
     })
     .map((s) => ({
       entity_id: s.entity_id,
@@ -61,7 +61,7 @@ export function groupShellyByDevice(
     if (!devices.has(deviceId)) {
       const devInfo = (hass as any).devices?.[deviceId];
       const configUrl: string = devInfo?.configuration_url ?? '';
-      const ipMatch = configUrl.match(/https?:\/\/([\d.]+)/);
+      const ipMatch = configUrl.match(/https?:\/\/((?:\d{1,3}\.){3}\d{1,3})/);
 
       devices.set(deviceId, {
         device_id: deviceId,
@@ -75,7 +75,8 @@ export function groupShellyByDevice(
       });
     }
 
-    devices.get(deviceId)!.entities.push(entity);
+    const dev = devices.get(deviceId);
+    if (dev) dev.entities.push(entity);
   }
 
   return Array.from(devices.values()).sort((a, b) => a.name.localeCompare(b.name));
@@ -90,7 +91,7 @@ export function groupShellyByDevice(
  * or the device manufacturer contains 'shelly'.
  */
 const ALL_DOMAINS = new Set([
-  'switch', 'light', 'cover', 'climate', 'sensor', 'binary_sensor',
+  'switch', 'light', 'cover', 'valve', 'climate', 'sensor', 'binary_sensor',
   'fan', 'lock', 'media_player', 'vacuum', 'alarm_control_panel',
   'update', 'button', 'number', 'select',
 ]);
@@ -114,7 +115,7 @@ export function getAllDevices(hass: HomeAssistant): ShellyHADevice[] {
       const devInfo = deviceRegistry[deviceId];
       if (!devInfo) continue;                 // skip if device info unavailable
       const configUrl: string = devInfo.configuration_url ?? '';
-      const ipMatch = configUrl.match(/https?:\/\/([\d.]+)/);
+      const ipMatch = configUrl.match(/https?:\/\/((?:\d{1,3}\.){3}\d{1,3})/);
       const mfr: string = (devInfo.manufacturer ?? '').toLowerCase();
       const isShellyDevice = mfr.includes('shelly');
 
@@ -130,7 +131,8 @@ export function getAllDevices(hass: HomeAssistant): ShellyHADevice[] {
       });
     }
 
-    const device = devices.get(deviceId)!;
+    const device = devices.get(deviceId);
+    if (!device) continue;
 
     // Mark Shelly if any entity's platform says so
     if (!device.isShelly && regEntry.platform === 'shelly') {
@@ -202,6 +204,9 @@ export function getDeviceProfile(device: ShellyHADevice): ShellyDeviceProfile {
   } else if (domains.has('cover')) {
     // Roller/shutter mode: cover entity present
     type = 'cover';
+  } else if (domains.has('valve')) {
+    // Water/heating valve
+    type = 'valve';
   } else if (domains.has('light')) {
     // Check if any light entity supports color modes → RGB device
     const hasColorMode = device.entities.some((e) => {
@@ -282,6 +287,7 @@ export function getDeviceProfile(device: ShellyHADevice): ShellyDeviceProfile {
     rgb:         'RGB',
     plug:        'Plug',
     cover:       'Roller',
+    valve:       'Valve',
     energy:      'Energy',
     sensor:      'Sensor',
     input:       'Input',

@@ -72,7 +72,7 @@ export class ShellyCloudClient {
       signal: AbortSignal.timeout(10000),
     });
     if (!res.ok) throw new Error(`Cloud API ${path} HTTP ${res.status}`);
-    return res.json() as Promise<T>;
+    return (await res.json()) as T;
   }
 
   /** Returns a list of all devices visible in the cloud account */

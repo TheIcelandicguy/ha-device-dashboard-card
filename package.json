@@ -1,6 +1,6 @@
 {
   "name": "shelly-dashboard-card",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "type": "module",
   "description": "Home Assistant Lovelace card for Shelly devices — single device and fleet dashboard modes",
   "license": "MIT",
