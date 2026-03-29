@@ -376,6 +376,17 @@ export class ShellyCardEditor extends LitElement {
 
     // Room Styles body (kept intact, just moved inside accordion)
     const roomStylesBody = html`
+      <div class="field" style="margin-bottom:10px">
+        <label>Tile style</label>
+        <div class="style-btn-group">
+          ${(['solid', 'semi', 'transparent'] as const).map((v) => html`
+            <button
+              class="style-btn ${(c.tile_style ?? 'semi') === v ? 'active' : ''}"
+              @click=${() => this._valueChanged('tile_style', v)}
+            >${v}</button>
+          `)}
+        </div>
+      </div>
       <p class="hint">Pick a room to customise its background, text colour, and font.</p>
       ${allAreas.length ? html`
         <div class="area-picker">

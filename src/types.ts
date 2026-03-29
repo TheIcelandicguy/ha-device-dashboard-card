@@ -54,6 +54,7 @@ export interface ShellyDashboardConfig extends LovelaceCardConfig {
   power_bar_max?: number;                 // W at 100% fill (default: 2000)
   device_styles?: Record<string, { color?: string }>; // per-device accent color (keyed by device_id)
   show_glow?: boolean;                    // pulsing orange glow on active tiles (default: true)
+  tile_style?: 'solid' | 'semi' | 'transparent'; // tile background: solid, semi-transparent (default), or transparent
   graph_sensors?: string[];               // device_class keys to graph: ['temperature','power',…]; empty = no graphs
   graph_hours?: number;                   // history window in hours (default: 24)
 }

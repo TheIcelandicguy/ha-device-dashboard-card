@@ -1,7 +1,7 @@
 # Shelly Dashboard Card
 
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange)](https://github.com/hacs/integration)
-![Version](https://img.shields.io/badge/version-2.0.0-blue)
+![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 A Home Assistant Lovelace custom card that auto-discovers all your Shelly devices and displays them in a live, interactive fleet dashboard.
@@ -17,11 +17,13 @@ A Home Assistant Lovelace custom card that auto-discovers all your Shelly device
 - **All generations** — Gen1, Gen2, Gen3, BLE
 - **Area grouping** — devices grouped by HA area with collapsible sections
 - **Tile controls** — toggle switches, dimmers, covers, valves directly from the tile
-- **Expanded detail** — click a tile to see all channels, sensors, firmware version, IP, RSSI, uptime and more
-- **Sparkline graphs** — mini per-metric line graphs on tiles (temperature, power, current, etc.)
+- **Sensor chips** — key sensor readings (temperature, power, humidity …) shown as compact chips at the top of every tile
+- **Expanded detail** — click a tile to open an inline panel directly below that tile row, showing all channels, sensors, firmware version, IP, RSSI, uptime and more
+- **Sparkline graphs** — per-metric labeled line graphs with time axis, peak/min markers, interactive hover tooltip and dotted tick grid
 - **Power bar** — mini wattage indicator at the bottom of each tile
 - **Bulk actions** — select multiple tiles and toggle them together
 - **Sensor filtering** — choose which electrical, environmental, and alert sensors are shown
+- **Tile style** — solid, semi-transparent, or fully transparent tile/card backgrounds
 - **Per-area styling** — custom colors, fonts, backgrounds, tile colors, column counts per room
 - **Sort & filter** — sort by name, power, or online status; filter by area
 - **HA Sections view** — fully responsive with CSS container queries
@@ -61,6 +63,7 @@ That's it — the card auto-discovers everything. Add options to customise:
 type: custom:shelly-dashboard-card
 columns: 3
 show_offline: true
+tile_style: semi
 areas:
   - Living Room
   - Kitchen
@@ -69,6 +72,10 @@ sensors:
   - temperature
   - battery
 sort_by: power
+graph_sensors:
+  - power
+  - temperature
+graph_hours: 24
 ```
 
 ---
@@ -89,6 +96,7 @@ sort_by: power
 | `view_mode` | string | `grid` | `grid` or `list` |
 | `tile_size` | string | `md` | Tile size: `sm`, `md`, `lg` |
 | `tile_click` | string | `expand` | Tile click action: `expand` or `toggle` |
+| `tile_style` | string | `semi` | Tile background: `solid`, `semi`, or `transparent` |
 | `show_power_bar` | boolean | `false` | Mini wattage bar at tile bottom |
 | `power_bar_max` | number | `2000` | Watts at 100% fill |
 | `show_glow` | boolean | `true` | Pulsing glow on active tiles |
@@ -109,6 +117,16 @@ Pass any combination of these in the `sensors` array:
 | Device | `battery`, `rssi`, `uptime`, `ip`, `ssid`, `fw_version`, `mac`, `cloud`, `mqtt`, `eth` |
 | Alerts | `motion`, `door`, `flood`, `smoke`, `vibration`, `overpower`, `overtemp` |
 
+### Tile style (`tile_style`)
+
+Controls how tile and card backgrounds look:
+
+| Value | Description |
+|-------|-------------|
+| `solid` | Opaque tile panels — clearly distinct from the card background |
+| `semi` | Subtle glass/frosted effect (default) |
+| `transparent` | Fully transparent — card, header, and tiles all show through to the dashboard background |
+
 ### Graphable types (`graph_sensors`)
 
 ```yaml
@@ -126,7 +144,13 @@ graph_sensors:
 graph_hours: 24
 ```
 
-Each selected type renders as its own labeled sparkline row on tiles that have a matching sensor entity.
+Each selected type renders as its own labeled sparkline row. Features:
+- **Time axis** — HH:MM labels at start, midpoint, and now
+- **Dotted tick grid** — vertical guide lines at start/mid/end; horizontal dashed baseline where dash spacing = 1 minute (≤1 h), 2 minutes (1–5 h), or 5 minutes (>5 h)
+- **Peak/min markers** — orange dot at highest value, muted dot at lowest
+- **Interactive hover** — mouse over any point to see the exact value and timestamp
+- **Expanded view** — clicking a tile opens a taller, wider graph panel directly below the tile row
+- **Retry** — each graph row with no history shows a ↺ button; the expanded panel has a "Refresh graphs" button to re-fetch all at once
 
 ### Area styles (`area_styles`)
 
@@ -185,8 +209,8 @@ The editor is split into accordion sections:
 - **Environmental** — toggle environmental sensors
 - **Devices** — toggle device-level sensors
 - **Alerts** — toggle alert sensors
-- **Graphs** — pick which sensor types render as sparkline graphs
-- **Room Styles** — per-area colour, font, tile, and layout overrides
+- **Graphs** — pick which sensor types render as sparkline graphs + set the time window
+- **Room Styles** — tile style (solid/semi/transparent) + per-area colour, font, tile, and layout overrides
 - **Hidden Devices** — click devices to hide/unhide
 - **Layout** — columns, offline visibility, include-all toggle
 

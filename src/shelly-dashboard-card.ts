@@ -70,10 +70,9 @@ export class ShellyDashboardCard extends LitElement {
   // Sections dashboard: default span + minimum span
   static getLayoutOptions() {
     return {
-      grid_columns: 4,
-      grid_rows: 6,
-      grid_min_columns: 2,
-      grid_min_rows: 3,
+      grid_columns: 10,      // ~720px in sections view (10 × 72px) — enough for --cols: 3
+      grid_min_columns: 4,   // minimum ~288px
+      grid_min_rows: 3,      // no fixed grid_rows → card auto-sizes to content
     };
   }
 
@@ -641,6 +640,27 @@ export class ShellyDashboardCard extends LitElement {
     this._fetchGraphData(entityId);
   }
 
+  /** Force-clears cache for one entity and immediately re-fetches. */
+  private _retryGraphData(entityId: string): void {
+    if (this._graphFetching.has(entityId)) return;
+    this._graphFetchedAt.delete(entityId);
+    const next = new Map(this._graphData);
+    next.delete(entityId);
+    this._graphData = next;                 // triggers re-render → shows shimmer
+    this._fetchGraphData(entityId);         // start fetch directly, don't rely on render()
+  }
+
+  /** Force-refreshes all graph entities for a device. */
+  private _refreshAllGraphs(device: ShellyHADevice): void {
+    const entities = this._getGraphEntities(device);
+    const toFetch = entities.map((e) => e.entityId).filter((id) => !this._graphFetching.has(id));
+    for (const id of toFetch) this._graphFetchedAt.delete(id);
+    const next = new Map(this._graphData);
+    for (const id of toFetch) next.delete(id);
+    this._graphData = next;                 // triggers re-render → shimmers on all rows
+    for (const id of toFetch) this._fetchGraphData(id);  // fetch all directly
+  }
+
   /** Fetches HA history for an entity and stores result in _graphData. */
   private async _fetchGraphData(entityId: string): Promise<void> {
     this._graphFetching.add(entityId);
@@ -648,40 +668,68 @@ export class ShellyDashboardCard extends LitElement {
       const hours = this._config.graph_hours ?? 24;
       const start = new Date(Date.now() - hours * 60 * 60 * 1000);
       const path = `history/period/${start.toISOString()}?filter_entity_id=${entityId}&minimal_response=true&no_attributes=true`;
+      console.debug(`[shelly-card] fetching history: ${entityId}  (${hours}h window)`);
       const raw = await (this.hass as any).callApi('GET', path) as Array<Array<{ state: string; last_changed: string }>>;
-      if (raw?.[0]) {
-        const points = raw[0]
-          .map((p) => ({ t: new Date(p.last_changed).getTime(), v: parseFloat(p.state) }))
-          .filter((p) => !isNaN(p.v));
-        const next = new Map(this._graphData);
-        next.set(entityId, points);
-        this._graphData = next;
-        this._graphFetchedAt.set(entityId, Date.now());
+      console.debug(`[shelly-card] raw response for ${entityId}:`, raw);
+      const series = raw?.[0] ?? [];
+      const points = series
+        .map((p) => ({ t: new Date(p.last_changed).getTime(), v: parseFloat(p.state) }))
+        .filter((p) => !isNaN(p.v));
+      console.debug(`[shelly-card] ${entityId}: ${series.length} raw states → ${points.length} numeric points`);
+      // If only 1 history point, pad with current live state so we can draw a flat line
+      if (points.length === 1) {
+        const liveVal = parseFloat((this.hass.states[entityId]?.state) ?? '');
+        points.push({ t: Date.now(), v: isNaN(liveVal) ? points[0].v : liveVal });
       }
+      const next = new Map(this._graphData);
+      next.set(entityId, points);
+      this._graphData = next;
     } catch (err) {
       console.warn('[shelly-card] history fetch failed for', entityId, err);
     } finally {
+      // Always mark fetched — prevents infinite retry for entities with no history
+      this._graphFetchedAt.set(entityId, Date.now());
       this._graphFetching.delete(entityId);
     }
   }
 
   /** Renders one labeled sparkline row per selected graph_sensor found on the device. */
-  private _renderSparklines(device: ShellyHADevice): TemplateResult {
+  private _renderSparklines(device: ShellyHADevice, expanded = false): TemplateResult {
     const entities = this._getGraphEntities(device);
     if (!entities.length) return nothing as unknown as TemplateResult;
 
-    const W = 200, H = 32, pad = 2;
+    const W = 200, H = 32, pad = 4;
+
+    // Tick interval along the time axis based on graph window
+    const graphHours = this._config?.graph_hours ?? 24;
+    const tickIntervalMs = graphHours <= 1 ? 60_000 : graphHours <= 5 ? 120_000 : 300_000;
+
+    const fmtTime = (ts: number) =>
+      new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     const rows = entities.map(({ entityId, label, unit }) => {
       this._requestGraphData(entityId);
       const points = this._graphData.get(entityId);
 
-      if (!points || points.length < 2) {
+      if (!points) {
+        // Not yet fetched — show shimmer
         return html`
           <div class="spark-row">
             <span class="spark-lbl">${label}</span>
-            <div class="sparkline-loading"></div>
+            <div class="sparkline-loading ${expanded ? 'exp' : ''}"></div>
             <span class="spark-val">—</span>
+          </div>`;
+      }
+      if (points.length < 2) {
+        // Fetched but no usable history — show retry button
+        return html`
+          <div class="spark-row">
+            <span class="spark-lbl">${label}</span>
+            <span class="spark-no-data">no history</span>
+            <button class="spark-retry" title="Retry" @click=${(e: Event) => {
+              e.stopPropagation();
+              this._retryGraphData(entityId);
+            }}>↺</button>
           </div>`;
       }
 
@@ -689,40 +737,165 @@ export class ShellyDashboardCard extends LitElement {
       const min = Math.min(...vals), max = Math.max(...vals);
       const range = max - min || 1;
       const tMin = points[0].t;
-      const tRange = (points[points.length - 1].t - tMin) || 1;
+      const tMax = points[points.length - 1].t;
+      const tRange = (tMax - tMin) || 1;
 
-      const coords = points.map((p) => {
-        const x = ((p.t - tMin) / tRange) * W;
-        const y = H - pad - ((p.v - min) / range) * (H - pad * 2);
-        return `${x.toFixed(1)},${y.toFixed(1)}`;
-      }).join(' ');
+      // Dash pattern: each dash = 1 tick interval, small gap between
+      const dashUnit = (tickIntervalMs / tRange) * W;
+      const dashOn  = Math.max(0.3, dashUnit * 0.7).toFixed(2);
+      const dashOff = Math.max(0.3, dashUnit * 0.3).toFixed(2);
+      const timeDash = `${dashOn} ${dashOff}`;
+
+      const ptX = (p: { t: number; v: number }) => ((p.t - tMin) / tRange) * W;
+      const ptY = (p: { t: number; v: number }) => H - pad - ((p.v - min) / range) * (H - pad * 2);
+
+      const coords = points.map((p) => `${ptX(p).toFixed(1)},${ptY(p).toFixed(1)}`).join(' ');
 
       const gId = `sg-${entityId.replace(/[^a-z0-9]/gi, '')}`;
-      const firstX = ((points[0].t - tMin) / tRange * W).toFixed(1);
+      const firstX = ptX(points[0]).toFixed(1);
       const lastVal = vals[vals.length - 1];
       const disp = lastVal % 1 === 0 ? `${lastVal}` : lastVal.toFixed(1);
 
+      // Peak / min dots
+      const showDots = (max - min) > 0;
+      const maxIdx = vals.indexOf(max);
+      const minIdx = vals.indexOf(min);
+      const maxCx = ptX(points[maxIdx]).toFixed(1);
+      const maxCy = ptY(points[maxIdx]).toFixed(1);
+      const minCx = ptX(points[minIdx]).toFixed(1);
+      const minCy = ptY(points[minIdx]).toFixed(1);
+      const maxDisp = max % 1 === 0 ? `${max}` : max.toFixed(1);
+      const minDisp = min % 1 === 0 ? `${min}` : min.toFixed(1);
+
+      // Time axis labels
+      const tStart = fmtTime(points[0].t);
+      const tMid   = fmtTime((points[0].t + points[points.length - 1].t) / 2);
+
+      // ── Interactive hover (direct DOM — no Lit re-render) ───────────────
+      const handleMove = (e: MouseEvent) => {
+        const svg = e.currentTarget as SVGElement;
+        const rect = svg.getBoundingClientRect();
+        const xPct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        const tAt = tMin + xPct * tRange;
+
+        // Find nearest point by timestamp
+        let nearest = points[0];
+        for (const p of points) {
+          if (Math.abs(p.t - tAt) < Math.abs(nearest.t - tAt)) nearest = p;
+        }
+
+        const cx = ptX(nearest);
+        const cy = ptY(nearest);
+
+        // Move crosshair line
+        const line = svg.querySelector('.spark-crosshair') as SVGLineElement | null;
+        if (line) {
+          line.setAttribute('x1', String(cx));
+          line.setAttribute('x2', String(cx));
+          line.style.display = '';
+        }
+
+        // Move hover dot
+        const hdot = svg.querySelector('.spark-hover-dot') as SVGCircleElement | null;
+        if (hdot) {
+          hdot.setAttribute('cx', String(cx));
+          hdot.setAttribute('cy', String(cy));
+          hdot.style.display = '';
+        }
+
+        // Update tooltip text + position
+        const wrap = svg.parentElement as HTMLElement | null;
+        const tip = wrap?.querySelector('.spark-tooltip') as HTMLElement | null;
+        if (tip) {
+          const tipVal  = tip.querySelector('.spark-tooltip-val')  as HTMLElement | null;
+          const tipTime = tip.querySelector('.spark-tooltip-time') as HTMLElement | null;
+          if (tipVal)  tipVal.textContent  = `${nearest.v % 1 === 0 ? String(nearest.v) : nearest.v.toFixed(1)} ${unit}`;
+          if (tipTime) tipTime.textContent = fmtTime(nearest.t);
+          // Position: cx/W gives 0-1 proportion across the SVG, map to % of wrap width
+          const leftPct = (cx / W) * 100;
+          tip.style.left = `${leftPct.toFixed(1)}%`;
+          tip.style.display = '';
+        }
+      };
+
+      const handleLeave = (e: MouseEvent) => {
+        const svg = e.currentTarget as SVGElement;
+        const line = svg.querySelector('.spark-crosshair') as SVGLineElement | null;
+        const hdot = svg.querySelector('.spark-hover-dot') as SVGCircleElement | null;
+        const tip  = svg.parentElement?.querySelector('.spark-tooltip') as HTMLElement | null;
+        if (line) line.style.display = 'none';
+        if (hdot) hdot.style.display = 'none';
+        if (tip)  tip.style.display  = 'none';
+      };
+
       return html`
-        <div class="spark-row">
-          <span class="spark-lbl">${label}</span>
-          <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="sparkline-svg">
-            <defs>
-              <linearGradient id="${gId}" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="var(--shelly-orange)" stop-opacity="0.3"/>
-                <stop offset="100%" stop-color="var(--shelly-orange)" stop-opacity="0"/>
-              </linearGradient>
-            </defs>
-            <polygon points="${coords} ${W},${H - pad} ${firstX},${H - pad}"
-              fill="url(#${gId})"/>
-            <polyline points="${coords}" fill="none"
-              stroke="var(--shelly-orange)" stroke-width="1.5"
-              stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          <span class="spark-val">${disp} ${unit}</span>
+        <div class="spark-group">
+          <div class="spark-row">
+            <span class="spark-lbl">${label}</span>
+            <div class="spark-svg-wrap">
+              <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"
+                class="sparkline-svg ${expanded ? 'exp' : ''}"
+                @mousemove=${handleMove}
+                @mouseleave=${handleLeave}>
+                <defs>
+                  <linearGradient id="${gId}" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="var(--shelly-orange)" stop-opacity="0.3"/>
+                    <stop offset="100%" stop-color="var(--shelly-orange)" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <!-- Dotted timeline tick lines at start, mid, end -->
+                <line x1="0"        x2="0"        y1="0" y2="${H}" class="spark-tick"/>
+                <line x1="${W / 2}" x2="${W / 2}" y1="0" y2="${H}" class="spark-tick"/>
+                <line x1="${W}"     x2="${W}"     y1="0" y2="${H}" class="spark-tick"/>
+                <polygon points="${coords} ${W},${H - pad} ${firstX},${H - pad}"
+                  fill="url(#${gId})"/>
+                <polyline points="${coords}" fill="none"
+                  stroke="var(--shelly-orange)" stroke-width="0.5"
+                  vector-effect="non-scaling-stroke"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+                <!-- Dashed time axis — each dash = 1 tick interval -->
+                <line x1="0" y1="${H}" x2="${W}" y2="${H}"
+                  stroke="rgba(255,255,255,0.55)" stroke-width="1"
+                  vector-effect="non-scaling-stroke"
+                  stroke-dasharray="${timeDash}"
+                  pointer-events="none"/>
+                ${showDots ? html`
+                  <circle cx="${maxCx}" cy="${maxCy}" r="3"
+                    fill="var(--shelly-orange)" stroke="var(--sc-card-bg,#1e1e2e)" stroke-width="1.2"/>
+                  <circle cx="${minCx}" cy="${minCy}" r="2.5"
+                    fill="var(--sc-text-muted)" stroke="var(--sc-card-bg,#1e1e2e)" stroke-width="1.2"/>
+                  ${expanded ? html`
+                    <text x="${maxCx}" y="${parseFloat(maxCy) - 5}" text-anchor="middle"
+                      font-size="8" fill="var(--shelly-orange)" opacity="0.9">${maxDisp}</text>
+                    <text x="${minCx}" y="${parseFloat(minCy) + 10}" text-anchor="middle"
+                      font-size="8" fill="var(--sc-text-muted)" opacity="0.8">${minDisp}</text>
+                  ` : nothing}
+                ` : nothing}
+                <!-- Interactive crosshair (hidden until hover) -->
+                <line class="spark-crosshair" x1="0" x2="0" y1="0" y2="${H}" style="display:none"/>
+                <circle class="spark-hover-dot" cx="0" cy="0" r="3.5" style="display:none"/>
+              </svg>
+              <div class="spark-tooltip" style="display:none">
+                <span class="spark-tooltip-val"></span>
+                <span class="spark-tooltip-time"></span>
+              </div>
+            </div>
+            <span class="spark-val">${disp} ${unit}</span>
+          </div>
+          <div class="spark-time-row ${expanded ? 'exp' : ''}">
+            <div class="spark-time-spacer"></div>
+            <div class="spark-time-labels">
+              <span>${tStart}</span>
+              <span>${tMid}</span>
+              <span>now</span>
+            </div>
+            <div class="spark-time-end"></div>
+          </div>
         </div>`;
     });
 
-    return html`<div class="sparklines-block" @click=${(e: Event) => e.stopPropagation()}>${rows}</div>`;
+    // Only stop propagation in the expanded panel — collapsed tile clicks should bubble up to expand the tile
+    return html`<div class="sparklines-block ${expanded ? 'exp' : ''}" @click=${expanded ? (e: Event) => e.stopPropagation() : nothing}>${rows}</div>`;
   }
 
   private _clickTile(device: ShellyHADevice, e: Event) {
@@ -821,8 +994,22 @@ export class ShellyDashboardCard extends LitElement {
     const alertDevices = devices.filter((d) => this._getAlerts(d).length > 0);
     const byArea = this._groupByArea(devices);
 
+    // Tile/card background style
+    const tileStyle = this._config.tile_style;
+    const TILE_BG: Record<string, string> = {
+      solid:       'rgba(255,255,255,0.18)',
+      semi:        'rgba(255,255,255,0.07)',
+      transparent: 'transparent',
+    };
+    const tsBg = TILE_BG[tileStyle ?? ''] ?? '';
+    const isTransparent = tileStyle === 'transparent';
+    const cardInlineStyle = [
+      tsBg ? `--sc-tile-bg:${tsBg}` : '',
+      isTransparent ? 'background:transparent;box-shadow:none;--sc-header-bg:transparent;--area-header-bg:transparent' : '',
+    ].filter(Boolean).join(';');
+
     return html`
-      <ha-card>
+      <ha-card style=${cardInlineStyle}>
         <div class="dash-header">
           <span class="dash-title">${cardTitle}</span>
           <div class="dash-stats">
@@ -906,6 +1093,44 @@ export class ShellyDashboardCard extends LitElement {
       }
     }
 
+    const expandedInArea = !isClosed && this._viewMode !== 'list'
+      ? filtered.find((d) => d.device_id === this._expandedDevice)
+      : undefined;
+
+    // Build grid items, inserting the expanded panel inside the grid right after
+    // the row that contains the clicked tile (so it opens just below that tile).
+    let gridContent: unknown = nothing;
+    if (!isClosed) {
+      if (this._viewMode === 'list') {
+        gridContent = html`<div class="device-list">${filtered.map((d) => this._renderListRow(d))}</div>`;
+      } else {
+        const expandedIdx = expandedInArea ? filtered.indexOf(expandedInArea) : -1;
+        // Last tile index in the same grid row as the expanded tile
+        const insertAfterIdx = expandedIdx >= 0
+          ? Math.min(Math.floor(expandedIdx / cols) * cols + cols - 1, filtered.length - 1)
+          : -1;
+
+        const expandedPanel = expandedInArea ? html`
+          <div class="tile-expanded-panel" @click=${(e: Event) => e.stopPropagation()}>
+            <div class="expanded-graph-header">
+              <button class="spark-refresh-all" title="Refresh all graphs"
+                @click=${(e: Event) => { e.stopPropagation(); this._refreshAllGraphs(expandedInArea!); }}>
+                ↺ Refresh graphs
+              </button>
+            </div>
+            ${this._renderSparklines(expandedInArea, true)}
+            ${this._renderExpanded(expandedInArea)}
+          </div>` : nothing;
+
+        const items = filtered.flatMap((d, i) => {
+          const tile = this._renderTile(d);
+          return i === insertAfterIdx ? [tile, expandedPanel] : [tile];
+        });
+
+        gridContent = html`<div class="device-grid" style="--cols:${cols}">${items}</div>`;
+      }
+    }
+
     return html`
       <div class="area-section ${isClosed ? 'closed' : ''}" style=${styleMap(styleObj)}>
         <div class="area-header" @click=${() => this._toggleArea(area)}>
@@ -916,11 +1141,7 @@ export class ShellyDashboardCard extends LitElement {
             <span class="chevron ${isClosed ? '' : 'open'}">▼</span>
           </div>
         </div>
-        ${!isClosed
-          ? this._viewMode === 'list'
-            ? html`<div class="device-list">${filtered.map((d) => this._renderListRow(d))}</div>`
-            : html`<div class="device-grid" style="--cols:${cols}">${filtered.map((d) => this._renderTile(d))}</div>`
-          : nothing}
+        ${gridContent}
       </div>
     `;
   }
@@ -962,6 +1183,8 @@ export class ShellyDashboardCard extends LitElement {
       tileStyle['borderColor'] = accentColor;
       tileStyle['boxShadow'] = `0 0 12px ${accentColor}50`;
     }
+
+    const tileSensors = this._getSensors(device);
 
     return html`
       <div
@@ -1006,6 +1229,17 @@ export class ShellyDashboardCard extends LitElement {
             >${isHeating ? 'HEAT' : 'OFF'}</button>
           ` : nothing}
         </div>
+
+        ${tileSensors.length ? html`
+          <div class="tile-sensor-chips">
+            ${tileSensors.map((s) => html`
+              <div class="tile-sensor-chip ${s.warn ? 'warn' : ''}">
+                <span class="tsc-lbl">${s.label}</span>
+                <span class="tsc-val">${s.value}</span>
+              </div>
+            `)}
+          </div>
+        ` : nothing}
 
         <!-- Cover position bar -->
         ${cover ? html`
@@ -1202,9 +1436,8 @@ export class ShellyDashboardCard extends LitElement {
           </div>
         ` : nothing}
 
-        ${this._renderSparklines(device)}
+        ${this._renderSparklines(device, false)}
         ${this._renderPowerBar(device)}
-        ${isExpanded ? this._renderExpanded(device) : nothing}
       </div>
     `;
   }
@@ -1706,7 +1939,8 @@ export class ShellyDashboardCard extends LitElement {
     }
 
     ha-card {
-      overflow: hidden;
+      overflow-x: hidden;
+      overflow-y: visible;
       background: var(--ha-card-background, var(--card-background-color, #1c1c1e));
       container-type: inline-size;
       container-name: shelly-card;
@@ -1854,6 +2088,18 @@ export class ShellyDashboardCard extends LitElement {
     }
     @container shelly-card (max-width: 600px) { .device-grid { --cols: 2; } }
     @container shelly-card (max-width: 380px) { .device-grid { --cols: 1; } }
+    /* ── Sections / wide-view graph expansion ───────────────────────────── */
+    @container shelly-card (min-width: 700px) {
+      .sparkline-svg.exp       { height: 64px; }
+      .sparkline-loading.exp   { height: 64px; }
+      .spark-lbl               { font-size: 0.72em; width: 40px; }
+      .spark-val               { font-size: 0.85em; min-width: 52px; }
+      .spark-time-labels       { font-size: 0.65em; }
+      .spark-time-spacer       { width: 40px; }
+      .spark-time-end          { min-width: 52px; }
+      .spark-tooltip-val       { font-size: 0.9em; }
+      .spark-tooltip-time      { font-size: 0.75em; }
+    }
 
     /* ── Device tile ────────────────────────────────────────────────────── */
     .tile {
@@ -1890,13 +2136,24 @@ export class ShellyDashboardCard extends LitElement {
     .tile.offline { opacity: 0.45; filter: grayscale(0.4); }
 
     .tile.expanded {
-      grid-column: 1 / -1;
       background: var(--sc-tile-expanded-bg);
       border-color: var(--shelly-orange);
-      box-shadow: 0 0 0 1px var(--shelly-orange), 0 8px 24px var(--shelly-glow);
+      box-shadow: 0 0 0 1px var(--shelly-orange), 0 4px 12px var(--shelly-glow);
       transform: none;
     }
     .tile.expanded::before { opacity: 1; }
+
+    .tile-expanded-panel {
+      grid-column: 1 / -1;
+      margin: 2px 4px 6px;
+      padding: 14px;
+      border: 1px solid var(--shelly-orange);
+      border-radius: 8px;
+      background: var(--sc-tile-expanded-bg);
+      box-shadow: 0 0 0 1px var(--shelly-orange), 0 8px 24px var(--shelly-glow);
+      animation: slide-in 0.2s ease;
+      cursor: default;
+    }
 
     .tile.glow-on { box-shadow: 0 0 12px var(--shelly-glow); }
 
@@ -1960,6 +2217,35 @@ export class ShellyDashboardCard extends LitElement {
       animation: blink 2s step-end infinite;
     }
     @keyframes blink { 50% { opacity: 0.3; } }
+
+    .tile-sensor-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin: 2px 0 0;
+    }
+    .tile-sensor-chip {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 6px;
+      padding: 2px 7px;
+      min-width: 38px;
+    }
+    .tsc-lbl {
+      font-size: 0.6em;
+      color: var(--sc-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .tsc-val {
+      font-size: 0.78em;
+      color: var(--sc-text-primary);
+      font-weight: 500;
+    }
+    .tile-sensor-chip.warn .tsc-val { color: var(--shelly-orange); }
 
     .tile-bot {
       display: flex;
@@ -2752,8 +3038,13 @@ export class ShellyDashboardCard extends LitElement {
     .sparklines-block {
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 4px;
       padding: 4px 8px 2px;
+    }
+    .spark-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
     }
     .spark-row {
       display: flex;
@@ -2771,10 +3062,65 @@ export class ShellyDashboardCard extends LitElement {
       flex-shrink: 0;
       text-align: right;
     }
-    .sparkline-svg {
+    .spark-svg-wrap {
       flex: 1;
+      position: relative;
+      min-width: 0;
+    }
+    .sparkline-svg {
+      width: 100%;
       height: 32px;
       display: block;
+      overflow: visible;
+      transition: height 0.25s ease;
+      cursor: crosshair;
+    }
+    .sparkline-svg.exp {
+      height: 48px;
+    }
+    .spark-tick {
+      stroke: rgba(255,255,255,0.28);
+      stroke-width: 0.5;
+      stroke-dasharray: 3 3;
+      pointer-events: none;
+    }
+    .spark-crosshair {
+      stroke: var(--sc-text-muted);
+      stroke-width: 0.6;
+      stroke-dasharray: 2 2;
+      pointer-events: none;
+    }
+    .spark-hover-dot {
+      fill: var(--shelly-orange);
+      stroke: var(--sc-card-bg, #1e1e2e);
+      stroke-width: 1.5;
+      pointer-events: none;
+    }
+    .spark-tooltip {
+      position: absolute;
+      bottom: calc(100% + 4px);
+      transform: translateX(-50%);
+      background: rgba(14, 14, 28, 0.92);
+      border: 1px solid var(--sc-tile-border, rgba(255,255,255,.15));
+      border-radius: 6px;
+      padding: 4px 8px;
+      pointer-events: none;
+      white-space: nowrap;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1px;
+      backdrop-filter: blur(6px);
+    }
+    .spark-tooltip-val {
+      font-size: 0.78em;
+      font-weight: 700;
+      color: var(--shelly-orange);
+    }
+    .spark-tooltip-time {
+      font-size: 0.65em;
+      color: var(--sc-text-muted);
     }
     .spark-val {
       font-size: 0.75em;
@@ -2784,13 +3130,86 @@ export class ShellyDashboardCard extends LitElement {
       min-width: 44px;
       text-align: right;
     }
+    .spark-time-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding-bottom: 1px;
+    }
+    .spark-time-spacer {
+      width: 34px;
+      flex-shrink: 0;
+    }
+    .spark-time-labels {
+      flex: 1;
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.55em;
+      color: var(--sc-text-muted);
+      opacity: 0.65;
+      user-select: none;
+    }
+    .spark-time-end {
+      min-width: 44px;
+    }
+    .sparkline-loading.exp {
+      height: 48px;
+    }
+    .sparklines-block.exp {
+      padding: 6px 8px 4px;
+      gap: 8px;
+    }
+    .spark-time-row.exp .spark-time-labels {
+      font-size: 0.65em;
+      opacity: 0.8;
+    }
     @keyframes shimmer {
       0%   { background-position: -200% 0; }
       100% { background-position:  200% 0; }
     }
+    .spark-no-data {
+      flex: 1;
+      font-size: 0.7em;
+      color: var(--sc-text-muted);
+      opacity: 0.6;
+      display: flex;
+      align-items: center;
+      padding-left: 4px;
+    }
+    .spark-retry {
+      background: none;
+      border: none;
+      color: var(--sc-text-muted);
+      font-size: 1em;
+      cursor: pointer;
+      padding: 0 4px;
+      opacity: 0.6;
+      line-height: 1;
+    }
+    .spark-retry:hover { opacity: 1; color: var(--shelly-orange); }
+    .expanded-graph-header {
+      display: flex;
+      justify-content: flex-end;
+      padding: 0 0 4px;
+    }
+    .spark-refresh-all {
+      background: none;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 6px;
+      color: var(--sc-text-muted);
+      font-size: 0.75em;
+      cursor: pointer;
+      padding: 3px 10px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .spark-refresh-all:hover {
+      color: var(--shelly-orange);
+      border-color: var(--shelly-orange);
+    }
     .sparkline-loading {
       flex: 1;
       height: 32px;
+      transition: height 0.25s ease;
       border-radius: 4px;
       background: linear-gradient(90deg,
         rgba(255,255,255,.03) 0%,
