@@ -1,12 +1,12 @@
+import resolve   from '@rollup/plugin-node-resolve';
 import typescript from '@rollup/plugin-typescript';
-import nodeResolve from '@rollup/plugin-node-resolve';
-import commonjs from '@rollup/plugin-commonjs';
-import terser from '@rollup/plugin-terser';
-import fs from 'fs';
-import path from 'path';
+import terser     from '@rollup/plugin-terser';
+import fs         from 'fs';
+import path       from 'path';
 
-const dev = process.env.ROLLUP_WATCH;
-const HA_DEST = 'Z:/www/community/dist/shelly-dashboard-card.js';
+const dev = process.env.ROLLUP_WATCH === 'true';
+
+const HA_DEST = 'Z:/www/community/ha-device-dashboard/ha-device-dashboard.js';
 
 function autoDeploy() {
   return {
@@ -25,18 +25,19 @@ function autoDeploy() {
 }
 
 export default {
-  input: 'src/index.ts',
+  input:  'src/index.ts',
   output: {
-    file: 'dist/shelly-dashboard-card.js',
-    format: 'es',
-    inlineDynamicImports: true,
-    sourcemap: dev ? true : false,
+    file:      'dist/ha-device-dashboard.js',
+    format:    'es',
+    sourcemap: dev,
   },
   plugins: [
-    nodeResolve({ browser: true }),
-    commonjs(),
+    resolve({ browser: true }),
     typescript({ tsconfig: './tsconfig.json' }),
-    !dev && terser({ format: { comments: false } }),
+    !dev && terser({
+      format:   { comments: false },
+      compress: { drop_console: false },
+    }),
     autoDeploy(),
   ].filter(Boolean),
 };
