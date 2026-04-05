@@ -87,8 +87,8 @@ function e(e,t,s,i){var a,r=arguments.length,o=r<3?t:null===i?i=Object.getOwnPro
         <text x="18" y="110" text-anchor="middle" class="dial-range-text">${t}°</text>
         <text x="142" y="110" text-anchor="middle" class="dial-range-text">${s}°</text>
       </svg>
-    `}_valvePosFromEvent(e,t){const s=t.getBoundingClientRect(),i=(e.clientX-s.left)*(160/s.width),a=(e.clientY-s.top)*(110/s.height);let r=Math.atan2(a-68,i-80)*(180/Math.PI)+90;r<0&&(r+=360);const o=(r-210+360)%360;return o>300?null:Math.round(o/300*100)}_renderValveDial(e){const t=e.position??("open"===e.state?100:0),s=(e,t)=>[80+t*Math.cos((e-90)*Math.PI/180),68+t*Math.sin((e-90)*Math.PI/180)],i=(e,t,i)=>{const[a,r]=s(e,i),[o,n]=s(t,i);return`M ${a} ${r} A ${i} ${i} 0 ${t-e>180?1:0} 1 ${o} ${n}`},a=(e=>210+e/100*300)(d),[r,o]=s(a,54),n=`hsl(${200+.2*d}, ${40+.55*d}%, ${38+.18*d}%)`,l=null!=this._valveDragPos?`${Math.round(this._valveDragPos)}%`:"opening"===e.state?"Opening…":"closing"===e.state?"Closing…":100===t?"Open":0===t?"Closed":"Partial",c=e.supportsPosition||!!e.numEntityId,d=this._valveDragPos??t,p=c?t=>{t.stopPropagation();const s=t.currentTarget;s.setPointerCapture(t.pointerId);const i=e=>{const t=this._valvePosFromEvent(e,s);null!=t&&(this._valveDragPos=t)},a=t=>{const r=this._valvePosFromEvent(t,s)??this._valveDragPos;this._valveDragPos=null,null!=r&&this._setValvePosition(e.entityId,r,e.numEntityId),s.removeEventListener("pointermove",i),s.removeEventListener("pointerup",a)};s.addEventListener("pointermove",i),s.addEventListener("pointerup",a)}:void 0;return q`
-      <svg viewBox="0 0 160 110" class="trv-dial-svg ${c?"valve-interactive":""}"
+    `}_valvePosFromEvent(e,t){const s=t.getBoundingClientRect(),i=(e.clientX-s.left)*(160/s.width),a=(e.clientY-s.top)*(110/s.height);let r=Math.atan2(a-68,i-80)*(180/Math.PI)+90;r<0&&(r+=360);const o=(r-210+360)%360;return o>300?null:Math.round(o/300*100)}_renderValveDial(e){const t=e.position??("open"===e.state?100:0),s=(e,t)=>[80+t*Math.cos((e-90)*Math.PI/180),68+t*Math.sin((e-90)*Math.PI/180)],i=(e,t,i)=>{const[a,r]=s(e,i),[o,n]=s(t,i);return`M ${a} ${r} A ${i} ${i} 0 ${t-e>180?1:0} 1 ${o} ${n}`},a=e.supportsPosition||!!e.numEntityId,r=this._valveDragPos??t,o=(e=>210+e/100*300)(r),[n,l]=s(o,54),c=`hsl(${200+.2*r}, ${40+.55*r}%, ${38+.18*r}%)`,d=null!=this._valveDragPos?`${Math.round(this._valveDragPos)}%`:"opening"===e.state?"Opening…":"closing"===e.state?"Closing…":100===t?"Open":0===t?"Closed":"Partial",p=a?t=>{t.stopPropagation();const s=t.currentTarget;s.setPointerCapture(t.pointerId);const i=e=>{const t=this._valvePosFromEvent(e,s);null!=t&&(this._valveDragPos=t)},a=t=>{const r=this._valvePosFromEvent(t,s)??this._valveDragPos;this._valveDragPos=null,null!=r&&this._setValvePosition(e.entityId,r,e.numEntityId),s.removeEventListener("pointermove",i),s.removeEventListener("pointerup",a)};s.addEventListener("pointermove",i),s.addEventListener("pointerup",a)}:void 0;return q`
+      <svg viewBox="0 0 160 110" class="trv-dial-svg ${a?"valve-interactive":""}"
         @pointerdown=${p}>
         <defs>
           <linearGradient id="valve-grad" x1="0%" y1="100%" x2="100%" y2="0%">
@@ -96,12 +96,12 @@ function e(e,t,s,i){var a,r=arguments.length,o=r<3?t:null===i?i=Object.getOwnPro
             <stop offset="100%" stop-color="#0ea5e9"/>
           </linearGradient>
         </defs>
-        ${c?q`<path d="${i(210,510,54)}" fill="none" stroke="transparent" stroke-width="22" stroke-linecap="round"/>`:W}
+        ${a?q`<path d="${i(210,510,54)}" fill="none" stroke="transparent" stroke-width="22" stroke-linecap="round"/>`:W}
         <path d="${i(210,510,54)}" fill="none" stroke="url(#valve-grad)" stroke-width="8" stroke-linecap="round" opacity="0.25"/>
-        ${t>0?q`<path d="${i(210,a,54)}" fill="none" stroke="url(#valve-grad)" stroke-width="8" stroke-linecap="round"/>`:W}
-        <circle cx="${r}" cy="${o}" r="9" fill="${n}" stroke="white" stroke-width="2" style="${c?"cursor:grab":""}"/>
-        <text x="${80}" y="${60}" text-anchor="middle" class="dial-target-text">${Math.round(d)}%</text>
-        <text x="${80}" y="${75}" text-anchor="middle" class="dial-sub-text">${l}</text>
+        ${t>0?q`<path d="${i(210,o,54)}" fill="none" stroke="url(#valve-grad)" stroke-width="8" stroke-linecap="round"/>`:W}
+        <circle cx="${n}" cy="${l}" r="9" fill="${c}" stroke="white" stroke-width="2" style="${a?"cursor:grab":""}"/>
+        <text x="${80}" y="${60}" text-anchor="middle" class="dial-target-text">${Math.round(r)}%</text>
+        <text x="${80}" y="${75}" text-anchor="middle" class="dial-sub-text">${d}</text>
         <text x="16" y="106" text-anchor="middle" class="dial-range-text">Closed</text>
         <text x="144" y="106" text-anchor="middle" class="dial-range-text">Open</text>
       </svg>

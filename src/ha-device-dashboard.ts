@@ -958,15 +958,14 @@ export class HADeviceDashboard extends LitElement {
       const large = (endDeg - startDeg) > 180 ? 1 : 0;
       return `M ${x1} ${y1} A ${radius} ${radius} 0 ${large} 1 ${x2} ${y2}`;
     };
+    const canSetPos = vc.supportsPosition || !!vc.numEntityId;
+    const displayPos = this._valveDragPos ?? pos;
     const posAngle = toAngle(displayPos);
     const [hx, hy] = toXY(posAngle, r);
     const handleColor = `hsl(${200 + displayPos * 0.2}, ${40 + displayPos * 0.55}%, ${38 + displayPos * 0.18}%)`;
     const stateLabel = this._valveDragPos != null ? `${Math.round(this._valveDragPos)}%`
       : vc.state === 'opening' ? 'Opening…' : vc.state === 'closing' ? 'Closing…'
       : pos === 100 ? 'Open' : pos === 0 ? 'Closed' : 'Partial';
-
-    const canSetPos = vc.supportsPosition || !!vc.numEntityId;
-    const displayPos = this._valveDragPos ?? pos;
 
     const onPointerDown = !canSetPos ? undefined : (e: PointerEvent) => {
       e.stopPropagation();
