@@ -920,6 +920,18 @@ export class HADeviceDashboard extends LitElement {
     `;
   }
 
+  private _valvePosFromEvent(e: PointerEvent, svg: SVGSVGElement): number | null {
+    const rect = svg.getBoundingClientRect();
+    const cx = 100, cy = 90;
+    const x = (e.clientX - rect.left) * (200 / rect.width);
+    const y = (e.clientY - rect.top)  * (145 / rect.height);
+    let deg = Math.atan2(y - cy, x - cx) * (180 / Math.PI) + 90;
+    if (deg < 0) deg += 360;
+    const arcDeg = (deg - 210 + 360) % 360;
+    if (arcDeg > 300) return null; // in the gap
+    return Math.round((arcDeg / 300) * 100);
+  }
+
   private _renderValveDial(vc: NonNullable<ReturnType<typeof this._getValve>>) {
     const pos = vc.position ?? (vc.state === 'open' ? 100 : 0);
     const cx = 100, cy = 90, r = 72;
@@ -939,17 +951,41 @@ export class HADeviceDashboard extends LitElement {
     const handleColor = `hsl(${200 + pos * 0.2}, ${40 + pos * 0.55}%, ${38 + pos * 0.18}%)`;
     const stateLabel = vc.state === 'opening' ? 'Opening…' : vc.state === 'closing' ? 'Closing…'
       : pos === 100 ? 'Open' : pos === 0 ? 'Closed' : 'Partial';
+
+    const onPointerDown = (e: PointerEvent) => {
+      e.stopPropagation();
+      const svgEl = (e.currentTarget as SVGSVGElement);
+      svgEl.setPointerCapture(e.pointerId);
+      const onMove = (ev: PointerEvent) => {
+        const pct = this._valvePosFromEvent(ev, svgEl);
+        if (pct != null) this._setValvePosition(vc.entityId, pct);
+      };
+      const onUp = (ev: PointerEvent) => {
+        const pct = this._valvePosFromEvent(ev, svgEl);
+        if (pct != null) this._setValvePosition(vc.entityId, pct);
+        svgEl.removeEventListener('pointermove', onMove);
+        svgEl.removeEventListener('pointerup', onUp);
+      };
+      svgEl.addEventListener('pointermove', onMove);
+      svgEl.addEventListener('pointerup', onUp);
+      const pct = this._valvePosFromEvent(e, svgEl);
+      if (pct != null) this._setValvePosition(vc.entityId, pct);
+    };
+
     return svg`
-      <svg viewBox="0 0 200 145" class="trv-dial-svg">
+      <svg viewBox="0 0 200 145" class="trv-dial-svg valve-interactive"
+        @pointerdown=${onPointerDown}>
         <defs>
           <linearGradient id="valve-grad" x1="0%" y1="100%" x2="100%" y2="0%">
             <stop offset="0%"   stop-color="#6b7280"/>
             <stop offset="100%" stop-color="#0ea5e9"/>
           </linearGradient>
         </defs>
+        <!-- wide invisible hit area on the track -->
+        <path d="${arcPath(210, 510, r)}" fill="none" stroke="transparent" stroke-width="28" stroke-linecap="round"/>
         <path d="${arcPath(210, 510, r)}" fill="none" stroke="url(#valve-grad)" stroke-width="10" stroke-linecap="round" opacity="0.25"/>
         ${pos > 0 ? svg`<path d="${arcPath(210, posAngle, r)}" fill="none" stroke="url(#valve-grad)" stroke-width="10" stroke-linecap="round"/>` : nothing}
-        <circle cx="${hx}" cy="${hy}" r="10" fill="${handleColor}" stroke="white" stroke-width="2.5"/>
+        <circle cx="${hx}" cy="${hy}" r="12" fill="${handleColor}" stroke="white" stroke-width="2.5" style="cursor:grab"/>
         <text x="${cx}" y="${cy - 10}" text-anchor="middle" class="dial-target-text">${Math.round(pos)}%</text>
         <text x="${cx}" y="${cy + 8}" text-anchor="middle" class="dial-sub-text">${stateLabel}</text>
         <text x="22" y="138" text-anchor="middle" class="dial-range-text">Closed</text>
@@ -1898,6 +1934,7 @@ export class HADeviceDashboard extends LitElement {
     .trv-preset-btn { font-size:11px; padding:3px 8px; border-radius:12px; border:1px solid var(--sc-border); background:transparent; color:var(--sc-text-primary); cursor:pointer; white-space:nowrap; }
     .trv-preset-btn.active { background:var(--sc-accent,#e67e22); border-color:var(--sc-accent,#e67e22); color:#fff; }
 
+    .valve-interactive { cursor:pointer; touch-action:none; }
     .valve-dial-btns { display:flex; align-items:center; gap:8px; margin-top:2px; }
     .valve-btn { padding:4px 14px; border-radius:8px; border:1px solid var(--sc-tog-off-border); background:var(--sc-tog-off-bg); color:var(--sc-text-primary); font-size:12px; font-weight:600; cursor:pointer; transition:background .15s; }
     .valve-btn:hover { background:rgba(255,255,255,.15); }
