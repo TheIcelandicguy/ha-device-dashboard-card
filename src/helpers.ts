@@ -276,7 +276,7 @@ const PROFILE_LABELS: Record<DeviceProfile, string> = {
   wall_display: 'Display',
   script:       'Script',
   scene:        'Scene',
-  automation:   'Auto',
+  automation:   'Automation',
   helper:       'Helper',
   weather:      'Weather',
   person:       'Person',
