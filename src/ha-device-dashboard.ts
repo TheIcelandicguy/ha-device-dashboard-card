@@ -325,10 +325,12 @@ export class HADeviceDashboard extends LitElement {
     return null;
   }
 
-  /** Extracts a short channel label from an entity_id, e.g. "Ch 1" / "Ch 2". Returns '' if no channel found. */
+  /** Extracts a short channel label from an entity_id, e.g. "Ch 1" / "Ch 2". Returns '' if no channel found.
+   *  Handles both switch-prefixed names (switch_0_power) and dc-suffixed names (power_0, energy_0). */
   private _chLabel(entityId: string): string {
-    const m = entityId.match(/[_-](?:switch|channel|ch|output)_?(\d+)[_-]/i)
-           ?? entityId.match(/[_-](\d+)[_-](?:power|energy|voltage|current|apparent|reactive|factor|freq)/i);
+    const m = entityId.match(/[_-](?:switch|channel|ch|output)_?(\d+)[_-]/i)          // switch_0_power
+           ?? entityId.match(/[_-](\d+)[_-](?:power|energy|voltage|current|apparent|reactive|factor|freq)/i)  // 0_power
+           ?? entityId.match(/(?:power|energy|voltage|current|freq|apparent|reactive)[_-](\d+)$/i);            // energy_0
     return m ? `Ch ${+m[1] + 1}` : '';
   }
 
@@ -354,8 +356,10 @@ export class HADeviceDashboard extends LitElement {
     const multiDcs = new Set([...dcIds.entries()].filter(([, ids]) => ids.length > 1).map(([dc]) => dc));
 
     const push = (k: string, label: string, value: string, warn = false, entityId?: string) => {
-      // For multi-channel electrical sensors use entity_id as the dedup key so all channels show
-      const key = (entityId && multiDcs.has(k)) ? entityId : k;
+      // For multi-channel sensors, key by (device_class + channel label) so that two entities
+      // mapping to the same channel slot (e.g. energy_0 and switch_0_energy) only show once,
+      // while different channels (Ch 1, Ch 2) and unlabelled totals each get their own slot.
+      const key = (entityId && multiDcs.has(k)) ? `${k}_${this._chLabel(entityId)}` : k;
       if (!seen.has(key)) { seen.add(key); result.push({ label, value, warn }); }
     };
 
@@ -502,10 +506,13 @@ export class HADeviceDashboard extends LitElement {
         const attrDc = (this.hass.states[e.entity_id]?.attributes as any)?.device_class ?? (e.attributes as any)?.device_class;
         return attrDc === dc || (dc === 'signal_strength' && e.entity_id.includes('rssi'));
       });
+      const seenLabels = new Set<string>();
       for (const ent of ents) {
         const unit = (this.hass.states[ent.entity_id]?.attributes as any)?.unit_of_measurement ?? '';
         const ch = ents.length > 1 ? this._chLabel(ent.entity_id) : '';
         const label = (GRAPH_DC_LABELS[dc] ?? dc) + (ch ? ` ${ch}` : '');
+        if (seenLabels.has(label)) continue; // skip duplicate channel slots
+        seenLabels.add(label);
         results.push({ entityId: ent.entity_id, label, dc, unit });
       }
     }
