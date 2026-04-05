@@ -911,7 +911,7 @@ export class HADeviceDashboard extends LitElement {
     const curColor = curRatio != null ? this._trvColor(curRatio) : fillColor;
     const gid = `trv-grad-${this._getTrv.name}`;
     return svg`
-      <svg viewBox="0 0 160 115" class="trv-dial-svg">
+      <svg viewBox="0 0 160 132" class="trv-dial-svg">
         <defs>
           <linearGradient id="${gid}" x1="0%" y1="100%" x2="100%" y2="0%">
             <stop offset="0%"   stop-color="${this._trvColor(0)}"/>
@@ -926,8 +926,8 @@ export class HADeviceDashboard extends LitElement {
         <text x="${cx}" y="${cy - 10}" text-anchor="middle" class="dial-target-text">${target.toFixed(1)}°</text>
         <text x="${cx}" y="${cy + 5}" text-anchor="middle" class="dial-sub-text">target</text>
         <text x="${cx}" y="${cy + 18}" text-anchor="middle" class="dial-current-text">${currentTemp != null ? `now ${currentTemp}°` : ''}</text>
-        <text x="18" y="110" text-anchor="middle" class="dial-range-text">${minTemp}°</text>
-        <text x="142" y="110" text-anchor="middle" class="dial-range-text">${maxTemp}°</text>
+        <text x="18" y="128" text-anchor="middle" class="dial-range-text">${minTemp}°</text>
+        <text x="142" y="128" text-anchor="middle" class="dial-range-text">${maxTemp}°</text>
       </svg>
     `;
   }
@@ -936,7 +936,7 @@ export class HADeviceDashboard extends LitElement {
     const rect = svg.getBoundingClientRect();
     const cx = 80, cy = 68;
     const x = (e.clientX - rect.left) * (160 / rect.width);
-    const y = (e.clientY - rect.top)  * (110 / rect.height);
+    const y = (e.clientY - rect.top)  * (128 / rect.height);
     let deg = Math.atan2(y - cy, x - cx) * (180 / Math.PI) + 90;
     if (deg < 0) deg += 360;
     const arcDeg = (deg - 210 + 360) % 360;
@@ -987,7 +987,7 @@ export class HADeviceDashboard extends LitElement {
     };
 
     return svg`
-      <svg viewBox="0 0 160 110" class="trv-dial-svg ${canSetPos ? 'valve-interactive' : ''}"
+      <svg viewBox="0 0 160 128" class="trv-dial-svg ${canSetPos ? 'valve-interactive' : ''}"
         @pointerdown=${onPointerDown}>
         <defs>
           <linearGradient id="valve-grad" x1="0%" y1="100%" x2="100%" y2="0%">
@@ -1001,8 +1001,8 @@ export class HADeviceDashboard extends LitElement {
         <circle cx="${hx}" cy="${hy}" r="9" fill="${handleColor}" stroke="white" stroke-width="2" style="${canSetPos ? 'cursor:grab' : ''}"/>
         <text x="${cx}" y="${cy - 8}" text-anchor="middle" class="dial-target-text">${Math.round(displayPos)}%</text>
         <text x="${cx}" y="${cy + 7}" text-anchor="middle" class="dial-sub-text">${stateLabel}</text>
-        <text x="16" y="106" text-anchor="middle" class="dial-range-text">Closed</text>
-        <text x="144" y="106" text-anchor="middle" class="dial-range-text">Open</text>
+        <text x="16" y="124" text-anchor="middle" class="dial-range-text">Closed</text>
+        <text x="144" y="124" text-anchor="middle" class="dial-range-text">Open</text>
       </svg>
     `;
   }
@@ -1933,7 +1933,7 @@ export class HADeviceDashboard extends LitElement {
     .dim-wrap { display:flex; flex-direction:row; align-items:center; gap:6px; flex:1; min-width:0; }
 
     .tile-trv-dial { display:flex; flex-direction:column; align-items:center; justify-content:center; flex:1; width:100%; padding:4px 0; }
-    .trv-dial-svg { width:100%; max-width:200px; height:auto; overflow:visible; }
+    .trv-dial-svg { width:100%; max-width:360px; height:auto; overflow:visible; }
     .dial-target-text { font-size:30px; font-weight:700; fill:var(--sc-text-primary,#fff); }
     .dial-sub-text { font-size:11px; fill:var(--sc-text-secondary,rgba(255,255,255,0.5)); }
     .dial-current-text { font-size:13px; fill:var(--sc-text-secondary,rgba(255,255,255,0.65)); }
@@ -1948,7 +1948,7 @@ export class HADeviceDashboard extends LitElement {
     .trv-preset-btn.active { background:var(--sc-accent,#e67e22); border-color:var(--sc-accent,#e67e22); color:#fff; }
 
     .valve-interactive { cursor:pointer; touch-action:none; }
-    .valve-dial-btns { display:flex; align-items:center; gap:8px; margin-top:2px; }
+    .valve-dial-btns { display:flex; align-items:center; gap:8px; margin-top:10px; }
     .valve-btn { padding:4px 14px; border-radius:8px; border:1px solid var(--sc-tog-off-border); background:var(--sc-tog-off-bg); color:var(--sc-text-primary); font-size:12px; font-weight:600; cursor:pointer; transition:background .15s; }
     .valve-btn:hover { background:rgba(255,255,255,.15); }
     .valve-btn.open:hover { background:#0ea5e9; border-color:#0ea5e9; color:#fff; }
