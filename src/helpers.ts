@@ -305,7 +305,7 @@ export const PROFILE_DEFAULT_BLOCKS: Record<DeviceProfile, TileBlockId[]> = {
   valve:        ['name_row', 'sensors', 'valve_controls', 'badges'],
   energy:       ['name_row', 'sensors', 'graph', 'badges'],
   sensor:       ['name_row', 'sensors', 'graph', 'badges'],
-  input:        ['name_row', 'input_channels', 'badges'],
+  input:        ['name_row', 'sensors', 'input_channels', 'badges'],
   camera:       ['name_row', 'badges'],
   uni:          ['name_row', 'input_channels', 'sensors', 'badges'],
   wall_display: ['name_row', 'sensors', 'trv_control', 'badges'],

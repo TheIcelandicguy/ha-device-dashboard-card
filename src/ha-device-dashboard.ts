@@ -515,7 +515,22 @@ export class HADeviceDashboard extends LitElement {
         const friendly = (s?.attributes as any)?.friendly_name ?? '';
         const m = e.entity_id.match(/(?:input|channel|button)[_\s]*(\d+)/i) ?? friendly.match(/(\d+)\s*$/);
         const ch = m ? parseInt(m[1]) : 0;
-        return { entityId: e.entity_id, label: m ? `${ch}` : '?', fullName: friendly || e.entity_id, isOn: s?.state === 'on', channel: ch };
+        const base = e.entity_id.replace(/^binary_sensor\./, '');
+        const evEnt = device.entities.find(ev =>
+          ev.domain === 'event' && ev.entity_id.replace(/^event\./, '') === base
+        );
+        const evState = evEnt ? this.hass.states[evEnt.entity_id] : null;
+        const lastEvent: string | null =
+          (evState?.attributes as any)?.event_type ??
+          (evState?.state && evState.state !== 'unknown' && evState.state !== 'unavailable' ? evState.state : null);
+        return {
+          entityId: e.entity_id,
+          label: m ? `Input ${+m[1] + 1}` : friendly || e.entity_id,
+          isOn: s?.state === 'on',
+          channel: ch,
+          lastEvent,
+          lastChanged: s?.last_changed ?? null,
+        };
       })
       .sort((a, b) => a.channel - b.channel);
   }
@@ -1159,9 +1174,11 @@ export class HADeviceDashboard extends LitElement {
         return inputs.length ? html`
           <div class="tile-inputs" @click=${(e: Event) => e.stopPropagation()}>
             ${inputs.map(ch => html`
-              <div class="input-chip ${ch.isOn ? 'active' : ''}">
-                <span class="input-dot"></span>
-                <span class="input-lbl">${ch.label}</span>
+              <div class="input-row ${ch.isOn ? 'active' : ''}">
+                <span class="input-row-dot"></span>
+                <span class="input-row-name">${ch.label}</span>
+                <span class="input-row-event">${ch.lastEvent ? ch.lastEvent.replace(/_/g, ' ') : '—'}</span>
+                <span class="input-row-time">${this._timeAgo(ch.lastChanged)}</span>
               </div>
             `)}
           </div>
@@ -1956,7 +1973,14 @@ export class HADeviceDashboard extends LitElement {
     .valve-btn.stop { color:var(--sc-text-muted); font-size:10px; }
     .valve-slider-row { display:flex; align-items:center; gap:6px; width:100%; padding:4px 8px 0; box-sizing:border-box; }
 
-    .tile-inputs { display:flex; gap:5px; flex-wrap:wrap; padding:4px 0 2px; }
+    .tile-inputs { display:flex; flex-direction:column; gap:5px; padding:4px 0 2px; }
+    .input-row { display:flex; align-items:center; gap:8px; padding:5px 8px; border-radius:8px; border:1px solid rgba(255,255,255,.06); background:rgba(255,255,255,.04); transition:all .15s; }
+    .input-row.active { background:color-mix(in srgb,var(--sc-accent) 15%,transparent); border-color:color-mix(in srgb,var(--sc-accent) 35%,transparent); }
+    .input-row-dot { width:8px; height:8px; border-radius:50%; background:var(--sc-text-muted); flex-shrink:0; transition:background .15s; }
+    .input-row.active .input-row-dot { background:var(--sc-accent); }
+    .input-row-name { font-size:13px; font-weight:600; color:var(--sc-text-primary); min-width:60px; }
+    .input-row-event { flex:1; font-size:12px; color:var(--sc-text-secondary); text-transform:capitalize; }
+    .input-row-time { font-size:11px; color:var(--sc-text-muted); white-space:nowrap; }
     .input-chip { display:flex; align-items:center; gap:4px; padding:4px 10px 4px 8px; border-radius:14px; border:1px solid rgba(255,255,255,.08); background:rgba(255,255,255,.05); font-size:12px; color:var(--sc-text-muted); transition:all .15s; }
     .input-chip.active { background:color-mix(in srgb,var(--sc-accent) 20%,transparent); color:var(--sc-accent); border-color:color-mix(in srgb,var(--sc-accent) 40%,transparent); }
     .input-dot { width:7px;height:7px; border-radius:50%; background:currentColor; flex-shrink:0; }
