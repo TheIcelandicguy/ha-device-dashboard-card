@@ -1152,16 +1152,6 @@ export class HADeviceDashboard extends LitElement {
               <button class="valve-btn stop" @click=${(e: Event) => this._valveAction(vc.entityId, 'stop', e)}>■</button>
               <button class="valve-btn open" @click=${(e: Event) => this._valveAction(vc.entityId, 'open', e)}>Open</button>
             </div>
-            ${vc.position != null ? html`
-              <div class="valve-slider-row">
-                <span class="dial-range-text">0%</span>
-                <input type="range" class="dim-slider" min="0" max="100" step="5"
-                  style="accent-color:#0ea5e9; flex:1"
-                  .value=${String(Math.round(vc.position))}
-                  @change=${(e: Event) => { e.stopPropagation(); this._setValvePosition(vc.entityId, parseFloat((e.target as HTMLInputElement).value)); }}/>
-                <span class="dial-range-text">100%</span>
-              </div>
-            ` : nothing}
           </div>
         ` : html``;
       }
