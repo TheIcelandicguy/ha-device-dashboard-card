@@ -1691,6 +1691,7 @@ export class HADeviceDashboard extends LitElement {
     .type-media_player{ background:rgba(26,188,156,.20);  color:#5eead4; }
     .type-script,.type-scene,.type-automation { background:rgba(99,102,241,.20); color:#c4b5fd; }
     .type-helper      { background:rgba(156,163,175,.20); color:#d1d5db; }
+    .type-script.type-badge,.type-scene.type-badge,.type-automation.type-badge,.type-helper.type-badge { font-size:18px; padding:4px 10px; border-radius:6px; }
     .gen-1   { background:rgba(107,114,128,.25); color:#9ca3af; }
     .gen-2   { background:rgba(59,130,246,.22);  color:#93c5fd; }
     .gen-3   { background:rgba(34,197,94,.20);   color:#86efac; }
