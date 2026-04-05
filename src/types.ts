@@ -78,7 +78,7 @@ export type TileBlockId =
 
 // ─── Style system ──────────────────────────────────────────────────────────────
 
-export type ButtonShape   = 'pill' | 'rect' | 'square';
+export type ButtonShape   = 'pill' | 'rect' | 'square' | 'circle';
 export type ButtonVariant = 'fill' | 'outline' | 'ghost';
 export type ButtonSize    = 'sm' | 'md' | 'lg';
 export type GraphType     = 'line' | 'area' | 'bar';
@@ -173,9 +173,10 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   sort_by?: SortBy;                    // default: 'name'
   /** Ordered list of tile blocks. Omit a block to hide it. */
   tile_layout?: TileBlockId[];
-  /** Tile click action: 'expand' (default) or 'toggle' */
-  tile_click?: 'expand' | 'toggle';
-  tile_opacity?: number;               // 0-100, default 100
+  tile_opacity?: number;               // 0-100, default 100 — tile background only
+  card_opacity?: number;               // 0-100, default 100 — card background only
+  card_bg_image?: string;
+  card_bg_image_size?: 'cover' | 'contain' | 'stretch';
   show_power_bar?: boolean;            // default: false
   power_bar_max?: number;              // W at 100%, default 2000
   show_entity_list?: boolean;          // expanded: All Entities section, default true
@@ -187,12 +188,17 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
     tile_radius?: number;
     tile_gap?: number;
     font_family?: string;
+    text_transform?: 'uppercase' | 'capitalize' | 'none';
+    text_size_scale?: number;
     button_shape?: ButtonShape;
     button_variant?: ButtonVariant;
     button_size?: ButtonSize;
+    card_bg?: string;
     header_bg?: string;
     header_bg2?: string;
     tile_bg?: string;
+    tile_bg_image?: string;
+    tile_bg_image_size?: 'cover' | 'contain' | 'stretch';
     tile_border?: string;
     text_primary?: string;
     online_color?: string;

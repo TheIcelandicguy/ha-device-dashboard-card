@@ -12,6 +12,7 @@ const DEVICE_DOMAINS = new Set([
   'fan', 'lock', 'media_player', 'vacuum', 'alarm_control_panel', 'humidifier',
   'water_heater', 'update', 'button', 'number', 'select', 'text', 'camera',
   'event',
+  // NOTE: device_tracker intentionally excluded — adds noise and slows discovery
 ]);
 
 /** Domains that can appear as standalone "virtual" tiles */
@@ -42,15 +43,14 @@ export function getAllDevices(
 
   const devices = new Map<string, HADevice>();
 
-  for (const state of Object.values(hass.states)) {
-    const domain = state.entity_id.split('.')[0];
-    if (!DEVICE_DOMAINS.has(domain)) continue;
-
-    const regEntry: any = entityRegistry[state.entity_id];
+  // Iterate entity registry (indexed, fast) instead of hass.states (array, slow)
+  for (const [entityId, regEntry] of Object.entries(entityRegistry)) {
     if (!regEntry?.device_id) continue;
     if (regEntry.hidden_by) continue;
 
-    // Integration filter
+    const domain = entityId.split('.')[0];
+    if (!DEVICE_DOMAINS.has(domain)) continue;
+
     const platform: string = (regEntry.platform ?? '').toLowerCase();
     if (filterPlatforms && !filterPlatforms.has(platform)) continue;
 
@@ -65,7 +65,6 @@ export function getAllDevices(
       const mfr: string = (devInfo.manufacturer ?? '').toLowerCase();
       const isShelly = mfr.includes('shelly') || platform === 'shelly';
 
-      // Resolve area: device area > entity area
       const areaId = devInfo.area_id ?? regEntry.area_id;
       const area = areaId ? (areaRegistry[areaId]?.name as string | undefined) : undefined;
 
@@ -83,18 +82,18 @@ export function getAllDevices(
     }
 
     const device = devices.get(deviceId)!;
-
-    // Mark Shelly if any entity's platform says so
     if (!device.isShelly && platform === 'shelly') {
       device.isShelly = true;
       device.integration = 'shelly';
     }
 
+    // Get live state from hass.states (O(1) lookup by key, not iteration)
+    const state = hass.states[entityId];
     device.entities.push({
-      entity_id:  state.entity_id,
+      entity_id:  entityId,
       domain,
-      state:      state.state,
-      attributes: state.attributes as Record<string, unknown>,
+      state:      state?.state ?? 'unavailable',
+      attributes: (state?.attributes ?? {}) as Record<string, unknown>,
       device_id:  deviceId,
       area_id:    regEntry.area_id,
       platform,
@@ -371,8 +370,7 @@ export function getDeviceProfile(device: HADevice): DeviceProfileResult {
     );
     const hasInputBS = device.entities.some(e =>
       e.domain === 'binary_sensor' && (
-        e.entity_id.includes('input') || e.entity_id.includes('button') ||
-        (e.attributes as any)?.device_class == null
+        e.entity_id.includes('input') || e.entity_id.includes('button')
       )
     );
     const hasEnvSensor = device.entities.some(e =>

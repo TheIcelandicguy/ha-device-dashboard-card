@@ -1,4 +1,4 @@
-import { LitElement, html, svg, css, PropertyValues, TemplateResult, nothing } from 'lit';
+import { LitElement, html, svg, css, TemplateResult, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { styleMap } from 'lit/directives/style-map.js';
 import { HomeAssistant } from 'custom-card-helpers';
@@ -19,13 +19,19 @@ import {
 @customElement('ha-device-dashboard')
 export class HADeviceDashboard extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
+  @property({ type: Boolean }) public preview = false;
   @state() private _config!: HADeviceDashboardConfig;
-  @state() private _expandedDevice: string | null = null;
   @state() private _closedAreas = new Set<string>();
   @state() private _entityListOpen = new Set<string>();
   @state() private _graphData = new Map<string, Array<{ t: number; v: number }>>();
   private readonly _graphFetching = new Set<string>();
   private readonly _graphFetchedAt = new Map<string, number>();
+
+  // Device list cache — only recompute when entity/device registries or config change
+  private _cachedDevices: HADevice[] | null = null;
+  private _cacheEntitiesRef: unknown = null;
+  private _cacheDevicesRef: unknown = null;
+  private _cacheConfigRef: HADeviceDashboardConfig | null = null;
 
   private static readonly BRIGHTNESS_MAX = 255;
 
@@ -61,11 +67,26 @@ export class HADeviceDashboard extends LitElement {
   private _getDevices(): HADevice[] {
     if (!this.hass) return [];
 
+    const entitiesRef = (this.hass as any).entities;
+    const devicesRef  = (this.hass as any).devices;
+    if (
+      this._cachedDevices &&
+      entitiesRef === this._cacheEntitiesRef &&
+      devicesRef  === this._cacheDevicesRef  &&
+      this._config === this._cacheConfigRef
+    ) {
+      return this._cachedDevices;
+    }
+    this._cacheEntitiesRef = entitiesRef;
+    this._cacheDevicesRef  = devicesRef;
+    this._cacheConfigRef   = this._config;
+
     let devices = getAllDevices(this.hass, this._config.integrations);
 
-    // Area filter
-    if (this._config.areas !== undefined) {
-      const normalized = new Set((this._config.areas ?? []).map(a => a.toLowerCase()));
+    // Area filter — undefined = show ALL rooms, [] = show nothing, [...] = show listed
+    const areaFilter = this._config.areas;
+    if (areaFilter !== undefined) {
+      const normalized = new Set(areaFilter.map(a => a.toLowerCase()));
       devices = devices.filter(d => normalized.has((d.area ?? '').toLowerCase()));
     }
 
@@ -101,6 +122,7 @@ export class HADeviceDashboard extends LitElement {
       }
     }
 
+    this._cachedDevices = devices;
     return devices;
   }
 
@@ -444,26 +466,7 @@ export class HADeviceDashboard extends LitElement {
   // ── Sparkline system ──────────────────────────────────────────────────────
 
   private _getGraphEntities(device: HADevice): Array<{ entityId: string; label: string; dc: string; unit: string }> {
-    const configured = this._config.graph_sensors;
-    let dcList: string[];
-
-    if (configured !== undefined) {
-      // Explicitly set (even [] means "no graphs")
-      dcList = configured;
-    } else {
-      // Auto-detect: find which GRAPH_SENSOR_DEFS keys this device actually has
-      const graphableKeys = new Set(GRAPH_SENSOR_DEFS.map(s => s.key));
-      const deviceDcs = new Set<string>();
-      for (const e of device.entities) {
-        if (e.domain !== 'sensor') continue;
-        const dc = (this.hass.states[e.entity_id]?.attributes as any)?.device_class;
-        if (dc && graphableKeys.has(dc)) deviceDcs.add(dc);
-        if (e.entity_id.includes('rssi')) deviceDcs.add('signal_strength');
-      }
-      // Preserve GRAPH_SENSOR_DEFS order
-      dcList = GRAPH_SENSOR_DEFS.map(s => s.key).filter(k => deviceDcs.has(k));
-    }
-
+    const dcList = this._config.graph_sensors ?? [];
     if (!dcList.length) return [];
     const results: Array<{ entityId: string; label: string; dc: string; unit: string }> = [];
     for (const dc of dcList) {
@@ -480,11 +483,29 @@ export class HADeviceDashboard extends LitElement {
     return results;
   }
 
+  private _fetchQueue: string[] = [];
+  private _fetchQueueRunning = false;
+
   private _requestGraphData(entityId: string) {
     if (this._graphFetching.has(entityId)) return;
     const age = Date.now() - (this._graphFetchedAt.get(entityId) ?? 0);
     if (age < 5 * 60_000 && this._graphData.has(entityId)) return;
-    this._fetchGraphData(entityId);
+    // Add to queue and drain — prevents simultaneous history API hammering
+    if (!this._fetchQueue.includes(entityId)) {
+      this._fetchQueue.push(entityId);
+    }
+    this._drainFetchQueue();
+  }
+
+  private _drainFetchQueue() {
+    if (this._fetchQueueRunning || this._fetchQueue.length === 0) return;
+    this._fetchQueueRunning = true;
+    const next = this._fetchQueue.shift()!;
+    Promise.resolve().then(async () => {
+      await this._fetchGraphData(next);
+      this._fetchQueueRunning = false;
+      this._drainFetchQueue(); // process next in queue
+    });
   }
 
   private _retryGraphData(entityId: string) {
@@ -492,7 +513,9 @@ export class HADeviceDashboard extends LitElement {
     this._graphFetchedAt.delete(entityId);
     const next = new Map(this._graphData); next.delete(entityId);
     this._graphData = next;
-    this._fetchGraphData(entityId);
+    // Route through the queue so concurrent fetches don't bypass the anti-hammering guard
+    this._fetchQueue = this._fetchQueue.filter(id => id !== entityId);
+    this._requestGraphData(entityId);
   }
 
   private _refreshAllGraphs(device: HADevice) {
@@ -520,13 +543,16 @@ export class HADeviceDashboard extends LitElement {
       this._graphData = next;
     } catch (err) {
       console.warn('[ha-device-dashboard] history fetch failed', entityId, err);
+      // Store empty array so the retry guard works — prevents hammering HA on every render
+      const next = new Map(this._graphData); next.set(entityId, []);
+      this._graphData = next;
     } finally {
       this._graphFetchedAt.set(entityId, Date.now());
       this._graphFetching.delete(entityId);
     }
   }
 
-  private _renderSparklines(device: HADevice, expanded = false): TemplateResult {
+  private _renderSparklines(device: HADevice): TemplateResult {
     const entities = this._getGraphEntities(device);
     if (!entities.length) return html``;
 
@@ -535,11 +561,12 @@ export class HADeviceDashboard extends LitElement {
     const H = gs.height ?? 32;
     const customH = gs.height != null;  // only override CSS height when explicitly set
     const lw = gs.line_width ?? 1.5;
-    const fill = gs.fill !== false;
     const showDots = gs.show_dots !== false;
     const showTicks = gs.tick_lines !== false;
     const showTimeLabels = gs.time_labels !== false;
     const graphType = gs.type ?? 'line';
+    // 'area' type always fills; 'line' type never fills; 'bar' type is separate
+    const fill = graphType === 'area';
     const graphHours = this._config.graph_hours ?? 24;
     const tickMs = graphHours <= 1 ? 60_000 : graphHours <= 5 ? 120_000 : 300_000;
     const sensorColors = this._config.graph_sensor_colors ?? {};
@@ -551,14 +578,14 @@ export class HADeviceDashboard extends LitElement {
     const rows = entities.map(({ entityId, label, unit, dc }) => {
       // Resolve to a concrete color so SVG elements never rely on CSS variable resolution
       const lineColor = sensorColors[dc] ?? globalColor ?? GRAPH_SENSOR_DEFS.find(s => s.key === dc)?.defaultColor ?? '#f4601e';
-      this._requestGraphData(entityId);
       const points = this._graphData.get(entityId);
+      this._requestGraphData(entityId);  // no-op if already fetched/fetching
 
       if (!points) {
         return html`
           <div class="spark-row">
             <span class="spark-lbl">${label}</span>
-            <div class="sparkline-loading" style="height:${customH ? (expanded ? Math.round(H * 1.5) : H) : (expanded ? 48 : 32)}px"></div>
+            <div class="sparkline-loading" style="height:${customH ? H : 32}px"></div>
             <span class="spark-val">—</span>
           </div>`;
       }
@@ -635,8 +662,8 @@ export class HADeviceDashboard extends LitElement {
             <span class="spark-lbl">${label}</span>
             <div class="spark-svg-wrap">
               <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"
-                class="sparkline-svg ${expanded ? 'exp' : ''}"
-                style="height:${customH ? (expanded ? Math.round(H * 1.5) : H) : (expanded ? 48 : 32)}px"
+                class="sparkline-svg"
+                style="height:${customH ? H : 32}px"
                 @mousemove=${handleMove} @mouseleave=${handleLeave}>
                 <defs>
                   <linearGradient id="${gId}" x1="0" y1="0" x2="0" y2="1">
@@ -663,7 +690,6 @@ export class HADeviceDashboard extends LitElement {
                   : svg`
                     <polyline points="${coords}" fill="none"
                       stroke="${lineColor}" stroke-width="${lw}"
-                      vector-effect="non-scaling-stroke"
                       stroke-linecap="round" stroke-linejoin="round"/>
                   `}
                 <line x1="0" y1="${H}" x2="${W}" y2="${H}"
@@ -675,10 +701,6 @@ export class HADeviceDashboard extends LitElement {
                     fill="${lineColor}" stroke="#1e1e2e" stroke-width="1.2"/>
                   <circle cx="${minCx}" cy="${minCy}" r="2.5"
                     fill="#6b7280" stroke="#1e1e2e" stroke-width="1.2"/>
-                  ${expanded ? svg`
-                    <text x="${maxCx}" y="${String(parseFloat(maxCy) - 5)}" text-anchor="middle" font-size="8" fill="${lineColor}" opacity="0.9">${max % 1 === 0 ? max : max.toFixed(1)}</text>
-                    <text x="${minCx}" y="${String(parseFloat(minCy) + 10)}" text-anchor="middle" font-size="8" fill="#6b7280" opacity="0.8">${min % 1 === 0 ? min : min.toFixed(1)}</text>
-                  ` : nothing}
                 ` : nothing}
                 <line class="spark-crosshair" x1="0" x2="0" y1="0" y2="${H}" style="display:none"/>
                 <circle class="spark-hover-dot" cx="0" cy="0" r="3.5" style="display:none"/>
@@ -691,7 +713,7 @@ export class HADeviceDashboard extends LitElement {
             <span class="spark-val">${disp} ${unit}</span>
           </div>
           ${showTimeLabels ? html`
-            <div class="spark-time-row ${expanded ? 'exp' : ''}">
+            <div class="spark-time-row">
               <div class="spark-time-spacer"></div>
               <div class="spark-time-labels">
                 <span>${tStart}</span><span>${tMid}</span><span>now</span>
@@ -703,8 +725,7 @@ export class HADeviceDashboard extends LitElement {
     });
 
     return html`
-      <div class="sparklines-block ${expanded ? 'exp' : ''}"
-        @click=${expanded ? (e: Event) => e.stopPropagation() : nothing}>
+      <div class="sparklines-block">
         ${rows}
       </div>`;
   }
@@ -725,8 +746,7 @@ export class HADeviceDashboard extends LitElement {
   private _renderBlock(
     blockId: TileBlockId,
     device: HADevice,
-    profile: DeviceProfileResult,
-    isExpanded: boolean
+    profile: DeviceProfileResult
   ): TemplateResult {
     const sw = this._getPrimarySwitch(device);
     const trv = this._getTrv(device);
@@ -783,6 +803,8 @@ export class HADeviceDashboard extends LitElement {
                   if (ent.domain === 'script') await this.hass.callService('script', 'turn_on', { entity_id: ent.entity_id });
                   else if (ent.domain === 'scene') await this.hass.callService('scene', 'turn_on', { entity_id: ent.entity_id });
                   else if (ent.domain === 'automation') await this.hass.callService('automation', 'trigger', { entity_id: ent.entity_id });
+                  else if (ent.domain === 'input_button') await this.hass.callService('input_button', 'press', { entity_id: ent.entity_id });
+                  else if (ent.domain === 'input_boolean') await this.hass.callService('input_boolean', 'toggle', { entity_id: ent.entity_id });
                 }}>
                 RUN
               </button>
@@ -803,7 +825,7 @@ export class HADeviceDashboard extends LitElement {
         ` : html``;
 
       case 'graph':
-        return this._renderSparklines(device, isExpanded);
+        return this._renderSparklines(device);
 
       case 'dimmer':
         return sw && isDimmable ? html`
@@ -969,7 +991,6 @@ export class HADeviceDashboard extends LitElement {
   private _renderTile(device: HADevice): TemplateResult {
     const online = this._isOnline(device);
     const profile = getDeviceProfile(device);
-    const isExpanded = this._expandedDevice === device.device_id;
     const tileSize = this._config.tile_size ?? 'md';
     const accentColor = this._config.device_styles?.[device.device_id]?.color;
     const tileStyle: Record<string, string> = {};
@@ -977,27 +998,56 @@ export class HADeviceDashboard extends LitElement {
       tileStyle['borderColor'] = accentColor;
       tileStyle['boxShadow'] = `0 0 12px ${accentColor}50`;
     }
-    const blockOrder = this._getBlockOrder(device, profile);
-
-    const clickHandler = (e: Event) => {
-      if (this._config.tile_click === 'toggle') {
-        const sw = this._getPrimarySwitch(device);
-        if (sw) this._toggle(sw.entityId, sw.isOn, e);
-      } else {
-        this._expandedDevice = this._expandedDevice === device.device_id ? null : device.device_id;
-      }
-    };
+    const _defaultBlocks: TileBlockId[] = ['name_row', 'sensors', 'graph', 'dimmer', 'cover_controls', 'trv_control', 'media_controls', 'fan_controls', 'valve_controls', 'input_channels', 'power_bar', 'badges'];
+    const blockOrder: TileBlockId[] =
+      this._config.device_styles?.[device.device_id]?.tile_layout ??
+      this._config.tile_layout ??
+      PROFILE_DEFAULT_BLOCKS[profile.type] ??
+      _defaultBlocks;
 
     return html`
-      <div class="tile ${isExpanded ? 'expanded' : ''} ${!online ? 'offline' : ''} tile-${tileSize}"
-        style=${styleMap(tileStyle)}
-        @click=${clickHandler}>
-        ${blockOrder.map(blockId => this._renderBlock(blockId, device, profile, isExpanded))}
+      <div class="tile ${!online ? 'offline' : ''} tile-${tileSize}"
+        style=${styleMap(tileStyle)}>
+        ${blockOrder.map(blockId => this._renderBlock(blockId, device, profile))}
       </div>
     `;
   }
 
   // ── Area section ──────────────────────────────────────────────────────────
+
+  private _getAreaChips(devices: HADevice[]): Array<{ label: string; value: string }> {
+    const allowed = this._config.sensors?.length ? new Set(this._config.sensors) : null;
+    const show = (k: string) => !allowed || allowed.has(k);
+    const acc: Record<string, { sum: number; count: number }> = {};
+    const add = (k: string, v: number) => {
+      if (!acc[k]) acc[k] = { sum: 0, count: 0 };
+      acc[k].sum += v; acc[k].count++;
+    };
+    for (const device of devices) {
+      for (const e of device.entities) {
+        if (e.domain !== 'sensor') continue;
+        const s = this.hass.states[e.entity_id];
+        if (!s || s.state === 'unavailable' || s.state === 'unknown') continue;
+        const v = parseFloat(s.state);
+        if (isNaN(v)) continue;
+        const dc = ((s.attributes as Record<string, unknown>).device_class as string) ?? '';
+        if      (dc === 'power'          && show('power'))       add('power', v);
+        else if (dc === 'energy'         && show('energy'))      add('energy', v);
+        else if (dc === 'temperature'    && show('temperature')) add('temperature', v);
+        else if (dc === 'humidity'       && show('humidity'))    add('humidity', v);
+        else if (dc === 'carbon_dioxide' && show('co2'))         add('co2', v);
+        else if (dc === 'illuminance'    && show('illuminance')) add('illuminance', v);
+      }
+    }
+    const chips: Array<{ label: string; value: string }> = [];
+    if (acc['power'])       chips.push({ label: 'Power',  value: formatPower(acc['power'].sum) });
+    if (acc['energy'])      chips.push({ label: 'Energy', value: formatEnergy(acc['energy'].sum) });
+    if (acc['temperature']) chips.push({ label: 'Temp',   value: formatTemp(acc['temperature'].sum / acc['temperature'].count) });
+    if (acc['humidity'])    chips.push({ label: 'Hum',    value: formatHumidity(acc['humidity'].sum / acc['humidity'].count) });
+    if (acc['co2'])         chips.push({ label: 'CO₂',   value: formatPpm(acc['co2'].sum / acc['co2'].count) });
+    if (acc['illuminance']) chips.push({ label: 'Light',  value: formatIlluminance(acc['illuminance'].sum / acc['illuminance'].count) });
+    return chips;
+  }
 
   private _renderAreaSection(area: string, devices: HADevice[]): TemplateResult {
     if (!devices.length) return html``;
@@ -1043,27 +1093,9 @@ export class HADeviceDashboard extends LitElement {
       }
     }
 
-    // Expand panel: insert full-width panel after the row containing the expanded tile
-    const expandedInArea = !isClosed ? devices.find(d => d.device_id === this._expandedDevice) : undefined;
-    const expandedIdx = expandedInArea ? devices.indexOf(expandedInArea) : -1;
-    const insertAfterIdx = expandedIdx >= 0
-      ? Math.min(Math.floor(expandedIdx / cols) * cols + cols - 1, devices.length - 1)
-      : -1;
-
-    const expandedPanel = expandedInArea ? html`
-      <div class="tile-expanded-panel" @click=${(e: Event) => e.stopPropagation()}>
-        <div class="expanded-graph-header">
-          <button class="spark-refresh-all" @click=${(e: Event) => { e.stopPropagation(); this._refreshAllGraphs(expandedInArea!); }}>↺ Refresh graphs</button>
-        </div>
-        ${this._renderSparklines(expandedInArea, true)}
-        ${this._renderExpanded(expandedInArea)}
-      </div>
-    ` : nothing;
-
-    const gridItems = devices.flatMap((d, i) => {
-      const tile = this._renderTile(d);
-      return i === insertAfterIdx ? [tile, expandedPanel] : [tile];
-    });
+    // Flat grid — no expanded panel
+    const gridItems = devices.map(d => this._renderTile(d));
+    const areaChips = this._getAreaChips(devices);
 
     return html`
       <div class="area-section ${isClosed ? 'closed' : ''}" style=${styleMap(styleObj)}>
@@ -1073,6 +1105,14 @@ export class HADeviceDashboard extends LitElement {
           this._closedAreas = next;
         }}>
           <span class="area-name">${label}</span>
+          ${areaChips.length ? html`
+            <div class="area-chips">
+              ${areaChips.map(c => html`
+                <div class="area-chip">
+                  <span class="tsc-lbl">${c.label}</span>
+                  <span class="tsc-val">${c.value}</span>
+                </div>`)}
+            </div>` : nothing}
           <div class="area-meta">
             <span class="area-count">${onlineCount}/${devices.length}</span>
             ${areaPower > 0 ? html`<span class="area-power">${formatPower(areaPower)}</span>` : nothing}
@@ -1246,6 +1286,26 @@ export class HADeviceDashboard extends LitElement {
   protected render(): TemplateResult {
     if (!this._config || !this.hass) return html``;
 
+    const pickerTags = new Set(['hui-card-picker','hui-cards-used-card-picker']);
+    let _node: Node = this;
+    let inPicker = false;
+    while (_node) {
+      if (_node instanceof Element && pickerTags.has(_node.tagName.toLowerCase())) { inPicker = true; break; }
+      const root = _node.getRootNode();
+      if (root === _node || root === document) break;
+      _node = (root as ShadowRoot).host;
+    }
+    if (inPicker) {
+      return html`
+        <ha-card>
+          <div style="padding:20px;text-align:center;color:var(--secondary-text-color,#9ca3af);">
+            <div style="font-size:2em;margin-bottom:8px">📡</div>
+            <div style="font-weight:600;margin-bottom:4px">HA Device Dashboard</div>
+            <div style="font-size:.85em">Add the card to configure rooms and devices</div>
+          </div>
+        </ha-card>`;
+    }
+
     const devices = this._getDevices();
     const st = this._config.style ?? {};
 
@@ -1254,7 +1314,7 @@ export class HADeviceDashboard extends LitElement {
         <ha-card>
           <div class="empty">
             <p>No devices found.</p>
-            <p class="hint">Devices are auto-discovered via the HA entity registry.</p>
+            <p class="hint">No devices found matching your filters.</p>
           </div>
         </ha-card>`;
     }
@@ -1270,13 +1330,44 @@ export class HADeviceDashboard extends LitElement {
     if (st.accent_color)  cardInlineStyles['--sc-accent']       = st.accent_color;
     if (st.tile_radius)   cardInlineStyles['--tile-radius']     = `${st.tile_radius}px`;
     if (st.tile_gap)      cardInlineStyles['--tile-gap']        = `${st.tile_gap}px`;
-    if (st.font_family)   cardInlineStyles['fontFamily']        = st.font_family;
-    if (st.tile_bg)       cardInlineStyles['--sc-tile-bg']      = st.tile_bg;
-    if (st.tile_border)   cardInlineStyles['--sc-tile-border']  = st.tile_border;
+    if (st.font_family)      cardInlineStyles['--sc-font-family']    = st.font_family;
+    if (st.text_transform)   cardInlineStyles['--sc-text-transform'] = st.text_transform;
+    if (st.text_size_scale)  cardInlineStyles['--sc-text-scale']     = String(st.text_size_scale);
+    if (st.tile_bg)            cardInlineStyles['--sc-tile-bg']         = st.tile_bg;
+    if (st.tile_bg_image)      cardInlineStyles['--sc-tile-bg-image']   = `url("${st.tile_bg_image}")`;
+    if (st.tile_bg_image_size) cardInlineStyles['--sc-tile-bg-image-sz']= st.tile_bg_image_size === 'stretch' ? '100% 100%' : st.tile_bg_image_size;
+    if (this._config.card_bg_image)      cardInlineStyles['--sc-card-bg-image']   = `url("${this._config.card_bg_image}")`;
+    if (this._config.card_bg_image_size) cardInlineStyles['--sc-card-bg-image-sz']= this._config.card_bg_image_size === 'stretch' ? '100% 100%' : this._config.card_bg_image_size;
+    if (st.tile_border)        cardInlineStyles['--sc-tile-border']     = st.tile_border;
     if (st.text_primary)  cardInlineStyles['--sc-text-primary'] = st.text_primary;
     if (st.online_color)  cardInlineStyles['--sc-online-color'] = st.online_color;
     if (st.power_color)   cardInlineStyles['--sc-power-color']  = st.power_color;
     if (this._config.graph_line_color) cardInlineStyles['--sc-graph-line'] = this._config.graph_line_color;
+
+    // Button style vars
+    const btnShape   = st.button_shape   ?? 'pill';
+    const btnVariant = st.button_variant ?? 'fill';
+    const btnSize    = st.button_size    ?? 'md';
+    const togPadMap: Record<string,string> = { sm: '2px 8px', md: '4px 11px', lg: '6px 16px' };
+    const togPadSqMap: Record<string,string> = { sm: '3px 5px', md: '4px 8px', lg: '6px 12px' };
+    const isSquarish = btnShape === 'square' || btnShape === 'circle';
+    cardInlineStyles['--tog-radius'] = btnShape === 'pill' ? '20px' : btnShape === 'rect' ? '6px' : btnShape === 'square' ? '6px' : '50%';
+    cardInlineStyles['--tog-pad']    = isSquarish ? togPadSqMap[btnSize] ?? togPadSqMap.md : togPadMap[btnSize] ?? togPadMap.md;
+    cardInlineStyles['--tog-fsize']  = btnSize === 'sm' ? '.65em' : btnSize === 'lg' ? '.8em' : '.72em';
+    cardInlineStyles['--tog-aspect'] = isSquarish ? '1' : 'auto';
+    if (btnVariant === 'outline') {
+      cardInlineStyles['--tog-on-bg']     = 'transparent';
+      cardInlineStyles['--tog-on-border'] = '1px solid var(--sc-accent)';
+      cardInlineStyles['--tog-on-color']  = 'var(--sc-accent)';
+      cardInlineStyles['--tog-on-shadow'] = 'none';
+    } else if (btnVariant === 'ghost') {
+      cardInlineStyles['--tog-on-bg']     = 'transparent';
+      cardInlineStyles['--tog-on-border'] = 'none';
+      cardInlineStyles['--tog-on-color']  = 'var(--sc-accent)';
+      cardInlineStyles['--tog-on-shadow'] = 'none';
+    } else {
+      // fill (default) — no override needed, existing CSS handles it
+    }
 
     if (st.header_bg && st.header_bg2) {
       cardInlineStyles['--sc-header-bg'] = `linear-gradient(135deg, ${st.header_bg} 0%, ${st.header_bg2} 100%)`;
@@ -1284,9 +1375,15 @@ export class HADeviceDashboard extends LitElement {
       cardInlineStyles['--sc-header-bg'] = st.header_bg;
     }
 
-    const opacity = this._config.tile_opacity ?? 100;
-    if (opacity < 100) {
-      cardInlineStyles['--sc-tile-bg'] = `color-mix(in srgb, ${st.tile_bg ?? 'rgba(255,255,255,0.04)'} ${opacity}%, transparent)`;
+    const cardBgBase = st.card_bg ?? 'var(--ha-card-background, #1c1c1e)';
+    if (st.card_bg) cardInlineStyles['--sc-card-bg'] = st.card_bg;
+    const cardTransparency = this._config.card_opacity ?? 100;
+    if (cardTransparency < 100) {
+      cardInlineStyles['--sc-card-bg'] = `color-mix(in srgb, ${cardBgBase} ${cardTransparency}%, transparent)`;
+    }
+    const tileTransparency = this._config.tile_opacity ?? 100;
+    if (tileTransparency < 100) {
+      cardInlineStyles['--sc-tile-bg-opacity'] = String(tileTransparency / 100);
     }
 
     return html`
@@ -1328,6 +1425,8 @@ export class HADeviceDashboard extends LitElement {
       --sc-power-color:     #fb923c;
       --sc-offline-dot:     #4b5563;
       --sc-tile-bg:         rgba(255,255,255,0.04);
+      --sc-tile-bg-image:   none;
+      --sc-tile-bg-image-sz:cover;
       --sc-tile-border:     rgba(255,255,255,0.07);
       --sc-tile-hover-bg:   rgba(255,255,255,0.07);
       --sc-tile-hover-shad: rgba(0,0,0,0.30);
@@ -1342,12 +1441,20 @@ export class HADeviceDashboard extends LitElement {
       --sc-tog-off-border:  rgba(255,255,255,0.10);
       --sc-update-color:    #f59e0b;
       --sc-update-glow:     rgba(245,158,11,0.40);
+      --sc-font-family:     'DM Sans', sans-serif;
+      --sc-text-transform:  uppercase;
+      --sc-text-scale:      1;
+      --sc-card-bg:         var(--ha-card-background, var(--card-background-color, #1c1c1e));
+      --sc-card-bg-image:   none;
+      --sc-card-bg-image-sz:cover;
+      --sc-tile-bg-opacity: 1;
     }
 
     ha-card {
       overflow-x: hidden; overflow-y: visible;
-      background: var(--ha-card-background, var(--card-background-color, #1c1c1e));
+      background: var(--sc-card-bg-image) center / var(--sc-card-bg-image-sz) no-repeat, var(--sc-card-bg);
       container-type: inline-size; container-name: ha-dash;
+      font-family: var(--sc-font-family);
     }
 
     .dash-header {
@@ -1392,7 +1499,11 @@ export class HADeviceDashboard extends LitElement {
     }
     .area-header:hover { filter:brightness(1.08); }
     .area-section:not(.closed) .area-header { border-radius:10px 10px 0 0; border-bottom:1px solid var(--sc-tile-border); }
-    .area-name { font-size:var(--area-name-size,0.78em); font-weight:var(--area-name-weight,700); text-transform:uppercase; letter-spacing:0.08em; color:var(--area-header-color,var(--sc-accent)); }
+    .area-name { font-size:var(--area-name-size,0.78em); font-weight:var(--area-name-weight,700); text-transform:var(--sc-text-transform,uppercase); letter-spacing:0.08em; color:var(--area-header-color,var(--sc-accent)); }
+    .area-chips { display:flex; align-items:center; flex-wrap:wrap; gap:4px; flex:1; margin:0 10px; }
+    .area-chip { display:flex; align-items:center; gap:3px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.08); border-radius:4px; padding:1px 5px; }
+    .area-chip .tsc-lbl { font-size:.65em; color:var(--secondary-text-color); }
+    .area-chip .tsc-val { font-size:.72em; font-weight:600; color:var(--sc-text-primary,var(--primary-text-color)); }
     .area-meta { display:flex; align-items:center; gap:8px; }
     .area-count { font-size:.75em; color:var(--secondary-text-color); }
     .area-power { font-size:.78em; font-weight:600; color:var(--sc-power-color); }
@@ -1408,19 +1519,28 @@ export class HADeviceDashboard extends LitElement {
     @container ha-dash (min-width:700px) { .sparkline-svg.exp { height:56px; } }
 
     .tile {
-      background:var(--sc-tile-bg); border:1px solid var(--sc-tile-border);
+      border:1px solid var(--sc-tile-border);
       border-radius:var(--tile-radius); padding:11px 13px; cursor:pointer;
-      transition:transform 0.15s, box-shadow 0.15s, background 0.15s;
+      transition:transform 0.15s, box-shadow 0.15s;
       display:flex; flex-direction:column; gap:6px; position:relative; overflow:hidden;
+      isolation:isolate;
+    }
+    .tile::after {
+      content:''; position:absolute; inset:0; z-index:-1; pointer-events:none;
+      background:var(--sc-tile-bg);
+      background-image:var(--sc-tile-bg-image); background-size:var(--sc-tile-bg-image-sz); background-position:center;
+      opacity:var(--sc-tile-bg-opacity,1); transition:opacity 0.15s, background 0.15s;
     }
     .tile::before {
       content:''; position:absolute; top:0;left:0;right:0; height:2px;
-      background:linear-gradient(90deg,var(--sc-accent),transparent); opacity:0; transition:opacity 0.2s;
+      background:linear-gradient(90deg,var(--sc-accent),transparent); opacity:0; transition:opacity 0.2s; z-index:1;
     }
-    .tile:hover { transform:translateY(-2px); box-shadow:0 6px 20px var(--sc-tile-hover-shad); background:var(--sc-tile-hover-bg); }
+    .tile:hover { transform:translateY(-2px); box-shadow:0 6px 20px var(--sc-tile-hover-shad); }
+    .tile:hover::after { background-color:var(--sc-tile-hover-bg); }
     .tile:hover::before { opacity:1; }
     .tile.offline { opacity:.45; filter:grayscale(.4); }
-    .tile.expanded { background:var(--sc-tile-exp-bg); border-color:var(--sc-accent); box-shadow:0 0 0 1px var(--sc-accent),0 4px 12px var(--sc-accent-glow); transform:none; }
+    .tile.expanded { border-color:var(--sc-accent); box-shadow:0 0 0 1px var(--sc-accent),0 4px 12px var(--sc-accent-glow); transform:none; }
+    .tile.expanded::after { background-color:var(--sc-tile-exp-bg); }
     .tile.expanded::before { opacity:1; }
     .tile.tile-sm { padding:7px 9px; gap:4px; }
     .tile.tile-lg { padding:15px 17px; gap:9px; }
@@ -1442,14 +1562,14 @@ export class HADeviceDashboard extends LitElement {
     .dot.offline { background:var(--sc-offline-dot); }
     @keyframes pulse-dot { 0%{box-shadow:0 0 0 0 var(--sc-online-glow)} 60%{box-shadow:0 0 0 5px transparent} 100%{box-shadow:0 0 0 0 var(--sc-online-glow)} }
 
-    .tile-name { font-size:.88em; font-weight:600; color:var(--sc-text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+    .tile-name { font-size:calc(var(--sc-text-scale,1) * .88em); font-weight:600; color:var(--sc-text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
     .update-dot { color:var(--sc-update-color); font-size:.55em; flex-shrink:0; animation:blink 2s step-end infinite; }
     @keyframes blink { 50%{opacity:.3} }
 
     .tile-sensor-chips { display:flex; flex-wrap:wrap; gap:4px; margin:2px 0 0; }
     .tile-sensor-chip { display:flex; flex-direction:column; align-items:center; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.08); border-radius:6px; padding:2px 7px; min-width:38px; }
     .tsc-lbl { font-size:.6em; color:var(--sc-text-muted); text-transform:uppercase; letter-spacing:.03em; }
-    .tsc-val { font-size:.78em; color:var(--sc-text-primary); font-weight:500; }
+    .tsc-val { font-size:calc(var(--sc-text-scale,1) * .78em); color:var(--sc-text-primary); font-weight:500; }
     .tile-sensor-chip.warn .tsc-val { color:var(--sc-accent); }
 
     .tile-bot { display:flex; align-items:center; justify-content:space-between; gap:4px; min-width:0; }
@@ -1481,11 +1601,11 @@ export class HADeviceDashboard extends LitElement {
     .alert-overtemp  { background:rgba(251,146,60,.25); color:#fdba74; }
     .alert-overpower { background:rgba(239,68,68,.25);  color:#fca5a5; }
 
-    .tog { padding:4px 11px; border:none; border-radius:20px; cursor:pointer; font-size:.72em; font-weight:700; letter-spacing:.05em; flex-shrink:0; transition:transform .1s,opacity .15s,box-shadow .15s; position:relative; overflow:hidden; }
+    .tog { padding:var(--tog-pad,4px 11px); border:none; border-radius:var(--tog-radius,20px); aspect-ratio:var(--tog-aspect,auto); cursor:pointer; font-size:var(--tog-fsize,.72em); font-weight:700; letter-spacing:.05em; flex-shrink:0; transition:transform .1s,opacity .15s,box-shadow .15s; position:relative; overflow:hidden; display:inline-flex; align-items:center; justify-content:center; }
     .tog::after { content:''; position:absolute; inset:0; background:white; opacity:0; transition:opacity .15s; }
     .tog:active::after { opacity:.15; }
     .tog.sm { padding:2px 9px; font-size:.68em; }
-    .tog.on { background:linear-gradient(135deg,var(--sc-accent),color-mix(in srgb,var(--sc-accent) 70%,#f97316)); color:white; box-shadow:0 2px 8px var(--sc-accent-glow); }
+    .tog.on { background:var(--tog-on-bg,linear-gradient(135deg,var(--sc-accent),color-mix(in srgb,var(--sc-accent) 70%,#f97316))); color:var(--tog-on-color,white); box-shadow:var(--tog-on-shadow,0 2px 8px var(--sc-accent-glow)); border:var(--tog-on-border,none); }
     .tog.off { background:var(--sc-tog-off-bg); color:var(--sc-text-secondary); border:1px solid var(--sc-tog-off-border); }
     .tog.update { background:linear-gradient(135deg,var(--sc-update-color),color-mix(in srgb,var(--sc-update-color) 60%,#f97316)); color:white; box-shadow:0 2px 6px var(--sc-update-glow); }
     .tog:hover { opacity:.85; transform:scale(1.04); }
@@ -1553,7 +1673,7 @@ export class HADeviceDashboard extends LitElement {
     .sensor-row { display:flex; flex-wrap:wrap; gap:6px; }
     .sensor-chip { display:flex; align-items:center; gap:5px; background:var(--sc-sensor-bg); border-radius:20px; padding:4px 10px; white-space:nowrap; }
     .sensor-label { font-size:.65em; text-transform:uppercase; letter-spacing:.05em; color:var(--sc-text-muted); }
-    .sensor-value { font-size:.85em; font-weight:600; color:var(--sc-text-value); font-variant-numeric:tabular-nums; }
+    .sensor-value { font-size:calc(var(--sc-text-scale,1) * .85em); font-weight:600; color:var(--sc-text-value); font-variant-numeric:tabular-nums; }
     .sensor-value.warn { color:var(--error-color,#ef4444); }
     .expanded-graph-header { display:flex; justify-content:flex-end; padding:0 0 4px; }
     .spark-refresh-all { background:none; border:1px solid rgba(255,255,255,.12); border-radius:6px; color:var(--sc-text-muted); font-size:.75em; cursor:pointer; padding:3px 10px; transition:color .15s,border-color .15s; }
@@ -1574,7 +1694,7 @@ export class HADeviceDashboard extends LitElement {
     .sparklines-block.exp { padding:6px 8px 4px; gap:8px; }
     .spark-group { display:flex; flex-direction:column; gap:0; }
     .spark-row { display:flex; align-items:center; gap:6px; min-height:32px; }
-    .spark-lbl { font-size:.62em; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--sc-text-muted); width:34px; flex-shrink:0; text-align:right; }
+    .spark-lbl { font-size:.62em; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--sc-text-muted); width:52px; flex-shrink:0; text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .spark-svg-wrap { flex:1; position:relative; min-width:0; }
     .sparkline-svg { width:100%; height:32px; display:block; overflow:visible; cursor:crosshair; }
     .sparkline-svg.exp { height:48px; }

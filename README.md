@@ -43,10 +43,10 @@ A Home Assistant Lovelace custom card that auto-discovers all your Shelly device
 
 ### Manual
 
-1. Download `dist/shelly-dashboard-card.js` from the latest release
-2. Copy to `/config/www/shelly-dashboard-card.js`
+1. Download `dist/ha-device-dashboard.js` from the latest release
+2. Copy to `/config/www/ha-device-dashboard.js`
 3. Go to **Dashboard → Edit → Manage Resources** and add:
-   - URL: `/local/shelly-dashboard-card.js`
+   - URL: `/local/ha-device-dashboard.js`
    - Type: JavaScript Module
 
 ---
