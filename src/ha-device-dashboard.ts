@@ -920,6 +920,44 @@ export class HADeviceDashboard extends LitElement {
     `;
   }
 
+  private _renderValveDial(vc: NonNullable<ReturnType<typeof this._getValve>>) {
+    const pos = vc.position ?? (vc.state === 'open' ? 100 : 0);
+    const cx = 100, cy = 90, r = 72;
+    const toAngle = (v: number) => 210 + (v / 100) * 300;
+    const toXY = (deg: number, radius: number): [number, number] => [
+      cx + radius * Math.cos((deg - 90) * Math.PI / 180),
+      cy + radius * Math.sin((deg - 90) * Math.PI / 180),
+    ];
+    const arcPath = (startDeg: number, endDeg: number, radius: number) => {
+      const [x1, y1] = toXY(startDeg, radius);
+      const [x2, y2] = toXY(endDeg, radius);
+      const large = (endDeg - startDeg) > 180 ? 1 : 0;
+      return `M ${x1} ${y1} A ${radius} ${radius} 0 ${large} 1 ${x2} ${y2}`;
+    };
+    const posAngle = toAngle(pos);
+    const [hx, hy] = toXY(posAngle, r);
+    const handleColor = `hsl(${200 + pos * 0.2}, ${40 + pos * 0.55}%, ${38 + pos * 0.18}%)`;
+    const stateLabel = vc.state === 'opening' ? 'Opening…' : vc.state === 'closing' ? 'Closing…'
+      : pos === 100 ? 'Open' : pos === 0 ? 'Closed' : 'Partial';
+    return svg`
+      <svg viewBox="0 0 200 145" class="trv-dial-svg">
+        <defs>
+          <linearGradient id="valve-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+            <stop offset="0%"   stop-color="#6b7280"/>
+            <stop offset="100%" stop-color="#0ea5e9"/>
+          </linearGradient>
+        </defs>
+        <path d="${arcPath(210, 510, r)}" fill="none" stroke="url(#valve-grad)" stroke-width="10" stroke-linecap="round" opacity="0.25"/>
+        ${pos > 0 ? svg`<path d="${arcPath(210, posAngle, r)}" fill="none" stroke="url(#valve-grad)" stroke-width="10" stroke-linecap="round"/>` : nothing}
+        <circle cx="${hx}" cy="${hy}" r="10" fill="${handleColor}" stroke="white" stroke-width="2.5"/>
+        <text x="${cx}" y="${cy - 10}" text-anchor="middle" class="dial-target-text">${Math.round(pos)}%</text>
+        <text x="${cx}" y="${cy + 8}" text-anchor="middle" class="dial-sub-text">${stateLabel}</text>
+        <text x="22" y="138" text-anchor="middle" class="dial-range-text">Closed</text>
+        <text x="178" y="138" text-anchor="middle" class="dial-range-text">Open</text>
+      </svg>
+    `;
+  }
+
   private _renderBlock(
     blockId: TileBlockId,
     device: HADevice,
@@ -1107,13 +1145,23 @@ export class HADeviceDashboard extends LitElement {
       case 'valve_controls': {
         const vc = this._getValve(device);
         return vc ? html`
-          <div class="tile-top" @click=${(e: Event) => e.stopPropagation()}>
-            <div class="cov-btns">
-              <button class="cov-btn" @click=${(e: Event) => this._valveAction(vc.entityId, 'open', e)}>▲</button>
-              <button class="cov-btn stop" @click=${(e: Event) => this._valveAction(vc.entityId, 'stop', e)}>■</button>
-              <button class="cov-btn" @click=${(e: Event) => this._valveAction(vc.entityId, 'close', e)}>▼</button>
+          <div class="tile-trv-dial" @click=${(e: Event) => e.stopPropagation()}>
+            ${this._renderValveDial(vc)}
+            <div class="valve-dial-btns">
+              <button class="valve-btn close" @click=${(e: Event) => this._valveAction(vc.entityId, 'close', e)}>Close</button>
+              <button class="valve-btn stop" @click=${(e: Event) => this._valveAction(vc.entityId, 'stop', e)}>■</button>
+              <button class="valve-btn open" @click=${(e: Event) => this._valveAction(vc.entityId, 'open', e)}>Open</button>
             </div>
-            ${vc.position != null ? html`<span class="cov-pct">${Math.round(vc.position)}%</span>` : nothing}
+            ${vc.position != null ? html`
+              <div class="valve-slider-row">
+                <span class="dial-range-text">0%</span>
+                <input type="range" class="dim-slider" min="0" max="100" step="5"
+                  style="accent-color:#0ea5e9; flex:1"
+                  .value=${String(Math.round(vc.position))}
+                  @change=${(e: Event) => { e.stopPropagation(); this._setValvePosition(vc.entityId, parseFloat((e.target as HTMLInputElement).value)); }}/>
+                <span class="dial-range-text">100%</span>
+              </div>
+            ` : nothing}
           </div>
         ` : html``;
       }
@@ -1859,6 +1907,14 @@ export class HADeviceDashboard extends LitElement {
     .trv-presets { display:flex; flex-wrap:wrap; gap:4px; justify-content:center; margin-top:6px; }
     .trv-preset-btn { font-size:11px; padding:3px 8px; border-radius:12px; border:1px solid var(--sc-border); background:transparent; color:var(--sc-text-primary); cursor:pointer; white-space:nowrap; }
     .trv-preset-btn.active { background:var(--sc-accent,#e67e22); border-color:var(--sc-accent,#e67e22); color:#fff; }
+
+    .valve-dial-btns { display:flex; align-items:center; gap:8px; margin-top:2px; }
+    .valve-btn { padding:4px 14px; border-radius:8px; border:1px solid var(--sc-tog-off-border); background:var(--sc-tog-off-bg); color:var(--sc-text-primary); font-size:12px; font-weight:600; cursor:pointer; transition:background .15s; }
+    .valve-btn:hover { background:rgba(255,255,255,.15); }
+    .valve-btn.open:hover { background:#0ea5e9; border-color:#0ea5e9; color:#fff; }
+    .valve-btn.close:hover { background:#6b7280; border-color:#6b7280; color:#fff; }
+    .valve-btn.stop { color:var(--sc-text-muted); font-size:10px; }
+    .valve-slider-row { display:flex; align-items:center; gap:6px; width:100%; padding:4px 8px 0; box-sizing:border-box; }
 
     .tile-inputs { display:flex; gap:5px; flex-wrap:wrap; padding:4px 0 2px; }
     .input-chip { display:flex; align-items:center; gap:4px; padding:4px 10px 4px 8px; border-radius:14px; border:1px solid rgba(255,255,255,.08); background:rgba(255,255,255,.05); font-size:12px; color:var(--sc-text-muted); transition:all .15s; }

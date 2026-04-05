@@ -302,7 +302,7 @@ export const PROFILE_DEFAULT_BLOCKS: Record<DeviceProfile, TileBlockId[]> = {
   media_player: ['name_row', 'media_controls', 'badges'],
   alarm:        ['name_row', 'sensors', 'badges'],
   humidifier:   ['name_row', 'sensors', 'badges'],
-  valve:        ['name_row', 'valve_controls', 'sensors', 'badges'],
+  valve:        ['name_row', 'sensors', 'valve_controls', 'badges'],
   energy:       ['name_row', 'sensors', 'graph', 'badges'],
   sensor:       ['name_row', 'sensors', 'graph', 'badges'],
   input:        ['name_row', 'input_channels', 'badges'],
