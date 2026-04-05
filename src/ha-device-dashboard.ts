@@ -968,7 +968,7 @@ export class HADeviceDashboard extends LitElement {
     const canSetPos = vc.supportsPosition || !!vc.numEntityId;
     const displayPos = this._valveDragPos ?? pos;
 
-    const onPointerDown = !canSetPos ? nothing : (e: PointerEvent) => {
+    const onPointerDown = !canSetPos ? undefined : (e: PointerEvent) => {
       e.stopPropagation();
       const svgEl = (e.currentTarget as SVGSVGElement);
       svgEl.setPointerCapture(e.pointerId);
