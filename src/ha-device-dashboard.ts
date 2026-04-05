@@ -24,6 +24,7 @@ export class HADeviceDashboard extends LitElement {
   @state() private _closedAreas = new Set<string>();
   @state() private _entityListOpen = new Set<string>();
   @state() private _graphData = new Map<string, Array<{ t: number; v: number }>>();
+  @state() private _valveDragPos: number | null = null;
   private readonly _graphFetching = new Set<string>();
   private readonly _graphFetchedAt = new Map<string, number>();
 
@@ -957,14 +958,15 @@ export class HADeviceDashboard extends LitElement {
       const large = (endDeg - startDeg) > 180 ? 1 : 0;
       return `M ${x1} ${y1} A ${radius} ${radius} 0 ${large} 1 ${x2} ${y2}`;
     };
-    const posAngle = toAngle(pos);
+    const posAngle = toAngle(displayPos);
     const [hx, hy] = toXY(posAngle, r);
-    const handleColor = `hsl(${200 + pos * 0.2}, ${40 + pos * 0.55}%, ${38 + pos * 0.18}%)`;
-    const stateLabel = vc.state === 'opening' ? 'Opening…' : vc.state === 'closing' ? 'Closing…'
+    const handleColor = `hsl(${200 + displayPos * 0.2}, ${40 + displayPos * 0.55}%, ${38 + displayPos * 0.18}%)`;
+    const stateLabel = this._valveDragPos != null ? `${Math.round(this._valveDragPos)}%`
+      : vc.state === 'opening' ? 'Opening…' : vc.state === 'closing' ? 'Closing…'
       : pos === 100 ? 'Open' : pos === 0 ? 'Closed' : 'Partial';
 
     const canSetPos = vc.supportsPosition || !!vc.numEntityId;
-    const setPos = (pct: number) => this._setValvePosition(vc.entityId, pct, vc.numEntityId);
+    const displayPos = this._valveDragPos ?? pos;
 
     const onPointerDown = !canSetPos ? nothing : (e: PointerEvent) => {
       e.stopPropagation();
@@ -972,18 +974,17 @@ export class HADeviceDashboard extends LitElement {
       svgEl.setPointerCapture(e.pointerId);
       const onMove = (ev: PointerEvent) => {
         const pct = this._valvePosFromEvent(ev, svgEl);
-        if (pct != null) setPos(pct);
+        if (pct != null) this._valveDragPos = pct; // visual preview only
       };
       const onUp = (ev: PointerEvent) => {
-        const pct = this._valvePosFromEvent(ev, svgEl);
-        if (pct != null) setPos(pct);
+        const pct = this._valvePosFromEvent(ev, svgEl) ?? this._valveDragPos;
+        this._valveDragPos = null;
+        if (pct != null) this._setValvePosition(vc.entityId, pct, vc.numEntityId);
         svgEl.removeEventListener('pointermove', onMove);
         svgEl.removeEventListener('pointerup', onUp);
       };
       svgEl.addEventListener('pointermove', onMove);
       svgEl.addEventListener('pointerup', onUp);
-      const pct = this._valvePosFromEvent(e, svgEl);
-      if (pct != null) setPos(pct);
     };
 
     return svg`
@@ -999,7 +1000,7 @@ export class HADeviceDashboard extends LitElement {
         <path d="${arcPath(210, 510, r)}" fill="none" stroke="url(#valve-grad)" stroke-width="8" stroke-linecap="round" opacity="0.25"/>
         ${pos > 0 ? svg`<path d="${arcPath(210, posAngle, r)}" fill="none" stroke="url(#valve-grad)" stroke-width="8" stroke-linecap="round"/>` : nothing}
         <circle cx="${hx}" cy="${hy}" r="9" fill="${handleColor}" stroke="white" stroke-width="2" style="${canSetPos ? 'cursor:grab' : ''}"/>
-        <text x="${cx}" y="${cy - 8}" text-anchor="middle" class="dial-target-text">${Math.round(pos)}%</text>
+        <text x="${cx}" y="${cy - 8}" text-anchor="middle" class="dial-target-text">${Math.round(displayPos)}%</text>
         <text x="${cx}" y="${cy + 7}" text-anchor="middle" class="dial-sub-text">${stateLabel}</text>
         <text x="16" y="106" text-anchor="middle" class="dial-range-text">Closed</text>
         <text x="144" y="106" text-anchor="middle" class="dial-range-text">Open</text>
