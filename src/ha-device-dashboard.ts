@@ -259,12 +259,15 @@ export class HADeviceDashboard extends LitElement {
       const pe = device.entities.find(e => e.domain === 'sensor' && e.entity_id.includes('position'));
       if (pe) { const v = parseFloat(this.hass.states[pe.entity_id]?.state ?? ''); if (!isNaN(v)) position = v; }
     }
-    // fallback: find a number entity for position control (0–100)
-    const numEnt = !supportsPosition ? device.entities.find(e => {
+    // prefer a number entity (0–100) over valve.set_valve_position — Shelly devices
+    // report SET_POSITION support but the underlying RPC can fail; the number entity is more reliable
+    const numEnt = device.entities.find(e => {
       if (e.domain !== 'number') return false;
       const ns = this.hass.states[e.entity_id];
-      return ns && (ns.attributes as any)?.min === 0 && (ns.attributes as any)?.max === 100;
-    }) : undefined;
+      if (!ns) return false;
+      const a = ns.attributes as any;
+      return (a.min === 0 && a.max === 100) || e.entity_id.includes('position');
+    });
     let temperature: number | undefined;
     const te = device.entities.find(e => e.domain === 'sensor' && (this.hass.states[e.entity_id]?.attributes as any)?.device_class === 'temperature');
     if (te) { const v = parseFloat(this.hass.states[te.entity_id]?.state ?? ''); if (!isNaN(v)) temperature = v; }
@@ -307,6 +310,8 @@ export class HADeviceDashboard extends LitElement {
 
   private async _setValvePosition(entityId: string, pos: number, numEntityId?: string) {
     const clamped = Math.round(Math.max(0, Math.min(100, pos)));
+    // Prefer number entity — valve.set_valve_position can fail on Shelly devices
+    // even when supported_features reports SET_POSITION support
     if (numEntityId) {
       await this.hass.callService('number', 'set_value', { entity_id: numEntityId, value: clamped });
     } else {
