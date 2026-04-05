@@ -687,7 +687,7 @@ function e(e,t,s,i){var a,r=arguments.length,o=r<3?t:null===i?i=Object.getOwnPro
     .dim-wrap { display:flex; flex-direction:row; align-items:center; gap:6px; flex:1; min-width:0; }
 
     .tile-trv-dial { display:flex; flex-direction:column; align-items:center; justify-content:center; flex:1; width:100%; padding:4px 0; }
-    .trv-dial-svg { width:100%; max-width:160px; height:auto; overflow:visible; }
+    .trv-dial-svg { width:100%; max-width:200px; height:auto; overflow:visible; }
     .dial-target-text { font-size:30px; font-weight:700; fill:var(--sc-text-primary,#fff); }
     .dial-sub-text { font-size:11px; fill:var(--sc-text-secondary,rgba(255,255,255,0.5)); }
     .dial-current-text { font-size:13px; fill:var(--sc-text-secondary,rgba(255,255,255,0.65)); }
