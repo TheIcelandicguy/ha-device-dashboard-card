@@ -850,36 +850,72 @@ export class HADeviceDashboard extends LitElement {
     return PROFILE_DEFAULT_BLOCKS[profile.type] ?? PROFILE_DEFAULT_BLOCKS.generic;
   }
 
+  private _trvColor(ratio: number): string {
+    // blue (#4a90d9) → orange (#e67e22) → red (#e53935)
+    const clamp = Math.max(0, Math.min(1, ratio));
+    let r: number, g: number, b: number;
+    if (clamp < 0.5) {
+      const t = clamp * 2;
+      r = Math.round(74  + t * (230 - 74));
+      g = Math.round(144 + t * (126 - 144));
+      b = Math.round(217 + t * (34  - 217));
+    } else {
+      const t = (clamp - 0.5) * 2;
+      r = Math.round(230 + t * (229 - 230));
+      g = Math.round(126 + t * (57  - 126));
+      b = Math.round(34  + t * (53  - 34));
+    }
+    return `rgb(${r},${g},${b})`;
+  }
+
   private _renderTrvDial(trv: NonNullable<ReturnType<typeof this._getTrv>>) {
-    const { minTemp, maxTemp, targetTemp, currentTemp, hvacAction } = trv;
+    const { minTemp, maxTemp, targetTemp, currentTemp } = trv;
+    const cx = 100, cy = 95, r = 72;
     const target = targetTemp ?? minTemp;
+    const targetRatio = Math.max(0, Math.min(1, (target - minTemp) / (maxTemp - minTemp)));
     const toAngle = (v: number) => 210 + ((v - minTemp) / (maxTemp - minTemp)) * 300;
-    const toXY = (deg: number, r: number): [number, number] => [
-      80 + r * Math.cos((deg - 90) * Math.PI / 180),
-      78 + r * Math.sin((deg - 90) * Math.PI / 180),
+    const toXY = (deg: number, radius: number): [number, number] => [
+      cx + radius * Math.cos((deg - 90) * Math.PI / 180),
+      cy + radius * Math.sin((deg - 90) * Math.PI / 180),
     ];
-    const arcPath = (startDeg: number, endDeg: number, r: number) => {
-      const [x1, y1] = toXY(startDeg, r);
-      const [x2, y2] = toXY(endDeg, r);
+    const arcPath = (startDeg: number, endDeg: number, radius: number) => {
+      const [x1, y1] = toXY(startDeg, radius);
+      const [x2, y2] = toXY(endDeg, radius);
       const large = (endDeg - startDeg) > 180 ? 1 : 0;
-      return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`;
+      return `M ${x1} ${y1} A ${radius} ${radius} 0 ${large} 1 ${x2} ${y2}`;
     };
-    const isHeating = hvacAction === 'heating';
-    const fillColor = isHeating ? 'var(--sc-accent, #e67e22)' : '#4a90d9';
+    const fillColor = this._trvColor(targetRatio);
     const targetAngle = toAngle(target);
-    const [tx, ty] = toXY(targetAngle, 58);
-    const curXY = currentTemp != null ? toXY(toAngle(currentTemp), 58) : null;
+    const [tx, ty] = toXY(targetAngle, r);
+    const curRatio = currentTemp != null ? (currentTemp - minTemp) / (maxTemp - minTemp) : null;
+    const curXY = currentTemp != null ? toXY(toAngle(currentTemp), r) : null;
+    const curColor = curRatio != null ? this._trvColor(curRatio) : fillColor;
+    // gradient id scoped to avoid conflicts if multiple TRV tiles
+    const gid = `trv-grad-${this._getTrv.name}`;
     return svg`
-      <svg viewBox="0 0 160 130" class="trv-dial-svg">
-        <path d="${arcPath(210, 510, 58)}" fill="none" stroke="var(--sc-border,rgba(128,128,128,0.25))" stroke-width="8" stroke-linecap="round"/>
-        ${targetAngle > 210 ? svg`<path d="${arcPath(210, targetAngle, 58)}" fill="none" stroke="${fillColor}" stroke-width="8" stroke-linecap="round"/>` : nothing}
-        ${curXY ? svg`<circle cx="${curXY[0]}" cy="${curXY[1]}" r="5" fill="white" stroke="${fillColor}" stroke-width="2"/>` : nothing}
-        <circle cx="${tx}" cy="${ty}" r="8" fill="${fillColor}" stroke="white" stroke-width="2"/>
-        <text x="80" y="64" text-anchor="middle" class="dial-target-text">${target.toFixed(1)}°</text>
-        <text x="80" y="79" text-anchor="middle" class="dial-sub-text">target</text>
-        <text x="80" y="93" text-anchor="middle" class="dial-current-text">${currentTemp != null ? `now ${currentTemp}°` : ''}</text>
-        <text x="18" y="124" text-anchor="middle" class="dial-range-text">${minTemp}°</text>
-        <text x="142" y="124" text-anchor="middle" class="dial-range-text">${maxTemp}°</text>
+      <svg viewBox="0 0 200 155" class="trv-dial-svg">
+        <defs>
+          <linearGradient id="${gid}" x1="0%" y1="100%" x2="100%" y2="0%">
+            <stop offset="0%"   stop-color="${this._trvColor(0)}"/>
+            <stop offset="50%"  stop-color="${this._trvColor(0.5)}"/>
+            <stop offset="100%" stop-color="${this._trvColor(1)}"/>
+          </linearGradient>
+        </defs>
+        <!-- full track with blue→red gradient -->
+        <path d="${arcPath(210, 510, r)}" fill="none" stroke="url(#${gid})" stroke-width="10" stroke-linecap="round" opacity="0.25"/>
+        <!-- fill arc to target -->
+        ${targetAngle > 210 ? svg`<path d="${arcPath(210, targetAngle, r)}" fill="none" stroke="url(#${gid})" stroke-width="10" stroke-linecap="round"/>` : nothing}
+        <!-- current temp dot -->
+        ${curXY ? svg`<circle cx="${curXY[0]}" cy="${curXY[1]}" r="6" fill="white" stroke="${curColor}" stroke-width="2.5"/>` : nothing}
+        <!-- target handle -->
+        <circle cx="${tx}" cy="${ty}" r="10" fill="${fillColor}" stroke="white" stroke-width="2.5"/>
+        <!-- center: target temp -->
+        <text x="${cx}" y="${cy - 14}" text-anchor="middle" class="dial-target-text">${target.toFixed(1)}°</text>
+        <text x="${cx}" y="${cy + 4}" text-anchor="middle" class="dial-sub-text">target</text>
+        <text x="${cx}" y="${cy + 20}" text-anchor="middle" class="dial-current-text">${currentTemp != null ? `now ${currentTemp}°` : ''}</text>
+        <!-- min/max labels -->
+        <text x="22" y="148" text-anchor="middle" class="dial-range-text">${minTemp}°</text>
+        <text x="178" y="148" text-anchor="middle" class="dial-range-text">${maxTemp}°</text>
       </svg>
     `;
   }
@@ -1810,11 +1846,11 @@ export class HADeviceDashboard extends LitElement {
     .dim-wrap { display:flex; flex-direction:row; align-items:center; gap:6px; flex:1; min-width:0; }
 
     .tile-trv-dial { display:flex; flex-direction:column; align-items:center; padding:4px 0; }
-    .trv-dial-svg { width:100%; max-width:160px; height:auto; overflow:visible; }
-    .dial-target-text { font-size:24px; font-weight:700; fill:var(--sc-text-primary,#fff); }
-    .dial-sub-text { font-size:10px; fill:var(--sc-text-secondary,rgba(255,255,255,0.5)); }
-    .dial-current-text { font-size:11px; fill:var(--sc-text-secondary,rgba(255,255,255,0.6)); }
-    .dial-range-text { font-size:10px; fill:var(--sc-text-secondary,rgba(255,255,255,0.5)); }
+    .trv-dial-svg { width:100%; max-width:220px; height:auto; overflow:visible; }
+    .dial-target-text { font-size:30px; font-weight:700; fill:var(--sc-text-primary,#fff); }
+    .dial-sub-text { font-size:11px; fill:var(--sc-text-secondary,rgba(255,255,255,0.5)); }
+    .dial-current-text { font-size:13px; fill:var(--sc-text-secondary,rgba(255,255,255,0.65)); }
+    .dial-range-text { font-size:11px; fill:var(--sc-text-secondary,rgba(255,255,255,0.5)); }
     .trv-dial-btns { display:flex; align-items:center; gap:12px; margin-top:2px; }
     .trv-stat-row { display:flex; gap:10px; justify-content:center; margin-top:4px; }
     .trv-stat { display:flex; flex-direction:column; align-items:center; }
