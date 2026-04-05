@@ -325,13 +325,38 @@ export class HADeviceDashboard extends LitElement {
     return null;
   }
 
+  /** Extracts a short channel label from an entity_id, e.g. "Ch 1" / "Ch 2". Returns '' if no channel found. */
+  private _chLabel(entityId: string): string {
+    const m = entityId.match(/[_-](?:switch|channel|ch|output)_?(\d+)[_-]/i)
+           ?? entityId.match(/[_-](\d+)[_-](?:power|energy|voltage|current|apparent|reactive|factor|freq)/i);
+    return m ? `Ch ${+m[1] + 1}` : '';
+  }
+
   private _getSensors(device: HADevice): Array<{ label: string; value: string; warn?: boolean }> {
     const allowed = this._config.sensors?.length ? new Set(this._config.sensors) : null;
     const show = (k: string) => !allowed || allowed.has(k);
     const result: Array<{ label: string; value: string; warn?: boolean }> = [];
     const seen = new Set<string>();
-    const push = (k: string, label: string, value: string, warn = false) => {
-      if (!seen.has(k)) { seen.add(k); result.push({ label, value, warn }); }
+
+    // Pre-scan: find which electrical device_classes appear on more than one entity
+    // so we can show per-channel labels for multi-channel devices (e.g. Shelly 2.5)
+    const ELECTRICAL_DCS = new Set(['power','energy','current','voltage','apparent_power','reactive_power','power_factor','frequency']);
+    const dcIds = new Map<string, string[]>();
+    for (const e of device.entities) {
+      const s = this.hass.states[e.entity_id];
+      if (!s || s.state === 'unavailable' || s.state === 'unknown') continue;
+      const dc = (s.attributes as any)?.device_class as string ?? '';
+      if (ELECTRICAL_DCS.has(dc)) {
+        if (!dcIds.has(dc)) dcIds.set(dc, []);
+        dcIds.get(dc)!.push(e.entity_id);
+      }
+    }
+    const multiDcs = new Set([...dcIds.entries()].filter(([, ids]) => ids.length > 1).map(([dc]) => dc));
+
+    const push = (k: string, label: string, value: string, warn = false, entityId?: string) => {
+      // For multi-channel electrical sensors use entity_id as the dedup key so all channels show
+      const key = (entityId && multiDcs.has(k)) ? entityId : k;
+      if (!seen.has(key)) { seen.add(key); result.push({ label, value, warn }); }
     };
 
     for (const e of device.entities) {
@@ -347,14 +372,16 @@ export class HADeviceDashboard extends LitElement {
         if (!dc && (id.endsWith('_firmware') || id.endsWith('_fw'))     && show('fw_version')) { push('fw_version', 'FW',       s.state); continue; }
         if (!dc && id.endsWith('_mac')                                  && show('mac'))        { push('mac',        'MAC',      s.state); continue; }
         const v = parseFloat(s.state); if (isNaN(v)) continue;
-        if      (dc === 'power'           && show('power'))          push('power',          'Power',        formatPower(v));
-        else if (dc === 'apparent_power'  && show('apparent_power')) push('apparent_power', 'App.P',        formatApparentPower(v));
-        else if (dc === 'reactive_power'  && show('reactive_power')) push('reactive_power', 'Re.P',         formatReactivePower(v));
-        else if (dc === 'power_factor'    && show('power_factor'))   push('power_factor',   'PF',           formatPercent(v));
-        else if (dc === 'frequency'       && show('frequency'))      push('frequency',      'Freq',         formatFrequency(v));
-        else if (dc === 'energy'          && show('energy'))         push('energy',         'Energy',       formatEnergy(v));
-        else if (dc === 'voltage'         && show('voltage'))        push('voltage',        'Volt',         formatVoltage(v));
-        else if (dc === 'current'         && show('current'))        push('current',        'Curr',         formatCurrent(v));
+        const ch = multiDcs.size ? this._chLabel(id) : '';
+        const chSufx = (k: string) => (multiDcs.has(k) && ch) ? ` ${ch}` : '';
+        if      (dc === 'power'           && show('power'))          push('power',          `Power${chSufx('power')}`,          formatPower(v),           false, id);
+        else if (dc === 'apparent_power'  && show('apparent_power')) push('apparent_power', `App.P${chSufx('apparent_power')}`, formatApparentPower(v),   false, id);
+        else if (dc === 'reactive_power'  && show('reactive_power')) push('reactive_power', `Re.P${chSufx('reactive_power')}`,  formatReactivePower(v),   false, id);
+        else if (dc === 'power_factor'    && show('power_factor'))   push('power_factor',   `PF${chSufx('power_factor')}`,      formatPercent(v),         false, id);
+        else if (dc === 'frequency'       && show('frequency'))      push('frequency',      `Freq${chSufx('frequency')}`,       formatFrequency(v),       false, id);
+        else if (dc === 'energy'          && show('energy'))         push('energy',         `Energy${chSufx('energy')}`,        formatEnergy(v),          false, id);
+        else if (dc === 'voltage'         && show('voltage'))        push('voltage',        `Volt${chSufx('voltage')}`,         formatVoltage(v),         false, id);
+        else if (dc === 'current'         && show('current'))        push('current',        `Curr${chSufx('current')}`,         formatCurrent(v),         false, id);
         else if (dc === 'temperature'     && show('temperature'))    push('temperature',    'Temp',         formatTemp(v));
         else if (dc === 'humidity'        && show('humidity'))       push('humidity',       'Hum',          formatHumidity(v));
         else if (dc === 'illuminance'     && show('illuminance'))    push('illuminance',    'Light',        formatIlluminance(v));
@@ -470,14 +497,16 @@ export class HADeviceDashboard extends LitElement {
     if (!dcList.length) return [];
     const results: Array<{ entityId: string; label: string; dc: string; unit: string }> = [];
     for (const dc of dcList) {
-      const ent = device.entities.find(e => {
+      const ents = device.entities.filter(e => {
         if (e.domain !== 'sensor') return false;
         const attrDc = (this.hass.states[e.entity_id]?.attributes as any)?.device_class ?? (e.attributes as any)?.device_class;
         return attrDc === dc || (dc === 'signal_strength' && e.entity_id.includes('rssi'));
       });
-      if (ent) {
+      for (const ent of ents) {
         const unit = (this.hass.states[ent.entity_id]?.attributes as any)?.unit_of_measurement ?? '';
-        results.push({ entityId: ent.entity_id, label: GRAPH_DC_LABELS[dc] ?? dc, dc, unit });
+        const ch = ents.length > 1 ? this._chLabel(ent.entity_id) : '';
+        const label = (GRAPH_DC_LABELS[dc] ?? dc) + (ch ? ` ${ch}` : '');
+        results.push({ entityId: ent.entity_id, label, dc, unit });
       }
     }
     return results;
