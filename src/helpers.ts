@@ -100,6 +100,36 @@ export function getAllDevices(
     });
   }
 
+  // Merge sub-devices into their parent when they represent the same physical
+  // device (e.g. Shelly 2.5 registers a main device + per-channel sub-devices).
+  // We only merge when the sub-device's via_device_id points to a collected device
+  // AND they share the same configuration_url host (same IP → same hardware unit),
+  // OR the child has no config URL but shares the same integration platform.
+  const toMerge = new Set<string>();
+  for (const [deviceId, device] of devices) {
+    if (toMerge.has(deviceId)) continue;
+    const devInfo: any = deviceRegistry[deviceId];
+    const parentId: string | undefined = devInfo?.via_device_id;
+    if (!parentId || !devices.has(parentId) || toMerge.has(parentId)) continue;
+
+    const parentInfo: any = deviceRegistry[parentId];
+    const childUrl: string  = devInfo?.configuration_url  ?? '';
+    const parentUrl: string = parentInfo?.configuration_url ?? '';
+
+    const getHost = (url: string) => { const m = url.match(/https?:\/\/([^/]+)/); return m ? m[1] : ''; };
+    const sameHost     = childUrl && parentUrl && getHost(childUrl) === getHost(parentUrl);
+    const subComponent = !childUrl && parentUrl && device.integration === devices.get(parentId)!.integration;
+
+    if (!sameHost && !subComponent) continue;
+
+    const parent = devices.get(parentId)!;
+    parent.entities.push(...device.entities);
+    if (!parent.ip    && device.ip)    parent.ip    = device.ip;
+    if (!parent.model && device.model) parent.model = device.model;
+    toMerge.add(deviceId);
+  }
+  for (const id of toMerge) devices.delete(id);
+
   return Array.from(devices.values())
     .filter(d => d.entities.length > 0)
     .sort((a, b) => a.name.localeCompare(b.name));
