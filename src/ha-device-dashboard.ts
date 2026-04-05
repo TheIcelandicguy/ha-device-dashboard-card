@@ -555,6 +555,10 @@ export class HADeviceDashboard extends LitElement {
     await this.hass.callService('climate', 'set_hvac_mode', { entity_id: entityId, hvac_mode: mode });
   }
 
+  private _setPresetMode(entityId: string, preset: string) {
+    this.hass.callService('climate', 'set_preset_mode', { entity_id: entityId, preset_mode: preset });
+  }
+
   private async _installUpdate(entityId: string, e: Event) {
     e.stopPropagation();
     await this.hass.callService('update', 'install', { entity_id: entityId });
@@ -846,6 +850,40 @@ export class HADeviceDashboard extends LitElement {
     return PROFILE_DEFAULT_BLOCKS[profile.type] ?? PROFILE_DEFAULT_BLOCKS.generic;
   }
 
+  private _renderTrvDial(trv: NonNullable<ReturnType<typeof this._getTrv>>) {
+    const { minTemp, maxTemp, targetTemp, currentTemp, hvacAction } = trv;
+    const target = targetTemp ?? minTemp;
+    const toAngle = (v: number) => 210 + ((v - minTemp) / (maxTemp - minTemp)) * 300;
+    const toXY = (deg: number, r: number): [number, number] => [
+      80 + r * Math.cos((deg - 90) * Math.PI / 180),
+      78 + r * Math.sin((deg - 90) * Math.PI / 180),
+    ];
+    const arcPath = (startDeg: number, endDeg: number, r: number) => {
+      const [x1, y1] = toXY(startDeg, r);
+      const [x2, y2] = toXY(endDeg, r);
+      const large = (endDeg - startDeg) > 180 ? 1 : 0;
+      return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`;
+    };
+    const isHeating = hvacAction === 'heating';
+    const fillColor = isHeating ? 'var(--sc-accent, #e67e22)' : '#4a90d9';
+    const targetAngle = toAngle(target);
+    const [tx, ty] = toXY(targetAngle, 58);
+    const curXY = currentTemp != null ? toXY(toAngle(currentTemp), 58) : null;
+    return svg`
+      <svg viewBox="0 0 160 130" class="trv-dial-svg">
+        <path d="${arcPath(210, 510, 58)}" fill="none" stroke="var(--sc-border,rgba(128,128,128,0.25))" stroke-width="8" stroke-linecap="round"/>
+        ${targetAngle > 210 ? svg`<path d="${arcPath(210, targetAngle, 58)}" fill="none" stroke="${fillColor}" stroke-width="8" stroke-linecap="round"/>` : nothing}
+        ${curXY ? svg`<circle cx="${curXY[0]}" cy="${curXY[1]}" r="5" fill="white" stroke="${fillColor}" stroke-width="2"/>` : nothing}
+        <circle cx="${tx}" cy="${ty}" r="8" fill="${fillColor}" stroke="white" stroke-width="2"/>
+        <text x="80" y="64" text-anchor="middle" class="dial-target-text">${target.toFixed(1)}°</text>
+        <text x="80" y="79" text-anchor="middle" class="dial-sub-text">target</text>
+        <text x="80" y="93" text-anchor="middle" class="dial-current-text">${currentTemp != null ? `now ${currentTemp}°` : ''}</text>
+        <text x="18" y="124" text-anchor="middle" class="dial-range-text">${minTemp}°</text>
+        <text x="142" y="124" text-anchor="middle" class="dial-range-text">${maxTemp}°</text>
+      </svg>
+    `;
+  }
+
   private _renderBlock(
     blockId: TileBlockId,
     device: HADevice,
@@ -961,20 +999,38 @@ export class HADeviceDashboard extends LitElement {
           </div>
         ` : html``;
 
-      case 'trv_control':
+      case 'trv_control': {
+        const battEnt = device.entities.find(e => e.domain === 'sensor' &&
+          (this.hass.states[e.entity_id]?.attributes as any)?.device_class === 'battery');
+        const batteryPct = battEnt != null ? parseFloat(this.hass.states[battEnt.entity_id]?.state ?? '') || null : null;
+        const PRESET_ICONS: Record<string, string> = { comfort: '🏠', eco: '🌿', boost: '🚀', away: '🌙', none: '❄️' };
         return trv ? html`
-          <div class="tile-trv-row" @click=${(e: Event) => e.stopPropagation()}>
-            <div class="trv-temps">
-              ${trv.currentTemp != null ? html`<span class="trv-cur">${trv.currentTemp}°</span><span class="trv-sep">›</span>` : nothing}
-              <span class="trv-target ${isHeating ? 'heating' : ''}">${trv.targetTemp ?? '—'}°</span>
+          <div class="tile-trv-dial" @click=${(e: Event) => e.stopPropagation()}>
+            ${this._renderTrvDial(trv)}
+            <div class="trv-dial-btns">
+              <button class="trv-step" @click=${() => trv.targetTemp != null && this._setTemp(trv.entityId, Math.max(trv.minTemp, trv.targetTemp - trv.step))}>−</button>
+              <span class="trv-flame">${trv.hvacAction === 'heating' ? '🔥' : ''}</span>
+              <button class="trv-step" @click=${() => trv.targetTemp != null && this._setTemp(trv.entityId, Math.min(trv.maxTemp, trv.targetTemp + trv.step))}>+</button>
             </div>
-            ${trv.hvacAction === 'heating' ? html`<span class="trv-flame">🔥</span>` : nothing}
-            <div class="trv-step-btns">
-              <button class="trv-step" @click=${() => trv.targetTemp != null && this._setTemp(trv.entityId, trv.targetTemp - trv.step)}>−</button>
-              <button class="trv-step" @click=${() => trv.targetTemp != null && this._setTemp(trv.entityId, trv.targetTemp + trv.step)}>+</button>
+            <div class="trv-stat-row">
+              <div class="trv-stat"><span class="trv-stat-lbl">Now</span><span class="trv-stat-val">${trv.currentTemp != null ? `${trv.currentTemp}°` : '—'}</span></div>
+              <div class="trv-stat"><span class="trv-stat-lbl">Set</span><span class="trv-stat-val">${trv.targetTemp != null ? `${trv.targetTemp.toFixed(1)}°` : '—'}</span></div>
+              ${trv.valvePosition != null ? html`<div class="trv-stat"><span class="trv-stat-lbl">Valve</span><span class="trv-stat-val">${Math.round(trv.valvePosition)}%</span></div>` : nothing}
+              ${batteryPct != null ? html`<div class="trv-stat"><span class="trv-stat-lbl">Batt</span><span class="trv-stat-val">${batteryPct}%</span></div>` : nothing}
             </div>
+            ${trv.presetModes.length ? html`
+              <div class="trv-presets">
+                ${trv.presetModes.map(p => html`
+                  <button class="trv-preset-btn ${trv.presetMode === p ? 'active' : ''}"
+                    @click=${() => this._setPresetMode(trv.entityId, p)}>
+                    ${(PRESET_ICONS[p] ?? '') + p}
+                  </button>
+                `)}
+              </div>
+            ` : nothing}
           </div>
         ` : html``;
+      }
 
       case 'input_channels':
         return inputs.length ? html`
@@ -1752,6 +1808,21 @@ export class HADeviceDashboard extends LitElement {
     .trv-mode-row { display:flex; gap:6px; margin-bottom:6px; }
     .trv-range-lbl { font-size:.68em; color:var(--sc-text-muted); flex-shrink:0; }
     .dim-wrap { display:flex; flex-direction:row; align-items:center; gap:6px; flex:1; min-width:0; }
+
+    .tile-trv-dial { display:flex; flex-direction:column; align-items:center; padding:4px 0; }
+    .trv-dial-svg { width:100%; max-width:160px; height:auto; overflow:visible; }
+    .dial-target-text { font-size:24px; font-weight:700; fill:var(--sc-text-primary,#fff); }
+    .dial-sub-text { font-size:10px; fill:var(--sc-text-secondary,rgba(255,255,255,0.5)); }
+    .dial-current-text { font-size:11px; fill:var(--sc-text-secondary,rgba(255,255,255,0.6)); }
+    .dial-range-text { font-size:10px; fill:var(--sc-text-secondary,rgba(255,255,255,0.5)); }
+    .trv-dial-btns { display:flex; align-items:center; gap:12px; margin-top:2px; }
+    .trv-stat-row { display:flex; gap:10px; justify-content:center; margin-top:4px; }
+    .trv-stat { display:flex; flex-direction:column; align-items:center; }
+    .trv-stat-lbl { font-size:10px; color:var(--sc-text-secondary,rgba(255,255,255,0.55)); }
+    .trv-stat-val { font-size:13px; font-weight:600; color:var(--sc-text-primary,#fff); }
+    .trv-presets { display:flex; flex-wrap:wrap; gap:4px; justify-content:center; margin-top:6px; }
+    .trv-preset-btn { font-size:11px; padding:3px 8px; border-radius:12px; border:1px solid var(--sc-border); background:transparent; color:var(--sc-text-primary); cursor:pointer; white-space:nowrap; }
+    .trv-preset-btn.active { background:var(--sc-accent,#e67e22); border-color:var(--sc-accent,#e67e22); color:#fff; }
 
     .tile-inputs { display:flex; gap:5px; flex-wrap:wrap; padding:4px 0 2px; }
     .input-chip { display:flex; align-items:center; gap:4px; padding:4px 10px 4px 8px; border-radius:14px; border:1px solid rgba(255,255,255,.08); background:rgba(255,255,255,.05); font-size:12px; color:var(--sc-text-muted); transition:all .15s; }
