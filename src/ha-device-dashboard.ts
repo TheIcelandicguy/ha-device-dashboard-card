@@ -252,15 +252,23 @@ export class HADeviceDashboard extends LitElement {
     if (!ent) return null;
     const s = this.hass.states[ent.entity_id];
     if (!s) return null;
+    // feature bit 4 = SET_POSITION support
+    const supportsPosition = !!((s.attributes as any)?.supported_features & 4);
     let position: number | undefined = (s.attributes as any)?.current_position;
     if (position == null) {
       const pe = device.entities.find(e => e.domain === 'sensor' && e.entity_id.includes('position'));
       if (pe) { const v = parseFloat(this.hass.states[pe.entity_id]?.state ?? ''); if (!isNaN(v)) position = v; }
     }
+    // fallback: find a number entity for position control (0–100)
+    const numEnt = !supportsPosition ? device.entities.find(e => {
+      if (e.domain !== 'number') return false;
+      const ns = this.hass.states[e.entity_id];
+      return ns && (ns.attributes as any)?.min === 0 && (ns.attributes as any)?.max === 100;
+    }) : undefined;
     let temperature: number | undefined;
     const te = device.entities.find(e => e.domain === 'sensor' && (this.hass.states[e.entity_id]?.attributes as any)?.device_class === 'temperature');
     if (te) { const v = parseFloat(this.hass.states[te.entity_id]?.state ?? ''); if (!isNaN(v)) temperature = v; }
-    return { entityId: ent.entity_id, state: s.state, position, temperature };
+    return { entityId: ent.entity_id, state: s.state, position, supportsPosition, numEntityId: numEnt?.entity_id, temperature };
   }
 
   private _getFan(device: HADevice) {
@@ -297,8 +305,13 @@ export class HADeviceDashboard extends LitElement {
     };
   }
 
-  private async _setValvePosition(entityId: string, pos: number) {
-    await this.hass.callService('valve', 'set_valve_position', { entity_id: entityId, position: Math.round(Math.max(0, Math.min(100, pos))) });
+  private async _setValvePosition(entityId: string, pos: number, numEntityId?: string) {
+    const clamped = Math.round(Math.max(0, Math.min(100, pos)));
+    if (numEntityId) {
+      await this.hass.callService('number', 'set_value', { entity_id: numEntityId, value: clamped });
+    } else {
+      await this.hass.callService('valve', 'set_valve_position', { entity_id: entityId, position: clamped });
+    }
   }
 
   private _getAlerts(device: HADevice): Array<'overtemp' | 'overpower'> {
@@ -952,28 +965,31 @@ export class HADeviceDashboard extends LitElement {
     const stateLabel = vc.state === 'opening' ? 'Opening…' : vc.state === 'closing' ? 'Closing…'
       : pos === 100 ? 'Open' : pos === 0 ? 'Closed' : 'Partial';
 
-    const onPointerDown = (e: PointerEvent) => {
+    const canSetPos = vc.supportsPosition || !!vc.numEntityId;
+    const setPos = (pct: number) => this._setValvePosition(vc.entityId, pct, vc.numEntityId);
+
+    const onPointerDown = !canSetPos ? nothing : (e: PointerEvent) => {
       e.stopPropagation();
       const svgEl = (e.currentTarget as SVGSVGElement);
       svgEl.setPointerCapture(e.pointerId);
       const onMove = (ev: PointerEvent) => {
         const pct = this._valvePosFromEvent(ev, svgEl);
-        if (pct != null) this._setValvePosition(vc.entityId, pct);
+        if (pct != null) setPos(pct);
       };
       const onUp = (ev: PointerEvent) => {
         const pct = this._valvePosFromEvent(ev, svgEl);
-        if (pct != null) this._setValvePosition(vc.entityId, pct);
+        if (pct != null) setPos(pct);
         svgEl.removeEventListener('pointermove', onMove);
         svgEl.removeEventListener('pointerup', onUp);
       };
       svgEl.addEventListener('pointermove', onMove);
       svgEl.addEventListener('pointerup', onUp);
       const pct = this._valvePosFromEvent(e, svgEl);
-      if (pct != null) this._setValvePosition(vc.entityId, pct);
+      if (pct != null) setPos(pct);
     };
 
     return svg`
-      <svg viewBox="0 0 200 145" class="trv-dial-svg valve-interactive"
+      <svg viewBox="0 0 200 145" class="trv-dial-svg ${canSetPos ? 'valve-interactive' : ''}"
         @pointerdown=${onPointerDown}>
         <defs>
           <linearGradient id="valve-grad" x1="0%" y1="100%" x2="100%" y2="0%">
@@ -981,11 +997,10 @@ export class HADeviceDashboard extends LitElement {
             <stop offset="100%" stop-color="#0ea5e9"/>
           </linearGradient>
         </defs>
-        <!-- wide invisible hit area on the track -->
-        <path d="${arcPath(210, 510, r)}" fill="none" stroke="transparent" stroke-width="28" stroke-linecap="round"/>
+        ${canSetPos ? svg`<path d="${arcPath(210, 510, r)}" fill="none" stroke="transparent" stroke-width="28" stroke-linecap="round"/>` : nothing}
         <path d="${arcPath(210, 510, r)}" fill="none" stroke="url(#valve-grad)" stroke-width="10" stroke-linecap="round" opacity="0.25"/>
         ${pos > 0 ? svg`<path d="${arcPath(210, posAngle, r)}" fill="none" stroke="url(#valve-grad)" stroke-width="10" stroke-linecap="round"/>` : nothing}
-        <circle cx="${hx}" cy="${hy}" r="12" fill="${handleColor}" stroke="white" stroke-width="2.5" style="cursor:grab"/>
+        <circle cx="${hx}" cy="${hy}" r="12" fill="${handleColor}" stroke="white" stroke-width="2.5" style="${canSetPos ? 'cursor:grab' : ''}"/>
         <text x="${cx}" y="${cy - 10}" text-anchor="middle" class="dial-target-text">${Math.round(pos)}%</text>
         <text x="${cx}" y="${cy + 8}" text-anchor="middle" class="dial-sub-text">${stateLabel}</text>
         <text x="22" y="138" text-anchor="middle" class="dial-range-text">Closed</text>
