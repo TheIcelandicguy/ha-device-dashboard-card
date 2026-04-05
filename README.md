@@ -1,7 +1,7 @@
-# Shelly Dashboard Card
+# HA Device Dashboard
 
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange)](https://github.com/hacs/integration)
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-2.0.1-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 A Home Assistant Lovelace custom card that auto-discovers all your Shelly devices and displays them in a live, interactive fleet dashboard.
