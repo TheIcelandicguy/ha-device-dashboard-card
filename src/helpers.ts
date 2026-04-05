@@ -400,7 +400,9 @@ export function getDeviceProfile(device: HADevice): DeviceProfileResult {
     );
     const hasInputBS = device.entities.some(e =>
       e.domain === 'binary_sensor' && (
-        e.entity_id.includes('input') || e.entity_id.includes('button')
+        e.entity_id.includes('input') || e.entity_id.includes('button') ||
+        e.entity_id.includes('channel') ||
+        (e.attributes as any)?.device_class == null
       )
     );
     const hasEnvSensor = device.entities.some(e =>
