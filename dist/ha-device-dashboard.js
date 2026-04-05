@@ -68,33 +68,27 @@ function e(e,t,s,i){var a,r=arguments.length,o=r<3?t:null===i?i=Object.getOwnPro
         </div>`});return V`
       <div class="sparklines-block">
         ${f}
-      </div>`}_getBlockOrder(e,t){const s=this._config.device_styles?.[e.device_id]?.tile_layout;return s||(this._config.tile_layout?this._config.tile_layout:Ae[t.type]??Ae.generic)}_trvColor(e){const t=Math.max(0,Math.min(1,e));let s,i,a;if(t<.5){const e=2*t;s=Math.round(74+156*e),i=Math.round(144+-18*e),a=Math.round(217+-183*e)}else{const e=2*(t-.5);s=Math.round(230+-1*e),i=Math.round(126+-69*e),a=Math.round(34+19*e)}return`rgb(${s},${i},${a})`}_renderTrvDial(e){const{minTemp:t,maxTemp:s,targetTemp:i,currentTemp:a}=e,r=100,o=i??t,n=Math.max(0,Math.min(1,(o-t)/(s-t))),l=e=>210+(e-t)/(s-t)*300,c=(e,t)=>[r+t*Math.cos((e-90)*Math.PI/180),95+t*Math.sin((e-90)*Math.PI/180)],d=(e,t,s)=>{const[i,a]=c(e,s),[r,o]=c(t,s);return`M ${i} ${a} A ${s} ${s} 0 ${t-e>180?1:0} 1 ${r} ${o}`},p=this._trvColor(n),h=l(o),[g,u]=c(h,72),v=null!=a?(a-t)/(s-t):null,b=null!=a?c(l(a),72):null,f=null!=v?this._trvColor(v):p,m=`trv-grad-${this._getTrv.name}`;return q`
-      <svg viewBox="0 0 200 155" class="trv-dial-svg">
+      </div>`}_getBlockOrder(e,t){const s=this._config.device_styles?.[e.device_id]?.tile_layout;return s||(this._config.tile_layout?this._config.tile_layout:Ae[t.type]??Ae.generic)}_trvColor(e){const t=Math.max(0,Math.min(1,e));let s,i,a;if(t<.5){const e=2*t;s=Math.round(74+156*e),i=Math.round(144+-18*e),a=Math.round(217+-183*e)}else{const e=2*(t-.5);s=Math.round(230+-1*e),i=Math.round(126+-69*e),a=Math.round(34+19*e)}return`rgb(${s},${i},${a})`}_renderTrvDial(e){const{minTemp:t,maxTemp:s,targetTemp:i,currentTemp:a}=e,r=i??t,o=Math.max(0,Math.min(1,(r-t)/(s-t))),n=e=>210+(e-t)/(s-t)*300,l=(e,t)=>[80+t*Math.cos((e-90)*Math.PI/180),70+t*Math.sin((e-90)*Math.PI/180)],c=(e,t,s)=>{const[i,a]=l(e,s),[r,o]=l(t,s);return`M ${i} ${a} A ${s} ${s} 0 ${t-e>180?1:0} 1 ${r} ${o}`},d=this._trvColor(o),p=n(r),[h,g]=l(p,54),u=null!=a?(a-t)/(s-t):null,v=null!=a?l(n(a),54):null,b=null!=u?this._trvColor(u):d,f=`trv-grad-${this._getTrv.name}`;return q`
+      <svg viewBox="0 0 160 115" class="trv-dial-svg">
         <defs>
-          <linearGradient id="${m}" x1="0%" y1="100%" x2="100%" y2="0%">
+          <linearGradient id="${f}" x1="0%" y1="100%" x2="100%" y2="0%">
             <stop offset="0%"   stop-color="${this._trvColor(0)}"/>
             <stop offset="50%"  stop-color="${this._trvColor(.5)}"/>
             <stop offset="100%" stop-color="${this._trvColor(1)}"/>
           </linearGradient>
         </defs>
-        <!-- full track with blue→red gradient -->
-        <path d="${d(210,510,72)}" fill="none" stroke="url(#${m})" stroke-width="10" stroke-linecap="round" opacity="0.25"/>
-        <!-- fill arc to target -->
-        ${h>210?q`<path d="${d(210,h,72)}" fill="none" stroke="url(#${m})" stroke-width="10" stroke-linecap="round"/>`:W}
-        <!-- current temp dot -->
-        ${b?q`<circle cx="${b[0]}" cy="${b[1]}" r="6" fill="white" stroke="${f}" stroke-width="2.5"/>`:W}
-        <!-- target handle -->
-        <circle cx="${g}" cy="${u}" r="10" fill="${p}" stroke="white" stroke-width="2.5"/>
-        <!-- center: target temp -->
-        <text x="${r}" y="${81}" text-anchor="middle" class="dial-target-text">${o.toFixed(1)}°</text>
-        <text x="${r}" y="${99}" text-anchor="middle" class="dial-sub-text">target</text>
-        <text x="${r}" y="${115}" text-anchor="middle" class="dial-current-text">${null!=a?`now ${a}°`:""}</text>
-        <!-- min/max labels -->
-        <text x="22" y="148" text-anchor="middle" class="dial-range-text">${t}°</text>
-        <text x="178" y="148" text-anchor="middle" class="dial-range-text">${s}°</text>
+        <path d="${c(210,510,54)}" fill="none" stroke="url(#${f})" stroke-width="8" stroke-linecap="round" opacity="0.25"/>
+        ${p>210?q`<path d="${c(210,p,54)}" fill="none" stroke="url(#${f})" stroke-width="8" stroke-linecap="round"/>`:W}
+        ${v?q`<circle cx="${v[0]}" cy="${v[1]}" r="5" fill="white" stroke="${b}" stroke-width="2"/>`:W}
+        <circle cx="${h}" cy="${g}" r="8" fill="${d}" stroke="white" stroke-width="2"/>
+        <text x="${80}" y="${60}" text-anchor="middle" class="dial-target-text">${r.toFixed(1)}°</text>
+        <text x="${80}" y="${75}" text-anchor="middle" class="dial-sub-text">target</text>
+        <text x="${80}" y="${88}" text-anchor="middle" class="dial-current-text">${null!=a?`now ${a}°`:""}</text>
+        <text x="18" y="110" text-anchor="middle" class="dial-range-text">${t}°</text>
+        <text x="142" y="110" text-anchor="middle" class="dial-range-text">${s}°</text>
       </svg>
-    `}_valvePosFromEvent(e,t){const s=t.getBoundingClientRect(),i=(e.clientX-s.left)*(200/s.width),a=(e.clientY-s.top)*(145/s.height);let r=Math.atan2(a-90,i-100)*(180/Math.PI)+90;r<0&&(r+=360);const o=(r-210+360)%360;return o>300?null:Math.round(o/300*100)}_renderValveDial(e){const t=e.position??("open"===e.state?100:0),s=(e,t)=>[100+t*Math.cos((e-90)*Math.PI/180),90+t*Math.sin((e-90)*Math.PI/180)],i=(e,t,i)=>{const[a,r]=s(e,i),[o,n]=s(t,i);return`M ${a} ${r} A ${i} ${i} 0 ${t-e>180?1:0} 1 ${o} ${n}`},a=(e=>210+e/100*300)(t),[r,o]=s(a,72),n=`hsl(${200+.2*t}, ${40+.55*t}%, ${38+.18*t}%)`,l="opening"===e.state?"Opening…":"closing"===e.state?"Closing…":100===t?"Open":0===t?"Closed":"Partial",c=e.supportsPosition||!!e.numEntityId,d=t=>this._setValvePosition(e.entityId,t,e.numEntityId),p=c?e=>{e.stopPropagation();const t=e.currentTarget;t.setPointerCapture(e.pointerId);const s=e=>{const s=this._valvePosFromEvent(e,t);null!=s&&d(s)},i=e=>{const a=this._valvePosFromEvent(e,t);null!=a&&d(a),t.removeEventListener("pointermove",s),t.removeEventListener("pointerup",i)};t.addEventListener("pointermove",s),t.addEventListener("pointerup",i);const a=this._valvePosFromEvent(e,t);null!=a&&d(a)}:W;return q`
-      <svg viewBox="0 0 200 145" class="trv-dial-svg ${c?"valve-interactive":""}"
+    `}_valvePosFromEvent(e,t){const s=t.getBoundingClientRect(),i=(e.clientX-s.left)*(160/s.width),a=(e.clientY-s.top)*(110/s.height);let r=Math.atan2(a-68,i-80)*(180/Math.PI)+90;r<0&&(r+=360);const o=(r-210+360)%360;return o>300?null:Math.round(o/300*100)}_renderValveDial(e){const t=e.position??("open"===e.state?100:0),s=(e,t)=>[80+t*Math.cos((e-90)*Math.PI/180),68+t*Math.sin((e-90)*Math.PI/180)],i=(e,t,i)=>{const[a,r]=s(e,i),[o,n]=s(t,i);return`M ${a} ${r} A ${i} ${i} 0 ${t-e>180?1:0} 1 ${o} ${n}`},a=(e=>210+e/100*300)(t),[r,o]=s(a,54),n=`hsl(${200+.2*t}, ${40+.55*t}%, ${38+.18*t}%)`,l="opening"===e.state?"Opening…":"closing"===e.state?"Closing…":100===t?"Open":0===t?"Closed":"Partial",c=e.supportsPosition||!!e.numEntityId,d=t=>this._setValvePosition(e.entityId,t,e.numEntityId),p=c?e=>{e.stopPropagation();const t=e.currentTarget;t.setPointerCapture(e.pointerId);const s=e=>{const s=this._valvePosFromEvent(e,t);null!=s&&d(s)},i=e=>{const a=this._valvePosFromEvent(e,t);null!=a&&d(a),t.removeEventListener("pointermove",s),t.removeEventListener("pointerup",i)};t.addEventListener("pointermove",s),t.addEventListener("pointerup",i);const a=this._valvePosFromEvent(e,t);null!=a&&d(a)}:W;return q`
+      <svg viewBox="0 0 160 110" class="trv-dial-svg ${c?"valve-interactive":""}"
         @pointerdown=${p}>
         <defs>
           <linearGradient id="valve-grad" x1="0%" y1="100%" x2="100%" y2="0%">
@@ -102,14 +96,14 @@ function e(e,t,s,i){var a,r=arguments.length,o=r<3?t:null===i?i=Object.getOwnPro
             <stop offset="100%" stop-color="#0ea5e9"/>
           </linearGradient>
         </defs>
-        ${c?q`<path d="${i(210,510,72)}" fill="none" stroke="transparent" stroke-width="28" stroke-linecap="round"/>`:W}
-        <path d="${i(210,510,72)}" fill="none" stroke="url(#valve-grad)" stroke-width="10" stroke-linecap="round" opacity="0.25"/>
-        ${t>0?q`<path d="${i(210,a,72)}" fill="none" stroke="url(#valve-grad)" stroke-width="10" stroke-linecap="round"/>`:W}
-        <circle cx="${r}" cy="${o}" r="12" fill="${n}" stroke="white" stroke-width="2.5" style="${c?"cursor:grab":""}"/>
-        <text x="${100}" y="${80}" text-anchor="middle" class="dial-target-text">${Math.round(t)}%</text>
-        <text x="${100}" y="${98}" text-anchor="middle" class="dial-sub-text">${l}</text>
-        <text x="22" y="138" text-anchor="middle" class="dial-range-text">Closed</text>
-        <text x="178" y="138" text-anchor="middle" class="dial-range-text">Open</text>
+        ${c?q`<path d="${i(210,510,54)}" fill="none" stroke="transparent" stroke-width="22" stroke-linecap="round"/>`:W}
+        <path d="${i(210,510,54)}" fill="none" stroke="url(#valve-grad)" stroke-width="8" stroke-linecap="round" opacity="0.25"/>
+        ${t>0?q`<path d="${i(210,a,54)}" fill="none" stroke="url(#valve-grad)" stroke-width="8" stroke-linecap="round"/>`:W}
+        <circle cx="${r}" cy="${o}" r="9" fill="${n}" stroke="white" stroke-width="2" style="${c?"cursor:grab":""}"/>
+        <text x="${80}" y="${60}" text-anchor="middle" class="dial-target-text">${Math.round(t)}%</text>
+        <text x="${80}" y="${75}" text-anchor="middle" class="dial-sub-text">${l}</text>
+        <text x="16" y="106" text-anchor="middle" class="dial-range-text">Closed</text>
+        <text x="144" y="106" text-anchor="middle" class="dial-range-text">Open</text>
       </svg>
     `}_renderBlock(e,t,s){const i=this._getPrimarySwitch(t),a=this._getTrv(t),r=this._getCover(t);this._getValve(t);const o=this._getAlerts(t),n=this._isOnline(t),l=this._getFirmware(t),c=this._getPower(t),d=this._getSensors(t),p=this._getInputChannels(t),h=i?.isOn??!1,g=void 0!==i?.brightness,u=g&&h?Math.max(1,i.brightness??1):0,v=!!i?.colorModes?.length,b=v&&i.rgbColor?this._rgbToHex(...i.rgbColor):"#ffffff",f=v&&(i.colorModes?.some(e=>"rgbw"===e||"rgbww"===e)??!1),m="heat"===a?.hvacMode,_="ble"===s.gen?"BLE":"other"===s.gen?"":`G${s.gen}`,x=(y=t.integration,Ce[y.toLowerCase()]??y.toUpperCase().slice(0,6));var y,$;switch(e){case"name_row":return V`
           <div class="tile-top">

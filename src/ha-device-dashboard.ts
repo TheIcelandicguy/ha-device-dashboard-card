@@ -883,7 +883,7 @@ export class HADeviceDashboard extends LitElement {
 
   private _renderTrvDial(trv: NonNullable<ReturnType<typeof this._getTrv>>) {
     const { minTemp, maxTemp, targetTemp, currentTemp } = trv;
-    const cx = 100, cy = 95, r = 72;
+    const cx = 80, cy = 70, r = 54;
     const target = targetTemp ?? minTemp;
     const targetRatio = Math.max(0, Math.min(1, (target - minTemp) / (maxTemp - minTemp)));
     const toAngle = (v: number) => 210 + ((v - minTemp) / (maxTemp - minTemp)) * 300;
@@ -903,10 +903,9 @@ export class HADeviceDashboard extends LitElement {
     const curRatio = currentTemp != null ? (currentTemp - minTemp) / (maxTemp - minTemp) : null;
     const curXY = currentTemp != null ? toXY(toAngle(currentTemp), r) : null;
     const curColor = curRatio != null ? this._trvColor(curRatio) : fillColor;
-    // gradient id scoped to avoid conflicts if multiple TRV tiles
     const gid = `trv-grad-${this._getTrv.name}`;
     return svg`
-      <svg viewBox="0 0 200 155" class="trv-dial-svg">
+      <svg viewBox="0 0 160 115" class="trv-dial-svg">
         <defs>
           <linearGradient id="${gid}" x1="0%" y1="100%" x2="100%" y2="0%">
             <stop offset="0%"   stop-color="${this._trvColor(0)}"/>
@@ -914,30 +913,24 @@ export class HADeviceDashboard extends LitElement {
             <stop offset="100%" stop-color="${this._trvColor(1)}"/>
           </linearGradient>
         </defs>
-        <!-- full track with blue→red gradient -->
-        <path d="${arcPath(210, 510, r)}" fill="none" stroke="url(#${gid})" stroke-width="10" stroke-linecap="round" opacity="0.25"/>
-        <!-- fill arc to target -->
-        ${targetAngle > 210 ? svg`<path d="${arcPath(210, targetAngle, r)}" fill="none" stroke="url(#${gid})" stroke-width="10" stroke-linecap="round"/>` : nothing}
-        <!-- current temp dot -->
-        ${curXY ? svg`<circle cx="${curXY[0]}" cy="${curXY[1]}" r="6" fill="white" stroke="${curColor}" stroke-width="2.5"/>` : nothing}
-        <!-- target handle -->
-        <circle cx="${tx}" cy="${ty}" r="10" fill="${fillColor}" stroke="white" stroke-width="2.5"/>
-        <!-- center: target temp -->
-        <text x="${cx}" y="${cy - 14}" text-anchor="middle" class="dial-target-text">${target.toFixed(1)}°</text>
-        <text x="${cx}" y="${cy + 4}" text-anchor="middle" class="dial-sub-text">target</text>
-        <text x="${cx}" y="${cy + 20}" text-anchor="middle" class="dial-current-text">${currentTemp != null ? `now ${currentTemp}°` : ''}</text>
-        <!-- min/max labels -->
-        <text x="22" y="148" text-anchor="middle" class="dial-range-text">${minTemp}°</text>
-        <text x="178" y="148" text-anchor="middle" class="dial-range-text">${maxTemp}°</text>
+        <path d="${arcPath(210, 510, r)}" fill="none" stroke="url(#${gid})" stroke-width="8" stroke-linecap="round" opacity="0.25"/>
+        ${targetAngle > 210 ? svg`<path d="${arcPath(210, targetAngle, r)}" fill="none" stroke="url(#${gid})" stroke-width="8" stroke-linecap="round"/>` : nothing}
+        ${curXY ? svg`<circle cx="${curXY[0]}" cy="${curXY[1]}" r="5" fill="white" stroke="${curColor}" stroke-width="2"/>` : nothing}
+        <circle cx="${tx}" cy="${ty}" r="8" fill="${fillColor}" stroke="white" stroke-width="2"/>
+        <text x="${cx}" y="${cy - 10}" text-anchor="middle" class="dial-target-text">${target.toFixed(1)}°</text>
+        <text x="${cx}" y="${cy + 5}" text-anchor="middle" class="dial-sub-text">target</text>
+        <text x="${cx}" y="${cy + 18}" text-anchor="middle" class="dial-current-text">${currentTemp != null ? `now ${currentTemp}°` : ''}</text>
+        <text x="18" y="110" text-anchor="middle" class="dial-range-text">${minTemp}°</text>
+        <text x="142" y="110" text-anchor="middle" class="dial-range-text">${maxTemp}°</text>
       </svg>
     `;
   }
 
   private _valvePosFromEvent(e: PointerEvent, svg: SVGSVGElement): number | null {
     const rect = svg.getBoundingClientRect();
-    const cx = 100, cy = 90;
-    const x = (e.clientX - rect.left) * (200 / rect.width);
-    const y = (e.clientY - rect.top)  * (145 / rect.height);
+    const cx = 80, cy = 68;
+    const x = (e.clientX - rect.left) * (160 / rect.width);
+    const y = (e.clientY - rect.top)  * (110 / rect.height);
     let deg = Math.atan2(y - cy, x - cx) * (180 / Math.PI) + 90;
     if (deg < 0) deg += 360;
     const arcDeg = (deg - 210 + 360) % 360;
@@ -947,7 +940,7 @@ export class HADeviceDashboard extends LitElement {
 
   private _renderValveDial(vc: NonNullable<ReturnType<typeof this._getValve>>) {
     const pos = vc.position ?? (vc.state === 'open' ? 100 : 0);
-    const cx = 100, cy = 90, r = 72;
+    const cx = 80, cy = 68, r = 54;
     const toAngle = (v: number) => 210 + (v / 100) * 300;
     const toXY = (deg: number, radius: number): [number, number] => [
       cx + radius * Math.cos((deg - 90) * Math.PI / 180),
@@ -989,7 +982,7 @@ export class HADeviceDashboard extends LitElement {
     };
 
     return svg`
-      <svg viewBox="0 0 200 145" class="trv-dial-svg ${canSetPos ? 'valve-interactive' : ''}"
+      <svg viewBox="0 0 160 110" class="trv-dial-svg ${canSetPos ? 'valve-interactive' : ''}"
         @pointerdown=${onPointerDown}>
         <defs>
           <linearGradient id="valve-grad" x1="0%" y1="100%" x2="100%" y2="0%">
@@ -997,14 +990,14 @@ export class HADeviceDashboard extends LitElement {
             <stop offset="100%" stop-color="#0ea5e9"/>
           </linearGradient>
         </defs>
-        ${canSetPos ? svg`<path d="${arcPath(210, 510, r)}" fill="none" stroke="transparent" stroke-width="28" stroke-linecap="round"/>` : nothing}
-        <path d="${arcPath(210, 510, r)}" fill="none" stroke="url(#valve-grad)" stroke-width="10" stroke-linecap="round" opacity="0.25"/>
-        ${pos > 0 ? svg`<path d="${arcPath(210, posAngle, r)}" fill="none" stroke="url(#valve-grad)" stroke-width="10" stroke-linecap="round"/>` : nothing}
-        <circle cx="${hx}" cy="${hy}" r="12" fill="${handleColor}" stroke="white" stroke-width="2.5" style="${canSetPos ? 'cursor:grab' : ''}"/>
-        <text x="${cx}" y="${cy - 10}" text-anchor="middle" class="dial-target-text">${Math.round(pos)}%</text>
-        <text x="${cx}" y="${cy + 8}" text-anchor="middle" class="dial-sub-text">${stateLabel}</text>
-        <text x="22" y="138" text-anchor="middle" class="dial-range-text">Closed</text>
-        <text x="178" y="138" text-anchor="middle" class="dial-range-text">Open</text>
+        ${canSetPos ? svg`<path d="${arcPath(210, 510, r)}" fill="none" stroke="transparent" stroke-width="22" stroke-linecap="round"/>` : nothing}
+        <path d="${arcPath(210, 510, r)}" fill="none" stroke="url(#valve-grad)" stroke-width="8" stroke-linecap="round" opacity="0.25"/>
+        ${pos > 0 ? svg`<path d="${arcPath(210, posAngle, r)}" fill="none" stroke="url(#valve-grad)" stroke-width="8" stroke-linecap="round"/>` : nothing}
+        <circle cx="${hx}" cy="${hy}" r="9" fill="${handleColor}" stroke="white" stroke-width="2" style="${canSetPos ? 'cursor:grab' : ''}"/>
+        <text x="${cx}" y="${cy - 8}" text-anchor="middle" class="dial-target-text">${Math.round(pos)}%</text>
+        <text x="${cx}" y="${cy + 7}" text-anchor="middle" class="dial-sub-text">${stateLabel}</text>
+        <text x="16" y="106" text-anchor="middle" class="dial-range-text">Closed</text>
+        <text x="144" y="106" text-anchor="middle" class="dial-range-text">Open</text>
       </svg>
     `;
   }
