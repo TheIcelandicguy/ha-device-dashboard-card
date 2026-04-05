@@ -334,6 +334,16 @@ export class HADeviceDashboard extends LitElement {
     return m ? `Ch ${+m[1] + 1}` : '';
   }
 
+  private _timeAgo(isoString: string | null | undefined): string {
+    if (!isoString) return 'Never';
+    const ms = Date.now() - new Date(isoString).getTime();
+    if (isNaN(ms) || ms < 0) return 'Never';
+    if (ms < 60_000)     return 'Just now';
+    if (ms < 3_600_000)  return `${Math.floor(ms / 60_000)}m ago`;
+    if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)}h ago`;
+    return `${Math.floor(ms / 86_400_000)}d ago`;
+  }
+
   private _getSensors(device: HADevice): Array<{ label: string; value: string; warn?: boolean }> {
     const allowed = this._config.sensors?.length ? new Set(this._config.sensors) : null;
     const show = (k: string) => !allowed || allowed.has(k);
@@ -362,6 +372,62 @@ export class HADeviceDashboard extends LitElement {
       const key = (entityId && multiDcs.has(k)) ? `${k}_${this._chLabel(entityId)}` : k;
       if (!seen.has(key)) { seen.add(key); result.push({ label, value, warn }); }
     };
+
+    // ── Virtual domain chips ────────────────────────────────────────────────────
+    if (device.isVirtual) {
+      const e = device.entities[0];
+      if (!e) return result;
+      const s = this.hass.states[e.entity_id];
+      if (!s) return result;
+      const attrs = s.attributes as Record<string, unknown>;
+
+      if (e.domain === 'automation') {
+        const isOff = s.state === 'off';
+        push('state',    'State',    isOff ? 'Off' : 'On', isOff);
+        push('last_run', 'Last run', this._timeAgo(attrs.last_triggered as string | null));
+        const mode = attrs.mode as string | undefined;
+        if (mode && mode !== 'single') push('mode', 'Mode', mode);
+
+      } else if (e.domain === 'script') {
+        push('state', 'State', s.state === 'on' ? 'Running' : 'Off');
+
+      } else if (e.domain === 'input_boolean') {
+        push('state', 'State', s.state === 'on' ? 'On' : 'Off');
+
+      } else if (e.domain === 'input_number') {
+        const unit = (attrs.unit_of_measurement as string | undefined) ?? '';
+        push('value', 'Value', unit ? `${s.state} ${unit}` : s.state);
+
+      } else if (e.domain === 'input_text') {
+        const text = s.state.length > 20 ? s.state.slice(0, 20) + '…' : s.state;
+        push('text', 'Text', text || '—');
+
+      } else if (e.domain === 'input_select') {
+        push('option', 'Option', s.state);
+
+      } else if (e.domain === 'input_datetime') {
+        const raw = s.state;
+        const dtMatch   = raw.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
+        const timeMatch = raw.match(/^(\d{2}:\d{2})/);
+        const friendly  = dtMatch ? `${dtMatch[1]} ${dtMatch[2]}` : timeMatch ? timeMatch[1] : raw;
+        push('datetime', 'Date/Time', friendly);
+
+      } else if (e.domain === 'input_button') {
+        push('pressed', 'Pressed', this._timeAgo(attrs.timestamp as string | null));
+
+      } else if (e.domain === 'timer') {
+        const statusMap: Record<string, string> = { idle: 'Idle', active: 'Active', paused: 'Paused' };
+        push('status', 'Status', statusMap[s.state] ?? s.state);
+        if ((s.state === 'active' || s.state === 'paused') && attrs.remaining)
+          push('left', 'Left', attrs.remaining as string);
+
+      } else if (e.domain === 'counter') {
+        push('count', 'Count', s.state);
+      }
+      // scene: no chips — stateless
+      return result;
+    }
+    // ── End virtual domain chips ────────────────────────────────────────────────
 
     for (const e of device.entities) {
       const s = this.hass.states[e.entity_id];
