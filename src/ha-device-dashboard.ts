@@ -509,8 +509,9 @@ export class HADeviceDashboard extends LitElement {
       const seenLabels = new Set<string>();
       for (const ent of ents) {
         const unit = (this.hass.states[ent.entity_id]?.attributes as any)?.unit_of_measurement ?? '';
-        const ch = ents.length > 1 ? this._chLabel(ent.entity_id) : '';
-        const label = (GRAPH_DC_LABELS[dc] ?? dc) + (ch ? ` ${ch}` : '');
+        // Use compact channel number (e.g. " 1"/" 2") in graph labels to keep them short
+        const chNum = ents.length > 1 ? this._chLabel(ent.entity_id).replace('Ch ', '') : '';
+        const label = (GRAPH_DC_LABELS[dc] ?? dc) + (chNum ? ` ${chNum}` : '');
         if (seenLabels.has(label)) continue; // skip duplicate channel slots
         seenLabels.add(label);
         results.push({ entityId: ent.entity_id, label, dc, unit });
@@ -1730,7 +1731,7 @@ export class HADeviceDashboard extends LitElement {
     .sparklines-block.exp { padding:6px 8px 4px; gap:8px; }
     .spark-group { display:flex; flex-direction:column; gap:0; }
     .spark-row { display:flex; align-items:center; gap:6px; min-height:32px; }
-    .spark-lbl { font-size:.62em; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--sc-text-muted); width:52px; flex-shrink:0; text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .spark-lbl { font-size:.62em; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--sc-text-muted); width:68px; flex-shrink:0; text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .spark-svg-wrap { flex:1; position:relative; min-width:0; }
     .sparkline-svg { width:100%; height:32px; display:block; overflow:visible; cursor:crosshair; }
     .sparkline-svg.exp { height:48px; }
@@ -1747,7 +1748,7 @@ export class HADeviceDashboard extends LitElement {
     .spark-tooltip-time { font-size:.65em; color:var(--sc-text-muted); }
     .spark-val { font-size:.75em; font-weight:600; color:var(--sc-text-secondary); white-space:nowrap; min-width:44px; text-align:right; }
     .spark-time-row { display:flex; align-items:center; gap:6px; padding-bottom:1px; }
-    .spark-time-spacer { width:34px; flex-shrink:0; }
+    .spark-time-spacer { width:68px; flex-shrink:0; }
     .spark-time-labels { flex:1; display:flex; justify-content:space-between; font-size:.55em; color:var(--sc-text-muted); opacity:.65; user-select:none; }
     .spark-time-end { min-width:44px; }
     .spark-no-data { flex:1; font-size:.7em; color:var(--sc-text-muted); opacity:.6; display:flex; align-items:center; padding-left:4px; }
