@@ -268,6 +268,7 @@ const PROFILE_LABELS: Record<DeviceProfile, string> = {
   alarm:        'Alarm',
   humidifier:   'Humid.',
   valve:        'Valve',
+  siren:        'Siren',
   energy:       'Energy',
   sensor:       'Sensor',
   input:        'Input',
@@ -288,17 +289,18 @@ const PROFILE_LABELS: Record<DeviceProfile, string> = {
  * Users can override this per-card, per-area, or per-device.
  */
 export const PROFILE_DEFAULT_BLOCKS: Record<DeviceProfile, TileBlockId[]> = {
-  relay:        ['name_row', 'sensors', 'graph', 'power_bar', 'badges'],
+  relay:        ['name_row', 'relay_channels', 'sensors', 'graph', 'power_bar', 'badges'],
   plug:         ['name_row', 'sensors', 'graph', 'power_bar', 'badges'],
   switch:       ['name_row', 'sensors', 'badges'],
   dimmer:       ['name_row', 'dimmer', 'sensors', 'graph', 'badges'],
   rgb:          ['name_row', 'dimmer', 'sensors', 'graph', 'badges'],
   light:        ['name_row', 'dimmer', 'sensors', 'badges'],
-  climate:      ['name_row', 'sensors', 'trv_control', 'badges'],
+  climate:      ['name_row', 'fan_controls', 'sensors', 'trv_control', 'badges'],
+  siren:        ['name_row', 'siren_controls', 'sensors', 'badges'],
   cover:        ['name_row', 'cover_controls', 'sensors', 'badges'],
   fan:          ['name_row', 'fan_controls', 'sensors', 'badges'],
-  lock:         ['name_row', 'sensors', 'badges'],
-  vacuum:       ['name_row', 'sensors', 'badges'],
+  lock:         ['name_row', 'sensors', 'lock_controls', 'badges'],
+  vacuum:       ['name_row', 'sensors', 'vacuum_controls', 'badges'],
   media_player: ['name_row', 'media_controls', 'badges'],
   alarm:        ['name_row', 'sensors', 'badges'],
   humidifier:   ['name_row', 'sensors', 'badges'],
@@ -312,7 +314,7 @@ export const PROFILE_DEFAULT_BLOCKS: Record<DeviceProfile, TileBlockId[]> = {
   script:       ['name_row', 'sensors', 'badges'],
   scene:        ['name_row', 'badges'],
   automation:   ['name_row', 'sensors', 'badges'],
-  helper:       ['name_row', 'sensors', 'badges'],
+  helper:       ['name_row', 'sensors', 'helper_controls', 'badges'],
   weather:      ['name_row', 'sensors'],
   person:       ['name_row', 'sensors'],
   generic:      ['name_row', 'sensors', 'badges'],
@@ -362,6 +364,8 @@ export function getDeviceProfile(device: HADevice): DeviceProfileResult {
     type = 'alarm';
   } else if (domains.has('humidifier')) {
     type = 'humidifier';
+  } else if (domains.has('siren')) {
+    type = 'siren';
   } else if (domains.has('media_player')) {
     type = 'media_player';
   } else if (domains.has('camera')) {
@@ -373,6 +377,11 @@ export function getDeviceProfile(device: HADevice): DeviceProfileResult {
       return modes.some(m => ['rgb', 'rgbw', 'rgbww', 'hs', 'xy'].includes(m));
     });
     type = hasColorMode ? 'rgb' : 'dimmer';
+  } else if (
+    device.entities.some(e => e.domain === 'event' && (e.attributes as any)?.device_class === 'button') &&
+    !device.entities.some(e => e.domain === 'switch' && /_(switch|relay)_\d/.test(e.entity_id))
+  ) {
+    type = 'input';
   } else if (domains.has('switch')) {
     if (device.isShelly) {
       if (modelLower.includes('uni')) {
@@ -399,11 +408,15 @@ export function getDeviceProfile(device: HADevice): DeviceProfileResult {
       )
     );
     const hasInputBS = device.entities.some(e =>
-      e.domain === 'binary_sensor' && (
+      (e.domain === 'binary_sensor' && (
         e.entity_id.includes('input') || e.entity_id.includes('button') ||
         e.entity_id.includes('channel') ||
         (e.attributes as any)?.device_class == null
-      )
+      )) ||
+      (e.domain === 'event' && (
+        (e.attributes as any)?.device_class === 'button' ||
+        e.entity_id.includes('channel') || e.entity_id.includes('input')
+      ))
     );
     const hasEnvSensor = device.entities.some(e =>
       e.domain === 'sensor' && ['temperature', 'humidity', 'illuminance', 'moisture', 'battery', 'gas']

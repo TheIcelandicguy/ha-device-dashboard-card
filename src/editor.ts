@@ -599,14 +599,17 @@ export class HADeviceDashboardEditor extends LitElement {
     const tab = this._styleTab[name] ?? 'background';
     const setTab = (t:string) => { this._styleTab = {...this._styleTab, [name]: t}; };
 
-    const colorRow = (label: string, key: keyof AreaStyle, def: string) => html`
+    const colorRow = (label: string, key: keyof AreaStyle, def: string) => {
+      const currentVal = (st as any)[key] ?? def;
+      return html`
       <div class="color-row">
+        <div class="color-preview-swatch" style="background:${currentVal}"></div>
         <span class="color-key">${label}</span>
-        <span class="color-val">${(st as any)[key] ?? def}</span>
-        <input type="color" .value=${(st as any)[key] ?? def}
+        <input type="color" .value=${currentVal}
           @change=${(e:Event)=>this._setAreaStyle(name, key, (e.target as HTMLInputElement).value)}/>
         ${(st as any)[key] ? html`<button class="color-reset" @click=${()=>this._setAreaStyle(name,key,undefined)}>↺</button>` : nothing}
       </div>`;
+    };
 
     const slRow = (label: string, key: keyof AreaStyle, min: number, max: number, step: number, def: number, unit: string) => html`
       <div class="sl-row">
@@ -775,14 +778,16 @@ export class HADeviceDashboardEditor extends LitElement {
         { label: 'Text primary',     key: 'text_primary',  def: '#e5e7eb' },
         { label: 'Online dot',       key: 'online_color',  def: '#4ade80' },
         { label: 'Power reading',    key: 'power_color',   def: '#fb923c' },
-      ].map(({label,key,def}) => html`
+      ].map(({label,key,def}) => {
+        const currentVal = (sty as any)[key] ?? def;
+        return html`
         <div class="color-row">
+          <div class="color-preview-swatch" style="background:${currentVal}"></div>
           <span class="color-key">${label}</span>
-          <span class="color-val">${(sty as any)[key] ?? def}</span>
-          <input type="color" .value=${(sty as any)[key] ?? def}
+          <input type="color" .value=${currentVal}
             @change=${(e:Event)=>this._set('style',{...sty,[key]:(e.target as HTMLInputElement).value})}/>
           ${(sty as any)[key] ? html`<button class="color-reset" @click=${()=>{const s={...sty};delete(s as any)[key];this._set('style',s)}}>↺</button>` : nothing}
-        </div>`)}`;
+        </div>`;})}`;
 
     const typogBody = html`
       <div class="field">
@@ -872,6 +877,7 @@ export class HADeviceDashboardEditor extends LitElement {
       ? `color-mix(in srgb, ${tileBgColor} ${tileTranspPct}%, transparent)` : tileBgColor;
 
     const tilesBody = html`
+      <div class="preview-label">Live preview</div>
       <div class="transp-preview" style="background-color:${cardBgColor};background-image:${cardBgImageUrl};background-size:${cardBgImageSize};background-position:center;">
         <div class="transp-card-layer" style="background-color:${cardBgMixed};">
           ${[0,1,2].map(i => html`
@@ -984,6 +990,8 @@ export class HADeviceDashboardEditor extends LitElement {
         allAreas.map(area => {
           const isExpanded = this._expandedRooms.has(area.name);
           const hasStyle = !!(c.area_styles?.[area.name] && Object.keys(c.area_styles[area.name]).length);
+          const roomSt = c.area_styles?.[area.name] ?? {};
+          const swatches = [roomSt.bgColor, roomSt.headerBgColor, roomSt.tileBgColor, roomSt.accentColor].filter(Boolean) as string[];
           return html`
             <div class="room-style-row">
               <div class="room-style-hdr" @click=${()=>{
@@ -992,7 +1000,11 @@ export class HADeviceDashboardEditor extends LitElement {
                 this._expandedRooms = next;
               }}>
                 <span class="room-style-name">${area.name}</span>
-                ${hasStyle ? html`<span class="room-styled-dot"></span>` : nothing}
+                ${swatches.length ? html`
+                  <div class="room-swatch-strip">
+                    ${swatches.map(c => html`<span class="room-swatch" style="background:${c}"></span>`)}
+                  </div>` : nothing}
+                ${hasStyle && !swatches.length ? html`<span class="room-styled-dot"></span>` : nothing}
                 <span class="room-style-chev">${isExpanded ? '▲' : '▼'}</span>
               </div>
               ${isExpanded ? this._renderRoomStyleInline(area.name) : nothing}
@@ -1055,7 +1067,7 @@ export class HADeviceDashboardEditor extends LitElement {
           @input=${(e:Event)=>this._set('graph_style',{...gs,line_width:parseFloat((e.target as HTMLInputElement).value)})}/>
       </div>
       <div class="tog-row">
-        <div class="tog-lbl">Fill under curve</div>
+        <div class="tog-lbl">Fill area under line</div>
         <label class="sw"><input type="checkbox" .checked=${gs.fill !== false} @change=${(e:Event)=>this._set('graph_style',{...gs,fill:(e.target as HTMLInputElement).checked})}><span class="sw-t"></span><span class="sw-b"></span></label>
       </div>
       <div class="field">
@@ -1089,8 +1101,8 @@ export class HADeviceDashboardEditor extends LitElement {
         const isCustom = !!sensorColors[key];
         return html`
           <div class="color-row">
+            <div class="color-preview-swatch" style="background:${color}"></div>
             <span class="color-key">${meta?.label ?? key}</span>
-            <span class="color-val">${color}</span>
             <input type="color" .value=${color}
               @change=${(e:Event)=>{
                 const v = (e.target as HTMLInputElement).value;
@@ -1139,14 +1151,14 @@ export class HADeviceDashboardEditor extends LitElement {
         const badge = this._badge(`${selectedCount || 'All'} / ${grp.items.length}`, grp.iconColor, grp.iconBg);
         const body = html`
           <div class="sensors-hdr">
-            <span class="sensors-hdr-lbl">${selectedCount === 0 ? 'All shown' : `${selectedCount} selected`}</span>
+            <span class="sensors-hdr-lbl">${selectedCount === 0 ? 'All shown (default)' : `${selectedCount} of ${grp.items.length} shown`}</span>
             <button class="sensors-all-btn" @click=${(e:Event) => {
               e.stopPropagation();
               const next = grpAllOn
                 ? selected.filter(k => !grpKeys.includes(k))
                 : [...new Set([...selected, ...grpKeys])];
               this._set('sensors', next);
-            }}>${grpAllOn ? 'Deselect all' : 'Select all'}</button>
+            }}>${grpAllOn ? '− Deselect all' : '+ Select all'}</button>
           </div>
           <div class="sensor-grid">
             ${grp.items.map(s => {
@@ -1159,15 +1171,18 @@ export class HADeviceDashboardEditor extends LitElement {
                   const next = on ? selected.filter(k=>k!==s.key) : [...selected,s.key];
                   this._set('sensors', next);
                 }}>
-                  <div class="sensor-dot ${grp.group==='Alerts'?'alert-dot':''}"></div>
-                  <span class="sensor-name">${s.label}</span>
+                  <div class="sensor-dot" style="background:${on ? s.defaultColor : 'var(--t3)'}"></div>
+                  <div class="sensor-item-body">
+                    <span class="sensor-name">${s.label}</span>
+                    ${s.unit ? html`<span class="sensor-unit">${s.unit}</span>` : nothing}
+                  </div>
                   ${isGraphable ? html`<button class="sensor-graph-btn ${graphOn ? 'on' : ''}"
-                    title="${graphOn ? 'Remove graph' : 'Add graph'}"
+                    title="${graphOn ? 'Remove from graphs' : 'Add to graphs'}"
                     @click=${(e:Event) => {
                       e.stopPropagation();
                       const next = graphOn ? graphSensors.filter(k=>k!==s.key) : [...graphSensors, s.key];
                       this._set('graph_sensors', next);
-                    }}>~</button>` : nothing}
+                    }}>∿</button>` : nothing}
                 </div>`;
             })}
           </div>`;
@@ -1213,15 +1228,21 @@ export class HADeviceDashboardEditor extends LitElement {
   protected render(): TemplateResult {
     if (!this._config) return html``;
     const c = this._config;
-    const tabs: Array<{id:typeof this._tab;label:string}> = [
-      {id:'devices',label:'Devices'},{id:'layout',label:'Layout'},{id:'style',label:'Style'},
-      {id:'graphs',label:'Graphs'},{id:'sensors',label:'Sensors'},{id:'yaml',label:'YAML'},
+    const tabs: Array<{id:typeof this._tab;label:string;icon:string}> = [
+      {id:'devices',label:'Rooms',icon:'⌂'},
+      {id:'layout',label:'Layout',icon:'⊡'},
+      {id:'style',label:'Style',icon:'◐'},
+      {id:'graphs',label:'Graphs',icon:'∿'},
+      {id:'sensors',label:'Sensors',icon:'⊕'},
+      {id:'yaml',label:'YAML',icon:'</>'},
     ];
     return html`
       <div class="shell">
         <div class="tab-nav">
           ${tabs.map(t => html`
-            <div class="tab ${this._tab===t.id?'active':''}" @click=${()=>{this._tab=t.id;}}>${t.label}</div>`)}
+            <div class="tab ${this._tab===t.id?'active':''}" @click=${()=>{this._tab=t.id;}}>
+              <span class="tab-icon">${t.icon}</span>${t.label}
+            </div>`)}
         </div>
         <div class="tab-body">
           ${this._tab==='devices' ? this._renderDevicesTab()
@@ -1252,9 +1273,10 @@ export class HADeviceDashboardEditor extends LitElement {
     /* ── Tab nav ── */
     .tab-nav { display:flex; gap:2px; padding:10px 16px 0; border-bottom:1px solid var(--border); background:var(--s1); overflow-x:auto; }
     .tab-nav::-webkit-scrollbar { height:0; }
-    .tab { font-size:11px; font-weight:500; letter-spacing:0.05em; text-transform:uppercase; padding:8px 14px; color:var(--t3); cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap; transition:all .15s; border-radius:5px 5px 0 0; user-select:none; }
+    .tab { font-size:11px; font-weight:500; letter-spacing:0.05em; text-transform:uppercase; padding:8px 14px; color:var(--t3); cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap; transition:all .15s; border-radius:5px 5px 0 0; user-select:none; display:flex; align-items:center; }
     .tab:hover { color:var(--t2); }
     .tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+    .tab-icon { margin-right:5px; font-size:10px; opacity:0.7; }
     .tab-body { padding:14px; background:var(--bg); max-height:70vh; overflow-y:auto; }
     .tab-body::-webkit-scrollbar { width:3px; }
     .tab-body::-webkit-scrollbar-thumb { background:var(--s3); border-radius:2px; }
@@ -1316,7 +1338,8 @@ export class HADeviceDashboardEditor extends LitElement {
     .color-val { font-family:monospace; font-size:10px; color:var(--t3); min-width:60px; text-align:right; }
     .color-reset { font-size:11px; color:var(--t3); background:none; border:none; cursor:pointer; padding:2px 4px; border-radius:3px; transition:color .15s; }
     .color-reset:hover { color:var(--accent); }
-    input[type="color"] { width:32px; height:28px; border:1px solid var(--border2); border-radius:5px; padding:2px 3px; background:var(--s2); cursor:pointer; flex-shrink:0; }
+    input[type="color"] { width:36px; height:28px; border:1px solid var(--border2); border-radius:5px; padding:2px 3px; background:var(--s2); cursor:pointer; flex-shrink:0; }
+    .color-preview-swatch { width:20px; height:20px; border-radius:4px; border:1px solid rgba(255,255,255,0.2); flex-shrink:0; }
     .sl-row { display:flex; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid var(--border); }
     .sl-row:last-child { border-bottom:none; }
     .sl-val { font-family:monospace; font-size:11px; color:var(--accent); min-width:36px; text-align:right; }
@@ -1352,6 +1375,8 @@ export class HADeviceDashboardEditor extends LitElement {
     .room-style-hdr:hover { background:rgba(255,255,255,0.03); border-radius:6px; }
     .room-style-name { flex:1; font-size:12px; color:var(--text); font-weight:500; }
     .room-styled-dot { width:6px; height:6px; border-radius:50%; background:var(--accent); flex-shrink:0; }
+    .room-swatch-strip { display:flex; gap:3px; align-items:center; }
+    .room-swatch { width:12px; height:12px; border-radius:3px; border:1px solid rgba(255,255,255,0.15); flex-shrink:0; }
     .room-style-chev { font-size:9px; color:var(--t3); }
     .room-devices { padding:4px 0 4px 12px; border-bottom:1px solid var(--border); }
     .room-device-row { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid rgba(255,255,255,0.04); }
@@ -1435,18 +1460,17 @@ export class HADeviceDashboardEditor extends LitElement {
     .sensors-hdr-lbl { font-size:11px; color:var(--t2); }
     .sensors-all-btn { background:rgba(244,96,30,0.12); color:#f4601e; border:1px solid rgba(244,96,30,0.3); border-radius:6px; padding:3px 10px; font-size:11px; cursor:pointer; }
     .sensors-all-btn:hover { background:rgba(244,96,30,0.22); }
-    .sensor-graph-btn { margin-left:auto; flex-shrink:0; background:transparent; border:1px solid rgba(255,255,255,0.12); border-radius:4px; color:var(--t2); font-size:11px; padding:1px 5px; cursor:pointer; line-height:1.4; }
+    .sensor-graph-btn { margin-left:auto; flex-shrink:0; background:transparent; border:1px solid rgba(255,255,255,0.12); border-radius:6px; color:var(--t2); font-size:13px; padding:1px 6px; cursor:pointer; line-height:1.4; transition:all .12s; }
     .sensor-graph-btn.on { background:rgba(74,158,255,0.18); border-color:#4a9eff; color:#4a9eff; }
-    .sensor-graph-btn:hover { border-color:rgba(255,255,255,0.3); }
-    .sensor-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
-    .sensor-item { display:flex; align-items:center; gap:8px; padding:7px 10px; background:var(--s2); border:1px solid var(--border); border-radius:8px; cursor:pointer; transition:all .12s; user-select:none; }
-    .sensor-item:hover { border-color:var(--border2); }
+    .sensor-graph-btn:hover { border-color:rgba(255,255,255,0.3); color:var(--text); }
+    .sensor-grid { display:grid; grid-template-columns:1fr 1fr; gap:5px; }
+    .sensor-item { display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--s2); border:1px solid var(--border); border-radius:8px; cursor:pointer; transition:all .12s; user-select:none; }
+    .sensor-item:hover { border-color:var(--border2); background:var(--s3); }
     .sensor-item.active { border-color:var(--accentbdr); background:var(--accentbg); }
-    .sensor-dot { width:6px; height:6px; border-radius:50%; background:var(--t3); flex-shrink:0; transition:background .12s; }
-    .sensor-item.active .sensor-dot { background:var(--accent); }
-    .alert-dot { background:rgba(248,113,113,0.5) !important; }
-    .sensor-item.active .alert-dot { background:#f87171 !important; }
-    .sensor-name { font-size:11px; color:var(--t2); flex:1; }
+    .sensor-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; transition:background .2s; }
+    .sensor-item-body { display:flex; flex-direction:column; gap:1px; flex:1; min-width:0; }
+    .sensor-unit { font-size:9px; color:var(--t3); letter-spacing:0.03em; }
+    .sensor-name { font-size:11px; color:var(--t2); }
     .sensor-item.active .sensor-name { color:var(--text); }
 
     /* ── YAML ── */

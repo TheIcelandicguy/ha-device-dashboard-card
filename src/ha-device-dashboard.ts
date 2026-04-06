@@ -25,6 +25,8 @@ export class HADeviceDashboard extends LitElement {
   @state() private _entityListOpen = new Set<string>();
   @state() private _graphData = new Map<string, Array<{ t: number; v: number }>>();
   @state() private _valveDragPos: number | null = null;
+  @state() private _graphDialog: string | null = null;
+  @state() private _lockConfirm: string | null = null;
   private readonly _graphFetching = new Set<string>();
   private readonly _graphFetchedAt = new Map<string, number>();
 
@@ -505,12 +507,22 @@ export class HADeviceDashboard extends LitElement {
   }
 
   private _getInputChannels(device: HADevice) {
-    return device.entities
-      .filter(e => e.domain === 'binary_sensor' && (
+    const bsInputs = device.entities.filter(e =>
+      e.domain === 'binary_sensor' && (
         e.entity_id.includes('input') || e.entity_id.includes('button') ||
+        e.entity_id.includes('channel') ||
         (e.attributes as any)?.device_class == null
-      ))
-      .map(e => {
+      )
+    );
+    const eventInputs = device.entities.filter(e =>
+      e.domain === 'event' && (
+        (e.attributes as any)?.device_class === 'button' ||
+        e.entity_id.includes('channel') || e.entity_id.includes('input')
+      )
+    );
+
+    if (bsInputs.length > 0) {
+      return bsInputs.map(e => {
         const s = this.hass.states[e.entity_id];
         const friendly = (s?.attributes as any)?.friendly_name ?? '';
         const m = e.entity_id.match(/(?:input|channel|button)[_\s]*(\d+)/i) ?? friendly.match(/(\d+)\s*$/);
@@ -531,8 +543,31 @@ export class HADeviceDashboard extends LitElement {
           lastEvent,
           lastChanged: s?.last_changed ?? null,
         };
-      })
-      .sort((a, b) => a.channel - b.channel);
+      }).sort((a, b) => a.channel - b.channel);
+    }
+
+    // Event-only input device (e.g. Shelly i3 Gen1)
+    return eventInputs.map(e => {
+      const s = this.hass.states[e.entity_id];
+      const friendly = (s?.attributes as any)?.friendly_name ?? '';
+      const m = e.entity_id.match(/(?:input|channel|button)[_\s]*(\d+)/i) ?? friendly.match(/(\d+)\s*$/);
+      const ch = m ? parseInt(m[1]) : 0;
+      const lastEvent: string | null =
+        (s?.attributes as any)?.event_type ??
+        (s?.state && s.state !== 'unknown' && s.state !== 'unavailable' ? s.state : null);
+      // For event entities, the state IS the last-triggered timestamp
+      const lastChanged: string | null =
+        s?.last_changed ??
+        (s?.state && s.state !== 'unknown' && s.state !== 'unavailable' ? s.state : null);
+      return {
+        entityId: e.entity_id,
+        label: m ? `Input ${+m[1] + 1}` : friendly || e.entity_id,
+        isOn: false,
+        channel: ch,
+        lastEvent,
+        lastChanged,
+      };
+    }).sort((a, b) => a.channel - b.channel);
   }
 
   // ── Actions ───────────────────────────────────────────────────────────────
@@ -598,6 +633,53 @@ export class HADeviceDashboard extends LitElement {
     await this.hass.callService('update', 'install', { entity_id: entityId });
   }
 
+  private async _lockAction(entityId: string, action: 'lock' | 'unlock', e: Event) {
+    e.stopPropagation();
+    if (action === 'unlock') {
+      if (this._lockConfirm === entityId) {
+        this._lockConfirm = null;
+        await this.hass.callService('lock', 'unlock', { entity_id: entityId });
+      } else {
+        this._lockConfirm = entityId;
+        setTimeout(() => { if (this._lockConfirm === entityId) this._lockConfirm = null; }, 3000);
+      }
+    } else {
+      await this.hass.callService('lock', 'lock', { entity_id: entityId });
+    }
+  }
+
+  private async _vacuumAction(entityId: string, action: string, e: Event) {
+    e.stopPropagation();
+    await this.hass.callService('vacuum', action, { entity_id: entityId });
+  }
+
+  private async _sirenOn(entityId: string, e: Event) {
+    e.stopPropagation();
+    await this.hass.callService('siren', 'turn_on', { entity_id: entityId });
+  }
+
+  private async _sirenOff(entityId: string, e: Event) {
+    e.stopPropagation();
+    await this.hass.callService('siren', 'turn_off', { entity_id: entityId });
+  }
+
+  private async _setNumber(entityId: string, value: number, e?: Event) {
+    e?.stopPropagation();
+    await this.hass.callService('number', 'set_value', { entity_id: entityId, value });
+  }
+
+  private async _selectOption(entityId: string, option: string, e?: Event) {
+    e?.stopPropagation();
+    await this.hass.callService('select', 'select_option', { entity_id: entityId, option });
+  }
+
+  private async _setHelperValue(entityId: string, domain: string, value: unknown, e?: Event) {
+    e?.stopPropagation();
+    if (domain === 'input_number')  await this.hass.callService('input_number', 'set_value', { entity_id: entityId, value });
+    else if (domain === 'input_select') await this.hass.callService('input_select', 'select_option', { entity_id: entityId, option: value });
+    else if (domain === 'input_text')   await this.hass.callService('input_text', 'set_value', { entity_id: entityId, value });
+  }
+
   // ── Sparkline system ──────────────────────────────────────────────────────
 
   private _getGraphEntities(device: HADevice): Array<{ entityId: string; label: string; dc: string; unit: string }> {
@@ -607,7 +689,9 @@ export class HADeviceDashboard extends LitElement {
     for (const dc of dcList) {
       const ents = device.entities.filter(e => {
         if (e.domain !== 'sensor') return false;
-        const attrDc = (this.hass.states[e.entity_id]?.attributes as any)?.device_class ?? (e.attributes as any)?.device_class;
+        const st = this.hass.states[e.entity_id];
+        if (!st || st.state === 'unavailable' || st.state === 'unknown') return false;
+        const attrDc = (st.attributes as any)?.device_class ?? (e.attributes as any)?.device_class;
         return attrDc === dc || (dc === 'signal_strength' && e.entity_id.includes('rssi'));
       });
       const seenLabels = new Set<string>();
@@ -693,14 +777,14 @@ export class HADeviceDashboard extends LitElement {
     }
   }
 
-  private _renderSparklines(device: HADevice): TemplateResult {
+  private _renderSparklines(device: HADevice, expanded = false): TemplateResult {
     const entities = this._getGraphEntities(device);
     if (!entities.length) return html``;
 
     const gs = this._config.graph_style ?? {};
     const W = 200;
-    const H = gs.height ?? 32;
-    const customH = gs.height != null;  // only override CSS height when explicitly set
+    const H = expanded ? 120 : (gs.height ?? 32);
+    const customH = expanded || gs.height != null;  // only override CSS height when explicitly set
     const lw = gs.line_width ?? 1.5;
     const showDots = gs.show_dots !== false;
     const showTicks = gs.tick_lines !== false;
@@ -797,9 +881,10 @@ export class HADeviceDashboard extends LitElement {
         if (tip) tip.style.display = 'none';
       };
 
+      const openDialog = (e: Event) => { e.stopPropagation(); this._graphDialog = device.device_id; };
       return html`
         <div class="spark-group">
-          <div class="spark-row">
+          <div class="spark-row ${expanded ? '' : 'spark-row-clickable'}" @click=${expanded ? nothing : openDialog}>
             <span class="spark-lbl">${label}</span>
             <div class="spark-svg-wrap">
               <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"
@@ -866,8 +951,24 @@ export class HADeviceDashboard extends LitElement {
     });
 
     return html`
-      <div class="sparklines-block">
+      <div class="sparklines-block ${expanded ? 'exp' : ''}">
         ${rows}
+      </div>`;
+  }
+
+  private _renderGraphDialog(): TemplateResult {
+    if (!this._graphDialog) return html``;
+    const device = this._getDevices().find(d => d.device_id === this._graphDialog);
+    if (!device) return html``;
+    return html`
+      <div class="graph-dialog-backdrop" @click=${() => this._graphDialog = null}>
+        <div class="graph-dialog" @click=${(e: Event) => e.stopPropagation()}>
+          <div class="graph-dialog-header">
+            <span>${device.name}</span>
+            <button class="graph-dialog-close" @click=${() => this._graphDialog = null}>✕</button>
+          </div>
+          ${this._renderSparklines(device, true)}
+        </div>
       </div>`;
   }
 
@@ -1073,20 +1174,43 @@ export class HADeviceDashboard extends LitElement {
                 @click=${(e: Event) => this._setHvacMode(trv.entityId, isHeating ? 'off' : 'heat', e)}>
                 ${isHeating ? 'HEAT' : 'OFF'}
               </button>
-            ` : device.isVirtual ? html`
-              <button class="tog off"
-                @click=${async (e: Event) => {
-                  e.stopPropagation();
+            ` : (() => {
+                const sirenEnt = device.entities.find(e => e.domain === 'siren');
+                if (!sirenEnt) return nothing;
+                const sirenOn = this.hass.states[sirenEnt.entity_id]?.state === 'on';
+                return html`<button class="tog ${sirenOn ? 'on' : 'off'}"
+                  @click=${(e: Event) => this._toggle(sirenEnt.entity_id, sirenOn, e)}>
+                  ${sirenOn ? 'ON' : 'OFF'}
+                </button>`;
+              })()
+            } ${device.isVirtual ? html`
+              <div class="virtual-btns" @click=${(e: Event) => e.stopPropagation()}>
+                ${(() => {
                   const ent = device.entities[0];
-                  if (!ent) return;
-                  if (ent.domain === 'script') await this.hass.callService('script', 'turn_on', { entity_id: ent.entity_id });
-                  else if (ent.domain === 'scene') await this.hass.callService('scene', 'turn_on', { entity_id: ent.entity_id });
-                  else if (ent.domain === 'automation') await this.hass.callService('automation', 'trigger', { entity_id: ent.entity_id });
-                  else if (ent.domain === 'input_button') await this.hass.callService('input_button', 'press', { entity_id: ent.entity_id });
-                  else if (ent.domain === 'input_boolean') await this.hass.callService('input_boolean', 'toggle', { entity_id: ent.entity_id });
-                }}>
-                RUN
-              </button>
+                  if (!ent) return nothing;
+                  const isAutomation = ent.domain === 'automation';
+                  const autoEnabled = isAutomation && this.hass.states[ent.entity_id]?.state === 'on';
+                  return html`
+                    <button class="tog off"
+                      @click=${async (e: Event) => {
+                        e.stopPropagation();
+                        if (ent.domain === 'script') await this.hass.callService('script', 'turn_on', { entity_id: ent.entity_id });
+                        else if (ent.domain === 'scene') await this.hass.callService('scene', 'turn_on', { entity_id: ent.entity_id });
+                        else if (ent.domain === 'automation') await this.hass.callService('automation', 'trigger', { entity_id: ent.entity_id });
+                        else if (ent.domain === 'input_button') await this.hass.callService('input_button', 'press', { entity_id: ent.entity_id });
+                        else if (ent.domain === 'input_boolean') await this.hass.callService('input_boolean', 'toggle', { entity_id: ent.entity_id });
+                      }}>
+                      RUN
+                    </button>
+                    ${isAutomation ? html`
+                      <button class="auto-toggle ${autoEnabled ? 'on' : 'off'}"
+                        title="${autoEnabled ? 'Enabled — click to disable' : 'Disabled — click to enable'}"
+                        @click=${(e: Event) => this._toggle(ent.entity_id, autoEnabled, e)}>
+                        ${autoEnabled ? '● On' : '○ Off'}
+                      </button>` : nothing}
+                  `;
+                })()}
+              </div>
             ` : nothing}
           </div>
         `;
@@ -1106,13 +1230,17 @@ export class HADeviceDashboard extends LitElement {
       case 'graph':
         return this._renderSparklines(device);
 
-      case 'dimmer':
+      case 'dimmer': {
+        const swState = sw ? this.hass.states[sw.entityId] : null;
+        const effectList: string[] = (swState?.attributes as any)?.effect_list ?? [];
+        const currentEffect: string | null = (swState?.attributes as any)?.effect ?? null;
+        const whiteVal = sw?.whiteValue ?? 0;
         return sw && isDimmable ? html`
           <div class="tile-dim-row" @click=${(e: Event) => e.stopPropagation()}>
             ${hasColor ? html`
               <input type="color" class="color-swatch tile-color-swatch" .value=${hexColor}
                 ?disabled=${!isOn}
-                @change=${(e: Event) => { e.stopPropagation(); this._setColor(sw.entityId, (e.target as HTMLInputElement).value, sw.whiteValue, isRgbw); }}/>
+                @change=${(e: Event) => { e.stopPropagation(); this._setColor(sw.entityId, (e.target as HTMLInputElement).value, whiteVal, isRgbw); }}/>
             ` : nothing}
             <input type="range" class="dim-slider" min="1" max="100"
               style=${styleMap(hasColor ? { accentColor: hexColor } : {})}
@@ -1125,7 +1253,169 @@ export class HADeviceDashboard extends LitElement {
               @change=${(e: Event) => { this._setBrightness(sw.entityId, parseInt((e.target as HTMLInputElement).value, 10)); }}/>
             <span class="dim-pct">${bPct}%</span>
           </div>
+          ${isRgbw ? html`
+            <div class="tile-dim-row tile-white-row" @click=${(e: Event) => e.stopPropagation()}>
+              <span class="dim-white-lbl">W</span>
+              <input type="range" class="dim-slider white-slider" min="0" max="255"
+                .value=${String(whiteVal)}
+                @input=${(e: Event) => {
+                  const el = (e.target as HTMLInputElement).closest('.tile-white-row')?.querySelector('.white-pct');
+                  if (el) el.textContent = (e.target as HTMLInputElement).value;
+                }}
+                @change=${(e: Event) => {
+                  const w = parseInt((e.target as HTMLInputElement).value, 10);
+                  this._setColor(sw.entityId, hexColor, w, true);
+                }}/>
+              <span class="white-pct dim-pct">${whiteVal}</span>
+            </div>
+          ` : nothing}
+          ${effectList.length > 1 ? html`
+            <div class="tile-effects" @click=${(e: Event) => e.stopPropagation()}>
+              ${effectList.filter(fx => fx !== 'Off').map(fx => html`
+                <button class="effect-btn ${currentEffect === fx ? 'active' : ''}"
+                  @click=${(e: Event) => {
+                    e.stopPropagation();
+                    const isActive = currentEffect === fx;
+                    this.hass.callService('light', 'turn_on', { entity_id: sw.entityId, effect: isActive ? 'Off' : fx });
+                  }}>
+                  ${fx}
+                </button>`)}
+            </div>
+          ` : nothing}
+          ${(() => {
+            // Detect WLED by presence of any speed/intensity number entity
+            const hasWled = device.entities.some(e => e.domain === 'number' && /speed|intensity/i.test(e.entity_id));
+            if (!hasWled) return nothing;
+
+            // Playlist + global preset selectors
+            const playlistEnt = device.entities.find(e => e.domain === 'select' && /playlist/i.test(e.entity_id));
+            const globalPresetEnt = device.entities.find(e => e.domain === 'select' && /preset/i.test(e.entity_id));
+
+            // Segment lights: all light entities that are not group lights and not the primary sw entity
+            const segLights = device.entities.filter(e => {
+              if (e.domain !== 'light') return false;
+              if (e.entity_id === sw?.entityId) return false;
+              const lst = this.hass.states[e.entity_id];
+              // skip group lights (HA groups have entity_id array attribute)
+              if (Array.isArray((lst?.attributes as any)?.entity_id)) return false;
+              // skip "main" light
+              if (/main/i.test((lst?.attributes as any)?.friendly_name ?? '')) return false;
+              return true;
+            });
+
+            // For a segment light, find its speed/intensity/palette entities
+            const segEntities = (lightEntityId: string) => {
+              const m = lightEntityId.match(/segment_(\d+)/);
+              if (m) {
+                const n = m[1];
+                return {
+                  speed:     device.entities.find(e => e.domain === 'number' && e.entity_id.includes(`segment_${n}_speed`)),
+                  intensity: device.entities.find(e => e.domain === 'number' && e.entity_id.includes(`segment_${n}_intensity`)),
+                  palette:   device.entities.find(e => e.domain === 'select' && e.entity_id.includes(`segment_${n}_color_palette`)),
+                  preset:    undefined as { entity_id: string } | undefined,
+                };
+              }
+              // Segment 0 — global entities (no "segment" in name)
+              return {
+                speed:     device.entities.find(e => e.domain === 'number' && /speed/i.test(e.entity_id) && !/segment/i.test(e.entity_id)),
+                intensity: device.entities.find(e => e.domain === 'number' && /intensity/i.test(e.entity_id) && !/segment/i.test(e.entity_id)),
+                palette:   device.entities.find(e => e.domain === 'select' && /color_palette/i.test(e.entity_id) && !/segment/i.test(e.entity_id)),
+                preset:    undefined as { entity_id: string } | undefined,
+              };
+            };
+
+            const renderNumSlider = (ent: { entity_id: string } | undefined, lbl: string) => {
+              if (!ent) return nothing;
+              const nst = this.hass.states[ent.entity_id];
+              const nval = Number(nst?.state ?? 128);
+              const nmin = Number((nst?.attributes as any)?.min ?? 0);
+              const nmax = Number((nst?.attributes as any)?.max ?? 255);
+              return html`
+                <div class="wled-param-row">
+                  <span class="wled-param-lbl">${lbl}</span>
+                  <input class="dim-slider" style="flex:1" type="range" min="${nmin}" max="${nmax}"
+                    .value=${String(nval)}
+                    @change=${(e: Event) => this._setNumber(ent.entity_id, parseInt((e.target as HTMLInputElement).value, 10), e)}/>
+                  <span class="dim-pct">${nval}</span>
+                </div>`;
+            };
+
+            const renderSelect = (ent: { entity_id: string } | undefined, lbl: string, allowNone = false) => {
+              if (!ent) return nothing;
+              const sst = this.hass.states[ent.entity_id];
+              const opts: string[] = (sst?.attributes as any)?.options ?? [];
+              if (!opts.length) return nothing;
+              const cur = sst?.state ?? '';
+              return html`
+                <div class="wled-param-row">
+                  <span class="wled-param-lbl">${lbl}</span>
+                  <select class="wled-select" @change=${(e: Event) => {
+                    e.stopPropagation();
+                    const val = (e.target as HTMLSelectElement).value;
+                    if (val === '__none__') return;
+                    this._selectOption(ent.entity_id, val);
+                  }}>
+                    ${allowNone ? html`<option value="__none__" ?selected=${cur === 'unknown' || cur === ''}>— None —</option>` : nothing}
+                    ${opts.map(o => html`<option .value=${o} ?selected=${o === cur}>${o}</option>`)}
+                  </select>
+                </div>`;
+            };
+
+            return html`
+              <div class="wled-params" @click=${(e: Event) => e.stopPropagation()}>
+                ${renderSelect(playlistEnt, 'Playlist', true)}
+                ${renderSelect(globalPresetEnt, 'Preset', true)}
+                ${segLights.length ? segLights.map(segEnt => {
+                  const lst = this.hass.states[segEnt.entity_id];
+                  const sOn = lst?.state === 'on';
+                  const sBri = Math.round(Number((lst?.attributes as any)?.brightness ?? 0) / 2.55);
+                  const sName = (lst?.attributes as any)?.friendly_name ?? segEnt.entity_id;
+                  const { speed, intensity, palette } = segEntities(segEnt.entity_id);
+                  return html`
+                    <div class="wled-segment">
+                      <div class="wled-seg-header">
+                        <span class="wled-seg-name">${sName}</span>
+                        <button class="tog sm ${sOn ? 'on' : 'off'}"
+                          @click=${(e: Event) => this._toggle(segEnt.entity_id, sOn, e)}>
+                          ${sOn ? 'ON' : 'OFF'}
+                        </button>
+                      </div>
+                      <div class="wled-param-row">
+                        <span class="wled-param-lbl">Bright</span>
+                        <input class="dim-slider" style="flex:1" type="range" min="1" max="100"
+                          .value=${String(sOn ? Math.max(1, sBri) : 1)} ?disabled=${!sOn}
+                          @change=${(e: Event) => {
+                            const pct = parseInt((e.target as HTMLInputElement).value, 10);
+                            this.hass.callService('light', 'turn_on', { entity_id: segEnt.entity_id, brightness_pct: pct });
+                          }}/>
+                        <span class="dim-pct">${sOn ? sBri : 0}%</span>
+                      </div>
+                      ${renderNumSlider(speed, 'Speed')}
+                      ${renderNumSlider(intensity, 'Intensity')}
+                      ${renderSelect(palette, 'Palette')}
+                    </div>`;
+                }) : sw ? (() => {
+                  // Single-segment WLED (e.g. outdoor) — use primary light + global params
+                  const { speed, intensity, palette } = segEntities('');
+                  const globalPalette = palette ?? device.entities.find(e => e.domain === 'select' && /color_palette/i.test(e.entity_id));
+                  return html`
+                    <div class="wled-segment">
+                      <div class="wled-param-row">
+                        <span class="wled-param-lbl">Bright</span>
+                        <input class="dim-slider" style="flex:1" type="range" min="1" max="100"
+                          .value=${String(isOn ? Math.max(1, sw.brightness ?? 1) : 1)} ?disabled=${!isOn}
+                          @change=${(e: Event) => { this._setBrightness(sw.entityId, parseInt((e.target as HTMLInputElement).value, 10)); }}/>
+                        <span class="dim-pct">${isOn ? Math.max(1, sw.brightness ?? 1) : 0}%</span>
+                      </div>
+                      ${renderNumSlider(speed, 'Speed')}
+                      ${renderNumSlider(intensity, 'Intensity')}
+                      ${renderSelect(globalPalette, 'Palette')}
+                    </div>`;
+                })() : nothing}
+              </div>`;
+          })()}
         ` : html``;
+      }
 
       case 'cover_controls':
         return cover ? html`
@@ -1184,28 +1474,182 @@ export class HADeviceDashboard extends LitElement {
           </div>
         ` : html``;
 
-      case 'fan_controls': {
-        const fan = this._getFan(device);
-        return fan ? html`
-          <div class="tile-dim-row" @click=${(e: Event) => e.stopPropagation()}>
-            <input type="range" class="dim-slider" min="0" max="100" step="${fan.percentageStep}"
-              .value=${String(fan.isOn ? (fan.percentage ?? 0) : 0)}
-              ?disabled=${!fan.isOn}
-              @change=${(e: Event) => {
-                e.stopPropagation();
-                const pct = parseInt((e.target as HTMLInputElement).value, 10);
-                this.hass.callService('fan', pct > 0 ? 'turn_on' : 'turn_off',
-                  { entity_id: fan.entityId, ...(pct > 0 ? { percentage: pct } : {}) });
-              }}/>
-            <span class="dim-pct">${fan.isOn ? (fan.percentage ?? 0) : 0}%</span>
-            ${fan.oscillating !== undefined ? html`
-              <button class="tog sm ${fan.oscillating ? 'on' : 'off'}"
-                @click=${(e: Event) => { e.stopPropagation(); this.hass.callService('fan', 'oscillate', { entity_id: fan.entityId, oscillating: !fan.oscillating }); }}>
-                ⟳
+      case 'relay_channels': {
+        const relayEnts = device.entities.filter(e =>
+          e.domain === 'switch' && /_(switch|relay|channel)_\d/.test(e.entity_id)
+        );
+        if (relayEnts.length <= 1) return html``;
+        return html`
+          <div class="relay-channels" @click=${(e: Event) => e.stopPropagation()}>
+            ${relayEnts.map(e => {
+              const s = this.hass.states[e.entity_id];
+              const on = s?.state === 'on';
+              const name = (s?.attributes as any)?.friendly_name ?? e.entity_id;
+              return html`
+                <div class="relay-ch-row">
+                  <span class="relay-ch-dot ${on ? 'on' : ''}"></span>
+                  <span class="relay-ch-name">${name}</span>
+                  <button class="tog sm ${on ? 'on' : 'off'}"
+                    @click=${(ev: Event) => this._toggle(e.entity_id, on, ev)}>
+                    ${on ? 'ON' : 'OFF'}
+                  </button>
+                </div>`;
+            })}
+          </div>`;
+      }
+
+      case 'lock_controls': {
+        const lockEnt = device.entities.find(e => e.domain === 'lock');
+        if (!lockEnt) return html``;
+        const lockState = this.hass.states[lockEnt.entity_id]?.state ?? 'unknown';
+        const isLocked = lockState === 'locked';
+        const confirming = this._lockConfirm === lockEnt.entity_id;
+        return html`
+          <div class="lock-controls" @click=${(e: Event) => e.stopPropagation()}>
+            <div class="lock-state">${lockState}</div>
+            <div class="lock-btns">
+              <button class="lock-btn ${isLocked ? 'active' : ''}"
+                @click=${(e: Event) => this._lockAction(lockEnt.entity_id, 'lock', e)}>
+                🔒 Lock
               </button>
-            ` : nothing}
-          </div>
-        ` : html``;
+              <button class="lock-btn unlock ${confirming ? 'confirm' : ''}"
+                @click=${(e: Event) => this._lockAction(lockEnt.entity_id, 'unlock', e)}>
+                ${confirming ? 'Confirm?' : '🔓 Unlock'}
+              </button>
+            </div>
+          </div>`;
+      }
+
+      case 'vacuum_controls': {
+        const vacEnt = device.entities.find(e => e.domain === 'vacuum');
+        if (!vacEnt) return html``;
+        const vacState = this.hass.states[vacEnt.entity_id]?.state ?? 'unknown';
+        const isCleaning = vacState === 'cleaning';
+        const isPaused = vacState === 'paused';
+        const isDocked = vacState === 'docked' || vacState === 'idle';
+        return html`
+          <div class="vacuum-controls" @click=${(e: Event) => e.stopPropagation()}>
+            <div class="vacuum-state">${vacState}</div>
+            <div class="vacuum-btns">
+              ${isCleaning ? html`
+                <button class="vac-btn" @click=${(e: Event) => this._vacuumAction(vacEnt.entity_id, 'pause', e)}>⏸ Pause</button>
+              ` : isPaused ? html`
+                <button class="vac-btn active" @click=${(e: Event) => this._vacuumAction(vacEnt.entity_id, 'start', e)}>▶ Resume</button>
+              ` : html`
+                <button class="vac-btn active" @click=${(e: Event) => this._vacuumAction(vacEnt.entity_id, 'start', e)}>▶ Start</button>
+              `}
+              ${!isDocked ? html`
+                <button class="vac-btn" @click=${(e: Event) => this._vacuumAction(vacEnt.entity_id, 'return_to_base', e)}>⏏ Return</button>
+              ` : nothing}
+            </div>
+          </div>`;
+      }
+
+      case 'helper_controls': {
+        const helperEnt = device.entities.find(e =>
+          ['input_number', 'input_select', 'input_text', 'input_boolean', 'input_button',
+           'number', 'select', 'text'].includes(e.domain)
+        );
+        if (!helperEnt) return html``;
+        const hs = this.hass.states[helperEnt.entity_id];
+        if (!hs) return html``;
+        const hDomain = helperEnt.domain;
+        if (hDomain === 'input_number' || hDomain === 'number') {
+          const min = (hs.attributes as any).min ?? 0;
+          const max = (hs.attributes as any).max ?? 100;
+          const step = (hs.attributes as any).step ?? 1;
+          const val = parseFloat(hs.state) || 0;
+          const unit = (hs.attributes as any).unit_of_measurement ?? '';
+          return html`
+            <div class="helper-ctrl" @click=${(e: Event) => e.stopPropagation()}>
+              <input type="range" class="dim-slider" min="${min}" max="${max}" step="${step}"
+                .value=${String(val)}
+                @change=${(e: Event) => {
+                  const v = parseFloat((e.target as HTMLInputElement).value);
+                  this._setHelperValue(helperEnt.entity_id, hDomain, v, e);
+                }}/>
+              <span class="dim-pct">${val}${unit}</span>
+            </div>`;
+        }
+        if (hDomain === 'input_select' || hDomain === 'select') {
+          const options: string[] = (hs.attributes as any).options ?? [];
+          return html`
+            <div class="helper-select" @click=${(e: Event) => e.stopPropagation()}>
+              ${options.map(opt => html`
+                <button class="helper-opt ${hs.state === opt ? 'active' : ''}"
+                  @click=${(e: Event) => this._setHelperValue(helperEnt.entity_id, hDomain, opt, e)}>
+                  ${opt}
+                </button>`)}
+            </div>`;
+        }
+        if (hDomain === 'input_text' || hDomain === 'text') {
+          return html`
+            <div class="helper-ctrl" @click=${(e: Event) => e.stopPropagation()}>
+              <input type="text" class="helper-text-input" .value=${hs.state}
+                @keydown=${(e: KeyboardEvent) => {
+                  if (e.key === 'Enter') {
+                    e.stopPropagation();
+                    this._setHelperValue(helperEnt.entity_id, hDomain, (e.target as HTMLInputElement).value);
+                  }
+                }}
+                @blur=${(e: FocusEvent) => {
+                  this._setHelperValue(helperEnt.entity_id, hDomain, (e.target as HTMLInputElement).value);
+                }}/>
+            </div>`;
+        }
+        return html``;
+      }
+
+      case 'siren_controls': {
+        const sirenE = device.entities.find(e => e.domain === 'siren');
+        if (!sirenE) return html``;
+        return html`
+          <div class="siren-controls" @click=${(e: Event) => e.stopPropagation()}>
+            <div class="siren-btns">
+              <button class="siren-btn on" @click=${(e: Event) => this._sirenOn(sirenE.entity_id, e)}>🔔 Sound</button>
+              <button class="siren-btn off" @click=${(e: Event) => this._sirenOff(sirenE.entity_id, e)}>🔕 Silence</button>
+            </div>
+          </div>`;
+      }
+
+      case 'fan_controls': {
+        const fans = device.entities.filter(e => e.domain === 'fan');
+        if (!fans.length) return html``;
+        return html`<div class="fan-controls">${fans.map(fanEnt => {
+          const fst = this.hass.states[fanEnt.entity_id];
+          if (!fst) return nothing;
+          const fOn  = fst.state === 'on';
+          const fPct = Number((fst.attributes as any)?.percentage ?? 0);
+          const fStep= Number((fst.attributes as any)?.percentage_step ?? 100);
+          const fLbl = (fst.attributes as any)?.friendly_name ?? fanEnt.entity_id;
+          const fOsc = (fst.attributes as any)?.oscillating as boolean | undefined;
+          const isPureOnOff = fStep >= 100;
+          return html`
+            <div class="fan-ch-row" @click=${(e: Event) => e.stopPropagation()}>
+              <span class="relay-ch-dot ${fOn ? 'on' : ''}"></span>
+              <span class="relay-ch-name">${fLbl}</span>
+              ${isPureOnOff ? html`
+                <button class="tog sm ${fOn ? 'on' : 'off'}"
+                  @click=${(e: Event) => this._toggle(fanEnt.entity_id, fOn, e)}>
+                  ${fOn ? 'ON' : 'OFF'}
+                </button>
+              ` : html`
+                <input class="dim-slider" style="flex:1" type="range" min="0" max="100" step="${fStep}"
+                  .value=${String(fOn ? fPct : 0)} ?disabled=${!fOn}
+                  @change=${(e: Event) => {
+                    e.stopPropagation();
+                    const pct = parseInt((e.target as HTMLInputElement).value, 10);
+                    this.hass.callService('fan', pct > 0 ? 'turn_on' : 'turn_off',
+                      { entity_id: fanEnt.entity_id, ...(pct > 0 ? { percentage: pct } : {}) });
+                  }}/>
+                <span class="dim-pct">${fOn ? fPct : 0}%</span>
+                ${fOsc !== undefined ? html`
+                  <button class="tog sm ${fOsc ? 'on' : 'off'}"
+                    @click=${(e: Event) => { e.stopPropagation(); this.hass.callService('fan', 'oscillate', { entity_id: fanEnt.entity_id, oscillating: !fOsc }); }}>⟳</button>
+                ` : nothing}
+              `}
+            </div>`;
+        })}</div>`;
       }
 
       case 'valve_controls': {
@@ -1297,7 +1741,7 @@ export class HADeviceDashboard extends LitElement {
       tileStyle['borderColor'] = accentColor;
       tileStyle['boxShadow'] = `0 0 12px ${accentColor}50`;
     }
-    const _defaultBlocks: TileBlockId[] = ['name_row', 'sensors', 'graph', 'dimmer', 'cover_controls', 'trv_control', 'media_controls', 'fan_controls', 'valve_controls', 'input_channels', 'power_bar', 'badges'];
+    const _defaultBlocks: TileBlockId[] = ['name_row', 'sensors', 'graph', 'dimmer', 'cover_controls', 'trv_control', 'media_controls', 'fan_controls', 'valve_controls', 'input_channels', 'relay_channels', 'lock_controls', 'vacuum_controls', 'helper_controls', 'siren_controls', 'power_bar', 'badges'];
     const blockOrder: TileBlockId[] =
       this._config.device_styles?.[device.device_id]?.tile_layout ??
       this._config.tile_layout ??
@@ -1687,6 +2131,7 @@ export class HADeviceDashboard extends LitElement {
 
     return html`
       <ha-card style=${styleMap(cardInlineStyles)}>
+        ${this._renderGraphDialog()}
         <div class="dash-header">
           <span class="dash-title">HA Devices</span>
           <div class="dash-stats">
@@ -1722,7 +2167,7 @@ export class HADeviceDashboard extends LitElement {
       --sc-online-border:   rgba(74,222,128,0.3);
       --sc-online-glow:     rgba(74,222,128,0.4);
       --sc-power-color:     #fb923c;
-      --sc-offline-dot:     #4b5563;
+      --sc-offline-dot:     #ef4444;
       --sc-tile-bg:         rgba(255,255,255,0.04);
       --sc-tile-bg-image:   none;
       --sc-tile-bg-image-sz:cover;
@@ -2053,6 +2498,90 @@ export class HADeviceDashboard extends LitElement {
       background:linear-gradient(90deg,rgba(255,255,255,.03) 0%,rgba(255,255,255,.08) 50%,rgba(255,255,255,.03) 100%);
       background-size:200% 100%; animation:shimmer 1.6s ease-in-out infinite; }
     .sparkline-loading.exp { height:48px; }
+
+    /* ── RGBW white + effects ── */
+    .tile-white-row { margin-top:2px; }
+    .dim-white-lbl { font-size:.6em; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--sc-text-muted); width:14px; flex-shrink:0; text-align:center; }
+    .white-slider { accent-color:#e5e7eb; }
+    .tile-effects { display:flex; flex-wrap:wrap; gap:4px; padding:4px 8px 2px; }
+    .effect-btn { padding:2px 9px; border-radius:12px; border:1px solid rgba(255,255,255,.12); background:rgba(255,255,255,.05); color:var(--sc-text-secondary); font-size:10px; cursor:pointer; transition:all .15s; white-space:nowrap; }
+    .effect-btn:hover { background:rgba(255,255,255,.1); color:var(--sc-text-primary); }
+    .effect-btn.active { background:color-mix(in srgb,var(--sc-accent) 25%,transparent); border-color:color-mix(in srgb,var(--sc-accent) 50%,transparent); color:var(--sc-accent); }
+
+    /* ── Graph dialog ── */
+    .graph-dialog-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.65); backdrop-filter:blur(4px); z-index:9999; display:flex; align-items:center; justify-content:center; }
+    .graph-dialog { background:var(--sc-card-bg); border:1px solid rgba(255,255,255,.12); border-radius:16px; padding:20px; width:min(720px,92vw); max-height:85vh; overflow-y:auto; }
+    .graph-dialog-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; font-size:15px; font-weight:600; color:var(--sc-text-primary); }
+    .graph-dialog-close { background:none; border:none; color:var(--sc-text-muted); font-size:18px; cursor:pointer; padding:4px 8px; border-radius:6px; transition:all .15s; }
+    .graph-dialog-close:hover { color:var(--sc-text-primary); background:rgba(255,255,255,.08); }
+    .spark-row-clickable { cursor:pointer; border-radius:6px; transition:background .15s; }
+    .spark-row-clickable:hover { background:rgba(255,255,255,.05); }
+    .graph-dialog .sparklines-block { padding:0; }
+    .graph-dialog .spark-lbl { width:90px; font-size:.7em; }
+    .graph-dialog .sparkline-svg { height:120px !important; }
+    .graph-dialog .sparkline-loading { height:120px !important; }
+    .graph-dialog .spark-group { margin-bottom:12px; }
+
+    /* ── Relay channels ── */
+    .relay-channels { display:flex; flex-direction:column; gap:4px; padding:2px 8px 4px; }
+    .relay-ch-row { display:flex; align-items:center; gap:8px; padding:3px 0; }
+    .relay-ch-dot { width:7px; height:7px; border-radius:50%; background:var(--sc-offline-dot); flex-shrink:0; transition:background .15s; }
+    .relay-ch-dot.on { background:var(--sc-online-color); }
+    .relay-ch-name { flex:1; font-size:12px; color:var(--sc-text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+    /* ── Lock controls ── */
+    .lock-controls { display:flex; flex-direction:column; align-items:center; gap:8px; padding:6px 8px 4px; }
+    .lock-state { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--sc-text-muted); }
+    .lock-btns { display:flex; gap:8px; }
+    .lock-btn { padding:5px 14px; border-radius:20px; border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.06); color:var(--sc-text-primary); font-size:12px; cursor:pointer; transition:all .15s; }
+    .lock-btn:hover { background:rgba(255,255,255,.12); }
+    .lock-btn.active { border-color:var(--sc-accent); color:var(--sc-accent); }
+    .lock-btn.unlock.confirm { background:color-mix(in srgb,#ef4444 20%,transparent); border-color:#ef4444; color:#ef4444; animation:pulse .6s infinite alternate; }
+    @keyframes pulse { from { opacity:.8; } to { opacity:1; } }
+
+    /* ── Vacuum controls ── */
+    .vacuum-controls { display:flex; flex-direction:column; align-items:center; gap:8px; padding:6px 8px 4px; }
+    .vacuum-state { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--sc-text-muted); }
+    .vacuum-btns { display:flex; gap:8px; }
+    .vac-btn { padding:5px 14px; border-radius:20px; border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.06); color:var(--sc-text-primary); font-size:12px; cursor:pointer; transition:all .15s; }
+    .vac-btn:hover { background:rgba(255,255,255,.12); }
+    .vac-btn.active { background:color-mix(in srgb,var(--sc-accent) 20%,transparent); border-color:var(--sc-accent); color:var(--sc-accent); }
+
+    /* ── Helper controls ── */
+    .helper-ctrl { display:flex; align-items:center; gap:8px; padding:4px 8px; }
+    .helper-select { display:flex; flex-wrap:wrap; gap:5px; padding:4px 8px; }
+    .helper-opt { padding:3px 10px; border-radius:14px; border:1px solid rgba(255,255,255,.12); background:rgba(255,255,255,.05); color:var(--sc-text-secondary); font-size:11px; cursor:pointer; transition:all .15s; }
+    .helper-opt:hover { background:rgba(255,255,255,.1); color:var(--sc-text-primary); }
+    .helper-opt.active { background:color-mix(in srgb,var(--sc-accent) 20%,transparent); border-color:color-mix(in srgb,var(--sc-accent) 50%,transparent); color:var(--sc-accent); }
+    .helper-text-input { flex:1; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12); border-radius:8px; padding:4px 8px; color:var(--sc-text-primary); font-size:12px; outline:none; }
+    .helper-text-input:focus { border-color:var(--sc-accent); }
+
+    /* ── Automation toggle ── */
+    .virtual-btns { display:flex; align-items:center; gap:6px; }
+    .auto-toggle { font-size:10px; padding:2px 8px; border-radius:10px; border:1px solid; cursor:pointer; background:none; transition:all .15s; white-space:nowrap; }
+    .auto-toggle.on { color:var(--sc-online-color); border-color:var(--sc-online-color); }
+    .auto-toggle.off { color:var(--sc-text-muted); border-color:rgba(255,255,255,.15); }
+    .auto-toggle:hover { opacity:.8; }
+
+    /* ── Fan channels ── */
+    .fan-controls { display:flex; flex-direction:column; gap:4px; padding:2px 8px 4px; }
+    .fan-ch-row { display:flex; align-items:center; gap:8px; padding:3px 0; }
+
+    /* ── Siren controls ── */
+    .siren-controls { display:flex; justify-content:center; padding:4px 8px; }
+    .siren-btns { display:flex; gap:8px; }
+    .siren-btn { padding:5px 14px; border-radius:20px; border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.06); color:var(--sc-text-primary); font-size:12px; cursor:pointer; transition:all .15s; }
+    .siren-btn:hover { background:rgba(255,255,255,.12); }
+    .siren-btn.on { border-color:#f59e0b; color:#f59e0b; }
+
+    /* ── WLED effect params ── */
+    .wled-params { display:flex; flex-direction:column; gap:6px; padding:4px 8px 4px; }
+    .wled-param-row { display:flex; align-items:center; gap:6px; }
+    .wled-param-lbl { font-size:11px; color:var(--sc-text-muted); min-width:54px; }
+    .wled-select { background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12); border-radius:6px; color:var(--sc-text-primary); font-size:11px; padding:2px 6px; cursor:pointer; flex:1; }
+    .wled-segment { display:flex; flex-direction:column; gap:3px; border-top:1px solid rgba(255,255,255,.06); padding-top:6px; }
+    .wled-seg-header { display:flex; align-items:center; gap:6px; }
+    .wled-seg-name { flex:1; font-size:12px; font-weight:600; color:var(--sc-text-primary); }
   `;
 }
 

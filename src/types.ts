@@ -26,6 +26,7 @@ export type DeviceProfile =
   | 'alarm'         // alarm_control_panel
   | 'humidifier'    // humidifier / dehumidifier
   | 'valve'         // water / heating valve
+  | 'siren'         // siren / doorbell chime
   // Monitoring only
   | 'energy'        // Shelly EM/3EM, solar, battery pack
   | 'sensor'        // H&T, door, motion, flood, smoke …
@@ -73,6 +74,11 @@ export type TileBlockId =
   | 'fan_controls'    // speed + oscillation
   | 'valve_controls'  // open/stop/close + position
   | 'input_channels'  // binary input chips (i3/i4)
+  | 'relay_channels'  // per-channel toggles for multi-channel relays
+  | 'lock_controls'   // lock/unlock buttons
+  | 'vacuum_controls' // start/pause/return-to-base
+  | 'helper_controls' // input_number slider, input_select pills, input_text field
+  | 'siren_controls'  // sound/silence buttons for siren entities
   | 'power_bar'       // mini usage bar at tile bottom
   | 'badges';         // type badge + gen badge + UI link
 
