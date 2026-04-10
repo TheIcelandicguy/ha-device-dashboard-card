@@ -1,8 +1,9 @@
 import { LitElement, html, css, TemplateResult, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
-import { HADeviceDashboardConfig, AreaStyle, TileBlockId } from './types';
+import { HADeviceDashboardConfig, AreaStyle, TileBlockId, EntityAnimationType } from './types';
 import { getAllDevices, GRAPH_SENSOR_DEFS } from './helpers';
+import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -15,14 +16,7 @@ const FONT_OPTIONS: Array<{ label: string; value: string | undefined }> = [
 ];
 
 const INTEGRATIONS = [
-  { key: 'shelly',  label: 'Shelly',               badge: 'SHELLY', color: '#f4601e', bg: 'rgba(244,96,30,0.2)' },
-  { key: 'zha',     label: 'Zigbee Home Automation',badge: 'ZHA',   color: '#4a9eff', bg: 'rgba(74,158,255,0.2)' },
-  { key: 'z2m',     label: 'Zigbee2MQTT',           badge: 'Z2M',   color: '#a78bfa', bg: 'rgba(167,139,250,0.2)' },
-  { key: 'hue',     label: 'Philips Hue',           badge: 'HUE',   color: '#2dd4bf', bg: 'rgba(45,212,191,0.2)' },
-  { key: 'esphome', label: 'ESPHome',               badge: 'ESP',   color: '#4ade80', bg: 'rgba(74,222,128,0.2)' },
-  { key: 'mqtt',    label: 'MQTT',                  badge: 'MQTT',  color: '#fbbf24', bg: 'rgba(251,191,36,0.2)' },
-  { key: 'tasmota', label: 'Tasmota',               badge: 'TASMO', color: '#fb923c', bg: 'rgba(251,146,60,0.2)' },
-  { key: 'matter',  label: 'Matter',                badge: 'MATTER',color: '#818cf8', bg: 'rgba(129,140,248,0.2)' },
+  { key: 'shelly', label: 'Shelly', badge: 'SHELLY', color: '#f4601e', bg: 'rgba(244,96,30,0.2)' },
 ];
 
 const SENSOR_GROUPS: Array<{ group: string; icon: string; iconColor: string; iconBg: string; items: Array<{ key: string; label: string; unit: string; defaultColor: string }> }> = [
@@ -91,8 +85,9 @@ const TILE_BLOCKS: Array<{ id: TileBlockId; label: string; sub: string }> = [
   { id: 'dimmer',        label: 'Dimmer / color',     sub: 'Brightness + color picker for lights' },
   { id: 'cover_controls',label: 'Cover controls',     sub: 'Open / stop / close + position' },
   { id: 'trv_control',   label: 'TRV control',        sub: 'Thermostat display + ± buttons' },
-  { id: 'power_bar',     label: 'Power bar',          sub: 'Mini usage bar at tile bottom' },
-  { id: 'badges',        label: 'Type & gen badges',  sub: 'Dimmer · G3 · Relay labels' },
+  { id: 'power_bar',        label: 'Power bar',          sub: 'Mini usage bar at tile bottom' },
+  { id: 'virtual_controls', label: 'Virtual controls',   sub: 'Script-defined switches, selectors & actions' },
+  { id: 'badges',           label: 'Type & gen badges',  sub: 'Dimmer · G3 · Relay labels' },
 ];
 
 /** Config keys that belong to style/layout — copied by "Copy style", excluded: device/room keys */
@@ -114,11 +109,11 @@ const STYLE_KEYS: ReadonlyArray<string> = [
 export class HADeviceDashboardEditor extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
   @state() private _config!: HADeviceDashboardConfig;
-  @state() private _tab: 'devices'|'layout'|'style'|'graphs'|'sensors'|'yaml' = 'devices';
+  @state() private _tab: 'devices'|'layout'|'graphs'|'yaml' = 'devices';
   @state() private _openSections: Record<string, boolean> = {
-    integrations: true, rooms: true, sortview: false,
+    rooms: true,
     grid: true, tileorder: true,
-    colors: true, tiles: true, typography: false, buttons: false, roomstyles: false,
+    header: false, colors: true, tiles: true, typography: false, buttons: false, roomstyles: false,
     graphtype: true, graphcolors: false,
     electrical: true, environmental: true, deviceinfo: false, alerts: false,
   };
@@ -127,7 +122,7 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _deviceSearch = '';
   @state() private _bgEditArea: string | null = null;
   @state() private _styleTab: Record<string, string> = {};
-  @state() private _hiddenBlocks: Set<TileBlockId> = new Set(['badges']);
+  @state() private _hiddenBlocks: Set<TileBlockId> = new Set();
   @state() private _dragOrder: TileBlockId[] = TILE_BLOCKS.map(b => b.id);
   @state() private _dragOver: TileBlockId | null = null;
   @state() private _styleClipFeedback = '';
@@ -320,7 +315,6 @@ export class HADeviceDashboardEditor extends LitElement {
 
   private _renderDevicesTab(): TemplateResult {
     const c = this._config;
-    const integrations = c.integrations ?? [];
     // undefined = all rooms on; explicit array = include list
     const allAreas = this._getAreas();
     const allAreaKeys = allAreas.map(a => a.name);
@@ -339,39 +333,7 @@ export class HADeviceDashboardEditor extends LitElement {
     };
     const isAreaOn = (areaKey: string) => selectedAreas === undefined || selectedAreas.includes(areaKey);
     const allDiscovered = this._getDiscoveredDevices();
-    const allHA = this._getAllHADevices();
-    const extraDevices = c.extra_devices ?? [];
     const hiddenDevices = c.hidden_devices ?? [];
-    const hiddenEntities = c.hidden_entities ?? [];
-
-    // Count devices per integration
-    const intCounts: Record<string, number> = {};
-    if (this.hass) {
-      const er: Record<string,any> = (this.hass as any).entities ?? {};
-      for (const e of Object.values(er)) {
-        const p = (e as any).platform?.toLowerCase() ?? '';
-        if (p) intCounts[p] = (intCounts[p] ?? 0) + 1;
-      }
-    }
-
-    const allIntKeys = INTEGRATIONS.map(i => i.key);
-    const toggleIntegration = (key: string) => {
-      // undefined/[] = all on. Toggling OFF one builds an explicit include list of all others.
-      // Toggling the last one back ON resets to undefined (show all).
-      const currentlyOn = integrations.length === 0
-        ? new Set(allIntKeys)
-        : new Set(integrations);
-      if (currentlyOn.has(key)) {
-        currentlyOn.delete(key);
-      } else {
-        currentlyOn.add(key);
-      }
-      // If all are on, reset to undefined (= show all, no filter)
-      const next = currentlyOn.size === allIntKeys.length
-        ? undefined
-        : [...currentlyOn];
-      this._set('integrations', next);
-    };
 
     // Build device tree by area
     const byArea = new Map<string, Array<{device_id:string;name:string}>>();
@@ -380,48 +342,38 @@ export class HADeviceDashboardEditor extends LitElement {
       if (!byArea.has(key)) byArea.set(key, []);
       byArea.get(key)!.push(dev);
     }
-    for (const id of extraDevices) {
-      if (allDiscovered.find(d => d.device_id === id)) continue;
-      const dev = allHA.find(d => d.device_id === id);
-      if (!dev) continue;
-      const key = dev.area ?? '';
-      if (!byArea.has(key)) byArea.set(key, []);
-      if (!byArea.get(key)!.find(d => d.device_id === id))
-        byArea.get(key)!.push({ device_id: dev.device_id, name: dev.name });
-    }
     const areaKeys = [...allAreas.map(a => a.name)];
     if (byArea.has('')) areaKeys.push('');
-
-    const q = this._deviceSearch.toLowerCase().trim();
-    const searchFiltered = q.length >= 1
-      ? allHA.filter(d => d.name.toLowerCase().includes(q) || (d.area ?? '').toLowerCase().includes(q)).slice(0, 20)
-      : [];
-
-    // Integration section
-    const intBody = html`
-      <div class="field-lbl">Show devices from</div>
-      ${INTEGRATIONS.map(int => {
-        const isOn = integrations.length === 0 || integrations.includes(int.key);
-        const count = intCounts[int.key] ?? 0;
-        return html`
-          <div class="int-row">
-            <span class="int-badge" style="color:${int.color};background:${int.bg}">${int.badge}</span>
-            <span class="int-name">${int.label}</span>
-            ${count ? html`<span class="int-count">${count} entities</span>` : nothing}
-            <label class="sw"><input type="checkbox" .checked=${isOn} @change=${()=>toggleIntegration(int.key)}><span class="sw-t"></span><span class="sw-b"></span></label>
-          </div>`;
-      })}
-      <div class="divider"></div>
-      <div class="tog-row">
-        <div><div class="tog-lbl">Include virtual entities</div><div class="tog-sub">Scripts, scenes, automations, helpers</div></div>
-        <label class="sw"><input type="checkbox" .checked=${c.include_entities ?? false} @change=${(e:Event)=>this._set('include_entities',(e.target as HTMLInputElement).checked)}><span class="sw-t"></span><span class="sw-b"></span></label>
-      </div>`;
 
     const onCount = selectedAreas === undefined ? allAreas.length : selectedAreas.length;
     const roomsBadge = this._badge(`${onCount} / ${allAreas.length}`, '#4ade80', 'rgba(74,222,128,0.1)');
 
     // Room rows
     const roomBody = html`
+      <div class="rooms-toolbar">
+        <div class="toolbar-group">
+          <span class="toolbar-lbl">Sort</span>
+          <div class="pill-grp">
+            ${(['name','power','online'] as const).map(v => html`
+              <span class="pill ${(c.sort_by ?? 'name') === v ? 'on' : ''}"
+                @click=${()=>this._set('sort_by',v)}>${v[0].toUpperCase()+v.slice(1)}</span>`)}
+          </div>
+        </div>
+        <div class="toolbar-group">
+          <span class="toolbar-lbl">View</span>
+          <div class="pill-grp">
+            ${(['grid','list','compact'] as const).map(v => html`
+              <span class="pill ${(c.view_mode ?? 'grid') === v ? 'on' : ''}"
+                @click=${()=>this._set('view_mode',v)}>${v[0].toUpperCase()+v.slice(1)}</span>`)}
+          </div>
+        </div>
+        <div class="tog-row" style="border:none;padding:4px 0 0">
+          <div class="tog-lbl">Show offline devices</div>
+          <label class="sw"><input type="checkbox" .checked=${c.show_offline !== false}
+            @change=${(e:Event)=>this._set('show_offline',(e.target as HTMLInputElement).checked)}>
+            <span class="sw-t"></span><span class="sw-b"></span></label>
+        </div>
+      </div>
       ${areaKeys.map(areaKey => {
         const label = areaKey || 'No Room';
         const devicesInArea = byArea.get(areaKey) ?? [];
@@ -437,7 +389,7 @@ export class HADeviceDashboardEditor extends LitElement {
               <span class="sw-t"></span><span class="sw-b"></span></label>
             <button class="room-style-btn" @click=${(e:Event)=>{
               e.stopPropagation();
-              this._tab = 'style';
+              this._tab = 'layout';
               this._openSections = { ...this._openSections, roomstyles: true };
               this._expandedRooms = new Set([...this._expandedRooms, areaKey]);
             }}>Style ›</button>
@@ -478,75 +430,28 @@ export class HADeviceDashboardEditor extends LitElement {
               }) : html`<div class="room-device-empty">No devices in this room</div>`}
             </div>
           ` : nothing}`;
-      })}
-      <!-- Extra device search -->
-      <div class="room-extra">
-        <div class="field-lbl" style="margin-top:10px">Pin extra devices</div>
-        <div class="search-wrap">
-          <span class="search-ico">⌕</span>
-          <input type="text" placeholder="Search by name or area…" .value=${this._deviceSearch}
-            @input=${(e:Event)=>{ this._deviceSearch = (e.target as HTMLInputElement).value; }}/>
-        </div>
-        ${q.length >= 1 ? html`
-          <div class="search-results">
-            ${searchFiltered.length ? searchFiltered.map(d => {
-              const pinned = extraDevices.includes(d.device_id);
-              return html`<div class="search-row ${pinned ? 'pinned' : ''}" @click=${()=>{
-                if (pinned) return;
-                this._set('extra_devices', [...extraDevices, d.device_id]);
-                this._deviceSearch = '';
-              }}>
-                <span class="search-name">${d.name}</span>
-                ${d.area ? html`<span class="search-area">${d.area}</span>` : nothing}
-                ${pinned ? html`<span style="color:#f4601e;font-size:10px">✓</span>` : nothing}
-              </div>`;
-            }) : html`<div class="search-empty">No devices match "${q}"</div>`}
-          </div>` : nothing}
-        ${extraDevices.length ? html`
-          <div class="pinned-chips">
-            ${extraDevices.map(id => {
-              const dev = allHA.find(d=>d.device_id===id);
-              return html`<span class="pinned-chip" @click=${()=>{
-                const next = extraDevices.filter(x=>x!==id);
-                this._set('extra_devices', next.length ? next : undefined);
-              }}>${dev?.name ?? id} ✕</span>`;
-            })}
-          </div>` : nothing}
-      </div>`;
-
-    const sortBody = html`
-      <div class="field">
-        <div class="field-lbl">Sort devices by</div>
-        <div class="pill-grp">
-          ${(['name','power','online'] as const).map(v => html`
-            <span class="pill ${(c.sort_by ?? 'name') === v ? 'on' : ''}" @click=${()=>this._set('sort_by',v)}>${v[0].toUpperCase()+v.slice(1)}</span>`)}
-        </div>
-      </div>
-      <div class="field">
-        <div class="field-lbl">View mode</div>
-        <div class="pill-grp">
-          ${(['grid','list','compact'] as const).map(v => html`
-            <span class="pill ${(c.view_mode ?? 'grid') === v ? 'on' : ''}" @click=${()=>this._set('view_mode',v)}>${v[0].toUpperCase()+v.slice(1)}</span>`)}
-        </div>
-      </div>
-      <div class="tog-row">
-        <div class="tog-lbl">Show offline devices</div>
-        <label class="sw"><input type="checkbox" .checked=${c.show_offline !== false} @change=${(e:Event)=>this._set('show_offline',(e.target as HTMLInputElement).checked)}><span class="sw-t"></span><span class="sw-b"></span></label>
-      </div>
-      `;
+      })}`;
 
     return html`
-      ${this._sec('integrations','⬡','rgba(74,158,255,0.1)','#4a9eff','Integrations',
-        this._badge('active','#4a9eff','rgba(74,158,255,0.1)'), intBody)}
-      ${this._sec('rooms','⌂','rgba(74,222,128,0.1)','#4ade80','Rooms', roomsBadge, roomBody)}
-      ${this._sec('sortview','⊞','rgba(167,139,250,0.1)','#a78bfa','Sort & View', nothing, sortBody)}`;
+      ${this._sec('rooms','⌂','rgba(74,222,128,0.1)','#4ade80','Rooms', roomsBadge, roomBody)}`;
   }
 
-  private _setDeviceStyle(deviceId: string, patch: Partial<{ color: string | undefined; tile_layout: TileBlockId[] | undefined }>) {
+  private _setDeviceStyle(deviceId: string, patch: Partial<{
+    color: string | undefined;
+    tile_layout: TileBlockId[] | undefined;
+    tile_icon: string | undefined;
+    tile_icon_off: string | undefined;
+    tile_icon_speed: number | undefined;
+    entity_animations: Record<string, { on?: string; off?: string; speed?: number }> | undefined;
+  }>) {
     const current = this._config.device_styles?.[deviceId] ?? {};
     const next: Record<string, unknown> = { ...current, ...patch };
     if (next['color'] === undefined) delete next['color'];
     if (next['tile_layout'] === undefined) delete next['tile_layout'];
+    if (next['tile_icon'] === undefined) delete next['tile_icon'];
+    if (next['tile_icon_off'] === undefined) delete next['tile_icon_off'];
+    if (next['tile_icon_speed'] === undefined) delete next['tile_icon_speed'];
+    if (next['entity_animations'] === undefined) delete next['entity_animations'];
     const allStyles = { ...(this._config.device_styles ?? {}), [deviceId]: next };
     if (!Object.keys(next).length) delete allStyles[deviceId];
     this._set('device_styles', Object.keys(allStyles).length ? allStyles : undefined);
@@ -556,6 +461,7 @@ export class HADeviceDashboardEditor extends LitElement {
     const devStyle = this._config.device_styles?.[deviceId] ?? {};
     const globalLayout: TileBlockId[] = this._config.tile_layout ?? TILE_BLOCKS.map(b => b.id);
     const devLayout: TileBlockId[] | null = (devStyle as any).tile_layout ?? null;
+    const entityAnims: Record<string, { on?: string; off?: string; speed?: number }> = (devStyle as any).entity_animations ?? {};
 
     const toggleBlock = (blockId: TileBlockId) => {
       const isVisible = devLayout === null ? globalLayout.includes(blockId) : devLayout.includes(blockId);
@@ -567,6 +473,24 @@ export class HADeviceDashboardEditor extends LitElement {
       this._setDeviceStyle(deviceId, { tile_layout: sameAsGlobal ? undefined : next });
     };
 
+    const setEntityAnim = (entityId: string, field: 'on' | 'off' | 'speed', value: string | number) => {
+      const cur: Record<string, unknown> = { ...(entityAnims[entityId] ?? {}) };
+      if (field === 'speed') {
+        const spd = Number(value);
+        if (spd === 1) delete cur['speed']; else cur['speed'] = spd;
+      } else {
+        if (value === 'none') delete cur[field]; else cur[field] = value;
+      }
+      const next = { ...entityAnims, [entityId]: cur as any };
+      if (!cur['on'] && !cur['off'] && !cur['speed']) delete next[entityId];
+      this._setDeviceStyle(deviceId, { entity_animations: Object.keys(next).length ? next : undefined });
+    };
+
+    // Find switch entities for this device to show animation pickers
+    const allDevices = this.hass ? getAllDevices(this.hass) : [];
+    const dev = allDevices.find(d => d.device_id === deviceId);
+    const switchEnts = dev ? dev.entities.filter(e => e.domain === 'switch' || e.domain === 'light') : [];
+
     return html`
       <div class="dev-style-panel">
         <div class="color-row">
@@ -577,6 +501,74 @@ export class HADeviceDashboardEditor extends LitElement {
           ${(devStyle as any).color ? html`<button class="color-reset"
             @click=${() => this._setDeviceStyle(deviceId, { color: undefined })}>↺</button>` : nothing}
         </div>
+        <div class="tile-icon-row">
+          <span class="color-key">Tile icon</span>
+          <div class="tile-icon-pickers">
+            <span class="tile-icon-state-lbl">ON</span>
+            <details class="icon-picker-wrap">
+              <summary class="icon-picker-btn compact">
+                ${(devStyle as any).tile_icon
+                  ? renderAnimSvg((devStyle as any).tile_icon as EntityAnimationType, true, `--ent-spd:1;color:${ANIM_COLORS[(devStyle as any).tile_icon as EntityAnimationType].on}`, 'icon-preview-sm')
+                  : html`<span class="icon-cell-none">—</span>`}
+              </summary>
+              <div class="icon-picker-grid">
+                ${ANIM_OPTIONS.map(opt => html`
+                  <button
+                    class="icon-cell ${((devStyle as any).tile_icon ?? 'none') === opt.value ? 'selected' : ''}"
+                    title="${opt.group} ${opt.label}"
+                    @click=${(ev: Event) => {
+                      this._setDeviceStyle(deviceId, { tile_icon: opt.value === 'none' ? undefined : opt.value as EntityAnimationType });
+                      ((ev.target as HTMLElement).closest('details') as HTMLDetailsElement)?.removeAttribute('open');
+                    }}
+                  >
+                    ${opt.value === 'none'
+                      ? html`<span class="icon-cell-none">—</span>`
+                      : renderAnimSvg(opt.value, true, `--ent-spd:1;color:${ANIM_COLORS[opt.value].on}`, 'icon-preview')}
+                    <span class="icon-cell-label">${opt.label}</span>
+                  </button>
+                `)}
+              </div>
+            </details>
+            <span class="tile-icon-state-lbl">OFF</span>
+            <details class="icon-picker-wrap">
+              <summary class="icon-picker-btn compact">
+                ${(devStyle as any).tile_icon_off
+                  ? renderAnimSvg((devStyle as any).tile_icon_off as EntityAnimationType, false, `--ent-spd:1;color:${ANIM_COLORS[(devStyle as any).tile_icon_off as EntityAnimationType].off}`, 'icon-preview-sm')
+                  : html`<span class="icon-cell-none">—</span>`}
+              </summary>
+              <div class="icon-picker-grid flip">
+                ${ANIM_OPTIONS.map(opt => html`
+                  <button
+                    class="icon-cell ${((devStyle as any).tile_icon_off ?? 'none') === opt.value ? 'selected' : ''}"
+                    title="${opt.group} ${opt.label}"
+                    @click=${(ev: Event) => {
+                      this._setDeviceStyle(deviceId, { tile_icon_off: opt.value === 'none' ? undefined : opt.value as EntityAnimationType });
+                      ((ev.target as HTMLElement).closest('details') as HTMLDetailsElement)?.removeAttribute('open');
+                    }}
+                  >
+                    ${opt.value === 'none'
+                      ? html`<span class="icon-cell-none">—</span>`
+                      : renderAnimSvg(opt.value, false, `--ent-spd:1;color:${ANIM_COLORS[opt.value].off}`, 'icon-preview')}
+                    <span class="icon-cell-label">${opt.label}</span>
+                  </button>
+                `)}
+              </div>
+            </details>
+          </div>
+          <select class="anim-select" style="width:90px" .value=${String((devStyle as any).tile_icon_speed ?? 1)}
+            @change=${(ev: Event) => {
+              const v = Number((ev.target as HTMLSelectElement).value);
+              this._setDeviceStyle(deviceId, { tile_icon_speed: v === 1 ? undefined : v });
+            }}>
+            <option value="0.25" ?selected=${((devStyle as any).tile_icon_speed ?? 1) === 0.25}>0.25× Slow</option>
+            <option value="0.5"  ?selected=${((devStyle as any).tile_icon_speed ?? 1) === 0.5}>0.5× Slow</option>
+            <option value="1"    ?selected=${((devStyle as any).tile_icon_speed ?? 1) === 1}>1× Normal</option>
+            <option value="1.5"  ?selected=${((devStyle as any).tile_icon_speed ?? 1) === 1.5}>1.5× Fast</option>
+            <option value="2"    ?selected=${((devStyle as any).tile_icon_speed ?? 1) === 2}>2× Fast</option>
+            <option value="3"    ?selected=${((devStyle as any).tile_icon_speed ?? 1) === 3}>3× Rapid</option>
+            <option value="5"    ?selected=${((devStyle as any).tile_icon_speed ?? 1) === 5}>5× Frantic</option>
+          </select>
+        </div>
         <div class="field-lbl" style="margin-bottom:4px">Visible blocks</div>
         <div class="block-toggles">
           ${TILE_BLOCKS.map(b => {
@@ -586,6 +578,78 @@ export class HADeviceDashboardEditor extends LitElement {
             </span>`;
           })}
         </div>
+        ${switchEnts.length ? html`
+          <div class="field-lbl" style="margin:6px 0 4px">Entity animations</div>
+          <div class="ent-anim-header">
+            <span class="ent-anim-hcol name">Entity</span>
+            <span class="ent-anim-hcol">When ON</span>
+            <span class="ent-anim-hcol">When OFF</span>
+            <span class="ent-anim-hcol">Speed</span>
+          </div>
+          ${switchEnts.map(e => {
+            const state = this.hass?.states[e.entity_id];
+            const name = (state?.attributes as any)?.friendly_name ?? e.entity_id.split('.').pop() ?? e.entity_id;
+            const curOn  = (entityAnims[e.entity_id]?.on  ?? 'none') as EntityAnimationType;
+            const curOff = (entityAnims[e.entity_id]?.off ?? 'none') as EntityAnimationType;
+            const curSpd = entityAnims[e.entity_id]?.speed ?? 1;
+            return html`
+              <div class="ent-anim-row">
+                <span class="ent-anim-name">${name}</span>
+                <details class="icon-picker-wrap">
+                  <summary class="icon-picker-btn compact">
+                    ${curOn !== 'none'
+                      ? renderAnimSvg(curOn, true, `--ent-spd:1;color:${ANIM_COLORS[curOn].on}`, 'icon-preview-sm')
+                      : html`<span class="icon-cell-none">—</span>`}
+                  </summary>
+                  <div class="icon-picker-grid">
+                    ${ANIM_OPTIONS.map(opt => html`
+                      <button class="icon-cell ${curOn === opt.value ? 'selected' : ''}"
+                        title="${opt.group} ${opt.label}"
+                        @click=${(ev: Event) => {
+                          setEntityAnim(e.entity_id, 'on', opt.value);
+                          ((ev.target as HTMLElement).closest('details') as HTMLDetailsElement)?.removeAttribute('open');
+                        }}>
+                        ${opt.value === 'none'
+                          ? html`<span class="icon-cell-none">—</span>`
+                          : renderAnimSvg(opt.value, true, `--ent-spd:1;color:${ANIM_COLORS[opt.value].on}`, 'icon-preview')}
+                        <span class="icon-cell-label">${opt.label}</span>
+                      </button>`)}
+                  </div>
+                </details>
+                <details class="icon-picker-wrap">
+                  <summary class="icon-picker-btn compact">
+                    ${curOff !== 'none'
+                      ? renderAnimSvg(curOff, false, `--ent-spd:1;color:${ANIM_COLORS[curOff].off}`, 'icon-preview-sm')
+                      : html`<span class="icon-cell-none">—</span>`}
+                  </summary>
+                  <div class="icon-picker-grid flip">
+                    ${ANIM_OPTIONS.map(opt => html`
+                      <button class="icon-cell ${curOff === opt.value ? 'selected' : ''}"
+                        title="${opt.group} ${opt.label}"
+                        @click=${(ev: Event) => {
+                          setEntityAnim(e.entity_id, 'off', opt.value);
+                          ((ev.target as HTMLElement).closest('details') as HTMLDetailsElement)?.removeAttribute('open');
+                        }}>
+                        ${opt.value === 'none'
+                          ? html`<span class="icon-cell-none">—</span>`
+                          : renderAnimSvg(opt.value, false, `--ent-spd:1;color:${ANIM_COLORS[opt.value].off}`, 'icon-preview')}
+                        <span class="icon-cell-label">${opt.label}</span>
+                      </button>`)}
+                  </div>
+                </details>
+                <select class="anim-select" .value=${String(curSpd)}
+                  @change=${(ev: Event) => setEntityAnim(e.entity_id, 'speed', (ev.target as HTMLSelectElement).value)}>
+                  <option value="0.25" ?selected=${curSpd === 0.25}>0.25× Slowest</option>
+                  <option value="0.5"  ?selected=${curSpd === 0.5}>0.5× Slow</option>
+                  <option value="1"    ?selected=${curSpd === 1}>1× Normal</option>
+                  <option value="1.5"  ?selected=${curSpd === 1.5}>1.5× Fast</option>
+                  <option value="2"    ?selected=${curSpd === 2}>2× Faster</option>
+                  <option value="3"    ?selected=${curSpd === 3}>3× Rapid</option>
+                  <option value="5"    ?selected=${curSpd === 5}>5× Frantic</option>
+                </select>
+              </div>`;
+          })}
+        ` : nothing}
         <button class="room-style-btn" style="align-self:flex-end;margin-top:2px" @click=${() => {
           const updated = { ...(this._config.device_styles ?? {}) };
           delete updated[deviceId];
@@ -744,12 +808,12 @@ export class HADeviceDashboardEditor extends LitElement {
                 <div class="drag-sub">${meta.sub}</div>
               </div>
               <button class="drag-eye" @click=${()=>{
-                const next = new Set(this._hiddenBlocks);
-                next.has(blockId) ? next.delete(blockId) : next.add(blockId);
-                this._hiddenBlocks = next;
-                const visible = this._dragOrder.filter(id => !next.has(id));
-                this._set('tile_layout', visible);
-              }} style="opacity:${isHidden ? 0.35 : 1}">👁</button>
+                    const next = new Set(this._hiddenBlocks);
+                    next.has(blockId) ? next.delete(blockId) : next.add(blockId);
+                    this._hiddenBlocks = next;
+                    const visible = this._dragOrder.filter(id => !next.has(id));
+                    this._set('tile_layout', visible);
+                  }} style="opacity:${isHidden ? 0.35 : 1}">👁</button>
             </div>`;
         })}
       </div>`;
@@ -768,26 +832,127 @@ export class HADeviceDashboardEditor extends LitElement {
     const c = this._config;
     const sty = c.style ?? {};
 
-
-    const colorBody = html`
-      ${[
-        { label: 'Dashboard BG',     key: 'card_bg',       def: '#1c1c1e' },
-        { label: 'Accent / brand',   key: 'accent_color',  def: '#f4601e' },
-        { label: 'Tile background',  key: 'tile_bg',       def: '#1c1c1e' },
-        { label: 'Tile border',      key: 'tile_border',   def: '#2a2a30' },
-        { label: 'Text primary',     key: 'text_primary',  def: '#e5e7eb' },
-        { label: 'Online dot',       key: 'online_color',  def: '#4ade80' },
-        { label: 'Power reading',    key: 'power_color',   def: '#fb923c' },
-      ].map(({label,key,def}) => {
-        const currentVal = (sty as any)[key] ?? def;
-        return html`
+    const hStyleSet = (key: string, val: unknown) => this._set('style', { ...sty, [key]: val });
+    const hStyleDel = (key: string) => { const s={...sty}; delete (s as any)[key]; this._set('style', s); };
+    const hColorRow = (label: string, key: string, def: string) => {
+      const cur = (sty as any)[key] ?? def;
+      return html`
         <div class="color-row">
-          <div class="color-preview-swatch" style="background:${currentVal}"></div>
+          <div class="color-preview-swatch" style="background:${cur}"></div>
           <span class="color-key">${label}</span>
-          <input type="color" .value=${currentVal}
+          <input type="color" .value=${cur}
+            @change=${(e:Event) => hStyleSet(key, (e.target as HTMLInputElement).value)}/>
+          ${(sty as any)[key] ? html`<button class="color-reset" @click=${() => hStyleDel(key)}>↺</button>` : nothing}
+        </div>`;
+    };
+
+    const headerBody = html`
+      <!-- Title -->
+      <div class="field">
+        <div class="field-lbl">Card title</div>
+        <div style="display:flex;gap:6px">
+          <input type="text" class="inline-text" placeholder="Shelly"
+            .value=${c.title ?? ''}
+            @change=${(e:Event) => { const v=(e.target as HTMLInputElement).value.trim(); this._set('title', v||undefined); }}
+            style="flex:1"/>
+          <input type="text" class="inline-text" placeholder="⚡" maxlength="4"
+            title="Icon / emoji before title"
+            .value=${sty.header_icon ?? ''}
+            @change=${(e:Event) => { const v=(e.target as HTMLInputElement).value.trim(); hStyleSet('header_icon', v||undefined); }}
+            style="width:48px;text-align:center;font-size:16px"/>
+        </div>
+      </div>
+      <!-- Appearance sliders -->
+      <div class="field">
+        <div class="field-lbl">Title size — <span style="color:#f4601e">${(sty.header_title_size ?? 1.1).toFixed(1)}em</span></div>
+        <input type="range" min="0.7" max="1.8" step="0.1" .value=${String(sty.header_title_size ?? 1.1)}
+          @input=${(e:Event) => { const v=parseFloat((e.target as HTMLInputElement).value); hStyleSet('header_title_size', v===1.1?undefined:v); }}/>
+      </div>
+      <div class="field">
+        <div class="field-lbl">Header height — <span style="color:#f4601e">${sty.header_padding ?? 16}px</span></div>
+        <input type="range" min="6" max="40" step="2" .value=${String(sty.header_padding ?? 16)}
+          @input=${(e:Event) => { const v=parseInt((e.target as HTMLInputElement).value); hStyleSet('header_padding', v===16?undefined:v); }}/>
+      </div>
+      <div class="field">
+        <div class="field-lbl">Corner radius — <span style="color:#f4601e">${sty.header_radius ?? 0}px</span></div>
+        <input type="range" min="0" max="24" step="2" .value=${String(sty.header_radius ?? 0)}
+          @input=${(e:Event) => { const v=parseInt((e.target as HTMLInputElement).value); hStyleSet('header_radius', v===0?undefined:v); }}/>
+      </div>
+      <!-- Bottom border/separator -->
+      <div class="field">
+        <div class="field-lbl">Bottom border — <span style="color:#f4601e">${sty.header_border_width ?? 0}px</span></div>
+        <input type="range" min="0" max="6" step="1" .value=${String(sty.header_border_width ?? 0)}
+          @input=${(e:Event) => { const v=parseInt((e.target as HTMLInputElement).value); hStyleSet('header_border_width', v===0?undefined:v); }}/>
+      </div>
+      ${(sty.header_border_width ?? 0) > 0 ? hColorRow('Border color', 'header_border_color', '#4ade80') : nothing}
+      <!-- Visibility toggles -->
+      <div class="tog-row" style="border:none;padding:4px 0 0">
+        <div class="tog-lbl">Show title</div>
+        <label class="sw"><input type="checkbox" .checked=${c.header_show_title !== false}
+          @change=${(e:Event) => this._set('header_show_title', (e.target as HTMLInputElement).checked ? undefined : false)}>
+          <span class="sw-t"></span><span class="sw-b"></span></label>
+      </div>
+      <div class="tog-row" style="border:none;padding:4px 0 0">
+        <div class="tog-lbl">Show stats (online / power)</div>
+        <label class="sw"><input type="checkbox" .checked=${c.header_show_stats !== false}
+          @change=${(e:Event) => this._set('header_show_stats', (e.target as HTMLInputElement).checked ? undefined : false)}>
+          <span class="sw-t"></span><span class="sw-b"></span></label>
+      </div>
+      <div class="tog-row" style="border:none;padding:4px 0 0">
+        <div class="tog-lbl">Show cloud chips</div>
+        <label class="sw"><input type="checkbox" .checked=${c.header_show_cloud !== false}
+          @change=${(e:Event) => this._set('header_show_cloud', (e.target as HTMLInputElement).checked ? undefined : false)}>
+          <span class="sw-t"></span><span class="sw-b"></span></label>
+      </div>
+      <div class="tog-row" style="border:none;padding:4px 0 0">
+        <div class="tog-lbl">Show glow orbs</div>
+        <label class="sw"><input type="checkbox" .checked=${c.header_show_orbs !== false}
+          @change=${(e:Event) => this._set('header_show_orbs', (e.target as HTMLInputElement).checked ? undefined : false)}>
+          <span class="sw-t"></span><span class="sw-b"></span></label>
+      </div>
+      <!-- Background colors -->
+      ${hColorRow('Background gradient start', 'header_bg',         '#1a1a2e')}
+      ${hColorRow('Background gradient end',   'header_bg2',        '#0f3460')}
+      ${hColorRow('Text color',                'header_text_color', '#ffffff')}
+      ${hColorRow('Orb / glow color',          'header_orb_color',  '#3b82f6')}
+      <!-- Stat chip colors -->
+      ${hColorRow('Online chip color',  'header_stat_online',  '#4ade80')}
+      ${hColorRow('Power chip color',   'header_stat_power',   '#fb923c')}
+      ${hColorRow('Offline chip color', 'header_stat_offline', '#9ca3af')}
+      <!-- Opacity -->
+      <div class="field">
+        <div class="field-lbl">Background opacity — <span style="color:#f4601e">${c.header_opacity ?? 100}%</span></div>
+        <input type="range" min="0" max="100" step="5" .value=${String(c.header_opacity ?? 100)}
+          @input=${(e:Event) => { const v=parseInt((e.target as HTMLInputElement).value); this._set('header_opacity', v===100?undefined:v); }}/>
+      </div>`;
+
+    const colorRow = (label: string, key: string, def: string) => {
+      const cur = (sty as any)[key] ?? def;
+      return html`
+        <div class="color-row">
+          <div class="color-preview-swatch" style="background:${cur}"></div>
+          <span class="color-key">${label}</span>
+          <input type="color" .value=${cur}
             @change=${(e:Event)=>this._set('style',{...sty,[key]:(e.target as HTMLInputElement).value})}/>
           ${(sty as any)[key] ? html`<button class="color-reset" @click=${()=>{const s={...sty};delete(s as any)[key];this._set('style',s)}}>↺</button>` : nothing}
-        </div>`;})}`;
+        </div>`;
+    };
+    const colorBody = html`
+      ${colorRow('Dashboard BG',       'card_bg',           '#1c1c1e')}
+      ${colorRow('Accent / brand',     'accent_color',      '#f4601e')}
+      ${colorRow('Room header label',  'area_header_color', '#f4601e')}
+      ${colorRow('Tile background',    'tile_bg',           '#1c1c1e')}
+      ${colorRow('Tile border',        'tile_border',       '#2a2a30')}
+      ${colorRow('Tile hover BG',      'tile_hover_bg',     'rgba(255,255,255,0.07)')}
+      ${colorRow('Tile hover shadow',  'tile_hover_shadow', 'rgba(0,0,0,0.30)')}
+      ${colorRow('Sensor chip BG',     'tile_sensor_bg',    'rgba(255,255,255,0.04)')}
+      ${colorRow('Expanded panel BG',  'tile_exp_bg',       'rgba(255,255,255,0.06)')}
+      ${colorRow('Text primary',       'text_primary',      '#e5e7eb')}
+      ${colorRow('Text secondary',     'text_secondary',    '#9ca3af')}
+      ${colorRow('Text muted',         'text_muted',        '#6b7280')}
+      ${colorRow('Online dot',         'online_color',      '#4ade80')}
+      ${colorRow('Offline dot',        'offline_color',     '#ef4444')}
+      ${colorRow('Power reading',      'power_color',       '#fb923c')}`;
 
     const typogBody = html`
       <div class="field">
@@ -907,6 +1072,25 @@ export class HADeviceDashboardEditor extends LitElement {
         <div class="field-lbl">Tile radius — <span style="color:#f4601e">${sty.tile_radius ?? 12}px</span></div>
         <input type="range" min="0" max="24" .value=${String(sty.tile_radius ?? 12)}
           @input=${(e:Event)=>this._set('style',{...sty,tile_radius:parseInt((e.target as HTMLInputElement).value,10)})}/>
+      </div>
+      <div class="field">
+        <div class="field-lbl">Tile border width — <span style="color:#f4601e">${sty.tile_border_width ?? 1}px</span></div>
+        <input type="range" min="0" max="4" step="1" .value=${String(sty.tile_border_width ?? 1)}
+          @input=${(e:Event)=>{ const v=parseInt((e.target as HTMLInputElement).value); this._set('style',{...sty,tile_border_width:v===1?undefined:v}); }}/>
+      </div>
+      <div class="field">
+        <div class="field-lbl">Tile shadow</div>
+        <div class="pill-grp">
+          ${(['none','soft','medium','strong'] as const).map(v => html`
+            <span class="pill ${(sty.tile_box_shadow ?? 'none') === v ? 'on' : ''}"
+              @click=${()=>this._set('style',{...sty,tile_box_shadow:v==='none'?undefined:v})}>
+              ${v[0].toUpperCase()+v.slice(1)}</span>`)}
+        </div>
+      </div>
+      <div class="field">
+        <div class="field-lbl">Card corner radius — <span style="color:#f4601e">${sty.card_radius ?? 12}px</span></div>
+        <input type="range" min="0" max="32" step="2" .value=${String(sty.card_radius ?? 12)}
+          @input=${(e:Event)=>{ const v=parseInt((e.target as HTMLInputElement).value); this._set('style',{...sty,card_radius:v===12?undefined:v}); }}/>
       </div>
 
       <div class="tiles-divider">Transparency</div>
@@ -1032,6 +1216,7 @@ export class HADeviceDashboardEditor extends LitElement {
             @input=${(e: Event) => { this._pasteText = (e.target as HTMLTextAreaElement).value; }}></textarea>
           <button class="btn-copy" @click=${() => this._applyPastedStyle()}>Apply</button>
         </div>` : nothing}
+      ${this._sec('header','◈','rgba(99,102,241,0.1)','#818cf8','Header', nothing, headerBody)}
       ${this._sec('colors','◐','rgba(244,96,30,0.12)','#f4601e','Colors', nothing, colorBody)}
       ${this._sec('tiles','⊡','rgba(45,212,191,0.1)','#2dd4bf','Tiles', nothing, tilesBody)}
       ${this._sec('typography','T','rgba(251,191,36,0.1)','#fbbf24','Typography', nothing, typogBody)}
@@ -1228,12 +1413,11 @@ export class HADeviceDashboardEditor extends LitElement {
   protected render(): TemplateResult {
     if (!this._config) return html``;
     const c = this._config;
-    const tabs: Array<{id:typeof this._tab;label:string;icon:string}> = [
+    type TabId = 'devices'|'layout'|'graphs'|'yaml';
+    const tabs: Array<{id:TabId;label:string;icon:string}> = [
       {id:'devices',label:'Rooms',icon:'⌂'},
-      {id:'layout',label:'Layout',icon:'⊡'},
-      {id:'style',label:'Style',icon:'◐'},
-      {id:'graphs',label:'Graphs',icon:'∿'},
-      {id:'sensors',label:'Sensors',icon:'⊕'},
+      {id:'layout',label:'Layout & Style',icon:'⊡'},
+      {id:'graphs',label:'Graphs & Sensors',icon:'∿'},
       {id:'yaml',label:'YAML',icon:'</>'},
     ];
     return html`
@@ -1246,17 +1430,15 @@ export class HADeviceDashboardEditor extends LitElement {
         </div>
         <div class="tab-body">
           ${this._tab==='devices' ? this._renderDevicesTab()
-           :this._tab==='layout'  ? this._renderLayoutTab()
-           :this._tab==='style'   ? this._renderStyleTab()
-           :this._tab==='graphs'  ? this._renderGraphsTab()
-           :this._tab==='sensors' ? this._renderSensorsTab()
+           :this._tab==='layout'  ? html`${this._renderLayoutTab()}${this._renderStyleTab()}`
+           :this._tab==='graphs'  ? html`${this._renderGraphsTab()}${this._renderSensorsTab()}`
            :                        this._renderYamlTab()}
         </div>
       </div>`;
   }
 
 
-  static styles = css`
+  static styles = [ANIM_CSS, css`
     :host { display:block; font-family:'DM Sans',sans-serif; }
     * { box-sizing:border-box; }
 
@@ -1354,12 +1536,10 @@ export class HADeviceDashboardEditor extends LitElement {
     .tiles-divider { font-size:10px; font-weight:600; color:var(--t2); letter-spacing:.06em; text-transform:uppercase; margin:12px 0 6px; padding-top:10px; border-top:1px solid var(--border); }
     .upload-btn { font-size:10px; background:var(--s2); border:1px solid var(--border2); border-radius:5px; color:var(--text); padding:3px 8px; cursor:pointer; white-space:nowrap; }
 
-    /* ── Integration rows ── */
-    .int-row { display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--border); }
-    .int-row:last-of-type { border-bottom:none; }
-    .int-badge { font-size:9px; font-weight:700; padding:2px 7px; border-radius:3px; letter-spacing:0.06em; flex-shrink:0; min-width:52px; text-align:center; }
-    .int-name { font-size:12px; color:var(--text); flex:1; }
-    .int-count { font-size:10px; color:var(--t3); }
+    /* ── Rooms toolbar ── */
+    .rooms-toolbar { display:flex; flex-direction:column; gap:6px; margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid var(--border); }
+    .toolbar-group { display:flex; align-items:center; gap:8px; }
+    .toolbar-lbl { font-size:11px; color:var(--t3); min-width:34px; }
 
     /* ── Room rows ── */
     .room-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border); }
@@ -1388,6 +1568,36 @@ export class HADeviceDashboardEditor extends LitElement {
     .block-toggles { display:flex; flex-wrap:wrap; gap:5px; }
     .block-tog { display:flex; align-items:center; gap:3px; font-size:10px; color:var(--t3); cursor:pointer; padding:2px 7px; border-radius:4px; border:1px solid var(--border); background:var(--s3); user-select:none; transition:color .12s,border-color .12s; }
     .block-tog.on { color:var(--text); border-color:var(--border2); }
+    .tile-icon-row { display:flex; align-items:center; gap:6px; }
+    .tile-icon-pickers { display:flex; align-items:center; gap:4px; flex:1; }
+    .tile-icon-state-lbl { font-size:9px; font-weight:600; color:var(--t3); letter-spacing:.04em; text-transform:uppercase; flex-shrink:0; }
+    .ent-anim-header { display:grid; grid-template-columns:1fr 1fr 1fr 0.8fr; gap:4px; padding:0 2px 2px; }
+    .ent-anim-hcol { font-size:9px; font-weight:600; color:var(--t3); letter-spacing:.04em; text-transform:uppercase; }
+    .ent-anim-hcol.name { /* first col */ }
+    .ent-anim-row { display:grid; grid-template-columns:1fr 1fr 1fr 0.8fr; gap:4px; align-items:center; }
+    .ent-anim-name { font-size:10px; color:var(--text); font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .anim-select { width:100%; font-size:10px; padding:3px 5px; border-radius:5px; border:1px solid var(--border); background:var(--s3); color:var(--text); cursor:pointer; outline:none; transition:border-color .12s; }
+    .anim-select:focus { border-color:var(--acc,#f4601e); }
+    .icon-picker-wrap { position:relative; display:inline-block; flex:1; }
+    .icon-picker-wrap summary { list-style:none; }
+    .icon-picker-wrap summary::-webkit-details-marker { display:none; }
+    .icon-picker-btn { cursor:pointer; display:flex; align-items:center; gap:5px; padding:4px 8px; border-radius:6px; background:var(--s3,#1e1e1e); border:1px solid var(--border,#333); color:var(--text); min-height:26px; }
+    .icon-picker-btn:hover { border-color:var(--acc,#f4601e); }
+    .icon-picker-grid { position:absolute; z-index:20; top:calc(100% + 4px); left:0; display:grid; grid-template-columns:repeat(6,1fr); gap:3px; padding:8px; background:var(--s2,#1a1a1a); border:1px solid var(--border2,#444); border-radius:8px; width:240px; max-height:280px; overflow-y:auto; box-shadow:0 4px 20px rgba(0,0,0,0.5); }
+    .icon-picker-grid.flip { left:auto; right:0; }
+    .icon-cell { display:flex; flex-direction:column; align-items:center; gap:2px; padding:5px 3px; border:1px solid transparent; border-radius:5px; background:none; cursor:pointer; color:var(--acc,#f4601e); transition:background .1s,border-color .1s; }
+    .icon-cell:hover { background:rgba(255,255,255,0.07); border-color:rgba(244,96,30,0.4); }
+    .icon-cell.selected { background:rgba(244,96,30,0.18); border-color:var(--acc,#f4601e); }
+    .icon-cell-label { font-size:0.58rem; color:var(--t3); max-width:34px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center; }
+    .icon-cell-none { font-size:1rem; color:var(--t3); }
+    .icon-preview { width:20px; height:20px; display:block; }
+    .icon-picker-btn.compact { padding:3px 5px; min-height:22px; justify-content:center; width:100%; }
+    .icon-preview-sm { width:16px; height:16px; display:block; }
+    .ent-icon-bulb.off .bulb-body,.ent-icon-bulb2.off .bulb-body { fill:none; stroke:currentColor; stroke-width:1.2; opacity:0.6; }
+    .ent-icon-bulb.off .bulb-base1,.ent-icon-bulb.off .bulb-base2,
+    .ent-icon-bulb2.off .bulb-base1,.ent-icon-bulb2.off .bulb-base2 { opacity:0.3; }
+    .ent-icon-bulb2.off .bulb-filament { display:none; }
+    .ent-icon-bulb3.off .bulb-chip { fill:none; stroke:currentColor; stroke-width:1; opacity:0.5; }
     .room-style-panel { margin:8px 0 12px; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
     .style-panel-hdr { display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:var(--s2); font-size:12px; font-weight:600; }
     .clear-btn { font-size:10px; background:none; border:1px solid rgba(239,68,68,0.4); border-radius:4px; color:#ef4444; padding:3px 8px; cursor:pointer; }
@@ -1396,21 +1606,6 @@ export class HADeviceDashboardEditor extends LitElement {
     .stab.on { background:var(--accentbg); border-color:var(--accentbdr); color:var(--accent); }
     .style-body { padding:10px 12px; }
 
-    /* ── Search ── */
-    .room-extra { margin-top:8px; }
-    .search-wrap { display:flex; align-items:center; gap:6px; background:var(--s2); border:1px solid var(--border2); border-radius:8px; padding:7px 11px; margin-bottom:6px; }
-    .search-wrap input { background:none; border:none; outline:none; font-size:12px; color:var(--text); width:100%; font-family:inherit; }
-    .search-ico { color:var(--t3); font-size:13px; }
-    .search-results { border:1px solid var(--border2); border-radius:8px; max-height:160px; overflow-y:auto; background:var(--s1); margin-bottom:6px; }
-    .search-row { display:flex; align-items:center; gap:8px; padding:7px 12px; cursor:pointer; border-bottom:1px solid var(--border); transition:background .12s; }
-    .search-row:hover { background:var(--s2); }
-    .search-row.pinned { opacity:0.4; cursor:default; }
-    .search-name { flex:1; font-size:11px; color:var(--text); }
-    .search-area { font-size:9px; color:var(--t3); background:var(--s2); border-radius:8px; padding:1px 7px; }
-    .search-empty { padding:10px 12px; font-size:11px; color:var(--t3); font-style:italic; }
-    .pinned-chips { display:flex; flex-wrap:wrap; gap:5px; }
-    .pinned-chip { font-size:10px; padding:4px 10px; border-radius:20px; border:1px solid var(--accentbdr); background:var(--accentbg); color:var(--accent); cursor:pointer; }
-    .pinned-chip:hover { filter:brightness(1.2); }
 
     /* ── Step buttons ── */
     .step-row { display:flex; align-items:center; gap:6px; }
@@ -1485,7 +1680,7 @@ export class HADeviceDashboardEditor extends LitElement {
     @keyframes fadeout { 0%{opacity:1} 70%{opacity:1} 100%{opacity:0} }
     .paste-area { display:flex; flex-direction:column; gap:6px; margin-bottom:12px; }
     .paste-ta { font-size:11px; font-family:monospace; background:var(--s2); border:1px solid var(--border); border-radius:6px; color:var(--text); padding:8px; resize:vertical; width:100%; box-sizing:border-box; }
-  `;
+  `];
 }
 
 declare global {

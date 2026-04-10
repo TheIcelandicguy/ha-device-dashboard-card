@@ -4,15 +4,16 @@ import { styleMap } from 'lit/directives/style-map.js';
 import { HomeAssistant } from 'custom-card-helpers';
 import {
   HADeviceDashboardConfig, HADevice, HAEntity,
-  TileBlockId, DeviceProfileResult,
+  TileBlockId, DeviceProfileResult, EntityAnimationType,
 } from './types';
 import {
-  getAllDevices, getVirtualDevices, getDeviceById, getDeviceProfile,
+  getAllDevices, getDeviceProfile,
   getIntegrationLabel, isPrivateIp, PROFILE_DEFAULT_BLOCKS, GRAPH_DC_LABELS, GRAPH_SENSOR_DEFS,
   formatPower, formatEnergy, formatVoltage, formatCurrent, formatTemp,
   formatUptime, rssiToQuality, formatApparentPower, formatReactivePower,
   formatFrequency, formatHumidity, formatIlluminance, formatPpm, formatPercent,
 } from './helpers';
+import { renderAnimSvg } from './anim-icons';
 
 // ─── Ha Device Dashboard Card ──────────────────────────────────────────────────
 
@@ -25,8 +26,11 @@ export class HADeviceDashboard extends LitElement {
   @state() private _entityListOpen = new Set<string>();
   @state() private _graphData = new Map<string, Array<{ t: number; v: number }>>();
   @state() private _valveDragPos: number | null = null;
+  @state() private _trvDragTemp: number | null = null;
+  private _trvBtnTimer: ReturnType<typeof setTimeout> | null = null;
   @state() private _graphDialog: string | null = null;
-  @state() private _lockConfirm: string | null = null;
+  @state() private _cloudDetailOpen: 'on' | 'off' | 'unavailable' | null = null;
+
   private readonly _graphFetching = new Set<string>();
   private readonly _graphFetchedAt = new Map<string, number>();
 
@@ -84,7 +88,7 @@ export class HADeviceDashboard extends LitElement {
     this._cacheDevicesRef  = devicesRef;
     this._cacheConfigRef   = this._config;
 
-    let devices = getAllDevices(this.hass, this._config.integrations);
+    let devices = getAllDevices(this.hass);
 
     // Area filter — undefined = show ALL rooms, [] = show nothing, [...] = show listed
     const areaFilter = this._config.areas;
@@ -98,31 +102,10 @@ export class HADeviceDashboard extends LitElement {
       devices = devices.filter(d => this._isOnline(d));
     }
 
-    // hide_shelly
-    if (this._config.hide_shelly) {
-      devices = devices.filter(d => !d.isShelly);
-    }
-
     // hidden_devices
     if (this._config.hidden_devices?.length) {
       const hidden = new Set(this._config.hidden_devices);
       devices = devices.filter(d => !hidden.has(d.device_id));
-    }
-
-    // Virtual entities
-    if (this._config.include_entities) {
-      const virtual = getVirtualDevices(this.hass, this._config.entity_domains);
-      devices = [...devices, ...virtual];
-    }
-
-    // Extra pinned devices
-    if (this._config.extra_devices?.length) {
-      const existing = new Set(devices.map(d => d.device_id));
-      for (const id of this._config.extra_devices) {
-        if (existing.has(id)) continue;
-        const extra = getDeviceById(this.hass, id);
-        if (extra) devices.push(extra);
-      }
     }
 
     this._cachedDevices = devices;
@@ -277,40 +260,6 @@ export class HADeviceDashboard extends LitElement {
     return { entityId: ent.entity_id, state: s.state, position, supportsPosition, numEntityId: numEnt?.entity_id, temperature };
   }
 
-  private _getFan(device: HADevice) {
-    const ent = device.entities.find(e => e.domain === 'fan');
-    if (!ent) return null;
-    const s = this.hass.states[ent.entity_id];
-    if (!s) return null;
-    const attrs = s.attributes as Record<string, unknown>;
-    return {
-      entityId:       ent.entity_id,
-      isOn:           s.state === 'on',
-      percentage:     attrs.percentage as number | undefined,
-      percentageStep: (attrs.percentage_step as number) ?? 10,
-      oscillating:    attrs.oscillating as boolean | undefined,
-      presetMode:     attrs.preset_mode as string | undefined,
-      presetModes:    (attrs.preset_modes as string[]) ?? [],
-    };
-  }
-
-  private _getMedia(device: HADevice) {
-    const ent = device.entities.find(e => e.domain === 'media_player');
-    if (!ent) return null;
-    const s = this.hass.states[ent.entity_id];
-    if (!s) return null;
-    const attrs = s.attributes as Record<string, unknown>;
-    return {
-      entityId:  ent.entity_id,
-      state:     s.state,
-      isPlaying: s.state === 'playing',
-      volume:    attrs.volume_level as number | undefined,
-      isMuted:   attrs.is_volume_muted as boolean | undefined,
-      title:     attrs.media_title as string | undefined,
-      artist:    attrs.media_artist as string | undefined,
-    };
-  }
-
   private async _setValvePosition(entityId: string, pos: number, numEntityId?: string) {
     const clamped = Math.round(Math.max(0, Math.min(100, pos)));
     // Prefer number entity — valve.set_valve_position can fail on Shelly devices
@@ -346,9 +295,13 @@ export class HADeviceDashboard extends LitElement {
     return null;
   }
 
-  /** Extracts a short channel label from an entity_id, e.g. "Ch 1" / "Ch 2". Returns '' if no channel found.
-   *  Handles both switch-prefixed names (switch_0_power) and dc-suffixed names (power_0, energy_0). */
+  /** Extracts a short channel label from an entity_id, e.g. "Ch 1" / "Ch 2" / "A" / "B" / "C".
+   *  Handles switch-prefixed names (switch_0_power), dc-suffixed names (power_0),
+   *  and 3-phase EM phase letters (_a_act_power, _b_voltage, _c_current). */
   private _chLabel(entityId: string): string {
+    // 3-phase EM phase letter: _a_act_power, _b_voltage, _c_current, etc.
+    const ph = entityId.match(/[_-]([abc])[_-](?:act_power|aprt_power|ret_power|voltage|current|pf|freq)/i);
+    if (ph) return ph[1].toUpperCase();
     const m = entityId.match(/[_-](?:switch|channel|ch|output)_?(\d+)[_-]/i)          // switch_0_power
            ?? entityId.match(/[_-](\d+)[_-](?:power|energy|voltage|current|apparent|reactive|factor|freq)/i)  // 0_power
            ?? entityId.match(/(?:power|energy|voltage|current|freq|apparent|reactive)[_-](\d+)$/i);            // energy_0
@@ -393,62 +346,6 @@ export class HADeviceDashboard extends LitElement {
       const key = (entityId && multiDcs.has(k)) ? `${k}_${this._chLabel(entityId)}` : k;
       if (!seen.has(key)) { seen.add(key); result.push({ label, value, warn }); }
     };
-
-    // ── Virtual domain chips ────────────────────────────────────────────────────
-    if (device.isVirtual) {
-      const e = device.entities[0];
-      if (!e) return result;
-      const s = this.hass.states[e.entity_id];
-      if (!s) return result;
-      const attrs = s.attributes as Record<string, unknown>;
-
-      if (e.domain === 'automation') {
-        const isOff = s.state === 'off';
-        push('state',    'State',    isOff ? 'Off' : 'On', isOff);
-        push('last_run', 'Last run', this._timeAgo(attrs.last_triggered as string | null));
-        const mode = attrs.mode as string | undefined;
-        if (mode && mode !== 'single') push('mode', 'Mode', mode);
-
-      } else if (e.domain === 'script') {
-        push('state', 'State', s.state === 'on' ? 'Running' : 'Off');
-
-      } else if (e.domain === 'input_boolean') {
-        push('state', 'State', s.state === 'on' ? 'On' : 'Off');
-
-      } else if (e.domain === 'input_number') {
-        const unit = (attrs.unit_of_measurement as string | undefined) ?? '';
-        push('value', 'Value', unit ? `${s.state} ${unit}` : s.state);
-
-      } else if (e.domain === 'input_text') {
-        const text = s.state.length > 20 ? s.state.slice(0, 20) + '…' : s.state;
-        push('text', 'Text', text || '—');
-
-      } else if (e.domain === 'input_select') {
-        push('option', 'Option', s.state);
-
-      } else if (e.domain === 'input_datetime') {
-        const raw = s.state;
-        const dtMatch   = raw.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
-        const timeMatch = raw.match(/^(\d{2}:\d{2})/);
-        const friendly  = dtMatch ? `${dtMatch[1]} ${dtMatch[2]}` : timeMatch ? timeMatch[1] : raw;
-        push('datetime', 'Date/Time', friendly);
-
-      } else if (e.domain === 'input_button') {
-        push('pressed', 'Pressed', this._timeAgo(attrs.timestamp as string | null));
-
-      } else if (e.domain === 'timer') {
-        const statusMap: Record<string, string> = { idle: 'Idle', active: 'Active', paused: 'Paused' };
-        push('status', 'Status', statusMap[s.state] ?? s.state);
-        if ((s.state === 'active' || s.state === 'paused') && attrs.remaining)
-          push('left', 'Left', attrs.remaining as string);
-
-      } else if (e.domain === 'counter') {
-        push('count', 'Count', s.state);
-      }
-      // scene: no chips — stateless
-      return result;
-    }
-    // ── End virtual domain chips ────────────────────────────────────────────────
 
     for (const e of device.entities) {
       const s = this.hass.states[e.entity_id];
@@ -539,6 +436,7 @@ export class HADeviceDashboard extends LitElement {
           entityId: e.entity_id,
           label: m ? `Input ${+m[1] + 1}` : friendly || e.entity_id,
           isOn: s?.state === 'on',
+          isButton: !!evEnt,
           channel: ch,
           lastEvent,
           lastChanged: s?.last_changed ?? null,
@@ -563,6 +461,7 @@ export class HADeviceDashboard extends LitElement {
         entityId: e.entity_id,
         label: m ? `Input ${+m[1] + 1}` : friendly || e.entity_id,
         isOn: false,
+        isButton: true,
         channel: ch,
         lastEvent,
         lastChanged,
@@ -633,52 +532,19 @@ export class HADeviceDashboard extends LitElement {
     await this.hass.callService('update', 'install', { entity_id: entityId });
   }
 
-  private async _lockAction(entityId: string, action: 'lock' | 'unlock', e: Event) {
-    e.stopPropagation();
-    if (action === 'unlock') {
-      if (this._lockConfirm === entityId) {
-        this._lockConfirm = null;
-        await this.hass.callService('lock', 'unlock', { entity_id: entityId });
-      } else {
-        this._lockConfirm = entityId;
-        setTimeout(() => { if (this._lockConfirm === entityId) this._lockConfirm = null; }, 3000);
-      }
-    } else {
-      await this.hass.callService('lock', 'lock', { entity_id: entityId });
-    }
-  }
-
-  private async _vacuumAction(entityId: string, action: string, e: Event) {
-    e.stopPropagation();
-    await this.hass.callService('vacuum', action, { entity_id: entityId });
-  }
-
-  private async _sirenOn(entityId: string, e: Event) {
-    e.stopPropagation();
-    await this.hass.callService('siren', 'turn_on', { entity_id: entityId });
-  }
-
-  private async _sirenOff(entityId: string, e: Event) {
-    e.stopPropagation();
-    await this.hass.callService('siren', 'turn_off', { entity_id: entityId });
-  }
-
-  private async _setNumber(entityId: string, value: number, e?: Event) {
-    e?.stopPropagation();
-    await this.hass.callService('number', 'set_value', { entity_id: entityId, value });
-  }
-
-  private async _selectOption(entityId: string, option: string, e?: Event) {
-    e?.stopPropagation();
+  private async _selectOption(entityId: string, option: string) {
     await this.hass.callService('select', 'select_option', { entity_id: entityId, option });
   }
 
-  private async _setHelperValue(entityId: string, domain: string, value: unknown, e?: Event) {
-    e?.stopPropagation();
-    if (domain === 'input_number')  await this.hass.callService('input_number', 'set_value', { entity_id: entityId, value });
-    else if (domain === 'input_select') await this.hass.callService('input_select', 'select_option', { entity_id: entityId, option: value });
-    else if (domain === 'input_text')   await this.hass.callService('input_text', 'set_value', { entity_id: entityId, value });
+  private async _setNumberValue(entityId: string, value: number) {
+    await this.hass.callService('number', 'set_value', { entity_id: entityId, value: String(value) });
   }
+
+  private async _pressButton(entityId: string, e: Event) {
+    e.stopPropagation();
+    await this.hass.callService('button', 'press', { entity_id: entityId });
+  }
+
 
   // ── Sparkline system ──────────────────────────────────────────────────────
 
@@ -1004,10 +870,10 @@ export class HADeviceDashboard extends LitElement {
   }
 
   private _renderTrvDial(trv: NonNullable<ReturnType<typeof this._getTrv>>) {
-    const { minTemp, maxTemp, targetTemp, currentTemp } = trv;
+    const { minTemp, maxTemp, targetTemp, currentTemp, step, entityId } = trv;
     const cx = 80, cy = 70, r = 54;
-    const target = targetTemp ?? minTemp;
-    const targetRatio = Math.max(0, Math.min(1, (target - minTemp) / (maxTemp - minTemp)));
+    const display = this._trvDragTemp ?? targetTemp ?? minTemp;
+    const displayRatio = Math.max(0, Math.min(1, (display - minTemp) / (maxTemp - minTemp)));
     const toAngle = (v: number) => 210 + ((v - minTemp) / (maxTemp - minTemp)) * 300;
     const toXY = (deg: number, radius: number): [number, number] => [
       cx + radius * Math.cos((deg - 90) * Math.PI / 180),
@@ -1019,15 +885,35 @@ export class HADeviceDashboard extends LitElement {
       const large = (endDeg - startDeg) > 180 ? 1 : 0;
       return `M ${x1} ${y1} A ${radius} ${radius} 0 ${large} 1 ${x2} ${y2}`;
     };
-    const fillColor = this._trvColor(targetRatio);
-    const targetAngle = toAngle(target);
+    const fillColor = this._trvColor(displayRatio);
+    const targetAngle = toAngle(display);
     const [tx, ty] = toXY(targetAngle, r);
     const curRatio = currentTemp != null ? (currentTemp - minTemp) / (maxTemp - minTemp) : null;
     const curXY = currentTemp != null ? toXY(toAngle(currentTemp), r) : null;
     const curColor = curRatio != null ? this._trvColor(curRatio) : fillColor;
-    const gid = `trv-grad-${this._getTrv.name}`;
+    const gid = `trv-grad-${entityId.replace(/\W/g, '_')}`;
+
+    const onPointerDown = (e: PointerEvent) => {
+      e.stopPropagation();
+      const svgEl = e.currentTarget as SVGSVGElement;
+      svgEl.setPointerCapture(e.pointerId);
+      const onMove = (ev: PointerEvent) => {
+        const t = this._trvTempFromEvent(ev, svgEl, minTemp, maxTemp, step);
+        if (t != null) this._trvDragTemp = t;
+      };
+      const onUp = (ev: PointerEvent) => {
+        const t = this._trvTempFromEvent(ev, svgEl, minTemp, maxTemp, step) ?? this._trvDragTemp;
+        this._trvDragTemp = null;
+        if (t != null) this._setTemp(entityId, t);
+        svgEl.removeEventListener('pointermove', onMove);
+        svgEl.removeEventListener('pointerup', onUp);
+      };
+      svgEl.addEventListener('pointermove', onMove);
+      svgEl.addEventListener('pointerup', onUp);
+    };
+
     return svg`
-      <svg viewBox="0 0 160 132" class="trv-dial-svg">
+      <svg viewBox="0 0 160 132" class="trv-dial-svg valve-interactive" @pointerdown=${onPointerDown}>
         <defs>
           <linearGradient id="${gid}" x1="0%" y1="100%" x2="100%" y2="0%">
             <stop offset="0%"   stop-color="${this._trvColor(0)}"/>
@@ -1035,17 +921,31 @@ export class HADeviceDashboard extends LitElement {
             <stop offset="100%" stop-color="${this._trvColor(1)}"/>
           </linearGradient>
         </defs>
+        <path d="${arcPath(210, 510, r)}" fill="none" stroke="transparent" stroke-width="22" stroke-linecap="round"/>
         <path d="${arcPath(210, 510, r)}" fill="none" stroke="url(#${gid})" stroke-width="8" stroke-linecap="round" opacity="0.25"/>
         ${targetAngle > 210 ? svg`<path d="${arcPath(210, targetAngle, r)}" fill="none" stroke="url(#${gid})" stroke-width="8" stroke-linecap="round"/>` : nothing}
         ${curXY ? svg`<circle cx="${curXY[0]}" cy="${curXY[1]}" r="5" fill="white" stroke="${curColor}" stroke-width="2"/>` : nothing}
-        <circle cx="${tx}" cy="${ty}" r="8" fill="${fillColor}" stroke="white" stroke-width="2"/>
-        <text x="${cx}" y="${cy - 10}" text-anchor="middle" class="dial-target-text">${target.toFixed(1)}°</text>
+        <circle cx="${tx}" cy="${ty}" r="9" fill="${fillColor}" stroke="white" stroke-width="2" style="cursor:grab"/>
+        <text x="${cx}" y="${cy - 10}" text-anchor="middle" class="dial-target-text">${display.toFixed(1)}°</text>
         <text x="${cx}" y="${cy + 5}" text-anchor="middle" class="dial-sub-text">target</text>
         <text x="${cx}" y="${cy + 18}" text-anchor="middle" class="dial-current-text">${currentTemp != null ? `now ${currentTemp}°` : ''}</text>
         <text x="18" y="128" text-anchor="middle" class="dial-range-text">${minTemp}°</text>
         <text x="142" y="128" text-anchor="middle" class="dial-range-text">${maxTemp}°</text>
       </svg>
     `;
+  }
+
+  private _trvTempFromEvent(e: PointerEvent, svgEl: SVGSVGElement, min: number, max: number, step: number): number | null {
+    const rect = svgEl.getBoundingClientRect();
+    const cx = 80, cy = 70;
+    const x = (e.clientX - rect.left) * (160 / rect.width);
+    const y = (e.clientY - rect.top)  * (132 / rect.height);
+    let deg = Math.atan2(y - cy, x - cx) * (180 / Math.PI) + 90;
+    if (deg < 0) deg += 360;
+    const arcDeg = (deg - 210 + 360) % 360;
+    if (arcDeg > 300) return null; // in the gap at the bottom
+    const raw = min + (arcDeg / 300) * (max - min);
+    return Math.max(min, Math.min(max, Math.round(raw / step) * step));
   }
 
   private _valvePosFromEvent(e: PointerEvent, svg: SVGSVGElement): number | null {
@@ -1123,6 +1023,147 @@ export class HADeviceDashboard extends LitElement {
     `;
   }
 
+  private _getVirtualControls(device: HADevice) {
+    return device.entities
+      .filter(e => {
+        if (e.domain === 'select' && /_enum_\d+$/i.test(e.entity_id))    return true;
+        if (e.domain === 'number' && /_number_\d+$/i.test(e.entity_id))  return true;
+        if (e.domain === 'button' && /_button_\d+$/i.test(e.entity_id))  return true;
+        if (e.domain === 'text'   && /_text_\d+$/i.test(e.entity_id))    return true;
+        if (e.domain === 'switch' && /_boolean_\d+$/i.test(e.entity_id)) return true;
+        return false;
+      })
+      .map(e => {
+        const s = this.hass.states[e.entity_id];
+        const attrs = (s?.attributes ?? {}) as Record<string, unknown>;
+        return {
+          entityId: e.entity_id,
+          domain: e.domain as 'select' | 'number' | 'button' | 'text' | 'switch',
+          label: (attrs.friendly_name as string) ?? e.entity_id.split('.').pop()!.replace(/_/g, ' '),
+          value: s?.state ?? 'unavailable',
+          options: attrs.options as string[] | undefined,
+          min: attrs.min as number | undefined,
+          max: attrs.max as number | undefined,
+          step: attrs.step as number | undefined,
+          isOn: s?.state === 'on',
+        };
+      });
+  }
+
+  private _renderTileIcon(profile: DeviceProfileResult, isOn: boolean, extra: {
+    coverPos?: number; coverState?: string;
+    isHeating?: boolean; valveOpen?: boolean;
+    hasFan?: boolean;
+  } = {}): TemplateResult {
+    const { coverPos, coverState, isHeating, valveOpen, hasFan } = extra;
+    const t = profile.type;
+
+    // relay / plug — lightning bolt, pulse glow when on
+    if (t === 'relay' || t === 'plug') {
+      // Special case: if device has a fan entity, show spinning fan
+      if (hasFan) {
+        return svg`<svg class="tile-icon tile-icon-fan ${isOn ? 'on' : ''}" viewBox="0 0 20 20">
+          <g class="fan-blades">
+            <path d="M10 10 C10 6,13 4,13 8 A3 3 0 0 1 10 10Z" fill="currentColor" opacity=".9"/>
+            <path d="M10 10 C14 10,16 13,12 13 A3 3 0 0 1 10 10Z" fill="currentColor" opacity=".9"/>
+            <path d="M10 10 C10 14,7 16,7 12 A3 3 0 0 1 10 10Z" fill="currentColor" opacity=".9"/>
+            <path d="M10 10 C6 10,4 7,8 7 A3 3 0 0 1 10 10Z" fill="currentColor" opacity=".9"/>
+          </g>
+          <circle cx="10" cy="10" r="2" fill="currentColor"/>
+        </svg>`;
+      }
+      return svg`<svg class="tile-icon tile-icon-relay ${isOn ? 'on' : ''}" viewBox="0 0 20 20">
+        <path d="M11 2L4 11h6l-1 7 7-9h-6l1-7z" fill="currentColor"/>
+      </svg>`;
+    }
+
+    // dimmer / rgb — sun, rotate when on
+    if (t === 'dimmer' || t === 'rgb') {
+      return svg`<svg class="tile-icon tile-icon-sun ${isOn ? 'on' : ''}" viewBox="0 0 20 20">
+        <circle cx="10" cy="10" r="3.5" fill="currentColor"/>
+        <g class="sun-rays" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <line x1="10" y1="1.5" x2="10" y2="3.5"/>
+          <line x1="10" y1="16.5" x2="10" y2="18.5"/>
+          <line x1="1.5" y1="10" x2="3.5" y2="10"/>
+          <line x1="16.5" y1="10" x2="18.5" y2="10"/>
+          <line x1="4.1" y1="4.1" x2="5.5" y2="5.5"/>
+          <line x1="14.5" y1="14.5" x2="15.9" y2="15.9"/>
+          <line x1="4.1" y1="15.9" x2="5.5" y2="14.5"/>
+          <line x1="14.5" y1="5.5" x2="15.9" y2="4.1"/>
+        </g>
+      </svg>`;
+    }
+
+    // cover — blinds, slats slide based on position
+    if (t === 'cover') {
+      const pos = coverPos ?? (coverState === 'open' ? 100 : coverState === 'closed' ? 0 : 50);
+      const moving = coverState === 'opening' || coverState === 'closing';
+      const slats = [2, 5.5, 9, 12.5, 16];
+      const visibleSlats = Math.ceil((pos / 100) * slats.length);
+      return svg`<svg class="tile-icon tile-icon-cover ${moving ? 'moving' : ''}" viewBox="0 0 20 20">
+        <rect x="2" y="1" width="16" height="1.5" rx="0.75" fill="currentColor" opacity=".7"/>
+        <line x1="10" y1="2.5" x2="10" y2="18.5" stroke="currentColor" stroke-width="1" opacity=".4"/>
+        ${slats.map((y, i) => svg`<rect x="3" y="${y}" width="14" height="1.8" rx="0.5"
+          fill="currentColor" opacity="${i < visibleSlats ? '0.85' : '0.2'}"/>`)}
+      </svg>`;
+    }
+
+    // climate / wall_display — flame, flicker when heating
+    if (t === 'climate' || t === 'wall_display') {
+      return svg`<svg class="tile-icon tile-icon-flame ${isHeating ? 'on' : ''}" viewBox="0 0 20 20">
+        <path class="flame-main" d="M10 18 C5 18 3 14 5 10 C6 8 7 9 7 9 C7 6 9 3 10 2 C10 5 12 6 12 9 C12 9 13 7 14 8 C16 11 15 18 10 18Z" fill="currentColor"/>
+        <path class="flame-inner" d="M10 16 C8 16 7 14 8 12 C8.5 11 9 11.5 9 11.5 C9 10 10 9 10 9 C10 10.5 11 11 11 12.5 C12 11 12 14 10 16Z" fill="currentColor" opacity=".5"/>
+      </svg>`;
+    }
+
+    // valve — droplet, animate when open
+    if (t === 'valve') {
+      return svg`<svg class="tile-icon tile-icon-valve ${valveOpen ? 'on' : ''}" viewBox="0 0 20 20">
+        <path class="drop-body" d="M10 3 C10 3 4 10 4 13.5 A6 6 0 0 0 16 13.5 C16 10 10 3 10 3Z" fill="currentColor"/>
+        <path class="drop-shine" d="M7.5 12 C7 10.5 8 9 8 9" stroke="white" stroke-width="1" stroke-linecap="round" fill="none" opacity=".5"/>
+      </svg>`;
+    }
+
+    // energy — waveform, animate always
+    if (t === 'energy') {
+      return svg`<svg class="tile-icon tile-icon-energy" viewBox="0 0 20 20">
+        <polyline class="energy-wave" points="1,10 4,6 7,14 10,4 13,14 16,6 19,10"
+          fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>`;
+    }
+
+    // sensor — thermometer, static
+    if (t === 'sensor') {
+      return svg`<svg class="tile-icon tile-icon-sensor" viewBox="0 0 20 20">
+        <rect x="8.5" y="2" width="3" height="11" rx="1.5" fill="currentColor" opacity=".5"/>
+        <circle cx="10" cy="14.5" r="3" fill="currentColor"/>
+        <rect x="9.2" y="7" width="1.6" height="7" rx="0.8" fill="currentColor"/>
+      </svg>`;
+    }
+
+    // input — touch finger, ripple on active
+    if (t === 'input' || t === 'uni') {
+      return svg`<svg class="tile-icon tile-icon-input ${isOn ? 'on' : ''}" viewBox="0 0 20 20">
+        <path d="M8 4 C8 3 9 2 10 2 C11 2 12 3 12 4 L12 10.5 C13 9.8 15 10 15 11.5 L15 14 C15 16.5 13 18 10 18 C7 18 5 16.5 5 14 L5 4Z" fill="currentColor" opacity=".7"/>
+        <circle class="input-ripple" cx="10" cy="4" r="0" fill="none" stroke="currentColor" stroke-width="1"/>
+      </svg>`;
+    }
+
+    // generic fallback — small circle
+    return svg`<svg class="tile-icon tile-icon-generic" viewBox="0 0 20 20">
+      <circle cx="10" cy="10" r="5" fill="none" stroke="currentColor" stroke-width="1.8" opacity=".6"/>
+      <circle cx="10" cy="10" r="2" fill="currentColor" opacity=".6"/>
+    </svg>`;
+  }
+
+  private _renderEntityAnim(entityId: string, isOn: boolean, deviceId: string): TemplateResult {
+    const anims = this._config.device_styles?.[deviceId]?.entity_animations?.[entityId];
+    if (!anims) return html``;
+    const animType: EntityAnimationType = (isOn ? anims.on : anims.off) ?? 'none';
+    if (animType === 'none') return html``;
+    return renderAnimSvg(animType, isOn, `--ent-spd:${anims.speed ?? 1}`, 'ent-icon');
+  }
+
   private _renderBlock(
     blockId: TileBlockId,
     device: HADevice,
@@ -1150,11 +1191,47 @@ export class HADeviceDashboard extends LitElement {
 
     switch (blockId) {
 
-      case 'name_row':
+      case 'name_row': {
+        const devSt = this._config.device_styles?.[device.device_id];
+        const tileIconType = isOn
+          ? devSt?.tile_icon
+          : (devSt?.tile_icon_off ?? devSt?.tile_icon);
+        let tileIcon: TemplateResult;
+        if (tileIconType) {
+          tileIcon = renderAnimSvg(tileIconType, isOn, `--ent-spd:${devSt?.tile_icon_speed ?? 1}`, 'tile-icon');
+        } else if (valve) {
+          const pos = valve.position ?? (valve.state === 'open' ? 100 : 0);
+          const valveIconType: EntityAnimationType | undefined =
+            pos > 66 ? 'water2' :   // waves — fully open
+            pos > 33 ? 'water3' :   // ripple — ~2/3 open
+            pos > 0  ? 'water'  :   // drop — ~1/3 open
+            undefined;              // closed — no icon
+          tileIcon = valveIconType
+            ? renderAnimSvg(valveIconType, true, '--ent-spd:1', 'tile-icon')
+            : html``;
+        } else if (trv) {
+          const heating = trv.hvacAction === 'heating';
+          const pos = trv.valvePosition;
+          const trvIconType: EntityAnimationType | undefined = heating
+            ? (pos != null
+                ? (pos > 66 ? 'flame3' :   // campfire — wide open
+                   pos > 33 ? 'flame2' :   // double flame — medium
+                   'flame')                // single flame — low
+                : 'flame')                 // no position data — single flame
+            : undefined;                   // idle / off — no icon
+          tileIcon = trvIconType
+            ? renderAnimSvg(trvIconType, true, '--ent-spd:1', 'tile-icon')
+            : html``;
+        } else {
+          tileIcon = html``;
+        }
+        const swAnimIcon = sw ? this._renderEntityAnim(sw.entityId, isOn, device.device_id) : html``;
         return html`
           <div class="tile-top">
             <div class="tile-left">
               <span class="dot ${online ? 'online' : 'offline'}"></span>
+              ${tileIcon}
+              ${swAnimIcon}
               <span class="tile-name">${device.name}</span>
               ${fw ? html`<span class="update-dot" title="Firmware update">●</span>` : nothing}
             </div>
@@ -1174,46 +1251,10 @@ export class HADeviceDashboard extends LitElement {
                 @click=${(e: Event) => this._setHvacMode(trv.entityId, isHeating ? 'off' : 'heat', e)}>
                 ${isHeating ? 'HEAT' : 'OFF'}
               </button>
-            ` : (() => {
-                const sirenEnt = device.entities.find(e => e.domain === 'siren');
-                if (!sirenEnt) return nothing;
-                const sirenOn = this.hass.states[sirenEnt.entity_id]?.state === 'on';
-                return html`<button class="tog ${sirenOn ? 'on' : 'off'}"
-                  @click=${(e: Event) => this._toggle(sirenEnt.entity_id, sirenOn, e)}>
-                  ${sirenOn ? 'ON' : 'OFF'}
-                </button>`;
-              })()
-            } ${device.isVirtual ? html`
-              <div class="virtual-btns" @click=${(e: Event) => e.stopPropagation()}>
-                ${(() => {
-                  const ent = device.entities[0];
-                  if (!ent) return nothing;
-                  const isAutomation = ent.domain === 'automation';
-                  const autoEnabled = isAutomation && this.hass.states[ent.entity_id]?.state === 'on';
-                  return html`
-                    <button class="tog off"
-                      @click=${async (e: Event) => {
-                        e.stopPropagation();
-                        if (ent.domain === 'script') await this.hass.callService('script', 'turn_on', { entity_id: ent.entity_id });
-                        else if (ent.domain === 'scene') await this.hass.callService('scene', 'turn_on', { entity_id: ent.entity_id });
-                        else if (ent.domain === 'automation') await this.hass.callService('automation', 'trigger', { entity_id: ent.entity_id });
-                        else if (ent.domain === 'input_button') await this.hass.callService('input_button', 'press', { entity_id: ent.entity_id });
-                        else if (ent.domain === 'input_boolean') await this.hass.callService('input_boolean', 'toggle', { entity_id: ent.entity_id });
-                      }}>
-                      RUN
-                    </button>
-                    ${isAutomation ? html`
-                      <button class="auto-toggle ${autoEnabled ? 'on' : 'off'}"
-                        title="${autoEnabled ? 'Enabled — click to disable' : 'Disabled — click to enable'}"
-                        @click=${(e: Event) => this._toggle(ent.entity_id, autoEnabled, e)}>
-                        ${autoEnabled ? '● On' : '○ Off'}
-                      </button>` : nothing}
-                  `;
-                })()}
-              </div>
             ` : nothing}
           </div>
         `;
+      }
 
       case 'sensors':
         return sensors.length ? html`
@@ -1282,138 +1323,6 @@ export class HADeviceDashboard extends LitElement {
                 </button>`)}
             </div>
           ` : nothing}
-          ${(() => {
-            // Detect WLED by presence of any speed/intensity number entity
-            const hasWled = device.entities.some(e => e.domain === 'number' && /speed|intensity/i.test(e.entity_id));
-            if (!hasWled) return nothing;
-
-            // Playlist + global preset selectors
-            const playlistEnt = device.entities.find(e => e.domain === 'select' && /playlist/i.test(e.entity_id));
-            const globalPresetEnt = device.entities.find(e => e.domain === 'select' && /preset/i.test(e.entity_id));
-
-            // Segment lights: all light entities that are not group lights and not the primary sw entity
-            const segLights = device.entities.filter(e => {
-              if (e.domain !== 'light') return false;
-              if (e.entity_id === sw?.entityId) return false;
-              const lst = this.hass.states[e.entity_id];
-              // skip group lights (HA groups have entity_id array attribute)
-              if (Array.isArray((lst?.attributes as any)?.entity_id)) return false;
-              // skip "main" light
-              if (/main/i.test((lst?.attributes as any)?.friendly_name ?? '')) return false;
-              return true;
-            });
-
-            // For a segment light, find its speed/intensity/palette entities
-            const segEntities = (lightEntityId: string) => {
-              const m = lightEntityId.match(/segment_(\d+)/);
-              if (m) {
-                const n = m[1];
-                return {
-                  speed:     device.entities.find(e => e.domain === 'number' && e.entity_id.includes(`segment_${n}_speed`)),
-                  intensity: device.entities.find(e => e.domain === 'number' && e.entity_id.includes(`segment_${n}_intensity`)),
-                  palette:   device.entities.find(e => e.domain === 'select' && e.entity_id.includes(`segment_${n}_color_palette`)),
-                  preset:    undefined as { entity_id: string } | undefined,
-                };
-              }
-              // Segment 0 — global entities (no "segment" in name)
-              return {
-                speed:     device.entities.find(e => e.domain === 'number' && /speed/i.test(e.entity_id) && !/segment/i.test(e.entity_id)),
-                intensity: device.entities.find(e => e.domain === 'number' && /intensity/i.test(e.entity_id) && !/segment/i.test(e.entity_id)),
-                palette:   device.entities.find(e => e.domain === 'select' && /color_palette/i.test(e.entity_id) && !/segment/i.test(e.entity_id)),
-                preset:    undefined as { entity_id: string } | undefined,
-              };
-            };
-
-            const renderNumSlider = (ent: { entity_id: string } | undefined, lbl: string) => {
-              if (!ent) return nothing;
-              const nst = this.hass.states[ent.entity_id];
-              const nval = Number(nst?.state ?? 128);
-              const nmin = Number((nst?.attributes as any)?.min ?? 0);
-              const nmax = Number((nst?.attributes as any)?.max ?? 255);
-              return html`
-                <div class="wled-param-row">
-                  <span class="wled-param-lbl">${lbl}</span>
-                  <input class="dim-slider" style="flex:1" type="range" min="${nmin}" max="${nmax}"
-                    .value=${String(nval)}
-                    @change=${(e: Event) => this._setNumber(ent.entity_id, parseInt((e.target as HTMLInputElement).value, 10), e)}/>
-                  <span class="dim-pct">${nval}</span>
-                </div>`;
-            };
-
-            const renderSelect = (ent: { entity_id: string } | undefined, lbl: string, allowNone = false) => {
-              if (!ent) return nothing;
-              const sst = this.hass.states[ent.entity_id];
-              const opts: string[] = (sst?.attributes as any)?.options ?? [];
-              if (!opts.length) return nothing;
-              const cur = sst?.state ?? '';
-              return html`
-                <div class="wled-param-row">
-                  <span class="wled-param-lbl">${lbl}</span>
-                  <select class="wled-select" @change=${(e: Event) => {
-                    e.stopPropagation();
-                    const val = (e.target as HTMLSelectElement).value;
-                    if (val === '__none__') return;
-                    this._selectOption(ent.entity_id, val);
-                  }}>
-                    ${allowNone ? html`<option value="__none__" ?selected=${cur === 'unknown' || cur === ''}>— None —</option>` : nothing}
-                    ${opts.map(o => html`<option .value=${o} ?selected=${o === cur}>${o}</option>`)}
-                  </select>
-                </div>`;
-            };
-
-            return html`
-              <div class="wled-params" @click=${(e: Event) => e.stopPropagation()}>
-                ${renderSelect(playlistEnt, 'Playlist', true)}
-                ${renderSelect(globalPresetEnt, 'Preset', true)}
-                ${segLights.length ? segLights.map(segEnt => {
-                  const lst = this.hass.states[segEnt.entity_id];
-                  const sOn = lst?.state === 'on';
-                  const sBri = Math.round(Number((lst?.attributes as any)?.brightness ?? 0) / 2.55);
-                  const sName = (lst?.attributes as any)?.friendly_name ?? segEnt.entity_id;
-                  const { speed, intensity, palette } = segEntities(segEnt.entity_id);
-                  return html`
-                    <div class="wled-segment">
-                      <div class="wled-seg-header">
-                        <span class="wled-seg-name">${sName}</span>
-                        <button class="tog sm ${sOn ? 'on' : 'off'}"
-                          @click=${(e: Event) => this._toggle(segEnt.entity_id, sOn, e)}>
-                          ${sOn ? 'ON' : 'OFF'}
-                        </button>
-                      </div>
-                      <div class="wled-param-row">
-                        <span class="wled-param-lbl">Bright</span>
-                        <input class="dim-slider" style="flex:1" type="range" min="1" max="100"
-                          .value=${String(sOn ? Math.max(1, sBri) : 1)} ?disabled=${!sOn}
-                          @change=${(e: Event) => {
-                            const pct = parseInt((e.target as HTMLInputElement).value, 10);
-                            this.hass.callService('light', 'turn_on', { entity_id: segEnt.entity_id, brightness_pct: pct });
-                          }}/>
-                        <span class="dim-pct">${sOn ? sBri : 0}%</span>
-                      </div>
-                      ${renderNumSlider(speed, 'Speed')}
-                      ${renderNumSlider(intensity, 'Intensity')}
-                      ${renderSelect(palette, 'Palette')}
-                    </div>`;
-                }) : sw ? (() => {
-                  // Single-segment WLED (e.g. outdoor) — use primary light + global params
-                  const { speed, intensity, palette } = segEntities('');
-                  const globalPalette = palette ?? device.entities.find(e => e.domain === 'select' && /color_palette/i.test(e.entity_id));
-                  return html`
-                    <div class="wled-segment">
-                      <div class="wled-param-row">
-                        <span class="wled-param-lbl">Bright</span>
-                        <input class="dim-slider" style="flex:1" type="range" min="1" max="100"
-                          .value=${String(isOn ? Math.max(1, sw.brightness ?? 1) : 1)} ?disabled=${!isOn}
-                          @change=${(e: Event) => { this._setBrightness(sw.entityId, parseInt((e.target as HTMLInputElement).value, 10)); }}/>
-                        <span class="dim-pct">${isOn ? Math.max(1, sw.brightness ?? 1) : 0}%</span>
-                      </div>
-                      ${renderNumSlider(speed, 'Speed')}
-                      ${renderNumSlider(intensity, 'Intensity')}
-                      ${renderSelect(globalPalette, 'Palette')}
-                    </div>`;
-                })() : nothing}
-              </div>`;
-          })()}
         ` : html``;
       }
 
@@ -1436,9 +1345,23 @@ export class HADeviceDashboard extends LitElement {
           <div class="tile-trv-dial" @click=${(e: Event) => e.stopPropagation()}>
             ${this._renderTrvDial(trv)}
             <div class="trv-dial-btns">
-              <button class="trv-step" @click=${() => trv.targetTemp != null && this._setTemp(trv.entityId, Math.max(trv.minTemp, trv.targetTemp - trv.step))}>−</button>
+              <button class="trv-step" @click=${() => {
+                const cur = this._trvDragTemp ?? trv.targetTemp;
+                if (cur == null) return;
+                const next = Math.max(trv.minTemp, Math.round((cur - trv.step) * 100) / 100);
+                this._trvDragTemp = next;
+                if (this._trvBtnTimer) clearTimeout(this._trvBtnTimer);
+                this._trvBtnTimer = setTimeout(() => { this._setTemp(trv.entityId, this._trvDragTemp ?? next); this._trvDragTemp = null; }, 600);
+              }}>−</button>
               <span class="trv-flame">${trv.hvacAction === 'heating' ? '🔥' : ''}</span>
-              <button class="trv-step" @click=${() => trv.targetTemp != null && this._setTemp(trv.entityId, Math.min(trv.maxTemp, trv.targetTemp + trv.step))}>+</button>
+              <button class="trv-step" @click=${() => {
+                const cur = this._trvDragTemp ?? trv.targetTemp;
+                if (cur == null) return;
+                const next = Math.min(trv.maxTemp, Math.round((cur + trv.step) * 100) / 100);
+                this._trvDragTemp = next;
+                if (this._trvBtnTimer) clearTimeout(this._trvBtnTimer);
+                this._trvBtnTimer = setTimeout(() => { this._setTemp(trv.entityId, this._trvDragTemp ?? next); this._trvDragTemp = null; }, 600);
+              }}>+</button>
             </div>
             <div class="trv-stat-row">
               <div class="trv-stat"><span class="trv-stat-lbl">Now</span><span class="trv-stat-val">${trv.currentTemp != null ? `${trv.currentTemp}°` : '—'}</span></div>
@@ -1464,8 +1387,8 @@ export class HADeviceDashboard extends LitElement {
         return inputs.length ? html`
           <div class="tile-inputs" @click=${(e: Event) => e.stopPropagation()}>
             ${inputs.map(ch => html`
-              <div class="input-row ${ch.isOn ? 'active' : ''}">
-                <span class="input-row-dot"></span>
+              <div class="input-row ${ch.isButton ? 'btn-mode' : (ch.isOn ? 'active' : '')}">
+                <span class="${ch.isButton ? 'input-btn-dot' : 'input-row-dot'}"></span>
                 <span class="input-row-name">${ch.label}</span>
                 <span class="input-row-event">${ch.lastEvent ? ch.lastEvent.replace(/_/g, ' ') : '—'}</span>
                 <span class="input-row-time">${this._timeAgo(ch.lastChanged)}</span>
@@ -1473,6 +1396,74 @@ export class HADeviceDashboard extends LitElement {
             `)}
           </div>
         ` : html``;
+
+      case 'virtual_controls': {
+        const virtuals = this._getVirtualControls(device);
+        if (!virtuals.length) return html``;
+        return html`
+          <div class="tile-virtuals" @click=${(e: Event) => e.stopPropagation()}>
+            ${virtuals.map(v => {
+              if (v.value === 'unavailable') return nothing;
+              if (v.domain === 'select') {
+                const opts = v.options ?? [];
+                const cur = opts.indexOf(v.value);
+                return html`
+                  <div class="virt-row">
+                    <span class="virt-lbl">${v.label}</span>
+                    <div class="virt-select">
+                      <button class="virt-arr" @click=${() => {
+                        const next = opts[(cur - 1 + opts.length) % opts.length];
+                        this._selectOption(v.entityId, next);
+                      }}>‹</button>
+                      <span class="virt-val">${v.value.replace(/_/g, ' ')}</span>
+                      <button class="virt-arr" @click=${() => {
+                        const next = opts[(cur + 1) % opts.length];
+                        this._selectOption(v.entityId, next);
+                      }}>›</button>
+                    </div>
+                  </div>`;
+              }
+              if (v.domain === 'number') {
+                const num = parseFloat(v.value);
+                const step = v.step ?? 1;
+                const decimals = step < 1 ? String(step).split('.')[1]?.length ?? 1 : 0;
+                return html`
+                  <div class="virt-row">
+                    <span class="virt-lbl">${v.label}</span>
+                    <div class="virt-num">
+                      <button class="virt-arr" @click=${() => this._setNumberValue(v.entityId, Math.max(v.min ?? 0, +(num - step).toFixed(decimals)))}>−</button>
+                      <span class="virt-val">${isNaN(num) ? v.value : num.toFixed(decimals)}</span>
+                      <button class="virt-arr" @click=${() => this._setNumberValue(v.entityId, Math.min(v.max ?? 100, +(num + step).toFixed(decimals)))}>+</button>
+                    </div>
+                  </div>`;
+              }
+              if (v.domain === 'button') {
+                return html`
+                  <div class="virt-row">
+                    <button class="virt-btn" @click=${(e: Event) => this._pressButton(v.entityId, e)}>${v.label}</button>
+                  </div>`;
+              }
+              if (v.domain === 'text') {
+                return html`
+                  <div class="virt-row">
+                    <span class="virt-lbl">${v.label}</span>
+                    <span class="virt-val">${v.value}</span>
+                  </div>`;
+              }
+              if (v.domain === 'switch') {
+                return html`
+                  <div class="virt-row">
+                    <span class="virt-lbl">${v.label}</span>
+                    <button class="tog sm ${v.isOn ? 'on' : 'off'}"
+                      @click=${(e: Event) => this._toggle(v.entityId, v.isOn, e)}>
+                      ${v.isOn ? 'ON' : 'OFF'}
+                    </button>
+                  </div>`;
+              }
+              return nothing;
+            })}
+          </div>`;
+      }
 
       case 'relay_channels': {
         const relayEnts = device.entities.filter(e =>
@@ -1488,6 +1479,7 @@ export class HADeviceDashboard extends LitElement {
               return html`
                 <div class="relay-ch-row">
                   <span class="relay-ch-dot ${on ? 'on' : ''}"></span>
+                  ${this._renderEntityAnim(e.entity_id, on, device.device_id)}
                   <span class="relay-ch-name">${name}</span>
                   <button class="tog sm ${on ? 'on' : 'off'}"
                     @click=${(ev: Event) => this._toggle(e.entity_id, on, ev)}>
@@ -1496,160 +1488,6 @@ export class HADeviceDashboard extends LitElement {
                 </div>`;
             })}
           </div>`;
-      }
-
-      case 'lock_controls': {
-        const lockEnt = device.entities.find(e => e.domain === 'lock');
-        if (!lockEnt) return html``;
-        const lockState = this.hass.states[lockEnt.entity_id]?.state ?? 'unknown';
-        const isLocked = lockState === 'locked';
-        const confirming = this._lockConfirm === lockEnt.entity_id;
-        return html`
-          <div class="lock-controls" @click=${(e: Event) => e.stopPropagation()}>
-            <div class="lock-state">${lockState}</div>
-            <div class="lock-btns">
-              <button class="lock-btn ${isLocked ? 'active' : ''}"
-                @click=${(e: Event) => this._lockAction(lockEnt.entity_id, 'lock', e)}>
-                🔒 Lock
-              </button>
-              <button class="lock-btn unlock ${confirming ? 'confirm' : ''}"
-                @click=${(e: Event) => this._lockAction(lockEnt.entity_id, 'unlock', e)}>
-                ${confirming ? 'Confirm?' : '🔓 Unlock'}
-              </button>
-            </div>
-          </div>`;
-      }
-
-      case 'vacuum_controls': {
-        const vacEnt = device.entities.find(e => e.domain === 'vacuum');
-        if (!vacEnt) return html``;
-        const vacState = this.hass.states[vacEnt.entity_id]?.state ?? 'unknown';
-        const isCleaning = vacState === 'cleaning';
-        const isPaused = vacState === 'paused';
-        const isDocked = vacState === 'docked' || vacState === 'idle';
-        return html`
-          <div class="vacuum-controls" @click=${(e: Event) => e.stopPropagation()}>
-            <div class="vacuum-state">${vacState}</div>
-            <div class="vacuum-btns">
-              ${isCleaning ? html`
-                <button class="vac-btn" @click=${(e: Event) => this._vacuumAction(vacEnt.entity_id, 'pause', e)}>⏸ Pause</button>
-              ` : isPaused ? html`
-                <button class="vac-btn active" @click=${(e: Event) => this._vacuumAction(vacEnt.entity_id, 'start', e)}>▶ Resume</button>
-              ` : html`
-                <button class="vac-btn active" @click=${(e: Event) => this._vacuumAction(vacEnt.entity_id, 'start', e)}>▶ Start</button>
-              `}
-              ${!isDocked ? html`
-                <button class="vac-btn" @click=${(e: Event) => this._vacuumAction(vacEnt.entity_id, 'return_to_base', e)}>⏏ Return</button>
-              ` : nothing}
-            </div>
-          </div>`;
-      }
-
-      case 'helper_controls': {
-        const helperEnt = device.entities.find(e =>
-          ['input_number', 'input_select', 'input_text', 'input_boolean', 'input_button',
-           'number', 'select', 'text'].includes(e.domain)
-        );
-        if (!helperEnt) return html``;
-        const hs = this.hass.states[helperEnt.entity_id];
-        if (!hs) return html``;
-        const hDomain = helperEnt.domain;
-        if (hDomain === 'input_number' || hDomain === 'number') {
-          const min = (hs.attributes as any).min ?? 0;
-          const max = (hs.attributes as any).max ?? 100;
-          const step = (hs.attributes as any).step ?? 1;
-          const val = parseFloat(hs.state) || 0;
-          const unit = (hs.attributes as any).unit_of_measurement ?? '';
-          return html`
-            <div class="helper-ctrl" @click=${(e: Event) => e.stopPropagation()}>
-              <input type="range" class="dim-slider" min="${min}" max="${max}" step="${step}"
-                .value=${String(val)}
-                @change=${(e: Event) => {
-                  const v = parseFloat((e.target as HTMLInputElement).value);
-                  this._setHelperValue(helperEnt.entity_id, hDomain, v, e);
-                }}/>
-              <span class="dim-pct">${val}${unit}</span>
-            </div>`;
-        }
-        if (hDomain === 'input_select' || hDomain === 'select') {
-          const options: string[] = (hs.attributes as any).options ?? [];
-          return html`
-            <div class="helper-select" @click=${(e: Event) => e.stopPropagation()}>
-              ${options.map(opt => html`
-                <button class="helper-opt ${hs.state === opt ? 'active' : ''}"
-                  @click=${(e: Event) => this._setHelperValue(helperEnt.entity_id, hDomain, opt, e)}>
-                  ${opt}
-                </button>`)}
-            </div>`;
-        }
-        if (hDomain === 'input_text' || hDomain === 'text') {
-          return html`
-            <div class="helper-ctrl" @click=${(e: Event) => e.stopPropagation()}>
-              <input type="text" class="helper-text-input" .value=${hs.state}
-                @keydown=${(e: KeyboardEvent) => {
-                  if (e.key === 'Enter') {
-                    e.stopPropagation();
-                    this._setHelperValue(helperEnt.entity_id, hDomain, (e.target as HTMLInputElement).value);
-                  }
-                }}
-                @blur=${(e: FocusEvent) => {
-                  this._setHelperValue(helperEnt.entity_id, hDomain, (e.target as HTMLInputElement).value);
-                }}/>
-            </div>`;
-        }
-        return html``;
-      }
-
-      case 'siren_controls': {
-        const sirenE = device.entities.find(e => e.domain === 'siren');
-        if (!sirenE) return html``;
-        return html`
-          <div class="siren-controls" @click=${(e: Event) => e.stopPropagation()}>
-            <div class="siren-btns">
-              <button class="siren-btn on" @click=${(e: Event) => this._sirenOn(sirenE.entity_id, e)}>🔔 Sound</button>
-              <button class="siren-btn off" @click=${(e: Event) => this._sirenOff(sirenE.entity_id, e)}>🔕 Silence</button>
-            </div>
-          </div>`;
-      }
-
-      case 'fan_controls': {
-        const fans = device.entities.filter(e => e.domain === 'fan');
-        if (!fans.length) return html``;
-        return html`<div class="fan-controls">${fans.map(fanEnt => {
-          const fst = this.hass.states[fanEnt.entity_id];
-          if (!fst) return nothing;
-          const fOn  = fst.state === 'on';
-          const fPct = Number((fst.attributes as any)?.percentage ?? 0);
-          const fStep= Number((fst.attributes as any)?.percentage_step ?? 100);
-          const fLbl = (fst.attributes as any)?.friendly_name ?? fanEnt.entity_id;
-          const fOsc = (fst.attributes as any)?.oscillating as boolean | undefined;
-          const isPureOnOff = fStep >= 100;
-          return html`
-            <div class="fan-ch-row" @click=${(e: Event) => e.stopPropagation()}>
-              <span class="relay-ch-dot ${fOn ? 'on' : ''}"></span>
-              <span class="relay-ch-name">${fLbl}</span>
-              ${isPureOnOff ? html`
-                <button class="tog sm ${fOn ? 'on' : 'off'}"
-                  @click=${(e: Event) => this._toggle(fanEnt.entity_id, fOn, e)}>
-                  ${fOn ? 'ON' : 'OFF'}
-                </button>
-              ` : html`
-                <input class="dim-slider" style="flex:1" type="range" min="0" max="100" step="${fStep}"
-                  .value=${String(fOn ? fPct : 0)} ?disabled=${!fOn}
-                  @change=${(e: Event) => {
-                    e.stopPropagation();
-                    const pct = parseInt((e.target as HTMLInputElement).value, 10);
-                    this.hass.callService('fan', pct > 0 ? 'turn_on' : 'turn_off',
-                      { entity_id: fanEnt.entity_id, ...(pct > 0 ? { percentage: pct } : {}) });
-                  }}/>
-                <span class="dim-pct">${fOn ? fPct : 0}%</span>
-                ${fOsc !== undefined ? html`
-                  <button class="tog sm ${fOsc ? 'on' : 'off'}"
-                    @click=${(e: Event) => { e.stopPropagation(); this.hass.callService('fan', 'oscillate', { entity_id: fanEnt.entity_id, oscillating: !fOsc }); }}>⟳</button>
-                ` : nothing}
-              `}
-            </div>`;
-        })}</div>`;
       }
 
       case 'valve_controls': {
@@ -1666,34 +1504,6 @@ export class HADeviceDashboard extends LitElement {
         ` : html``;
       }
 
-      case 'media_controls': {
-        const media = this._getMedia(device);
-        return media ? html`
-          <div class="tile-media-row" @click=${(e: Event) => e.stopPropagation()}>
-            ${media.title ? html`<span class="media-title">${media.title}${media.artist ? html` · <em class="media-artist">${media.artist}</em>` : nothing}</span>` : nothing}
-            <div class="media-btns">
-              <button class="cov-btn" title="Previous"
-                @click=${(e: Event) => { e.stopPropagation(); this.hass.callService('media_player', 'media_previous_track', { entity_id: media.entityId }); }}>⏮</button>
-              <button class="cov-btn" title="${media.isPlaying ? 'Pause' : 'Play'}"
-                @click=${(e: Event) => { e.stopPropagation(); this.hass.callService('media_player', media.isPlaying ? 'media_pause' : 'media_play', { entity_id: media.entityId }); }}>
-                ${media.isPlaying ? '⏸' : '▶'}
-              </button>
-              <button class="cov-btn" title="Next"
-                @click=${(e: Event) => { e.stopPropagation(); this.hass.callService('media_player', 'media_next_track', { entity_id: media.entityId }); }}>⏭</button>
-              <button class="cov-btn ${media.isMuted ? 'stop' : ''}" title="${media.isMuted ? 'Unmute' : 'Mute'}"
-                @click=${(e: Event) => { e.stopPropagation(); this.hass.callService('media_player', 'volume_mute', { entity_id: media.entityId, is_volume_muted: !media.isMuted }); }}>
-                ${media.isMuted ? '🔇' : '🔊'}
-              </button>
-            </div>
-            ${media.volume != null ? html`
-              <input type="range" class="dim-slider" min="0" max="100" step="5"
-                .value=${String(Math.round((media.volume ?? 0) * 100))}
-                @change=${(e: Event) => { e.stopPropagation(); this.hass.callService('media_player', 'volume_set', { entity_id: media.entityId, volume_level: parseInt((e.target as HTMLInputElement).value) / 100 }); }}/>
-            ` : nothing}
-          </div>
-        ` : html``;
-      }
-
       case 'power_bar':
         return this._renderPowerBar(device);
 
@@ -1705,7 +1515,7 @@ export class HADeviceDashboard extends LitElement {
               ${alerts.map(a => html`<span class="alert-badge alert-${a}">${a === 'overtemp' ? '🌡' : '⚡'}!</span>`)}
               ${profile.label ? html`<span class="type-badge type-${profile.type}">${profile.label}</span>` : nothing}
               ${genLabel ? html`<span class="gen-badge gen-${profile.gen}">${genLabel}</span>` : nothing}
-              ${intLabel && !device.isVirtual ? html`<span class="int-badge-tile">${intLabel}</span>` : nothing}
+              ${intLabel ? html`<span class="int-badge-tile">${intLabel}</span>` : nothing}
               ${device.isShelly && device.ip && isPrivateIp(device.ip) ? html`
                 <a href="http://${device.ip}" target="_blank" class="tile-ui-link"
                   @click=${(e: Event) => e.stopPropagation()}>↗</a>
@@ -1741,7 +1551,7 @@ export class HADeviceDashboard extends LitElement {
       tileStyle['borderColor'] = accentColor;
       tileStyle['boxShadow'] = `0 0 12px ${accentColor}50`;
     }
-    const _defaultBlocks: TileBlockId[] = ['name_row', 'sensors', 'graph', 'dimmer', 'cover_controls', 'trv_control', 'media_controls', 'fan_controls', 'valve_controls', 'input_channels', 'relay_channels', 'lock_controls', 'vacuum_controls', 'helper_controls', 'siren_controls', 'power_bar', 'badges'];
+    const _defaultBlocks: TileBlockId[] = ['name_row', 'sensors', 'graph', 'dimmer', 'cover_controls', 'trv_control', 'valve_controls', 'input_channels', 'relay_channels', 'power_bar', 'badges'];
     const blockOrder: TileBlockId[] =
       this._config.device_styles?.[device.device_id]?.tile_layout ??
       this._config.tile_layout ??
@@ -2066,7 +1876,16 @@ export class HADeviceDashboard extends LitElement {
     const offline = devices.length - online;
     const totalPower = devices.reduce((s, d) => s + (this._getPower(d) ?? 0), 0);
     const alertDevices = devices.filter(d => this._getAlerts(d).length > 0);
-    const byArea = this._groupByArea(devices);
+    const grouped = this._groupByArea(devices);
+
+    // Cloud connectivity stats from binary_sensor.*_cloud entities
+    const cloudSensors = Object.values(this.hass.states)
+      .filter(s => s.entity_id.startsWith('binary_sensor.') && s.entity_id.endsWith('_cloud'));
+    const cloudOnline    = cloudSensors.filter(s => s.state === 'on');
+    const cloudOffline   = cloudSensors.filter(s => s.state === 'off');
+    const cloudUnavail   = cloudSensors.filter(s => s.state === 'unavailable');
+    const cloudName = (s: (typeof cloudSensors)[0]) =>
+      ((s.attributes.friendly_name as string) ?? s.entity_id).replace(/\s*[Cc]loud$/, '').trim();
 
     // Build CSS variable inline styles from config.style
     const cardInlineStyles: Record<string, string> = {};
@@ -2081,11 +1900,31 @@ export class HADeviceDashboard extends LitElement {
     if (st.tile_bg_image_size) cardInlineStyles['--sc-tile-bg-image-sz']= st.tile_bg_image_size === 'stretch' ? '100% 100%' : st.tile_bg_image_size;
     if (this._config.card_bg_image)      cardInlineStyles['--sc-card-bg-image']   = `url("${this._config.card_bg_image}")`;
     if (this._config.card_bg_image_size) cardInlineStyles['--sc-card-bg-image-sz']= this._config.card_bg_image_size === 'stretch' ? '100% 100%' : this._config.card_bg_image_size;
-    if (st.tile_border)        cardInlineStyles['--sc-tile-border']     = st.tile_border;
-    if (st.text_primary)  cardInlineStyles['--sc-text-primary'] = st.text_primary;
-    if (st.online_color)  cardInlineStyles['--sc-online-color'] = st.online_color;
-    if (st.power_color)   cardInlineStyles['--sc-power-color']  = st.power_color;
+    if (st.tile_border)        cardInlineStyles['--sc-tile-border']      = st.tile_border;
+    if (st.tile_border_width != null) cardInlineStyles['--sc-tile-border-width'] = `${st.tile_border_width}px`;
+    if (st.tile_hover_bg)      cardInlineStyles['--sc-tile-hover-bg']    = st.tile_hover_bg;
+    if (st.tile_hover_shadow)  cardInlineStyles['--sc-tile-hover-shad']  = st.tile_hover_shadow;
+    if (st.tile_sensor_bg)     cardInlineStyles['--sc-sensor-bg']        = st.tile_sensor_bg;
+    if (st.tile_exp_bg)        cardInlineStyles['--sc-tile-exp-bg']      = st.tile_exp_bg;
+    if (st.card_radius != null) cardInlineStyles['--sc-card-radius']     = `${st.card_radius}px`;
+    if (st.text_primary)       cardInlineStyles['--sc-text-primary']     = st.text_primary;
+    if (st.text_secondary)     cardInlineStyles['--sc-text-secondary']   = st.text_secondary;
+    if (st.text_muted)         cardInlineStyles['--sc-text-muted']       = st.text_muted;
+    if (st.offline_color)      cardInlineStyles['--sc-offline-dot']      = st.offline_color;
+    if (st.online_color)       cardInlineStyles['--sc-online-color']     = st.online_color;
+    if (st.power_color)        cardInlineStyles['--sc-power-color']      = st.power_color;
+    if (st.area_header_color)  cardInlineStyles['--sc-area-header-color']= st.area_header_color;
     if (this._config.graph_line_color) cardInlineStyles['--sc-graph-line'] = this._config.graph_line_color;
+    // Tile box shadow preset
+    const shadowMap: Record<string, string> = {
+      soft:   '0 2px 8px rgba(0,0,0,0.25)',
+      medium: '0 4px 16px rgba(0,0,0,0.40)',
+      strong: '0 8px 28px rgba(0,0,0,0.60)',
+    };
+    if (st.tile_box_shadow && st.tile_box_shadow !== 'none')
+      cardInlineStyles['--sc-tile-shadow'] = shadowMap[st.tile_box_shadow] ?? 'none';
+    else if (st.tile_box_shadow === 'none')
+      cardInlineStyles['--sc-tile-shadow'] = 'none';
 
     // Button style vars
     const btnShape   = st.button_shape   ?? 'pill';
@@ -2117,6 +1956,20 @@ export class HADeviceDashboard extends LitElement {
     } else if (st.header_bg) {
       cardInlineStyles['--sc-header-bg'] = st.header_bg;
     }
+    if (st.header_text_color)            cardInlineStyles['--sc-header-text']         = st.header_text_color;
+    if (st.header_orb_color)             cardInlineStyles['--sc-header-orb2']         = st.header_orb_color;
+    if (st.header_icon !== undefined)    cardInlineStyles['--sc-header-icon']         = `'${st.header_icon}'`;
+    if (st.header_title_size)            cardInlineStyles['--sc-header-title-size']   = `${st.header_title_size}em`;
+    if (st.header_radius != null)        cardInlineStyles['--sc-header-radius']       = `${st.header_radius}px`;
+    if (st.header_padding != null)       cardInlineStyles['--sc-header-padding']      = `${st.header_padding}px`;
+    if (st.header_border_color)          cardInlineStyles['--sc-header-border-color'] = st.header_border_color;
+    if (st.header_border_width != null)  cardInlineStyles['--sc-header-border-width'] = `${st.header_border_width}px`;
+    if (st.header_stat_online)           cardInlineStyles['--sc-hstat-online']        = st.header_stat_online;
+    if (st.header_stat_power)            cardInlineStyles['--sc-hstat-power']         = st.header_stat_power;
+    if (st.header_stat_offline)          cardInlineStyles['--sc-hstat-offline']       = st.header_stat_offline;
+    if (this._config.header_show_orbs === false) cardInlineStyles['--sc-header-orb-opacity'] = '0';
+    const headerTransparency = this._config.header_opacity ?? 100;
+    if (headerTransparency < 100) cardInlineStyles['--sc-header-opacity'] = String(headerTransparency / 100);
 
     const cardBgBase = st.card_bg ?? 'var(--ha-card-background, #1c1c1e)';
     if (st.card_bg) cardInlineStyles['--sc-card-bg'] = st.card_bg;
@@ -2130,19 +1983,56 @@ export class HADeviceDashboard extends LitElement {
     }
 
     return html`
-      <ha-card style=${styleMap(cardInlineStyles)}>
+      <ha-card style=${styleMap(cardInlineStyles)} @click=${() => { if (this._cloudDetailOpen) this._cloudDetailOpen = null; }}>
         ${this._renderGraphDialog()}
         <div class="dash-header">
-          <span class="dash-title">HA Devices</span>
-          <div class="dash-stats">
-            <span class="stat online">${online}/${devices.length} online</span>
-            ${offline > 0 ? html`<span class="stat offline-count">${offline} offline</span>` : nothing}
-            <span class="stat power">${formatPower(totalPower)}</span>
-            ${alertDevices.length > 0 ? html`<span class="stat alerts-count">⚠ ${alertDevices.length}</span>` : nothing}
-          </div>
+          <div class="dash-header-bg"></div>
+          ${this._config.header_show_title !== false ? html`
+            <span class="dash-title">${this._config.title ?? 'Shelly'}</span>` : nothing}
+          ${this._config.header_show_stats !== false ? html`
+            <div class="dash-stats">
+              <span class="stat online">${online}/${devices.length} online</span>
+              ${offline > 0 ? html`<span class="stat offline-count">${offline} offline</span>` : nothing}
+              <span class="stat power">${formatPower(totalPower)}</span>
+              ${alertDevices.length > 0 ? html`<span class="stat alerts-count">⚠ ${alertDevices.length}</span>` : nothing}
+            </div>` : nothing}
+          ${this._config.header_show_cloud !== false ? html`
+            <div class="cloud-chips">
+              <span class="cloud-chip cloud-on ${this._cloudDetailOpen === 'on' ? 'active' : ''}"
+                @click=${(e: Event) => { e.stopPropagation(); this._cloudDetailOpen = this._cloudDetailOpen === 'on' ? null : 'on'; }}>
+                ● ${cloudOnline.length} online</span>
+              <span class="cloud-chip cloud-off ${this._cloudDetailOpen === 'off' ? 'active' : ''}"
+                @click=${(e: Event) => { e.stopPropagation(); this._cloudDetailOpen = this._cloudDetailOpen === 'off' ? null : 'off'; }}>
+                ● ${cloudOffline.length} offline</span>
+              ${cloudUnavail.length > 0 ? html`
+                <span class="cloud-chip cloud-unavail ${this._cloudDetailOpen === 'unavailable' ? 'active' : ''}"
+                  @click=${(e: Event) => { e.stopPropagation(); this._cloudDetailOpen = this._cloudDetailOpen === 'unavailable' ? null : 'unavailable'; }}>
+                  ● ${cloudUnavail.length} unavailable</span>` : nothing}
+            </div>` : nothing}
         </div>
+        ${this._cloudDetailOpen === 'on' ? html`
+          <div class="cloud-detail" @click=${(e: Event) => e.stopPropagation()}>
+            <div class="cloud-detail-hdr cloud-on">● Online — ${cloudOnline.length} devices</div>
+            <div class="cloud-grid">
+              ${cloudOnline.map(s => html`<div class="cloud-item">${cloudName(s)}</div>`)}
+            </div>
+          </div>` : nothing}
+        ${this._cloudDetailOpen === 'off' ? html`
+          <div class="cloud-detail" @click=${(e: Event) => e.stopPropagation()}>
+            <div class="cloud-detail-hdr cloud-off">● Offline — ${cloudOffline.length} devices</div>
+            <div class="cloud-grid">
+              ${cloudOffline.map(s => html`<div class="cloud-item">${cloudName(s)}</div>`)}
+            </div>
+          </div>` : nothing}
+        ${this._cloudDetailOpen === 'unavailable' ? html`
+          <div class="cloud-detail" @click=${(e: Event) => e.stopPropagation()}>
+            <div class="cloud-detail-hdr cloud-unavail">● Unavailable — ${cloudUnavail.length} devices</div>
+            <div class="cloud-grid">
+              ${cloudUnavail.map(s => html`<div class="cloud-item">${cloudName(s)}</div>`)}
+            </div>
+          </div>` : nothing}
         <div class="dash-body">
-          ${[...byArea.entries()].map(([area, areaDevices]) =>
+          ${[...grouped.entries()].map(([area, areaDevices]) =>
             this._renderAreaSection(area, areaDevices)
           )}
         </div>
@@ -2191,7 +2081,19 @@ export class HADeviceDashboard extends LitElement {
       --sc-card-bg:         var(--ha-card-background, var(--card-background-color, #1c1c1e));
       --sc-card-bg-image:   none;
       --sc-card-bg-image-sz:cover;
-      --sc-tile-bg-opacity: 1;
+      --sc-tile-bg-opacity:      1;
+      --sc-header-opacity:       1;
+      --sc-header-orb-opacity:   0.5;
+      --sc-header-radius:        0px;
+      --sc-header-padding:       16px;
+      --sc-header-title-size:    1.1em;
+      --sc-header-icon:          '⚡';
+      --sc-header-border-width:  0px;
+      --sc-header-border-color:  transparent;
+      --sc-tile-border-width:    1px;
+      --sc-tile-shadow:          none;
+      --sc-card-radius:          var(--ha-card-border-radius, 12px);
+      --sc-area-header-color:    var(--sc-accent);
     }
 
     ha-card {
@@ -2199,14 +2101,23 @@ export class HADeviceDashboard extends LitElement {
       background: var(--sc-card-bg-image) center / var(--sc-card-bg-image-sz) no-repeat, var(--sc-card-bg);
       container-type: inline-size; container-name: ha-dash;
       font-family: var(--sc-font-family);
+      border-radius: var(--sc-card-radius);
     }
 
     .dash-header {
-      position: relative; display: flex; align-items: center; justify-content: space-between;
-      padding: 16px 18px 14px; background: var(--sc-header-bg); overflow: hidden;
+      position: relative; display: flex; align-items: center; gap:10px;
+      padding: var(--sc-header-padding, 16px) 18px; overflow: hidden;
+      border-radius: var(--sc-header-radius, 0px);
+      border-bottom: var(--sc-header-border-width, 0px) solid var(--sc-header-border-color, transparent);
     }
+    .dash-header-bg {
+      position: absolute; inset: 0; background: var(--sc-header-bg);
+      opacity: var(--sc-header-opacity, 1); pointer-events: none; z-index: 0;
+    }
+    .dash-stats { margin-right: auto; }
     .dash-header::before,.dash-header::after {
-      content:''; position:absolute; border-radius:50%; filter:blur(40px); opacity:0.5;
+      content:''; position:absolute; border-radius:50%; filter:blur(40px);
+      opacity: var(--sc-header-orb-opacity, 0.5);
       animation: drift 8s ease-in-out infinite alternate;
     }
     .dash-header::before { width:120px;height:120px; background:var(--sc-accent); top:-40px;left:-20px; }
@@ -2214,18 +2125,40 @@ export class HADeviceDashboard extends LitElement {
     @keyframes drift { from{transform:translate(0,0) scale(1)} to{transform:translate(15px,8px) scale(1.15)} }
 
     .dash-title {
-      font-size:1.1em; font-weight:800; color:var(--sc-header-text);
+      font-size: var(--sc-header-title-size, 1.1em); font-weight:800; color:var(--sc-header-text);
       letter-spacing:0.02em; position:relative; z-index:1;
       display:flex; align-items:center; gap:8px;
     }
-    .dash-title::before { content:'⚡'; }
+    .dash-title::before { content: var(--sc-header-icon, '⚡'); }
 
-    .dash-stats { display:flex; gap:8px; align-items:center; position:relative; z-index:1; }
+    .dash-stats { display:flex; gap:8px; align-items:center; position:relative; z-index:1; flex-shrink:0; }
     .stat { font-size:0.78em; padding:3px 10px; border-radius:20px; font-weight:600; backdrop-filter:blur(4px); }
     .stat.online   { background:var(--sc-online-bg);  color:var(--sc-online-color); border:1px solid var(--sc-online-border); }
     .stat.power    { background:color-mix(in srgb,var(--sc-accent) 20%,transparent); color:var(--sc-power-color); border:1px solid color-mix(in srgb,var(--sc-accent) 30%,transparent); }
     .stat.offline-count { background:rgba(75,85,99,.25); color:#9ca3af; border:1px solid rgba(75,85,99,.35); }
     .stat.alerts-count  { background:rgba(239,68,68,.2); color:#fca5a5; border:1px solid rgba(239,68,68,.3); animation:blink 2s step-end infinite; }
+    /* Scoped header stat chip color overrides */
+    .dash-header .stat.online       { color:var(--sc-hstat-online, var(--sc-online-color)); background:color-mix(in srgb,var(--sc-hstat-online, var(--sc-online-color)) 18%,transparent); border-color:color-mix(in srgb,var(--sc-hstat-online, var(--sc-online-color)) 30%,transparent); }
+    .dash-header .stat.power        { color:var(--sc-hstat-power, var(--sc-power-color)); }
+    .dash-header .stat.offline-count { color:var(--sc-hstat-offline, #9ca3af); }
+
+    /* ── Cloud status chips ── */
+    .cloud-chips { display:flex; gap:5px; align-items:center; position:relative; z-index:1; flex-shrink:0; }
+    .cloud-chip { font-size:0.72em; font-weight:700; padding:3px 10px; border-radius:20px; backdrop-filter:blur(4px); cursor:pointer; transition:all .15s; white-space:nowrap; }
+    .cloud-chip:hover { opacity:.8; }
+    .cloud-chip.cloud-on    { background:rgba(74,222,128,.18); color:#4ade80; border:1px solid rgba(74,222,128,.3); }
+    .cloud-chip.cloud-off   { background:rgba(239,68,68,.18);  color:#f87171; border:1px solid rgba(239,68,68,.3); }
+    .cloud-chip.cloud-unavail { background:rgba(107,114,128,.2); color:#9ca3af; border:1px solid rgba(107,114,128,.3); }
+    .cloud-chip.active { filter:brightness(1.3); box-shadow:0 0 8px currentColor; }
+
+    /* ── Cloud detail panel ── */
+    .cloud-detail { padding:12px 18px 14px; background:rgba(0,0,0,.3); border-bottom:1px solid rgba(255,255,255,.06); animation:slide-in .15s ease; }
+    .cloud-detail-hdr { font-size:.7em; font-weight:700; text-transform:uppercase; letter-spacing:.06em; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid rgba(255,255,255,.08); }
+    .cloud-detail-hdr.cloud-on    { color:#4ade80; }
+    .cloud-detail-hdr.cloud-off   { color:#f87171; }
+    .cloud-detail-hdr.cloud-unavail { color:#9ca3af; }
+    .cloud-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:4px 16px; }
+    .cloud-item { font-size:.82em; color:var(--sc-text-secondary); padding:3px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
     .dash-body { padding:0 0 8px; }
     .empty { padding:32px; text-align:center; color:var(--secondary-text-color); }
@@ -2243,7 +2176,7 @@ export class HADeviceDashboard extends LitElement {
     }
     .area-header:hover { filter:brightness(1.08); }
     .area-section:not(.closed) .area-header { border-radius:10px 10px 0 0; border-bottom:1px solid var(--sc-tile-border); }
-    .area-name { font-size:var(--area-name-size,0.78em); font-weight:var(--area-name-weight,700); text-transform:var(--sc-text-transform,uppercase); letter-spacing:0.08em; color:var(--area-header-color,var(--sc-accent)); }
+    .area-name { font-size:var(--area-name-size,0.78em); font-weight:var(--area-name-weight,700); text-transform:var(--sc-text-transform,uppercase); letter-spacing:0.08em; color:var(--area-header-color,var(--sc-area-header-color,var(--sc-accent))); }
     .area-chips { display:flex; align-items:center; flex-wrap:wrap; gap:4px; flex:1; margin:0 10px; }
     .area-chip { display:flex; align-items:center; gap:3px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.08); border-radius:4px; padding:1px 5px; }
     .area-chip .tsc-lbl { font-size:.65em; color:var(--secondary-text-color); }
@@ -2263,11 +2196,11 @@ export class HADeviceDashboard extends LitElement {
     @container ha-dash (min-width:700px) { .sparkline-svg.exp { height:56px; } }
 
     .tile {
-      border:1px solid var(--sc-tile-border);
+      border: var(--sc-tile-border-width, 1px) solid var(--sc-tile-border);
       border-radius:var(--tile-radius); padding:11px 13px; cursor:pointer;
       transition:transform 0.15s, box-shadow 0.15s;
       display:flex; flex-direction:column; gap:6px; position:relative; overflow:hidden;
-      isolation:isolate;
+      isolation:isolate; box-shadow: var(--sc-tile-shadow, none);
     }
     .tile::after {
       content:''; position:absolute; inset:0; z-index:-1; pointer-events:none;
@@ -2310,6 +2243,240 @@ export class HADeviceDashboard extends LitElement {
     .update-dot { color:var(--sc-update-color); font-size:.55em; flex-shrink:0; animation:blink 2s step-end infinite; }
     @keyframes blink { 50%{opacity:.3} }
 
+    /* ── Tile icons ── */
+    .tile-icon { width:18px; height:18px; flex-shrink:0; color:var(--sc-text-muted); transition:color .3s, filter .3s; }
+
+    /* Relay / plug — lightning bolt */
+    .tile-icon-relay.on { color:var(--sc-accent); animation:icon-pulse 2s ease-in-out infinite; }
+    @keyframes icon-pulse { 0%,100%{filter:drop-shadow(0 0 3px var(--ipglow,var(--sc-accent-glow)))} 50%{filter:drop-shadow(0 0 8px var(--ipglow,var(--sc-accent-glow)))} }
+
+    /* Fan — spinning blades */
+    .tile-icon-fan .fan-blades { transform-origin:10px 10px; }
+    .tile-icon-fan.on { color:var(--sc-accent); }
+    .tile-icon-fan.on .fan-blades { animation:fan-spin 1s linear infinite; }
+    @keyframes fan-spin { to{transform:rotate(360deg)} }
+
+    /* Sun — rotate + glow */
+    .tile-icon-sun { transform-origin:10px 10px; }
+    .tile-icon-sun.on { color:#fbbf24; filter:drop-shadow(0 0 5px rgba(251,191,36,0.6)); animation:sun-spin 8s linear infinite; }
+    @keyframes sun-spin { to{transform:rotate(360deg)} }
+
+    /* Cover — slat movement */
+    .tile-icon-cover.moving { animation:cover-bounce 1s ease-in-out infinite; }
+    @keyframes cover-bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-1.5px)} }
+
+    /* Flame — flicker */
+    .tile-icon-flame.on { color:#f97316; filter:drop-shadow(0 0 5px rgba(249,115,22,0.6)); }
+    .tile-icon-flame.on .flame-main { animation:flicker 1.5s ease-in-out infinite alternate; transform-origin:10px 18px; }
+    .tile-icon-flame.on .flame-inner { animation:flicker 1.5s ease-in-out infinite alternate-reverse; transform-origin:10px 18px; }
+    @keyframes flicker { 0%{transform:scaleX(1) scaleY(1)} 33%{transform:scaleX(.95) scaleY(1.04)} 66%{transform:scaleX(1.04) scaleY(.97)} 100%{transform:scaleX(.97) scaleY(1.03)} }
+
+    /* Valve — drip pulse */
+    .tile-icon-valve.on { color:#38bdf8; filter:drop-shadow(0 0 4px rgba(56,189,248,0.5)); }
+    .tile-icon-valve.on .drop-body { animation:drip 2s ease-in-out infinite; transform-origin:10px 10px; }
+    @keyframes drip { 0%,100%{transform:scaleY(1)} 50%{transform:scaleY(1.06) translateY(1px)} }
+
+    /* Energy — wave scroll */
+    .tile-icon-energy { color:var(--sc-accent); }
+    .tile-icon-energy .energy-wave { stroke-dasharray:40; animation:wave-scroll 2s linear infinite; }
+    @keyframes wave-scroll { to{stroke-dashoffset:-40} }
+
+    /* Input — ripple */
+    .tile-icon-input.on { color:var(--sc-accent); }
+    .tile-icon-input.on .input-ripple { animation:input-ripple .8s ease-out forwards; }
+    @keyframes input-ripple { 0%{r:0;opacity:.8} 100%{r:6;opacity:0} }
+
+    /* ── Entity-level state animation icons ─────────────────────────────── */
+    .ent-icon { width:15px; height:15px; flex-shrink:0; transition:color .3s,filter .3s; }
+    .ent-icon-flame.off { color:#4b5563; }
+    .ent-icon-flame.on  { color:#f97316; filter:drop-shadow(0 0 5px rgba(249,115,22,0.55)); }
+    .ent-icon-flame.on .flame-main { animation:flicker calc(1.5s / var(--ent-spd,1)) ease-in-out infinite alternate; transform-origin:10px 18px; }
+    .ent-icon-flame.on .flame-inner { animation:flicker calc(1.5s / var(--ent-spd,1)) ease-in-out infinite alternate-reverse; transform-origin:10px 18px; }
+    .ent-icon-snowflake { color:#7dd3fc; }
+    .ent-icon-snowflake .snow-arms { animation:snow-spin calc(6s / var(--ent-spd,1)) linear infinite; }
+    @keyframes snow-spin { to { transform:rotate(360deg); } }
+    .ent-icon-fan.off { color:#4b5563; }
+    .ent-icon-fan.on  { color:var(--sc-accent); }
+    .ent-icon-fan.on .fan-blades { animation:fan-spin calc(1s / var(--ent-spd,1)) linear infinite; }
+    .ent-icon-pulse.off { color:#4b5563; }
+    .ent-icon-pulse.on  { color:var(--sc-accent); }
+    .ent-icon-pulse.on .pulse-ring { animation:icon-pulse calc(2s / var(--ent-spd,1)) ease-in-out infinite; transform-origin:10px 10px; }
+    .ent-icon-wave { color:var(--sc-accent); }
+    .ent-icon-wave .energy-wave { stroke-dasharray:40; animation:wave-scroll calc(2s / var(--ent-spd,1)) linear infinite; }
+    .ent-icon-sun.off { color:#4b5563; }
+    .ent-icon-sun.on  { color:#fbbf24; filter:drop-shadow(0 0 6px rgba(251,191,36,0.55)); }
+    .ent-icon-sun.on .sun-group { animation:snow-spin calc(8s / var(--ent-spd,1)) linear infinite; }
+    .ent-icon-lightning.off { color:#4b5563; }
+    .ent-icon-lightning.on  { --ipglow:rgba(251,191,36,0.55); color:#fbbf24; animation:icon-pulse calc(1.5s / var(--ent-spd,1)) ease-in-out infinite; }
+    .ent-icon-heart.off { color:#4b5563; }
+    .ent-icon-heart.on  { color:#f43f5e; filter:drop-shadow(0 0 5px rgba(244,63,94,0.55)); }
+    .ent-icon-heart.on .heart-shape { animation:heartbeat calc(1s / var(--ent-spd,1)) ease-in-out infinite; transform-origin:10px 10px; }
+    @keyframes heartbeat { 0%,100%{transform:scale(1)} 20%{transform:scale(1.22)} 40%{transform:scale(1)} 60%{transform:scale(1.15)} }
+    .ent-icon-bulb.off { color:#6b7280; }
+    .ent-icon-bulb.off .bulb-body { fill:none; stroke:currentColor; stroke-width:1.2; opacity:0.6; }
+    .ent-icon-bulb.off .bulb-base1,.ent-icon-bulb.off .bulb-base2 { opacity:0.3; }
+    .ent-icon-bulb.on  { --ipglow:rgba(253,224,71,0.65); color:#fde047; animation:icon-pulse calc(2.5s / var(--ent-spd,1)) ease-in-out infinite; }
+    .ent-icon-leaf.off { color:#4b5563; }
+    .ent-icon-leaf.on  { color:#4ade80; filter:drop-shadow(0 0 5px rgba(74,222,128,0.5)); }
+    .ent-icon-leaf.on .leaf-body { animation:leaf-sway calc(3s / var(--ent-spd,1)) ease-in-out infinite; transform-origin:10px 17px; }
+    @keyframes leaf-sway { 0%,100%{transform:rotate(0deg)} 33%{transform:rotate(6deg)} 66%{transform:rotate(-6deg)} }
+    .ent-icon-moon.off { color:#4b5563; }
+    .ent-icon-moon.on  { --ipglow:rgba(196,181,253,0.55); color:#c4b5fd; animation:icon-pulse calc(3s / var(--ent-spd,1)) ease-in-out infinite; }
+    .ent-icon-water.off { color:#4b5563; }
+    .ent-icon-water.on  { color:#38bdf8; filter:drop-shadow(0 0 5px rgba(56,189,248,0.5)); }
+    .ent-icon-water.on .drop-body { animation:drip calc(2s / var(--ent-spd,1)) ease-in-out infinite; transform-origin:10px 10px; }
+    .ent-icon-lock.off { color:#4b5563; }
+    .ent-icon-lock.on  { --ipglow:rgba(167,139,250,0.55); color:#a78bfa; animation:icon-pulse calc(2s / var(--ent-spd,1)) ease-in-out infinite; }
+    /* ── Flame variants ── */
+    .ent-icon-flame2.off,.ent-icon-flame3.off { color:#4b5563; }
+    .ent-icon-flame2.on  { color:#f97316; filter:drop-shadow(0 0 6px rgba(249,115,22,0.55)); }
+    .ent-icon-flame2.on .flame-main { animation:flicker calc(1.5s / var(--ent-spd,1)) ease-in-out infinite alternate; transform-origin:10px 18px; }
+    .ent-icon-flame2.on .flame-b { animation:flicker calc(1.5s / var(--ent-spd,1)) ease-in-out infinite alternate-reverse; transform-origin:10px 18px; animation-delay:calc(-0.4s / var(--ent-spd,1)); }
+    .ent-icon-flame3.on  { color:#f97316; filter:drop-shadow(0 0 5px rgba(249,115,22,0.5)); }
+    .ent-icon-flame3.on .flame-main { animation:flicker calc(1.2s / var(--ent-spd,1)) ease-in-out infinite alternate; transform-origin:10px 15px; }
+    /* ── Snowflake variants ── */
+    .ent-icon-snowflake2 { color:#7dd3fc; }
+    .ent-icon-snowflake2 .snow-arms { animation:snow-spin calc(8s / var(--ent-spd,1)) linear infinite; }
+    .ent-icon-snowflake3 { color:#7dd3fc; }
+    .ent-icon-snowflake3 .snow-drift-g { animation:snow-drift calc(4s / var(--ent-spd,1)) ease-in-out infinite; }
+    @keyframes snow-drift { 0%{transform:translateY(-3px) rotate(0deg)} 50%{transform:translateY(3px) rotate(180deg)} 100%{transform:translateY(-3px) rotate(360deg)} }
+    /* ── Fan variants ── */
+    .ent-icon-fan2.off,.ent-icon-fan3.off { color:#4b5563; }
+    .ent-icon-fan2.on  { color:var(--sc-accent); }
+    .ent-icon-fan2.on .fan-blades { animation:fan-spin calc(0.8s / var(--ent-spd,1)) linear infinite; }
+    .ent-icon-fan3.on  { color:var(--sc-accent); }
+    .ent-icon-fan3.on .fan-blades { animation:fan-spin calc(1.2s / var(--ent-spd,1)) linear infinite; }
+    /* ── Lightning variants ── */
+    .ent-icon-lightning2.off,.ent-icon-lightning3.off { color:#4b5563; }
+    .ent-icon-lightning2.on { --ipglow:rgba(251,191,36,0.6); color:#fbbf24; filter:drop-shadow(0 0 5px rgba(251,191,36,0.5)); }
+    .ent-icon-lightning2.on .bolt-a { animation:bolt-flash calc(1.2s / var(--ent-spd,1)) ease-in-out infinite; }
+    .ent-icon-lightning2.on .bolt-b { animation:bolt-flash calc(1.2s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.6s / var(--ent-spd,1)); }
+    @keyframes bolt-flash { 0%,100%{opacity:1} 50%{opacity:0.2} }
+    .ent-icon-lightning3.off .arc-path { opacity:0.2; }
+    .ent-icon-lightning3.on  { color:#fbbf24; filter:drop-shadow(0 0 6px rgba(251,191,36,0.6)); }
+    .ent-icon-lightning3.on .arc-path { animation:arc-flash calc(0.8s / var(--ent-spd,1)) ease-in-out infinite; }
+    @keyframes arc-flash { 0%,100%{opacity:0.15} 50%{opacity:1} }
+    /* ── Bulb variants ── */
+    .ent-icon-bulb2.off { color:#6b7280; }
+    .ent-icon-bulb2.off .bulb-body { fill:none; stroke:currentColor; stroke-width:1.2; opacity:0.6; }
+    .ent-icon-bulb2.off .bulb-filament { display:none; }
+    .ent-icon-bulb2.off .bulb-base1,.ent-icon-bulb2.off .bulb-base2 { opacity:0.3; }
+    .ent-icon-bulb2.on { --ipglow:rgba(251,191,36,0.7); color:#fbbf24; animation:icon-pulse calc(2.5s / var(--ent-spd,1)) ease-in-out infinite; }
+    .ent-icon-bulb3.off { color:#6b7280; }
+    .ent-icon-bulb3.off .bulb-chip { fill:none; stroke:currentColor; stroke-width:1; opacity:0.5; }
+    .ent-icon-bulb3.on { --ipglow:rgba(224,242,254,0.7); color:#e0f2fe; animation:icon-pulse calc(2s / var(--ent-spd,1)) ease-in-out infinite; }
+    /* ── Water variants ── */
+    .ent-icon-water2 { color:#38bdf8; }
+    .ent-icon-water2 .wave-a { animation:wave-scroll calc(2s / var(--ent-spd,1)) linear infinite; }
+    .ent-icon-water2 .wave-b { animation:wave-scroll calc(2s / var(--ent-spd,1)) linear infinite; animation-delay:calc(-0.5s / var(--ent-spd,1)); }
+    .ent-icon-water3.off { color:#4b5563; }
+    .ent-icon-water3.on  { --ipglow:rgba(56,189,248,0.5); color:#38bdf8; }
+    .ent-icon-water3.on .ripple1 { animation:ripple-out calc(2s / var(--ent-spd,1)) ease-out infinite; }
+    .ent-icon-water3.on .ripple2 { animation:ripple-out calc(2s / var(--ent-spd,1)) ease-out infinite; animation-delay:calc(-1s / var(--ent-spd,1)); }
+    @keyframes ripple-out { 0%{r:2;opacity:0.8} 100%{r:9;opacity:0} }
+    /* ── Sun variants ── */
+    .ent-icon-sun2.off,.ent-icon-sun3.off { color:#4b5563; }
+    .ent-icon-sun2.on { --ipglow:rgba(251,191,36,0.5); color:#fbbf24; animation:icon-pulse calc(3s / var(--ent-spd,1)) ease-in-out infinite; }
+    .ent-icon-sun3.on { color:#fbbf24; filter:drop-shadow(0 0 6px rgba(251,191,36,0.55)); }
+    .ent-icon-sun3.on .sun-group { animation:snow-spin calc(4s / var(--ent-spd,1)) linear infinite; }
+    /* ── Moon variants ── */
+    .ent-icon-moon2.off,.ent-icon-moon3.off { color:#4b5563; }
+    .ent-icon-moon2.on { --ipglow:rgba(241,245,249,0.6); color:#f1f5f9; animation:icon-pulse calc(3s / var(--ent-spd,1)) ease-in-out infinite; }
+    .ent-icon-moon3.on { color:#c4b5fd; filter:drop-shadow(0 0 6px rgba(196,181,253,0.55)); }
+    .ent-icon-moon3.on .star1 { animation:twinkle calc(2s / var(--ent-spd,1)) ease-in-out infinite; }
+    .ent-icon-moon3.on .star2 { animation:twinkle calc(2s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.7s / var(--ent-spd,1)); }
+    .ent-icon-moon3.on .star3 { animation:twinkle calc(2s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-1.4s / var(--ent-spd,1)); }
+    @keyframes twinkle { 0%,100%{opacity:1} 50%{opacity:0.15} }
+    @keyframes wind-blow { 0%{transform:translateX(0);opacity:0.3} 50%{opacity:1} 100%{transform:translateX(4px);opacity:0.3} }
+    @keyframes bell-ring { 0%,100%{transform:rotate(0deg)} 20%{transform:rotate(-10deg)} 40%{transform:rotate(10deg)} 60%{transform:rotate(-7deg)} 80%{transform:rotate(7deg)} }
+    @keyframes therm-pulse { 0%,100%{transform:scaleY(1)} 50%{transform:scaleY(0.65)} }
+    @keyframes star-pulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.15);opacity:0.7} }
+    @keyframes star-shoot { 0%{transform:translate(0,0);opacity:1} 100%{transform:translate(6px,-6px);opacity:0.15} }
+    @keyframes ekg-scan { to{stroke-dashoffset:-50} }
+    @keyframes bar-bounce { 0%,100%{transform:scaleY(0.3)} 50%{transform:scaleY(1)} }
+
+    /* ── Wind ──────────────────────────────────────────────────── */
+    .ent-icon-wind.off,.ent-icon-wind2.off,.ent-icon-wind3.off { color:#4b5563; }
+    .ent-icon-wind.on  { color:#a5f3fc; filter:drop-shadow(0 0 5px rgba(165,243,252,0.45)); }
+    .ent-icon-wind.on .wind-line-a { animation:wave-scroll calc(1.4s / var(--ent-spd,1)) linear infinite; stroke-dasharray:24; }
+    .ent-icon-wind.on .wind-line-b { animation:wave-scroll calc(1.6s / var(--ent-spd,1)) linear infinite; stroke-dasharray:20; animation-delay:calc(-0.25s / var(--ent-spd,1)); }
+    .ent-icon-wind.on .wind-line-c { animation:wave-scroll calc(1.9s / var(--ent-spd,1)) linear infinite; stroke-dasharray:16; animation-delay:calc(-0.5s / var(--ent-spd,1)); }
+    .ent-icon-wind2.on { color:#a5f3fc; filter:drop-shadow(0 0 4px rgba(165,243,252,0.4)); }
+    .ent-icon-wind2.on .gust-a { animation:wind-blow calc(1s / var(--ent-spd,1)) ease-in-out infinite; }
+    .ent-icon-wind2.on .gust-b { animation:wind-blow calc(1s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.33s / var(--ent-spd,1)); }
+    .ent-icon-wind2.on .gust-c { animation:wind-blow calc(1s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.66s / var(--ent-spd,1)); }
+    .ent-icon-wind3.on { color:#a5f3fc; --ipglow:rgba(165,243,252,0.5); animation:icon-pulse calc(2s / var(--ent-spd,1)) ease-in-out infinite; }
+
+    /* ── Bell ──────────────────────────────────────────────────── */
+    .ent-icon-bell.off,.ent-icon-bell2.off,.ent-icon-bell3.off { color:#4b5563; }
+    .ent-icon-bell.on  { color:#fde68a; --ipglow:rgba(253,230,138,0.55); filter:drop-shadow(0 0 5px rgba(253,230,138,0.4)); animation:bell-ring calc(1.2s / var(--ent-spd,1)) ease-in-out infinite; transform-origin:10px 2.5px; }
+    .ent-icon-bell2.on { color:#fde68a; --ipglow:rgba(253,230,138,0.55); filter:drop-shadow(0 0 4px rgba(253,230,138,0.35)); }
+    .ent-icon-bell2.on .ring-a { animation:arc-flash calc(0.8s / var(--ent-spd,1)) ease-in-out infinite; }
+    .ent-icon-bell2.on .ring-b { animation:arc-flash calc(0.8s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.25s / var(--ent-spd,1)); }
+    .ent-icon-bell2.on .ring-c { animation:arc-flash calc(0.8s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.5s / var(--ent-spd,1)); }
+    .ent-icon-bell3.on { color:#fca5a5; --ipglow:rgba(252,165,165,0.55); animation:icon-pulse calc(1.2s / var(--ent-spd,1)) ease-in-out infinite; }
+
+    /* ── Thermometer ────────────────────────────────────────────── */
+    .ent-icon-thermometer.off,.ent-icon-thermometer2.off,.ent-icon-thermometer3.off { color:#4b5563; }
+    .ent-icon-thermometer.on  { color:#fb923c; filter:drop-shadow(0 0 5px rgba(251,146,60,0.5)); }
+    .ent-icon-thermometer.on .therm-mercury { animation:therm-pulse calc(2s / var(--ent-spd,1)) ease-in-out infinite; transform-origin:10px 13px; }
+    .ent-icon-thermometer2.on { color:#f87171; filter:drop-shadow(0 0 5px rgba(248,113,113,0.5)); }
+    .ent-icon-thermometer2.on .therm-arrow { animation:cover-bounce calc(1.2s / var(--ent-spd,1)) ease-in-out infinite; }
+    .ent-icon-thermometer3.on { color:#fb923c; filter:drop-shadow(0 0 4px rgba(251,146,60,0.45)); }
+    .ent-icon-thermometer3.on .therm-up   { animation:cover-bounce calc(1.4s / var(--ent-spd,1)) ease-in-out infinite; }
+    .ent-icon-thermometer3.on .therm-down { animation:cover-bounce calc(1.4s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.7s / var(--ent-spd,1)); }
+
+    /* ── Battery ────────────────────────────────────────────────── */
+    .ent-icon-battery.off,.ent-icon-battery2.off { color:#4b5563; }
+    .ent-icon-battery.on  { color:#4ade80; --ipglow:rgba(74,222,128,0.5); animation:icon-pulse calc(2s / var(--ent-spd,1)) ease-in-out infinite; }
+    .ent-icon-battery2.on { color:#fbbf24; filter:drop-shadow(0 0 5px rgba(251,191,36,0.5)); }
+    .ent-icon-battery2.on .charge-bolt { animation:bolt-flash calc(0.9s / var(--ent-spd,1)) ease-in-out infinite; }
+    .ent-icon-battery3      { color:#f87171; }
+    .ent-icon-battery3.off  { color:#6b7280; }
+    .ent-icon-battery3.on   { color:#f87171; filter:drop-shadow(0 0 4px rgba(248,113,113,0.5)); animation:blink calc(1.2s / var(--ent-spd,1)) step-end infinite; }
+
+    /* ── Star ───────────────────────────────────────────────────── */
+    .ent-icon-star.off,.ent-icon-star2.off,.ent-icon-star3.off { color:#4b5563; }
+    .ent-icon-star.on  { color:#fde047; --ipglow:rgba(253,224,71,0.55); filter:drop-shadow(0 0 6px rgba(253,224,71,0.45)); animation:star-pulse calc(2s / var(--ent-spd,1)) ease-in-out infinite; transform-origin:10px 10px; }
+    .ent-icon-star2.on { color:#fde047; filter:drop-shadow(0 0 5px rgba(253,224,71,0.4)); }
+    .ent-icon-star2.on .star-body { animation:fan-spin calc(3s / var(--ent-spd,1)) linear infinite; transform-origin:10px 10px; }
+    .ent-icon-star3.on { color:#fde047; filter:drop-shadow(0 0 4px rgba(253,224,71,0.4)); animation:star-shoot calc(1.5s / var(--ent-spd,1)) ease-in-out infinite alternate; }
+
+    /* ── Pulse variants ─────────────────────────────────────────── */
+    .ent-icon-pulse2.off,.ent-icon-pulse3.off { color:#4b5563; }
+    .ent-icon-pulse2.on { color:var(--sc-accent); }
+    .ent-icon-pulse2.on .pulse-ring  { animation:ripple-out calc(1.2s / var(--ent-spd,1)) ease-out infinite; }
+    .ent-icon-pulse2.on .pulse-ring2 { animation:ripple-out calc(1.2s / var(--ent-spd,1)) ease-out infinite; animation-delay:calc(-0.5s / var(--ent-spd,1)); }
+    .ent-icon-pulse3.on { color:#f43f5e; filter:drop-shadow(0 0 4px rgba(244,63,94,0.45)); }
+    .ent-icon-pulse3.on .ekg-line { animation:ekg-scan calc(1.5s / var(--ent-spd,1)) linear infinite; stroke-dasharray:50; stroke-dashoffset:0; }
+
+    /* ── Wave variants ──────────────────────────────────────────── */
+    .ent-icon-wave2.off,.ent-icon-wave3.off,.ent-icon-wave4.off { color:#4b5563; }
+    .ent-icon-wave2.on { color:#5eead4; filter:drop-shadow(0 0 4px rgba(94,234,212,0.4)); }
+    .ent-icon-wave2.on .bar-odd  { animation:bar-bounce calc(0.6s / var(--ent-spd,1)) ease-in-out infinite alternate; transform-origin:50% 100%; }
+    .ent-icon-wave2.on .bar-even { animation:bar-bounce calc(0.6s / var(--ent-spd,1)) ease-in-out infinite alternate-reverse; transform-origin:50% 100%; }
+    .ent-icon-wave3.on { color:#7dd3fc; filter:drop-shadow(0 0 4px rgba(125,211,252,0.4)); }
+    .ent-icon-wave3.on .arc-a { animation:twinkle calc(1.5s / var(--ent-spd,1)) ease-in-out infinite; }
+    .ent-icon-wave3.on .arc-b { animation:twinkle calc(1.5s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.5s / var(--ent-spd,1)); }
+    .ent-icon-wave3.on .arc-c { animation:twinkle calc(1.5s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-1s / var(--ent-spd,1)); }
+    .ent-icon-wave4.on { color:#93c5fd; filter:drop-shadow(0 0 4px rgba(147,197,253,0.4)); }
+    .ent-icon-wave4.on .wifi-a { animation:twinkle calc(1.4s / var(--ent-spd,1)) ease-in-out infinite; }
+    .ent-icon-wave4.on .wifi-b { animation:twinkle calc(1.4s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.45s / var(--ent-spd,1)); }
+    .ent-icon-wave4.on .wifi-c { animation:twinkle calc(1.4s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.9s / var(--ent-spd,1)); }
+
+    /* ── Heart variant ──────────────────────────────────────────── */
+    .ent-icon-heart2.off { color:#4b5563; }
+    .ent-icon-heart2.on  { color:#f43f5e; filter:drop-shadow(0 0 5px rgba(244,63,94,0.5)); }
+    .ent-icon-heart2.on .heart-shape { animation:heartbeat calc(0.8s / var(--ent-spd,1)) ease-in-out infinite; transform-origin:10px 10px; }
+
+    /* ── Leaf variant ───────────────────────────────────────────── */
+    .ent-icon-leaf2.off { color:#4b5563; }
+    .ent-icon-leaf2.on  { color:#4ade80; filter:drop-shadow(0 0 5px rgba(74,222,128,0.45)); animation:leaf-sway calc(2.5s / var(--ent-spd,1)) ease-in-out infinite; transform-origin:10px 18px; }
+
+    /* ── Lock variant ───────────────────────────────────────────── */
+    .ent-icon-lock2.off { color:#4b5563; }
+    .ent-icon-lock2.on  { color:#7ecfff; --ipglow:rgba(126,207,255,0.55); animation:icon-pulse calc(2s / var(--ent-spd,1)) ease-in-out infinite; }
+
     .tile-sensor-chips { display:flex; flex-wrap:wrap; gap:4px; margin:2px 0 0; }
     .tile-sensor-chip { display:flex; flex-direction:column; align-items:center; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.08); border-radius:6px; padding:2px 7px; min-width:38px; }
     .tsc-lbl { font-size:.6em; color:var(--sc-text-muted); text-transform:uppercase; letter-spacing:.03em; }
@@ -2329,10 +2496,6 @@ export class HADeviceDashboard extends LitElement {
     .type-sensor      { background:rgba(20,184,166,.20);  color:#5eead4; }
     .type-input       { background:rgba(168,85,247,.20);  color:#d8b4fe; }
     .type-climate     { background:rgba(239,68,68,.22);   color:#fca5a5; }
-    .type-media_player{ background:rgba(26,188,156,.20);  color:#5eead4; }
-    .type-script,.type-scene,.type-automation { background:rgba(99,102,241,.20); color:#c4b5fd; }
-    .type-helper      { background:rgba(156,163,175,.20); color:#d1d5db; }
-    .type-script.type-badge,.type-scene.type-badge,.type-automation.type-badge,.type-helper.type-badge { font-size:18px; padding:4px 10px; border-radius:6px; }
     .gen-1   { background:rgba(107,114,128,.25); color:#9ca3af; }
     .gen-2   { background:rgba(59,130,246,.22);  color:#93c5fd; }
     .gen-3   { background:rgba(34,197,94,.20);   color:#86efac; }
@@ -2423,6 +2586,8 @@ export class HADeviceDashboard extends LitElement {
     .input-row.active { background:color-mix(in srgb,var(--sc-accent) 15%,transparent); border-color:color-mix(in srgb,var(--sc-accent) 35%,transparent); }
     .input-row-dot { width:8px; height:8px; border-radius:50%; background:var(--sc-text-muted); flex-shrink:0; transition:background .15s; }
     .input-row.active .input-row-dot { background:var(--sc-accent); }
+    .input-btn-dot { width:8px; height:8px; border-radius:2px; background:rgba(129,140,248,0.5); flex-shrink:0; }
+    .input-row.btn-mode { border-color:rgba(129,140,248,0.18); }
     .input-row-name { font-size:13px; font-weight:600; color:var(--sc-text-primary); min-width:60px; }
     .input-row-event { flex:1; font-size:12px; color:var(--sc-text-secondary); text-transform:capitalize; }
     .input-row-time { font-size:11px; color:var(--sc-text-muted); white-space:nowrap; }
@@ -2431,10 +2596,16 @@ export class HADeviceDashboard extends LitElement {
     .input-dot { width:7px;height:7px; border-radius:50%; background:currentColor; flex-shrink:0; }
     .input-lbl { font-weight:600; }
 
-    .tile-media-row { display:flex; flex-direction:column; gap:5px; padding:2px 0 0; }
-    .media-title { font-size:.72em; color:var(--sc-text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
-    .media-artist { font-style:normal; color:var(--sc-text-muted); }
-    .media-btns { display:flex; gap:3px; }
+    /* ── Virtual controls ── */
+    .tile-virtuals { display:flex; flex-direction:column; gap:4px; padding:4px 0 2px; }
+    .virt-row { display:flex; align-items:center; gap:8px; padding:4px 8px; border-radius:7px; border:1px solid rgba(255,255,255,.06); background:rgba(255,255,255,.03); }
+    .virt-lbl { font-size:11px; color:var(--sc-text-muted); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .virt-val { font-size:12px; color:var(--sc-text-primary); font-weight:500; max-width:90px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-transform:capitalize; }
+    .virt-select, .virt-num { display:flex; align-items:center; gap:3px; }
+    .virt-arr { background:none; border:none; color:var(--sc-text-secondary); cursor:pointer; font-size:15px; padding:0 3px; line-height:1; border-radius:4px; transition:color .12s; }
+    .virt-arr:hover { color:var(--sc-accent); }
+    .virt-btn { background:color-mix(in srgb,var(--sc-accent) 12%,transparent); border:1px solid color-mix(in srgb,var(--sc-accent) 30%,transparent); color:var(--sc-accent); font-size:11px; font-weight:600; padding:3px 10px; border-radius:6px; cursor:pointer; transition:all .15s; width:100%; text-align:left; }
+    .virt-btn:hover { background:color-mix(in srgb,var(--sc-accent) 22%,transparent); }
 
     .power-bar { position:absolute; bottom:0;left:0;right:0; height:3px; background:rgba(255,255,255,.06); border-radius:0 0 var(--tile-radius) var(--tile-radius); overflow:hidden; }
     .power-bar-fill { height:100%; background:linear-gradient(90deg,var(--sc-accent),#f97316); border-radius:inherit; transition:width .4s; }
@@ -2529,59 +2700,6 @@ export class HADeviceDashboard extends LitElement {
     .relay-ch-dot.on { background:var(--sc-online-color); }
     .relay-ch-name { flex:1; font-size:12px; color:var(--sc-text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
-    /* ── Lock controls ── */
-    .lock-controls { display:flex; flex-direction:column; align-items:center; gap:8px; padding:6px 8px 4px; }
-    .lock-state { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--sc-text-muted); }
-    .lock-btns { display:flex; gap:8px; }
-    .lock-btn { padding:5px 14px; border-radius:20px; border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.06); color:var(--sc-text-primary); font-size:12px; cursor:pointer; transition:all .15s; }
-    .lock-btn:hover { background:rgba(255,255,255,.12); }
-    .lock-btn.active { border-color:var(--sc-accent); color:var(--sc-accent); }
-    .lock-btn.unlock.confirm { background:color-mix(in srgb,#ef4444 20%,transparent); border-color:#ef4444; color:#ef4444; animation:pulse .6s infinite alternate; }
-    @keyframes pulse { from { opacity:.8; } to { opacity:1; } }
-
-    /* ── Vacuum controls ── */
-    .vacuum-controls { display:flex; flex-direction:column; align-items:center; gap:8px; padding:6px 8px 4px; }
-    .vacuum-state { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--sc-text-muted); }
-    .vacuum-btns { display:flex; gap:8px; }
-    .vac-btn { padding:5px 14px; border-radius:20px; border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.06); color:var(--sc-text-primary); font-size:12px; cursor:pointer; transition:all .15s; }
-    .vac-btn:hover { background:rgba(255,255,255,.12); }
-    .vac-btn.active { background:color-mix(in srgb,var(--sc-accent) 20%,transparent); border-color:var(--sc-accent); color:var(--sc-accent); }
-
-    /* ── Helper controls ── */
-    .helper-ctrl { display:flex; align-items:center; gap:8px; padding:4px 8px; }
-    .helper-select { display:flex; flex-wrap:wrap; gap:5px; padding:4px 8px; }
-    .helper-opt { padding:3px 10px; border-radius:14px; border:1px solid rgba(255,255,255,.12); background:rgba(255,255,255,.05); color:var(--sc-text-secondary); font-size:11px; cursor:pointer; transition:all .15s; }
-    .helper-opt:hover { background:rgba(255,255,255,.1); color:var(--sc-text-primary); }
-    .helper-opt.active { background:color-mix(in srgb,var(--sc-accent) 20%,transparent); border-color:color-mix(in srgb,var(--sc-accent) 50%,transparent); color:var(--sc-accent); }
-    .helper-text-input { flex:1; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12); border-radius:8px; padding:4px 8px; color:var(--sc-text-primary); font-size:12px; outline:none; }
-    .helper-text-input:focus { border-color:var(--sc-accent); }
-
-    /* ── Automation toggle ── */
-    .virtual-btns { display:flex; align-items:center; gap:6px; }
-    .auto-toggle { font-size:10px; padding:2px 8px; border-radius:10px; border:1px solid; cursor:pointer; background:none; transition:all .15s; white-space:nowrap; }
-    .auto-toggle.on { color:var(--sc-online-color); border-color:var(--sc-online-color); }
-    .auto-toggle.off { color:var(--sc-text-muted); border-color:rgba(255,255,255,.15); }
-    .auto-toggle:hover { opacity:.8; }
-
-    /* ── Fan channels ── */
-    .fan-controls { display:flex; flex-direction:column; gap:4px; padding:2px 8px 4px; }
-    .fan-ch-row { display:flex; align-items:center; gap:8px; padding:3px 0; }
-
-    /* ── Siren controls ── */
-    .siren-controls { display:flex; justify-content:center; padding:4px 8px; }
-    .siren-btns { display:flex; gap:8px; }
-    .siren-btn { padding:5px 14px; border-radius:20px; border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.06); color:var(--sc-text-primary); font-size:12px; cursor:pointer; transition:all .15s; }
-    .siren-btn:hover { background:rgba(255,255,255,.12); }
-    .siren-btn.on { border-color:#f59e0b; color:#f59e0b; }
-
-    /* ── WLED effect params ── */
-    .wled-params { display:flex; flex-direction:column; gap:6px; padding:4px 8px 4px; }
-    .wled-param-row { display:flex; align-items:center; gap:6px; }
-    .wled-param-lbl { font-size:11px; color:var(--sc-text-muted); min-width:54px; }
-    .wled-select { background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12); border-radius:6px; color:var(--sc-text-primary); font-size:11px; padding:2px 6px; cursor:pointer; flex:1; }
-    .wled-segment { display:flex; flex-direction:column; gap:3px; border-top:1px solid rgba(255,255,255,.06); padding-top:6px; }
-    .wled-seg-header { display:flex; align-items:center; gap:6px; }
-    .wled-seg-name { flex:1; font-size:12px; font-weight:600; color:var(--sc-text-primary); }
   `;
 }
 

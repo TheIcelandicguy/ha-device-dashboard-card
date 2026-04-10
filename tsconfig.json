@@ -11,6 +11,7 @@
     "noUnusedParameters":  false,
     "skipLibCheck":        true,
     "outDir":              "./dist",
+    "rootDir":             "./src",
     "declaration":         false,
     "sourceMap":           true
   },

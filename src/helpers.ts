@@ -15,31 +15,18 @@ const DEVICE_DOMAINS = new Set([
   // NOTE: device_tracker intentionally excluded — adds noise and slows discovery
 ]);
 
-/** Domains that can appear as standalone "virtual" tiles */
-const VIRTUAL_DOMAINS = new Set([
-  'script', 'scene', 'automation',
-  'input_boolean', 'input_number', 'input_text', 'input_select',
-  'input_datetime', 'input_button', 'timer', 'counter',
-]);
 
 // ─── Device discovery ──────────────────────────────────────────────────────────
 
 /**
- * Returns all HA devices, each with all their entities attached.
- * Filtered by integrations when provided (e.g. ['shelly','zha','hue']).
- * When integrations is undefined/empty, ALL platforms are included.
+ * Returns all Shelly devices, each with all their entities attached.
  */
 export function getAllDevices(
-  hass: HomeAssistant,
-  integrations?: string[]
+  hass: HomeAssistant
 ): HADevice[] {
   const entityRegistry: Record<string, any> = (hass as any).entities ?? {};
   const deviceRegistry: Record<string, any> = (hass as any).devices ?? {};
   const areaRegistry: Record<string, any>   = (hass as any).areas   ?? {};
-
-  const filterPlatforms = integrations && integrations.length > 0
-    ? new Set(integrations.map(s => s.toLowerCase()))
-    : null;
 
   const devices = new Map<string, HADevice>();
 
@@ -52,7 +39,7 @@ export function getAllDevices(
     if (!DEVICE_DOMAINS.has(domain)) continue;
 
     const platform: string = (regEntry.platform ?? '').toLowerCase();
-    if (filterPlatforms && !filterPlatforms.has(platform)) continue;
+    if (platform !== 'shelly') continue;
 
     const deviceId: string = regEntry.device_id;
 
@@ -135,114 +122,6 @@ export function getAllDevices(
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/**
- * Returns virtual entity tiles: scripts, scenes, automations, helpers.
- * These are not backed by a device registry entry.
- */
-export function getVirtualDevices(
-  hass: HomeAssistant,
-  entityDomains?: string[]
-): HADevice[] {
-  const entityRegistry: Record<string, any> = (hass as any).entities ?? {};
-  const areaRegistry: Record<string, any>   = (hass as any).areas   ?? {};
-
-  const allowedDomains = entityDomains && entityDomains.length > 0
-    ? new Set(entityDomains.map(d => d.replace('.*', '')))
-    : VIRTUAL_DOMAINS;
-
-  const result: HADevice[] = [];
-
-  for (const state of Object.values(hass.states)) {
-    const domain = state.entity_id.split('.')[0];
-    if (!allowedDomains.has(domain)) continue;
-
-    const regEntry: any = entityRegistry[state.entity_id];
-    // Virtual entities should NOT have a device_id
-    if (regEntry?.device_id) continue;
-    if (regEntry?.hidden_by) continue;
-
-    const areaId = regEntry?.area_id;
-    const area = areaId ? (areaRegistry[areaId]?.name as string | undefined) : undefined;
-    const name = (state.attributes as any)?.friendly_name
-      ?? state.entity_id.split('.')[1].replace(/_/g, ' ');
-
-    result.push({
-      device_id:   state.entity_id,  // entity_id serves as device_id for virtual tiles
-      name,
-      area,
-      isShelly:    false,
-      integration: domain,
-      isVirtual:   true,
-      entities: [{
-        entity_id:  state.entity_id,
-        domain,
-        state:      state.state,
-        attributes: state.attributes as Record<string, unknown>,
-        platform:   domain,
-      }],
-    });
-  }
-
-  return result.sort((a, b) => a.name.localeCompare(b.name));
-}
-
-/**
- * Builds a HADevice for a specific device_id.
- * Used for extra_devices entries not auto-discovered.
- */
-export function getDeviceById(hass: HomeAssistant, deviceId: string): HADevice | null {
-  const deviceRegistry: Record<string, any> = (hass as any).devices ?? {};
-  const entityRegistry: Record<string, any> = (hass as any).entities ?? {};
-  const areaRegistry: Record<string, any>   = (hass as any).areas   ?? {};
-
-  const devInfo: any = deviceRegistry[deviceId];
-  if (!devInfo) return null;
-
-  const configUrl: string = devInfo.configuration_url ?? '';
-  const ipMatch = configUrl.match(/https?:\/\/((?:\d{1,3}\.){3}\d{1,3})/);
-  const mfr: string = (devInfo.manufacturer ?? '').toLowerCase();
-  const areaId = devInfo.area_id;
-  const area = areaId ? (areaRegistry[areaId]?.name as string | undefined) : undefined;
-
-  const device: HADevice = {
-    device_id:   deviceId,
-    name:        devInfo.name_by_user ?? devInfo.name ?? deviceId,
-    area,
-    model:       devInfo.model,
-    sw_version:  devInfo.sw_version,
-    ip:          ipMatch ? ipMatch[1] : undefined,
-    isShelly:    mfr.includes('shelly'),
-    integration: '',
-    entities:    [],
-  };
-
-  for (const state of Object.values(hass.states)) {
-    const regEntry: any = entityRegistry[state.entity_id];
-    if (regEntry?.device_id !== deviceId) continue;
-    if (regEntry?.hidden_by) continue;
-    const domain = state.entity_id.split('.')[0];
-    const platform: string = (regEntry.platform ?? '').toLowerCase();
-    if (!device.isShelly && platform === 'shelly') {
-      device.isShelly = true;
-      device.integration = 'shelly';
-    }
-    device.entities.push({
-      entity_id: state.entity_id,
-      domain,
-      state:     state.state,
-      attributes: state.attributes as Record<string, unknown>,
-      device_id: deviceId,
-      platform,
-    });
-  }
-
-  if (device.entities.length === 0) return null;
-  if (!device.integration && device.entities[0]) {
-    device.integration = device.entities[0].platform ?? '';
-  }
-  return device;
-}
-
 /** Returns the HA area name for an area_id */
 export function getAreaName(hass: HomeAssistant, areaId?: string): string | undefined {
   if (!areaId) return undefined;
@@ -255,32 +134,16 @@ export function getAreaName(hass: HomeAssistant, areaId?: string): string | unde
 const PROFILE_LABELS: Record<DeviceProfile, string> = {
   relay:        'Relay',
   plug:         'Plug',
-  switch:       'Switch',
   dimmer:       'Dimmer',
   rgb:          'RGB',
-  light:        'Light',
   climate:      'TRV',
   cover:        'Roller',
-  fan:          'Fan',
-  lock:         'Lock',
-  vacuum:       'Vacuum',
-  media_player: 'Media',
-  alarm:        'Alarm',
-  humidifier:   'Humid.',
   valve:        'Valve',
-  siren:        'Siren',
   energy:       'Energy',
   sensor:       'Sensor',
   input:        'Input',
-  camera:       'Camera',
   uni:          'UNI',
   wall_display: 'Display',
-  script:       'Script',
-  scene:        'Scene',
-  automation:   'Automation',
-  helper:       'Helper',
-  weather:      'Weather',
-  person:       'Person',
   generic:      '',
 };
 
@@ -289,35 +152,19 @@ const PROFILE_LABELS: Record<DeviceProfile, string> = {
  * Users can override this per-card, per-area, or per-device.
  */
 export const PROFILE_DEFAULT_BLOCKS: Record<DeviceProfile, TileBlockId[]> = {
-  relay:        ['name_row', 'relay_channels', 'sensors', 'graph', 'power_bar', 'badges'],
-  plug:         ['name_row', 'sensors', 'graph', 'power_bar', 'badges'],
-  switch:       ['name_row', 'sensors', 'badges'],
-  dimmer:       ['name_row', 'dimmer', 'sensors', 'graph', 'badges'],
-  rgb:          ['name_row', 'dimmer', 'sensors', 'graph', 'badges'],
-  light:        ['name_row', 'dimmer', 'sensors', 'badges'],
-  climate:      ['name_row', 'fan_controls', 'sensors', 'trv_control', 'badges'],
-  siren:        ['name_row', 'siren_controls', 'sensors', 'badges'],
-  cover:        ['name_row', 'cover_controls', 'sensors', 'badges'],
-  fan:          ['name_row', 'fan_controls', 'sensors', 'badges'],
-  lock:         ['name_row', 'sensors', 'lock_controls', 'badges'],
-  vacuum:       ['name_row', 'sensors', 'vacuum_controls', 'badges'],
-  media_player: ['name_row', 'media_controls', 'badges'],
-  alarm:        ['name_row', 'sensors', 'badges'],
-  humidifier:   ['name_row', 'sensors', 'badges'],
-  valve:        ['name_row', 'sensors', 'valve_controls', 'badges'],
-  energy:       ['name_row', 'sensors', 'graph', 'badges'],
-  sensor:       ['name_row', 'sensors', 'graph', 'badges'],
-  input:        ['name_row', 'sensors', 'input_channels', 'badges'],
-  camera:       ['name_row', 'badges'],
-  uni:          ['name_row', 'input_channels', 'sensors', 'badges'],
-  wall_display: ['name_row', 'sensors', 'trv_control', 'badges'],
-  script:       ['name_row', 'sensors', 'badges'],
-  scene:        ['name_row', 'badges'],
-  automation:   ['name_row', 'sensors', 'badges'],
-  helper:       ['name_row', 'sensors', 'helper_controls', 'badges'],
-  weather:      ['name_row', 'sensors'],
-  person:       ['name_row', 'sensors'],
-  generic:      ['name_row', 'sensors', 'badges'],
+  relay:        ['name_row', 'relay_channels', 'sensors', 'graph', 'power_bar', 'virtual_controls', 'badges'],
+  plug:         ['name_row', 'sensors', 'graph', 'power_bar', 'virtual_controls', 'badges'],
+  dimmer:       ['name_row', 'dimmer', 'sensors', 'graph', 'virtual_controls', 'badges'],
+  rgb:          ['name_row', 'dimmer', 'sensors', 'graph', 'virtual_controls', 'badges'],
+  climate:      ['name_row', 'sensors', 'trv_control', 'virtual_controls', 'badges'],
+  cover:        ['name_row', 'cover_controls', 'sensors', 'virtual_controls', 'badges'],
+  valve:        ['name_row', 'sensors', 'valve_controls', 'virtual_controls', 'badges'],
+  energy:       ['name_row', 'sensors', 'graph', 'virtual_controls', 'badges'],
+  sensor:       ['name_row', 'sensors', 'graph', 'virtual_controls', 'badges'],
+  input:        ['name_row', 'sensors', 'input_channels', 'virtual_controls', 'badges'],
+  uni:          ['name_row', 'input_channels', 'sensors', 'virtual_controls', 'badges'],
+  wall_display: ['name_row', 'sensors', 'trv_control', 'virtual_controls', 'badges'],
+  generic:      ['name_row', 'sensors', 'virtual_controls', 'badges'],
 };
 
 /**
@@ -328,19 +175,6 @@ export const PROFILE_DEFAULT_BLOCKS: Record<DeviceProfile, TileBlockId[]> = {
 export function getDeviceProfile(device: HADevice): DeviceProfileResult {
   const modelLower = (device.model ?? '').toLowerCase();
   const domains = new Set(device.entities.map(e => e.domain));
-
-  // Virtual device types
-  if (device.isVirtual) {
-    const vDomain = device.entities[0]?.domain ?? 'generic';
-    const vType: DeviceProfile =
-      vDomain === 'script'     ? 'script'     :
-      vDomain === 'scene'      ? 'scene'       :
-      vDomain === 'automation' ? 'automation'  :
-      vDomain === 'weather'    ? 'weather'     :
-      vDomain === 'person'     ? 'person'      :
-      VIRTUAL_DOMAINS.has(vDomain) ? 'helper' : 'generic';
-    return { type: vType, gen: 'other', label: PROFILE_LABELS[vType], integration: device.integration };
-  }
 
   // ── Type detection (domain-based) ───────────────────────────────────────────
 
@@ -354,22 +188,6 @@ export function getDeviceProfile(device: HADevice): DeviceProfileResult {
     type = 'cover';
   } else if (domains.has('valve')) {
     type = 'valve';
-  } else if (domains.has('vacuum')) {
-    type = 'vacuum';
-  } else if (domains.has('fan')) {
-    type = 'fan';
-  } else if (domains.has('lock')) {
-    type = 'lock';
-  } else if (domains.has('alarm_control_panel')) {
-    type = 'alarm';
-  } else if (domains.has('humidifier')) {
-    type = 'humidifier';
-  } else if (domains.has('siren')) {
-    type = 'siren';
-  } else if (domains.has('media_player')) {
-    type = 'media_player';
-  } else if (domains.has('camera')) {
-    type = 'camera';
   } else if (domains.has('light')) {
     const hasColorMode = device.entities.some(e => {
       if (e.domain !== 'light') return false;
@@ -383,20 +201,16 @@ export function getDeviceProfile(device: HADevice): DeviceProfileResult {
   ) {
     type = 'input';
   } else if (domains.has('switch')) {
-    if (device.isShelly) {
-      if (modelLower.includes('uni')) {
-        type = 'uni';
-      } else if (
-        modelLower.includes('plug') ||
-        (!device.entities.some(e => e.domain === 'binary_sensor' && e.entity_id.includes('input')) &&
-          !modelLower.includes('1pm') && !modelLower.includes('2pm') && !modelLower.includes('pro '))
-      ) {
-        type = 'plug';
-      } else {
-        type = 'relay';
-      }
+    if (modelLower.includes('uni')) {
+      type = 'uni';
+    } else if (
+      modelLower.includes('plug') ||
+      (!device.entities.some(e => e.domain === 'binary_sensor' && e.entity_id.includes('input')) &&
+        !modelLower.includes('1pm') && !modelLower.includes('2pm') && !modelLower.includes('pro '))
+    ) {
+      type = 'plug';
     } else {
-      type = modelLower.includes('plug') || modelLower.includes('outlet') ? 'plug' : 'switch';
+      type = 'relay';
     }
   } else {
     // No controllable domain — sensor/input/energy device
