@@ -123,15 +123,17 @@ export const mainCss = css`
 
     .dash-stats { display:flex; gap:8px; align-items:center; position:relative; z-index:1; flex-shrink:0; }
 
-    .stat { font-size:0.78em; padding:3px 10px; border-radius:20px; font-weight:600; backdrop-filter:blur(4px); }
+    .stat { font-size:0.78em; padding:3px 10px; border-radius:20px; font-weight:600; backdrop-filter:blur(4px); cursor:pointer; transition:all .15s; white-space:nowrap; }
 
-    .stat.online, .stat.offline-count { cursor:pointer; transition:all .15s; }
-
-    .stat.online:hover, .stat.offline-count:hover { opacity:.8; }
+    .stat:hover { opacity:.8; }
 
     .stat.active { filter:brightness(1.3); box-shadow:0 0 8px currentColor; }
 
     .stat.online   { background:var(--sc-online-bg);  color:var(--sc-online-color); border:1px solid var(--sc-online-border); }
+
+    .stat.metric   { background:rgba(255,255,255,.07); color:var(--sc-text-secondary); border:1px solid rgba(255,255,255,.12); }
+
+    .stat.updates-count { background:rgba(245,158,11,.18); color:var(--sc-update-color); border:1px solid rgba(245,158,11,.3); }
 
     .stat.power    { background:color-mix(in srgb,var(--sc-accent) 20%,transparent); color:var(--sc-power-color); border:1px solid color-mix(in srgb,var(--sc-accent) 30%,transparent); }
 
@@ -177,6 +179,15 @@ export const mainCss = css`
     .cloud-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:4px 16px; }
 
     .cloud-item { font-size:.82em; color:var(--sc-text-secondary); padding:3px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+    /* Header chip drill-down: devices ranked high→low by the chip's metric */
+    .metric-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:2px 20px; }
+
+    .metric-row { display:flex; align-items:baseline; justify-content:space-between; gap:10px; padding:3px 0; min-width:0; border-bottom:1px solid rgba(255,255,255,.04); }
+
+    .metric-name { font-size:.82em; color:var(--sc-text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+
+    .metric-val { font-size:.82em; font-weight:600; color:var(--sc-text-primary); font-variant-numeric:tabular-nums; flex-shrink:0; }
 
 
     /* ── View tabs ──────────────────────────────── */

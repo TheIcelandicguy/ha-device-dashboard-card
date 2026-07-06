@@ -2,7 +2,7 @@ import { LitElement, html, css, TemplateResult, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile } from './types';
-import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile } from './helpers';
+import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS } from './helpers';
 import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -1782,6 +1782,27 @@ export class HADeviceDashboardEditor extends LitElement {
           @change=${(e:Event) => this._set('header_show_stats', (e.target as HTMLInputElement).checked ? undefined : false)}>
           <span class="sw-t"></span><span class="sw-b"></span></label>
       </div>
+      ${c.header_show_stats !== false ? html`
+        <div class="field" style="margin:6px 0 2px">
+          <div class="field-lbl" style="display:flex;align-items:center;gap:8px">
+            Header chips
+            ${c.header_chips ? html`<button class="color-reset" @click=${() => this._set('header_chips', undefined)}>↺ Default</button>` : nothing}
+          </div>
+          <div class="pill-grp">
+            ${HEADER_CHIP_DEFS.map(def => {
+              const sel = c.header_chips ?? DEFAULT_HEADER_CHIPS;
+              const on = sel.includes(def.key);
+              return html`
+                <span class="pill ${on ? 'on' : ''}"
+                  @click=${() => {
+                    const next = on ? sel.filter(k => k !== def.key) : [...sel, def.key];
+                    const isDefault = next.length === DEFAULT_HEADER_CHIPS.length && DEFAULT_HEADER_CHIPS.every(k => next.includes(k));
+                    this._set('header_chips', isDefault ? undefined : next);
+                  }}>${def.label}</span>`;
+            })}
+          </div>
+          <div class="hint" style="margin-top:4px">Each chip is clickable on the card and lists devices high → low.</div>
+        </div>` : nothing}
       <div class="tog-row" style="border:none;padding:4px 0 0">
         <div class="tog-lbl">Show cloud chips (extra status row)</div>
         <label class="sw"><input type="checkbox" .checked=${c.header_show_cloud === true}

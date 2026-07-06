@@ -330,6 +330,11 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   header_show_orbs?: boolean;          // default: follows `effects`
   /** Ambient visual effects: header orbs, pulse/glow animations, backdrop blur, hover shadows. Default: false */
   effects?: boolean;
+  /** Which stat chips the header shows, in order. Keys from HEADER_CHIP_DEFS
+   *  (online, offline, power, energy, temperature, humidity, illuminance, rssi, alerts, updates).
+   *  undefined = default set (online, offline, power, alerts). Every chip is clickable and
+   *  opens a high-to-low device list for its metric. */
+  header_chips?: string[];
   card_bg_image?: string;
   card_bg_image_size?: 'cover' | 'contain' | 'stretch';
   show_power_bar?: boolean;            // default: false

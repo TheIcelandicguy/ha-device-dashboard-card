@@ -423,3 +423,28 @@ export const GRAPH_SENSOR_DEFS: Array<{
 export const GRAPH_DC_LABELS: Record<string, string> = Object.fromEntries(
   GRAPH_SENSOR_DEFS.map(d => [d.key, d.label.split(' ')[0]])
 );
+
+// ─── Header stat chips ─────────────────────────────────────────────────────────
+
+/** Header chip catalogue: which fleet-level stats the card header can show.
+ *  `agg` describes how per-device values combine into the chip value;
+ *  clicking a chip lists devices high→low by the same metric. */
+export const HEADER_CHIP_DEFS: Array<{
+  key: string;
+  label: string;
+  agg: 'count' | 'sum' | 'avg';
+}> = [
+  { key: 'online',      label: 'Online',      agg: 'count' },
+  { key: 'offline',     label: 'Offline',     agg: 'count' },
+  { key: 'power',       label: 'Power',       agg: 'sum' },
+  { key: 'energy',      label: 'Energy',      agg: 'sum' },
+  { key: 'temperature', label: 'Temperature', agg: 'avg' },
+  { key: 'humidity',    label: 'Humidity',    agg: 'avg' },
+  { key: 'illuminance', label: 'Light',       agg: 'avg' },
+  { key: 'rssi',        label: 'Wi-Fi',       agg: 'avg' },
+  { key: 'alerts',      label: 'Alerts',      agg: 'count' },
+  { key: 'updates',     label: 'Updates',     agg: 'count' },
+];
+
+/** Chips shown when `header_chips` is not configured. */
+export const DEFAULT_HEADER_CHIPS = ['online', 'offline', 'power', 'alerts'];

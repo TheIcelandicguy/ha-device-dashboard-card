@@ -22,6 +22,7 @@ import { renderDetailSheet } from './detail/detail-sheet';
 import {
   getAllDevices, getDeviceProfile,
   getIntegrationLabel, isPrivateIp, PROFILE_DEFAULT_BLOCKS, GRAPH_DC_LABELS, GRAPH_SENSOR_DEFS,
+  HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS,
   formatPower, formatEnergy, formatVoltage, formatCurrent, formatTemp,
   formatUptime, formatApparentPower, formatReactivePower,
   formatFrequency, formatHumidity, formatIlluminance, formatPpm, formatPercent,
@@ -58,7 +59,8 @@ export class HADeviceDashboard extends LitElement {
   @state() private _valveDragPos: number | null = null;
   @state() private _trvDragTemp: number | null = null;
   private _trvBtnTimer: ReturnType<typeof setTimeout> | null = null;
-  @state() private _cloudDetailOpen: 'on' | 'off' | 'unavailable' | 'dev-on' | 'dev-off' | null = null;
+  /** Which header drill-down is open: 'on'/'off'/'unavailable' (cloud chips) or 'm:<metric>' (stat chips). */
+  @state() private _cloudDetailOpen: string | null = null;
   @state() private _detailDevice: string | null = null;
   @state() private _detailHistoryRange: 24 | 168 | 720 = 24;
   @state() private _activeViewId: string | null = null;
@@ -1500,6 +1502,134 @@ export class HADeviceDashboard extends LitElement {
     return { power, voltage, current, temp, energy, rssi, uptime };
   }
 
+  // ── Header stat chips ───────────────────────────────────────────────────────
+
+  /** Per-device value for a header chip metric. null = device doesn't report it. */
+  private _deviceMetric(device: HADevice, key: string): number | null {
+    if (key === 'power') return this._getPower(device);
+    const DC_KEYS: Record<string, string> = {
+      energy: 'energy', temperature: 'temperature', humidity: 'humidity', illuminance: 'illuminance',
+    };
+    for (const e of device.entities) {
+      if (e.domain !== 'sensor') continue;
+      const s = this.hass.states[e.entity_id];
+      if (!s || s.state === 'unavailable' || s.state === 'unknown') continue;
+      const v = parseFloat(s.state);
+      if (isNaN(v)) continue;
+      const dc = ((s.attributes as HassAttrs).device_class as string) ?? '';
+      if (key === 'rssi') {
+        if (dc === 'signal_strength' || e.entity_id.includes('rssi')) return v;
+      } else if (dc === DC_KEYS[key]) return v;
+    }
+    return null;
+  }
+
+  private _formatHeaderMetric(key: string, v: number): string {
+    switch (key) {
+      case 'power':       return formatPower(v);
+      case 'energy':      return formatEnergy(v);
+      case 'temperature': return formatTemp(v);
+      case 'humidity':    return formatHumidity(v);
+      case 'illuminance': return formatIlluminance(v);
+      case 'rssi':        return `${Math.round(v)} dBm`;
+      default:            return String(v);
+    }
+  }
+
+  private _devicesWithUpdates(devices: HADevice[]): Array<{ device: HADevice; fw: FirmwareInfo }> {
+    return devices
+      .map(d => ({ device: d, fw: this._getFirmware(d) }))
+      .filter((x): x is { device: HADevice; fw: FirmwareInfo } =>
+        !!x.fw?.newVersion && x.fw.newVersion !== x.fw.current);
+  }
+
+  /** Header stat chips — each clickable, opening a high→low device list for its metric. */
+  private _renderHeaderChips(devices: HADevice[]): TemplateResult {
+    const selected = this._config.header_chips ?? DEFAULT_HEADER_CHIPS;
+    const online = devices.filter(d => this._isOnline(d)).length;
+    const toggle = (key: string) => (e: Event) => {
+      e.stopPropagation();
+      this._cloudDetailOpen = this._cloudDetailOpen === `m:${key}` ? null : `m:${key}`;
+    };
+    return html`
+      <div class="dash-stats">
+        ${selected.map(key => {
+          const def = HEADER_CHIP_DEFS.find(d => d.key === key);
+          if (!def) return nothing;
+          let text = '';
+          let cls = 'metric';
+          if (key === 'online') { text = `${online}/${devices.length} online`; cls = 'online'; }
+          else if (key === 'offline') {
+            const off = devices.length - online;
+            if (!off) return nothing;
+            text = `${off} offline`; cls = 'offline-count';
+          } else if (key === 'alerts') {
+            const n = devices.filter(d => this._getAlerts(d).length > 0).length;
+            if (!n) return nothing;
+            text = `⚠ ${n}`; cls = 'alerts-count';
+          } else if (key === 'updates') {
+            const n = this._devicesWithUpdates(devices).length;
+            if (!n) return nothing;
+            text = `⬆ ${n} update${n > 1 ? 's' : ''}`; cls = 'updates-count';
+          } else {
+            const vals = devices.map(d => this._deviceMetric(d, key)).filter((v): v is number => v != null);
+            if (!vals.length) return nothing;
+            const sum = vals.reduce((a, b) => a + b, 0);
+            const v = def.agg === 'sum' ? sum : sum / vals.length;
+            text = key === 'power' ? this._formatHeaderMetric(key, v) : `${def.label} ${this._formatHeaderMetric(key, v)}`;
+            if (key === 'power') cls = 'power';
+          }
+          const open = this._cloudDetailOpen === `m:${key}`;
+          return html`<span class="stat ${cls} ${open ? 'active' : ''}" @click=${toggle(key)}>${text}</span>`;
+        })}
+      </div>`;
+  }
+
+  /** Drill-down panel for the open header chip: devices sorted high→low by the metric. */
+  private _renderHeaderDetail(devices: HADevice[]): TemplateResult {
+    const openKey = this._cloudDetailOpen;
+    if (!openKey?.startsWith('m:')) return html``;
+    const key = openKey.slice(2);
+    const def = HEADER_CHIP_DEFS.find(d => d.key === key);
+    if (!def) return html``;
+    let rows: Array<{ name: string; value: string }> = [];
+    let hdrCls = 'cloud-on';
+    if (key === 'online') {
+      rows = devices.filter(d => this._isOnline(d)).map(d => ({ name: d.name, value: '' }));
+    } else if (key === 'offline') {
+      rows = devices.filter(d => !this._isOnline(d)).map(d => ({ name: d.name, value: '' }));
+      hdrCls = 'cloud-off';
+    } else if (key === 'alerts') {
+      rows = devices
+        .map(d => ({ d, a: this._getAlerts(d) }))
+        .filter(x => x.a.length)
+        .sort((a, b) => b.a.length - a.a.length)
+        .map(x => ({ name: x.d.name, value: x.a.join(', ') }));
+      hdrCls = 'cloud-off';
+    } else if (key === 'updates') {
+      rows = this._devicesWithUpdates(devices)
+        .map(x => ({ name: x.device.name, value: `${x.fw.current} → ${x.fw.newVersion}` }));
+    } else {
+      rows = devices
+        .map(d => ({ d, v: this._deviceMetric(d, key) }))
+        .filter((x): x is { d: HADevice; v: number } => x.v != null)
+        .sort((a, b) => b.v - a.v)
+        .map(x => ({ name: x.d.name, value: this._formatHeaderMetric(key, x.v) }));
+    }
+    if (!rows.length) return html``;
+    return html`
+      <div class="cloud-detail" @click=${(e: Event) => e.stopPropagation()}>
+        <div class="cloud-detail-hdr ${hdrCls}">● ${def.label} — ${rows.length} device${rows.length > 1 ? 's' : ''}</div>
+        <div class="metric-list">
+          ${rows.map(r => html`
+            <div class="metric-row">
+              <span class="metric-name">${r.name}</span>
+              ${r.value ? html`<span class="metric-val">${r.value}</span>` : nothing}
+            </div>`)}
+        </div>
+      </div>`;
+  }
+
   /** Accent colour: device override → area accent → global accent → orange fallback */
   private _tileAccent(device: HADevice, areaLabel: string): string {
     const devClr = this._config.device_styles?.[device.device_id]?.color;
@@ -2230,10 +2360,6 @@ export class HADeviceDashboard extends LitElement {
         </ha-card>`;
     }
 
-    const online = devices.filter(d => this._isOnline(d)).length;
-    const offline = devices.length - online;
-    const totalPower = devices.reduce((s, d) => s + (this._getPower(d) ?? 0), 0);
-    const alertDevices = devices.filter(d => this._getAlerts(d).length > 0);
     const activeView = this._getActiveView();
     const viewDevices = activeView ? this._applyViewFilter(devices, activeView) : devices;
     const grouped = this._groupByArea(viewDevices);
@@ -2265,18 +2391,7 @@ export class HADeviceDashboard extends LitElement {
           <div class="dash-header-bg"></div>
           ${this._config.header_show_title !== false ? html`
             <span class="dash-title">${this._config.title ?? 'Shelly'}</span>` : nothing}
-          ${this._config.header_show_stats !== false ? html`
-            <div class="dash-stats">
-              <span class="stat online ${this._cloudDetailOpen === 'dev-on' ? 'active' : ''}"
-                @click=${(e: Event) => { e.stopPropagation(); this._cloudDetailOpen = this._cloudDetailOpen === 'dev-on' ? null : 'dev-on'; }}>
-                ${online}/${devices.length} online</span>
-              ${offline > 0 ? html`
-                <span class="stat offline-count ${this._cloudDetailOpen === 'dev-off' ? 'active' : ''}"
-                  @click=${(e: Event) => { e.stopPropagation(); this._cloudDetailOpen = this._cloudDetailOpen === 'dev-off' ? null : 'dev-off'; }}>
-                  ${offline} offline</span>` : nothing}
-              <span class="stat power">${formatPower(totalPower)}</span>
-              ${alertDevices.length > 0 ? html`<span class="stat alerts-count">⚠ ${alertDevices.length}</span>` : nothing}
-            </div>` : nothing}
+          ${this._config.header_show_stats !== false ? this._renderHeaderChips(devices) : nothing}
           ${this._config.header_show_cloud === true ? html`
             <div class="cloud-chips">
               <span class="cloud-chip cloud-on ${this._cloudDetailOpen === 'on' ? 'active' : ''}"
@@ -2312,20 +2427,7 @@ export class HADeviceDashboard extends LitElement {
               ${cloudUnavail.map(s => html`<div class="cloud-item">${cloudName(s)}</div>`)}
             </div>
           </div>` : nothing}
-        ${this._cloudDetailOpen === 'dev-on' ? html`
-          <div class="cloud-detail" @click=${(e: Event) => e.stopPropagation()}>
-            <div class="cloud-detail-hdr cloud-on">● Online — ${online} devices</div>
-            <div class="cloud-grid">
-              ${devices.filter(d => this._isOnline(d)).map(d => html`<div class="cloud-item">${d.name}</div>`)}
-            </div>
-          </div>` : nothing}
-        ${this._cloudDetailOpen === 'dev-off' ? html`
-          <div class="cloud-detail" @click=${(e: Event) => e.stopPropagation()}>
-            <div class="cloud-detail-hdr cloud-off">● Offline — ${offline} devices</div>
-            <div class="cloud-grid">
-              ${devices.filter(d => !this._isOnline(d)).map(d => html`<div class="cloud-item">${d.name}</div>`)}
-            </div>
-          </div>` : nothing}
+        ${this._renderHeaderDetail(devices)}
         ${this._renderViewTabs()}
         <div class="dash-body">
           ${showFavourites ? this._renderFavoritesSection(devices) : nothing}
