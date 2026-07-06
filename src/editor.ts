@@ -251,6 +251,7 @@ export class HADeviceDashboardEditor extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     window.removeEventListener('mousedown', this._onIconPickerOutsideClick, true);
+    this._flushConfig();   // don't lose a pending debounced change when the editor closes
   }
 
   /** Single shared popover rendered at the editor root; opened on demand. */
@@ -347,6 +348,9 @@ export class HADeviceDashboardEditor extends LitElement {
       </div>`;
   }
 
+  private _emitTimer: number | null = null;
+  private _pendingConfig: HADeviceDashboardConfig | null = null;
+
   private _set(key: string, value: unknown) {
     if (!this._config) return;
     const updated: Record<string, unknown> = { ...this._config, [key]: value };
@@ -354,7 +358,39 @@ export class HADeviceDashboardEditor extends LitElement {
     if (value === '' || value === undefined || (Array.isArray(value) && value.length === 0 && key !== 'areas')) {
       delete updated[key];
     }
-    fireEvent(this, 'config-changed', { config: updated });
+    this._emitConfig(updated as HADeviceDashboardConfig);
+  }
+
+  /**
+   * Coalesce config changes before telling HA. `@input` on colour pickers,
+   * range sliders and the view-name field fires per pixel / per keystroke;
+   * emitting `config-changed` each time makes HA tear down and rebuild the
+   * preview card every event (full device rediscovery + history refetch),
+   * which halts the editor and can crash the tab. We update the editor's own
+   * `_config` immediately so its UI stays live, and debounce the outbound
+   * event so the preview rebuilds once the value settles.
+   */
+  private _emitConfig(config: HADeviceDashboardConfig) {
+    this._config = config;            // optimistic — keeps inputs & counts live
+    this._pendingConfig = config;
+    if (this._emitTimer != null) clearTimeout(this._emitTimer);
+    this._emitTimer = window.setTimeout(() => this._flushConfig(), 300);
+  }
+
+  /** Fire any pending debounced config change immediately. */
+  private _flushConfig() {
+    if (this._emitTimer != null) { clearTimeout(this._emitTimer); this._emitTimer = null; }
+    const cfg = this._pendingConfig;
+    this._pendingConfig = null;
+    if (cfg) fireEvent(this, 'config-changed', { config: cfg });
+  }
+
+  /** Emit a config change immediately (deliberate one-shot actions: reset,
+   *  paste, add/delete view). Supersedes any pending debounced change. */
+  private _emitNow(config: HADeviceDashboardConfig) {
+    this._config = config;
+    this._pendingConfig = config;
+    this._flushConfig();
   }
 
   private _toggleSec(id: string) {
@@ -374,8 +410,7 @@ export class HADeviceDashboardEditor extends LitElement {
     const next = { ...(this._config as any) } as Record<string, unknown>;
     delete next[key];
     const { type, ...rest } = next as any;
-    this._config = { type, ...rest } as HADeviceDashboardConfig;
-    fireEvent(this, 'config-changed', { config: this._config });
+    this._emitNow({ type, ...rest } as HADeviceDashboardConfig);
   }
 
   /** Clear a style sub-key. */
@@ -435,7 +470,7 @@ export class HADeviceDashboardEditor extends LitElement {
       for (const k of STYLE_KEYS) {
         if (k in parsed) updated[k] = parsed[k];
       }
-      fireEvent(this, 'config-changed', { config: updated });
+      this._emitNow(updated as HADeviceDashboardConfig);
       this._showStyleFeedback('Applied!');
       this._pasteOpen = false;
       this._pasteText = '';
@@ -470,10 +505,23 @@ export class HADeviceDashboardEditor extends LitElement {
     return res.sort((a,b)=>a.name.localeCompare(b.name));
   }
 
+  // getAllDevices scans the full HA entity/device registry (thousands of
+  // entries) — never call it in a loop. Cached per hass reference.
+  private _devCacheHass?: HomeAssistant;
+  private _devCache: ReturnType<typeof getAllDevices> = [];
+  private _allDevices(): ReturnType<typeof getAllDevices> {
+    if (!this.hass) return [];
+    if (this._devCacheHass !== this.hass) {
+      this._devCache = getAllDevices(this.hass);
+      this._devCacheHass = this.hass;
+    }
+    return this._devCache;
+  }
+
   private _getDiscoveredDevices(): Array<{ device_id: string; name: string; area?: string }> {
     if (!this.hass) return [];
     const areas = this._config.areas;
-    let raw = getAllDevices(this.hass);
+    let raw = this._allDevices();
     if (areas !== undefined) {
       const norm = new Set(areas.map(a => a.toLowerCase()));
       raw = raw.filter(d => norm.has((d.area ?? '').toLowerCase()));
@@ -960,7 +1008,7 @@ export class HADeviceDashboardEditor extends LitElement {
     };
 
     // Find this device for profile detection
-    const allDevices = this.hass ? getAllDevices(this.hass) : [];
+    const allDevices = this._allDevices();
     const dev = allDevices.find(d => d.device_id === deviceId);
     const profile = dev ? getDeviceProfile(dev) : null;
 
@@ -1332,6 +1380,7 @@ export class HADeviceDashboardEditor extends LitElement {
     while (existing.some(v => v.id === `view_${n}`)) n++;
     const newView: ViewConfig = { id: `view_${n}`, name: `View ${n}` };
     this._set('views', [...existing, newView]);
+    this._flushConfig();   // structural change — apply immediately
     this._expandedViewId = newView.id;
   }
 
@@ -1339,6 +1388,7 @@ export class HADeviceDashboardEditor extends LitElement {
     const next = (this._config.views ?? []).filter(v => v.id !== id);
     this._set('views', next.length ? next : undefined);
     if (this._config.default_view === id) this._set('default_view', undefined);
+    this._flushConfig();   // structural change — apply immediately
   }
 
   private _moveView(id: string, dir: -1 | 1): void {
@@ -1349,6 +1399,7 @@ export class HADeviceDashboardEditor extends LitElement {
     if (target < 0 || target >= views.length) return;
     [views[idx], views[target]] = [views[target], views[idx]];
     this._set('views', views);
+    this._flushConfig();   // structural change — apply immediately
   }
 
   /** Editor-side mirror of the runtime filter — returns how many discovered devices a view matches. */
@@ -1356,23 +1407,19 @@ export class HADeviceDashboardEditor extends LitElement {
     const f = v.filter;
     let pool = this._getDiscoveredDevices();
     if (!f) return pool.length;
+    // Build a device_id → full device map ONCE (the cached registry scan),
+    // instead of re-scanning per device inside each filter's callback.
+    const byId = new Map(this._allDevices().map(d => [d.device_id, d]));
     if (f.profiles?.length) {
-      const hass = this.hass;
       const allow = new Set(f.profiles);
       pool = pool.filter(d => {
-        const allDevs = getAllDevices(hass);
-        const full = allDevs.find(x => x.device_id === d.device_id);
+        const full = byId.get(d.device_id);
         return full && allow.has(getDeviceProfile(full).type);
       });
     }
     if (f.domains?.length) {
       const allow = new Set(f.domains);
-      const hass = this.hass;
-      pool = pool.filter(d => {
-        const allDevs = getAllDevices(hass);
-        const full = allDevs.find(x => x.device_id === d.device_id);
-        return full?.entities.some(e => allow.has(e.domain));
-      });
+      pool = pool.filter(d => byId.get(d.device_id)?.entities.some(e => allow.has(e.domain)));
     }
     if (f.areas?.length) {
       const allow = new Set(f.areas.map(a => a.toLowerCase()));
@@ -1389,12 +1436,7 @@ export class HADeviceDashboardEditor extends LitElement {
     if (f.entity_id_pattern) {
       try {
         const re = new RegExp(f.entity_id_pattern);
-        const hass = this.hass;
-        pool = pool.filter(d => {
-          const allDevs = getAllDevices(hass);
-          const full = allDevs.find(x => x.device_id === d.device_id);
-          return full?.entities.some(e => re.test(e.entity_id));
-        });
+        pool = pool.filter(d => byId.get(d.device_id)?.entities.some(e => re.test(e.entity_id)));
       } catch { /* invalid regex → no filtering */ }
     }
     return pool.length;
@@ -1974,7 +2016,7 @@ export class HADeviceDashboardEditor extends LitElement {
             const updated = { ...this._config };
             delete (updated as any).card_bg_image;
             delete (updated as any).card_bg_image_size;
-            fireEvent(this, 'config-changed', { config: updated });
+            this._emitNow(updated as HADeviceDashboardConfig);
           }}>↺</button>` : nothing}
         </div>
         ${c.card_bg_image ? html`
