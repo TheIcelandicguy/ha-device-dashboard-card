@@ -8,7 +8,7 @@ The card's design goal is **local-first**: Shelly users heavy into Home Assistan
 
 | File | Covers |
 |---|---|
-| [shelly-api-complete-reference.md](shelly-api-complete-reference.md) | All Gen2+ components/services (Switch, Light, RGB(W), CCT, Cover, Input, EM/EM1, TRV, BLU, virtual components…), Gen1 API, per-component status fields |
+| [shelly-api-complete-reference.md](shelly-api-complete-reference.md) | All Gen2+ components/services (Switch, Light, RGB(W), CCT, Cover, Input, EM/EM1, TRV, BLU, virtual components…), per-component status fields, and the **per-device tables**: full Gen1 catalogue (with HA entity mapping + CoIoT notes), Gen2 Plus/Pro, Gen3, Gen4, BLU — refreshed 2026-07 with the CES 2025 / L+B 2026 wave (Presence Gen4, Power Strip 4, Flood Gen4, EM Gen4, DALI Dimmer, Shelly Shutter, The Pill, BLU ZB variants…) |
 | [shelly-ha-integration-strategy.md](shelly-ha-integration-strategy.md) | How Shelly devices map into HA (entities, device classes, naming), integration behaviour |
 | [shelly-ha-real-world-patterns.md](shelly-ha-real-world-patterns.md) | Real-world automation/dashboard patterns with Shelly + HA |
 | [shelly-virtual-components-guide.md](shelly-virtual-components-guide.md) | Gen2+ virtual components (boolean/number/text/enum/button/group) and scripting |

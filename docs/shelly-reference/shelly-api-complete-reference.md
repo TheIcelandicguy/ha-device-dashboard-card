@@ -417,6 +417,50 @@ Devices with profiles: Plus 2PM, Pro 2PM, Gen3 2PM, Gen4 2PM, 3EM Gen3 (triphase
 
 ## Per-Device Component Availability
 
+### Gen1 Devices
+
+Gen1 uses the HTTP REST + CoAP/CoIoT protocol (not the Gen2+ RPC components above); the table maps each device to the HA entities the native Shelly integration creates.
+
+| Device | Channels / Hardware | Sensors & HA entities |
+|--------|--------------------|----------------------|
+| Shelly 1 (SHSW-1) | 1 relay (dry contact), 1 input, no power metering | `switch` + input `binary_sensor`/events; optional add-on: up to 3× DS18B20 or 1× DHT22 → `sensor` temperature/humidity |
+| Shelly 1PM (SHSW-PM) | 1 relay, 1 input, power metering | `switch`, `sensor` power (W) + energy, internal temperature + overheating `binary_sensor`; same DS18B20/DHT22 add-on as Shelly 1 |
+| Shelly 1L (SHSW-L) | 1 relay, 2 inputs, **no-neutral** wiring (min. 20 W load) | `switch`, power/energy sensors reported by firmware (approximate — no dedicated metering circuit), internal temperature + overtemp; supports the temperature add-on |
+| Shelly 2 (SHSW-21/22) | 2 relays **or** 1 roller (cover), 2 inputs | `switch` ×2 or `cover`; **one shared meter** for both channels (single power/energy sensor, voltage) |
+| Shelly 2.5 (SHSW-25) | 2 relays **or** 1 roller with position, 2 inputs | `switch` ×2 or `cover` (position %); **per-channel** power + energy sensors, voltage, internal temperature + overtemp |
+| Shelly 4Pro (SHSW-44) | 4 relays, per-channel power metering, DIN-rail | **Not supported by the HA Shelly integration** (CoAP v1 protocol, like Shelly Sense) |
+| Shelly Plug (SHPLG-1) / Plug E (SHPLG2-1) / Plug S (SHPLG-S) / Plug US (SHPLG-U1) | 1 relay socket; Plug 16 A, Plug S 12 A (LED ring), Plug US 15 A | `switch`, power + energy sensors, overpower `binary_sensor`; Plug S additionally reports internal temperature + overtemp |
+| Shelly EM (SHEM) | 1 relay (contactor control), 2 CT clamp channels (50 A/120 A clamps) | `switch`, per-channel power, energy, energy returned, voltage sensors |
+| Shelly 3EM (SHEM-3) | 1 relay (contactor control), 3 phase CT channels (120 A) | `switch`, per-phase power, current, voltage, power factor, energy + energy returned sensors |
+| Shelly Dimmer (SHDM-1) / Dimmer 2 (SHDM-2) | 1 dimming channel (leading/trailing edge), 2 inputs; Dimmer 2 works without neutral | `light` with brightness, power + energy sensors, internal temperature + overtemp, input events; load-error `binary_sensor` |
+| Shelly Duo (SHBDUO-1, E27 + GU10) | White bulb, dimmable + tunable CCT (2700–6500 K) | `light` (brightness, color temp), power + energy sensors |
+| Shelly Duo RGBW / Bulb RGBW (SHCB-1, E27 + GU10) | RGBW bulb, color or white mode | `light` (RGBW, brightness, color temp in white mode), power + energy sensors |
+| Shelly Bulb (SHBLB-1) | Original RGBW E27 bulb, color/white modes | `light` (RGBW/effects), power + energy sensors |
+| Shelly Vintage (SHVIN-1) | Dimmable warm-white filament bulb | `light` (brightness), power + energy sensors |
+| Shelly RGBW2 (SHRGBW2) | 4 PWM channels, 12/24 V DC: **color mode** = 1× RGBW, **white mode** = 4 independent channels; 1 input | Color: one `light` + power/energy; White: 4× `light`, each with its own power + energy sensor; input events |
+| Shelly i3 (SHIX3-1) | 3 inputs only, no relay, mains powered | Per input: `binary_sensor` (switch mode) or `event`/`shelly.click` (button mode: short/long/double/triple push); no sensors |
+| Shelly Button1 (SHBTN-1/2) | 1 physical button, battery (rechargeable, USB) | `shelly.click` events (1×/2×/3×/long push), battery sensor, charger state; sleeps between presses — no `binary_sensor` for the button itself |
+| Shelly H&T (SHHT-1) | Battery (or USB add-on) sensor | Temperature, humidity, battery sensors; sleeping device — reports on change thresholds/periodic wake |
+| Shelly Flood (SHWT-1) | Battery water-leak sensor | Flood `binary_sensor`, temperature, battery sensors; sleeping device |
+| Shelly Door/Window 1 (SHDW-1) | Battery contact sensor | Opening `binary_sensor`, lux + illumination level, tilt (°), vibration `binary_sensor`, battery; **no temperature**; sleeping device |
+| Shelly Door/Window 2 (SHDW-2) | Battery contact sensor | Everything DW1 has **plus temperature sensor**; sleeping device |
+| Shelly Gas (SHGS-1) | **Mains powered** natural-gas/LPG detector; optional valve add-on | Gas alarm (mild/heavy) `binary_sensor`, concentration (ppm) sensor, self-test status, `valve`/switch for the gas-valve add-on; no battery sensor |
+| Shelly Smoke (SHSM-01) | Battery smoke detector | Smoke `binary_sensor`, **temperature sensor**, battery, sensor-error; sleeping device |
+| Shelly Motion (SHMOS-01) | Battery (rechargeable, USB-powerable) PIR | Motion + vibration/tamper `binary_sensor`s, lux sensor, battery; **no temperature**; always-listening WiFi (not deep-sleeping, but requires CoIoT unicast) |
+| Shelly Motion 2 (SHMOS-02) | As Motion, revised hardware | Everything Motion has **plus temperature sensor** |
+| Shelly TRV (SHTRV-01) | Thermostatic radiator valve, rechargeable battery (USB-C) | `climate` entity (target/current temperature), valve position (%) sensor, battery, boost mode; sleeping device, slow to respond |
+| Shelly Uni (SHUNI-1) | 2 potential-free outputs (max 100 mA), 2 digital inputs, 1 ADC (0–12 V / 0–30 V), 12–36 V supply | `switch` ×2, input `binary_sensor`s/events, ADC voltage sensor; add-on: up to 3× DS18B20 or 1× DHT22 → temperature/humidity sensors |
+| Shelly Sense (SHSEN-1) | Battery IR blaster + PIR (motion, lux, temp, humidity) | **Not supported by the HA Shelly integration** (CoAP v1, like the 4Pro) |
+
+**Gen1 HA integration notes:**
+
+- **CoIoT must be enabled** on every Gen1 device (web UI → Internet & Security → Advanced Developer Settings), and **unicast is strongly recommended**: set the CoIoT peer to `<HA-IP>:5683` and restart the device. Unicast is **mandatory for battery devices** and for HA/devices on different subnets or VLANs (multicast doesn't cross them). UDP 5683 must be open toward HA.
+- **Firmware ≥ 1.9 required** (Duo, Bulb RGBW, Dimmer 1/2, RGBW2 and Vintage need ≥ 1.11). Shelly 4Pro and Sense use the older CoAP v1 protocol and are not supported at all.
+- **Entity naming:** single-channel devices name entities from the device name (falling back to device ID) — e.g. `switch.kitchen_light`, `sensor.kitchen_light_power`. Multi-channel devices create one sub-device per channel named from the **Channel Name** if set, otherwise "Device Name channel N" (older installs may still carry legacy `_relay_0`-style entity IDs).
+- **Battery devices sleep:** they must be woken (button press) to be discovered/configured, `homeassistant.update_entity` cannot poll them, and state arrives only on their own wake/report schedule. Motion/Motion 2 are the exception — always WiFi-connected but push-only (unicast CoIoT required).
+- **Momentary inputs (i3, Button1, buttons on relays)** are exposed as `shelly.click` events (usable in device triggers), not long-lived binary sensors — automations should use events for short/long/double/triple push.
+- **Gen1 is discontinued** (superseded by Plus/Gen2, Gen3, Gen4) but remains extremely widely deployed and fully supported by the HA Shelly integration. There is no Gen1 "EM50" — the Pro EM-50 is a Gen2 Pro device; likewise "Shelly Air" (announced 2020) never shipped.
+
 ### Gen2 (Plus) Devices
 
 | Device | Components |
@@ -454,14 +498,25 @@ Devices with profiles: Plus 2PM, Pro 2PM, Gen3 2PM, Gen4 2PM, 3EM Gen3 (triphase
 | Device | Components (all include WiFi, BLE, Script) |
 |--------|---------------------------------------------|
 | 1 Gen3 / 1 Mini Gen3 | Input, Switch |
+| 1L Gen3 | Input, Switch — no neutral wire |
 | 1PM Gen3 / 1PM Mini Gen3 | Input, Switch (PM) |
 | 2PM Gen3 | Input (×2), Switch (×2) or Cover (with tilt support) |
 | 2L Gen3 | Input (×2), Switch (×2) — no neutral wire |
+| i4 Gen3 | Input (×4) — scene/event controller, no relay |
 | PM Mini Gen3 | PM1, Input |
 | Dimmer Gen3 | Input (×2), Light |
+| Dimmer 0/1-10V PM Gen3 | Input (×2), Light (0/1-10V control, PM) |
+| DALI Dimmer Gen3 | Input (×2), DALI bridge/dimmer for DALI luminaire networks |
 | EM Gen3 | EM, EMData, Switch |
-| 3EM Gen3 | EM or EM1 (×3), EMData or EM1Data |
-| Plug S Gen3 / Plug M Gen3 | Switch (PM), PLUGS_UI (LED control) |
+| 3EM Gen3 (official name: 3EM-63 Gen3) | EM or EM1 (×3), EMData or EM1Data |
+| Plug S Gen3 / Plug M Gen3 (3000W since 2026 refresh) | Switch (PM), PLUGS_UI (LED control) |
+| Plug S MTR Gen3 | Switch (PM), Matter-certified |
+| Plug PM Gen3 | Switch (PM) — capability details unverified |
+| Outdoor Plug S Gen3 | Switch (PM), outdoor-rated, Matter |
+| Shelly Shutter | Cover (dedicated roller/blind/awning controller, PM) |
+| Duo Bulb E27 Gen3 / Multicolor Bulb E27 Gen3 | Light (white / RGB) — specs unverified |
+| The Pill by Shelly | 5V USB-C low-voltage bridge; sensor add-ons (DS18B20/DHT22/digital input), virtual-component host |
+| BLU Gateway Gen3 | BLE gateway (USB dongle), Script, BLU TRV support |
 | H&T Gen3 | Temperature, Humidity, DevicePower, HT_UI (screen) |
 | Wall Display | Input, Light, Temperature, Humidity, Illuminance, Thermostat |
 | Wall Display X2i / XL | Input, Light, Temperature, Humidity, Illuminance, Thermostat, AppStore (fw 2.6.0+) |
@@ -541,14 +596,37 @@ With firmware 2.6.0+, virtual components on the Wall Display will also appear as
 
 ### Gen4 Devices
 
-| Device | Components (all include WiFi, BLE, Zigbee, Matter, Script) |
+Gen4 dropped the "Plus" branding entirely (CES 2025). All Gen4 devices are multiprotocol: WiFi 6 + BLE + Zigbee, most with Matter. Note: Zigbee mode and WiFi/Matter mode are mutually exclusive on-device — in Zigbee mode the device appears in HA via ZHA/Z2M instead of the Shelly integration.
+
+| Device | Components (all include WiFi 6, BLE, Zigbee, Matter, Script) |
 |--------|-----------------------------------------------------------|
-| 1 Gen4 | Input, Switch |
+| 1 Gen4 / 1 Mini Gen4 | Input, Switch |
 | 1PM Gen4 / 1PM Mini Gen4 | Input, Switch (PM) |
 | 2PM Gen4 | Input (×2), Switch (×2) or Cover |
 | 1L Gen4 / 2L Gen4 | Input, Switch — no neutral wire |
 | i4 Gen4 / i4 DC Gen4 | Input (×4) |
+| Dimmer Gen4 / Dimmer Gen4 US | Input (×2), Light (wall dimmer, EU + US variants) |
+| Dimmer 0/1-10V PM Gen4 | Input (×2), Light (0/1-10V, PM) |
+| Plug US Gen4 / Plug Gen4 | Switch (PM, 1800W US) |
+| Plug C Gen4 / Plug C PM Gen4 | Switch (PM, 14A) / PM-only monitor (16A) — announced L+B 2026, rolling out |
+| Power Strip 4 Gen4 | Switch (×4), per-outlet PM (V/A/W/kWh), 3680W total |
+| EM Mini Gen4 | PM1 (mini energy meter, metering only) |
+| EM Gen4 | EM (clamp), dry contact for contactor, 16MB local storage — rolling out 2026 |
+| Flood Gen4 | Flood (leak detector + extendable sensor cable), DevicePower |
+| Flood S Gen4 | Flood (disc floor sensor, battery) — rolling out 2026 |
+| Presence Gen4 | mmWave radar presence (60–64 GHz): up to 6 people, 10 zones, 42 m², still-detection; Illuminance; USB-C powered |
 | Pro 1PM 40A Gen4 | Input, Switch (PM, 40A), Ethernet |
+| 1 / 1PM / 2PM / 1 Mini Gen4 ANZ | Regional AU/NZ variants — distinct model IDs, identical components to EU counterparts |
+
+### Other Families (2025–2026)
+
+| Product | Notes |
+|---------|-------|
+| **Shelly X MOD1 / XT1** | OEM embeddable module platform (ESP-Shelly-C38F, 8 I/O, UART, sensor add-ons); XT1 hosts custom apps. Appears in HA (if at all) as a generic Shelly-RPC device. |
+| **Cury by Shelly** | Smart fragrance diffuser (dual compartments, scheduling); new "Cury" product line, EU launch Feb 2026. |
+| **Shelly Wave line** | Z-Wave (Qubino-based) — uses HA's Z-Wave integration, NOT the Shelly integration; out of scope for this card. |
+
+*Device tables refreshed 2026-07 from kb.shelly.cloud (Gen3/Gen4/Mini Gen4/BLE device indexes), shelly.com product pages, and press coverage of the CES 2025 / Light+Building 2026 announcements. Items marked "rolling out" or "unverified" had no full KB/API page yet at refresh time.*
 
 ---
 
@@ -869,6 +947,10 @@ The BLU line consists of battery-operated, low-power devices using BLE radio wit
 | **BLU Wall Switch 4 ZB** | — | Wall remote + Zigbee | Dual BLE+Zigbee |
 | **BLU H&T ZB** | — | T+H sensor + Zigbee | Dual BLE+Zigbee |
 | **BLU H&T Display ZB** | SBHT-103C | T+H+Lux + Display + Zigbee | Temperature, humidity, illuminance, e-ink display |
+| **BLU Button Tough 1** | — | Rugged 1-button remote (BLE-only sibling of the ZB variant) | Press events |
+| **BLU Motion ZB** | — | PIR motion + lux + Zigbee | Motion, illuminance, dual BLE+Zigbee |
+| **BLU Door/Window ZB** | — | Contact sensor + Zigbee | Open/closed, dual BLE+Zigbee |
+| **BLU Remote Control ZB** | — | Multi-button remote + Zigbee | Button events, dual BLE+Zigbee |
 
 ### BTHome Object IDs (commonly used)
 
