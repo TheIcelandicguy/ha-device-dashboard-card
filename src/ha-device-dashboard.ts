@@ -22,7 +22,7 @@ import { renderDetailSheet } from './detail/detail-sheet';
 import {
   getAllDevices, getDeviceProfile,
   getIntegrationLabel, isPrivateIp, PROFILE_DEFAULT_BLOCKS, GRAPH_DC_LABELS, GRAPH_SENSOR_DEFS,
-  HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS,
+  HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, downsamplePoints,
   formatPower, formatEnergy, formatVoltage, formatCurrent, formatTemp,
   formatUptime, formatApparentPower, formatReactivePower,
   formatFrequency, formatHumidity, formatIlluminance, formatPpm, formatPercent,
@@ -138,18 +138,43 @@ export class HADeviceDashboard extends LitElement {
     const devices = this._cachedDevices;
     if (!devices) return true;
 
-    // Re-render only if a state for one of OUR entities actually changed
+    // Re-render only if a state for one of OUR entities actually changed.
+    // Interactive domains (switch/light/cover/…) render immediately; pure
+    // sensor churn (Shelly power sensors push every second or two) is
+    // coalesced to at most one render per THROTTLE_MS — otherwise a large
+    // fleet re-renders the whole card near-continuously.
+    const THROTTLE_MS = 2000;
+    let sensorChanged = false;
     for (const dev of devices) {
       const ents = dev.entities;
       if (!ents) continue;
       for (const e of ents) {
         const id = e.entity_id;
         if (!id) continue;
-        if (oldHass.states[id] !== this.hass.states[id]) return true;
+        if (oldHass.states[id] !== this.hass.states[id]) {
+          if (e.domain !== 'sensor') return true;
+          sensorChanged = true;
+        }
       }
+    }
+    if (!sensorChanged) return false;
+    const now = Date.now();
+    if (now - this._lastSensorRender >= THROTTLE_MS) {
+      this._lastSensorRender = now;
+      return true;
+    }
+    if (this._sensorRenderTimer == null) {
+      this._sensorRenderTimer = window.setTimeout(() => {
+        this._sensorRenderTimer = null;
+        this._lastSensorRender = Date.now();
+        this.requestUpdate();
+      }, THROTTLE_MS - (now - this._lastSensorRender));
     }
     return false;
   }
+
+  private _lastSensorRender = 0;
+  private _sensorRenderTimer: number | null = null;
 
   getCardSize() { return 6; }
 
@@ -163,6 +188,10 @@ export class HADeviceDashboard extends LitElement {
     this._graphFetching.clear();
     this._graphFetchedAt.clear();
     this._graphData = new Map();
+    if (this._sensorRenderTimer != null) {
+      clearTimeout(this._sensorRenderTimer);
+      this._sensorRenderTimer = null;
+    }
   }
 
   // ── Device data ───────────────────────────────────────────────────────────
@@ -871,7 +900,9 @@ export class HADeviceDashboard extends LitElement {
     const key = this._gk(entityId, h);
     if (this._graphFetching.has(key)) return;
     const age = Date.now() - (this._graphFetchedAt.get(key) ?? 0);
-    if (age < 5 * 60_000 && this._graphData.has(key)) return;
+    // Long ranges change slowly — no point refetching a 7d/30d series every 5 minutes.
+    const ttl = h >= 168 ? 30 * 60_000 : 5 * 60_000;
+    if (age < ttl && this._graphData.has(key)) return;
     if (!this._fetchQueue.includes(key)) {
       this._fetchQueue.push(key);
     }
@@ -909,21 +940,59 @@ export class HADeviceDashboard extends LitElement {
     keys.forEach(k => this._fetchGraphData(k));
   }
 
+  /** Long-range series from the recorder statistics API — 288 five-minute rows
+   *  for 24h (or hourly rows beyond 48h) instead of tens of thousands of raw
+   *  state changes. Returns null when the entity has no statistics (no
+   *  state_class) so the caller can fall back to raw history. */
+  private async _fetchStatistics(entityId: string, hours: number): Promise<Array<{ t: number; v: number }> | null> {
+    try {
+      const period = hours > 48 ? 'hour' : '5minute';
+      const rows = await (this.hass as any).callWS({
+        type: 'recorder/statistics_during_period',
+        start_time: new Date(Date.now() - hours * 3600_000).toISOString(),
+        statistic_ids: [entityId],
+        period,
+        types: ['mean', 'state', 'min', 'max'],
+      }) as Record<string, Array<{ start: number | string; mean?: number | null; state?: number | null; max?: number | null }>>;
+      const series = rows?.[entityId];
+      if (!series?.length) return null;
+      const points = series
+        .map(r => ({
+          t: typeof r.start === 'number' ? r.start : new Date(r.start).getTime(),
+          v: (r.mean ?? r.state ?? r.max) as number,
+        }))
+        .filter(p => p.v != null && !isNaN(p.v));
+      return points.length >= 2 ? points : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Raw state-change history via REST — only for short ranges or as a
+   *  fallback when an entity has no recorder statistics. */
+  private async _fetchRawHistory(entityId: string, hours: number): Promise<Array<{ t: number; v: number }>> {
+    const start = new Date(Date.now() - hours * 3600_000);
+    const path = `history/period/${start.toISOString()}?filter_entity_id=${entityId}&minimal_response=true&no_attributes=true`;
+    const raw = await (this.hass as any).callApi('GET', path) as Array<Array<{ state: string; last_changed: string }>>;
+    const series = raw?.[0] ?? [];
+    const points = series.map(p => ({ t: new Date(p.last_changed).getTime(), v: parseFloat(p.state) })).filter(p => !isNaN(p.v));
+    if (points.length === 1) {
+      const live = parseFloat(this.hass.states[entityId]?.state ?? '');
+      points.push({ t: Date.now(), v: isNaN(live) ? points[0].v : live });
+    }
+    return points;
+  }
+
   /** Fetch history data. Key is compound "entityId::hours". */
   private async _fetchGraphData(key: string) {
     this._graphFetching.add(key);
     const [entityId, hoursStr] = key.split('::');
     const hours = parseInt(hoursStr, 10) || 24;
     try {
-      const start = new Date(Date.now() - hours * 3600_000);
-      const path = `history/period/${start.toISOString()}?filter_entity_id=${entityId}&minimal_response=true&no_attributes=true`;
-      const raw = await (this.hass as any).callApi('GET', path) as Array<Array<{ state: string; last_changed: string }>>;
-      const series = raw?.[0] ?? [];
-      let points = series.map(p => ({ t: new Date(p.last_changed).getTime(), v: parseFloat(p.state) })).filter(p => !isNaN(p.v));
-      if (points.length === 1) {
-        const live = parseFloat(this.hass.states[entityId]?.state ?? '');
-        points.push({ t: Date.now(), v: isNaN(live) ? points[0].v : live });
-      }
+      // Statistics first for 24h+ ranges (tiny payload); raw history otherwise.
+      let points = hours >= 24 ? await this._fetchStatistics(entityId, hours) : null;
+      if (!points) points = await this._fetchRawHistory(entityId, hours);
+      points = downsamplePoints(points);
       const next = new Map(this._graphData); next.set(key, points);
       this._graphData = next;
     } catch (err) {

@@ -378,6 +378,43 @@ export function formatPercent(v: number): string {
   return `${Math.round(v)} %`;
 }
 
+// ─── Graph data helpers ────────────────────────────────────────────────────────
+
+/**
+ * Downsample a time series to ≤ 2×target points while preserving peaks:
+ * points are bucketed by time and each bucket keeps its min and max sample.
+ * Raw Shelly power sensors can produce tens of thousands of points per day —
+ * rendering those into SVG polylines is what melts the tab.
+ */
+export function downsamplePoints(
+  points: Array<{ t: number; v: number }>,
+  target = 240,
+): Array<{ t: number; v: number }> {
+  if (points.length <= target * 2) return points;
+  const t0 = points[0].t;
+  const span = (points[points.length - 1].t - t0) || 1;
+  const out: Array<{ t: number; v: number }> = [];
+  let bucket = 0;
+  let bMin = points[0], bMax = points[0];
+  const flush = () => {
+    if (bMin === bMax) out.push(bMin);
+    else if (bMin.t <= bMax.t) out.push(bMin, bMax);
+    else out.push(bMax, bMin);
+  };
+  for (const p of points) {
+    const idx = Math.min(target - 1, Math.floor(((p.t - t0) / span) * target));
+    if (idx !== bucket) {
+      flush();
+      bucket = idx; bMin = p; bMax = p;
+    } else {
+      if (p.v < bMin.v) bMin = p;
+      if (p.v > bMax.v) bMax = p;
+    }
+  }
+  flush();
+  return out;
+}
+
 // ─── Network helpers ───────────────────────────────────────────────────────────
 
 /** Returns true only for RFC-1918 / link-local addresses */
