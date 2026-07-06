@@ -494,7 +494,7 @@ export class HADeviceDashboardEditor extends LitElement {
   }
 
   // ── Area style helpers ──────────────────────────────────────────────────────
-  private _setAreaStyle(n: string, key: keyof AreaStyle, value: string|number|undefined) {
+  private _setAreaStyle(n: string, key: keyof AreaStyle, value: string|number|string[]|undefined) {
     const cur: AreaStyle = { ...(this._config.area_styles?.[n] ?? {}) };
     if (value === undefined || value === '') delete cur[key];
     else (cur as any)[key] = value;
@@ -507,6 +507,47 @@ export class HADeviceDashboardEditor extends LitElement {
     const all = { ...(this._config.area_styles ?? {}) };
     delete all[n];
     this._set('area_styles', Object.keys(all).length ? all : undefined);
+  }
+
+  /** Compact sensor-chip whitelist picker with inherit semantics.
+   *  selected = undefined → inheriting (shows the inherited set greyed);
+   *  onChange(undefined) clears the override; empty selections normalize to undefined. */
+  private _chipPicker(
+    selected: string[] | undefined,
+    inheritedSel: string[] | undefined,
+    inheritedFrom: string,
+    onChange: (next: string[] | undefined) => void,
+  ): TemplateResult {
+    const inherited = inheritedSel ?? [];
+    const isOverride = selected !== undefined;
+    // Effective set shown: override, else inherited global (empty = all keys on)
+    const allKeys = SENSOR_GROUPS.flatMap(g => g.items.map(i => i.key));
+    const effective = new Set(isOverride ? selected : (inherited.length ? inherited : allKeys));
+    const toggle = (key: string) => {
+      const base = isOverride ? [...selected] : [...effective];
+      const next = base.includes(key) ? base.filter(k => k !== key) : [...base, key];
+      // If the result matches "everything on", store undefined-equivalent full list only when overriding;
+      // an emptied selection clears the override entirely.
+      onChange(next.length ? next : undefined);
+    };
+    return html`
+      <div class="chip-picker">
+        <div class="chip-picker-hdr">
+          <span class="chip-picker-state">${isOverride ? 'Custom selection' : `Inheriting from ${inheritedFrom}`}</span>
+          ${isOverride
+            ? html`<button class="color-reset" @click=${() => onChange(undefined)}>↺ Inherit</button>`
+            : html`<button class="color-reset" @click=${() => onChange([...effective])}>Customize</button>`}
+        </div>
+        ${SENSOR_GROUPS.map(grp => html`
+          <div class="chip-picker-grp">
+            <span class="chip-picker-grp-lbl" style="color:${grp.iconColor}">${grp.icon} ${grp.group}</span>
+            <div class="pill-grp">
+              ${grp.items.map(item => html`
+                <span class="pill ${effective.has(item.key) ? 'on' : ''} ${isOverride ? '' : 'dim'}"
+                  @click=${() => toggle(item.key)}>${item.label}</span>`)}
+            </div>
+          </div>`)}
+      </div>`;
   }
 
   private _clearDeviceStyle(deviceId: string) {
@@ -871,6 +912,7 @@ export class HADeviceDashboardEditor extends LitElement {
     tile_icon_off: string | undefined;
     tile_icon_speed: number | undefined;
     entity_animations: Record<string, { on?: string; off?: string; speed?: number }> | undefined;
+    sensors: string[] | undefined;
   }>) {
     const current = this._config.device_styles?.[deviceId] ?? {};
     const next: Record<string, unknown> = { ...current, ...patch };
@@ -882,6 +924,7 @@ export class HADeviceDashboardEditor extends LitElement {
     if (next['tile_icon_off'] === undefined) delete next['tile_icon_off'];
     if (next['tile_icon_speed'] === undefined) delete next['tile_icon_speed'];
     if (next['entity_animations'] === undefined) delete next['entity_animations'];
+    if (next['sensors'] === undefined) delete next['sensors'];
     const allStyles = { ...(this._config.device_styles ?? {}), [deviceId]: next };
     if (!Object.keys(next).length) delete allStyles[deviceId];
     this._set('device_styles', Object.keys(allStyles).length ? allStyles : undefined);
@@ -1033,6 +1076,16 @@ export class HADeviceDashboardEditor extends LitElement {
             </span>`;
           })}
         </div>
+        <div class="field-lbl" style="margin:6px 0 4px">Sensor chips</div>
+        ${(() => {
+          const areaSel = dev?.area ? this._config.area_styles?.[dev.area]?.sensors : undefined;
+          return this._chipPicker(
+            (devStyle as any).sensors,
+            areaSel?.length ? areaSel : this._config.sensors,
+            areaSel?.length ? `area (${dev?.area})` : 'global',
+            (next) => this._setDeviceStyle(deviceId, { sensors: next }),
+          );
+        })()}
         ${switchEnts.length ? html`
           <div class="field-lbl" style="margin:6px 0 4px">Entity animations</div>
           <div class="ent-anim-header">
@@ -1168,6 +1221,14 @@ export class HADeviceDashboardEditor extends LitElement {
         ${colorRow('Gradient end', 'headerBgColor2', '#0f3460')}
         ${colorRow('Header text', 'textColor', '#f4601e')}
         ${slRow('Font size', 'fontSize', 8, 32, 1, 12, 'px')}
+
+        ${sectionLbl('Sensor chips')}
+        ${this._chipPicker(
+          st.sensors,
+          this._config.sensors,
+          'global',
+          (next) => this._setAreaStyle(name, 'sensors', next),
+        )}
 
         ${sectionLbl('ON / OFF buttons')}
         ${(() => {
@@ -1722,15 +1783,21 @@ export class HADeviceDashboardEditor extends LitElement {
           <span class="sw-t"></span><span class="sw-b"></span></label>
       </div>
       <div class="tog-row" style="border:none;padding:4px 0 0">
-        <div class="tog-lbl">Show cloud chips</div>
-        <label class="sw"><input type="checkbox" .checked=${c.header_show_cloud !== false}
-          @change=${(e:Event) => this._set('header_show_cloud', (e.target as HTMLInputElement).checked ? undefined : false)}>
+        <div class="tog-lbl">Show cloud chips (extra status row)</div>
+        <label class="sw"><input type="checkbox" .checked=${c.header_show_cloud === true}
+          @change=${(e:Event) => this._set('header_show_cloud', (e.target as HTMLInputElement).checked ? true : undefined)}>
           <span class="sw-t"></span><span class="sw-b"></span></label>
       </div>
       <div class="tog-row" style="border:none;padding:4px 0 0">
         <div class="tog-lbl">Show glow orbs</div>
-        <label class="sw"><input type="checkbox" .checked=${c.header_show_orbs !== false}
-          @change=${(e:Event) => this._set('header_show_orbs', (e.target as HTMLInputElement).checked ? undefined : false)}>
+        <label class="sw"><input type="checkbox" .checked=${(c.header_show_orbs ?? c.effects ?? false) === true}
+          @change=${(e:Event) => this._set('header_show_orbs', (e.target as HTMLInputElement).checked ? true : undefined)}>
+          <span class="sw-t"></span><span class="sw-b"></span></label>
+      </div>
+      <div class="tog-row" style="border:none;padding:4px 0 0">
+        <div class="tog-lbl">Ambient effects (pulse, glow, blur)</div>
+        <label class="sw"><input type="checkbox" .checked=${c.effects === true}
+          @change=${(e:Event) => this._set('effects', (e.target as HTMLInputElement).checked ? true : undefined)}>
           <span class="sw-t"></span><span class="sw-b"></span></label>
       </div>
       <!-- Background colors -->
@@ -2200,6 +2267,7 @@ export class HADeviceDashboardEditor extends LitElement {
     const selected = c.sensors ?? [];
 
     return html`
+      <div class="hint" style="margin:4px 2px 8px">Global default — override per room (Layout & Style → room) or per device (Rooms & devices).</div>
       ${SENSOR_GROUPS.map(grp => {
         const grpKeys = grp.items.map(i => i.key);
         const selectedCount = grpKeys.filter(k => selected.includes(k)).length;
@@ -2415,6 +2483,18 @@ export class HADeviceDashboardEditor extends LitElement {
     .pill { font-size:11px; font-weight:500; padding:4px 11px; border-radius:20px; border:1px solid var(--border2); color:var(--t2); cursor:pointer; transition:all .15s; user-select:none; background:var(--s2); }
     .pill:hover { border-color:var(--accent); color:var(--accent); }
     .pill.on { background:var(--accentbg); border-color:var(--accentbdr); color:var(--accent); }
+    .pill.dim { opacity:.55; }
+    .pill.dim:hover { opacity:1; }
+
+    /* ── Sensor-chip picker (per-device / per-area overrides) ── */
+    .chip-picker { display:flex; flex-direction:column; gap:8px; padding:8px 10px; background:var(--s2); border:1px solid var(--border); border-radius:8px; }
+    .chip-picker-hdr { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .chip-picker-state { font-size:11px; color:var(--t3); font-style:italic; }
+    .chip-picker-grp { display:flex; flex-direction:column; gap:4px; }
+    .chip-picker-grp-lbl { font-size:10px; font-weight:600; letter-spacing:.04em; }
+
+    /* ── Hint line ── */
+    .hint { font-size:11px; color:var(--t3); font-style:italic; }
 
     /* ── Subgroup label (inside sections) ── */
     .subgroup-lbl { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--t3); opacity:0.8; margin:10px 0 4px; padding-top:6px; border-top:1px solid var(--border); }

@@ -123,13 +123,13 @@ export const detailCss = css`
       padding: 8px 4px; background: rgba(255, 255, 255, .04); border-radius: 6px;
     }
     .ds-sensor-val { font-size: .95em; font-weight: 700; color: var(--sc-text-primary); font-variant-numeric: tabular-nums; }
-    .ds-sensor-label { font-size: .62em; color: var(--sc-text-muted); text-transform: uppercase; letter-spacing: .05em; margin-top: 2px; }
+    .ds-sensor-label { font-size: var(--fs-xs); color: var(--sc-text-muted); letter-spacing: .02em; margin-top: 2px; }
 
     .ds-diag-grid {
       display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 6px;
     }
     .ds-diag-item { display: flex; flex-direction: column; gap: 2px; padding: 6px 10px; background: rgba(255, 255, 255, .04); border-radius: 6px; }
-    .ds-diag-label { font-size: .62em; color: var(--sc-text-muted); text-transform: uppercase; letter-spacing: .04em; }
+    .ds-diag-label { font-size: var(--fs-xs); color: var(--sc-text-muted); letter-spacing: .02em; }
     .ds-diag-val { font-size: .85em; color: var(--sc-text-primary); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .ds-diag-alert .ds-diag-val { color: #fca5a5; }
 
@@ -169,7 +169,7 @@ export const detailCss = css`
     .ds-climate-info { display: flex; justify-content: space-around; align-items: center; gap: 14px; padding: 6px 0; }
     .ds-climate-current, .ds-climate-target { display: flex; flex-direction: column; align-items: center; gap: 4px; }
     .ds-climate-target { flex-direction: row; gap: 8px; }
-    .ds-climate-label { font-size: .68em; color: var(--sc-text-muted); text-transform: uppercase; letter-spacing: .06em; }
+    .ds-climate-label { font-size: var(--fs-xs); color: var(--sc-text-muted); letter-spacing: .02em; }
     .ds-climate-val { font-size: 1.3em; font-weight: 700; color: var(--sc-text-primary); font-variant-numeric: tabular-nums; }
     .ds-climate-target-val { font-size: 1.5em; color: var(--ds-accent, var(--sc-accent)); min-width: 80px; text-align: center; }
     .ds-temp-btn {

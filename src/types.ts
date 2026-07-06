@@ -129,6 +129,8 @@ export interface AreaStyle {
   buttonShape?: ButtonShape;
   buttonVariant?: ButtonVariant;
   buttonSize?: ButtonSize;
+  /** Sensor chip keys for tiles in this area. undefined = inherit global `sensors`. */
+  sensors?: string[];
 }
 
 /**
@@ -245,6 +247,8 @@ export interface DeviceStyle {
   tile_icon_speed?: number;
   /** Per-entity state animations, keyed by entity_id */
   entity_animations?: Record<string, { on?: EntityAnimationType; off?: EntityAnimationType; speed?: number }>;
+  /** Sensor chip keys for this device. undefined = inherit area/global `sensors`. */
+  sensors?: string[];
 }
 
 /** Per-view filter — all fields AND-ed; within a list values OR-ed. */
@@ -323,7 +327,9 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   header_show_title?: boolean;         // default true
   header_show_stats?: boolean;         // default true
   header_show_cloud?: boolean;         // default true
-  header_show_orbs?: boolean;          // default true
+  header_show_orbs?: boolean;          // default: follows `effects`
+  /** Ambient visual effects: header orbs, pulse/glow animations, backdrop blur, hover shadows. Default: false */
+  effects?: boolean;
   card_bg_image?: string;
   card_bg_image_size?: 'cover' | 'contain' | 'stretch';
   show_power_bar?: boolean;            // default: false

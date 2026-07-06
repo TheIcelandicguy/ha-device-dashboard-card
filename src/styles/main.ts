@@ -36,6 +36,11 @@ export const mainCss = css`
       --sc-font-family:     'DM Sans', sans-serif;
       --sc-text-transform:  uppercase;
       --sc-text-scale:      1;
+      /* Type scale — every tile font size derives from these four steps */
+      --fs-xs: calc(var(--sc-text-scale, 1) * 0.72em);
+      --fs-sm: calc(var(--sc-text-scale, 1) * 0.82em);
+      --fs-md: calc(var(--sc-text-scale, 1) * 0.95em);
+      --fs-lg: calc(var(--sc-text-scale, 1) * 1.2em);
       --sc-card-bg:         var(--ha-card-background, var(--card-background-color, #1c1c1e));
       --sc-card-bg-image:   none;
       --sc-card-bg-image-sz:cover;
@@ -119,6 +124,12 @@ export const mainCss = css`
     .dash-stats { display:flex; gap:8px; align-items:center; position:relative; z-index:1; flex-shrink:0; }
 
     .stat { font-size:0.78em; padding:3px 10px; border-radius:20px; font-weight:600; backdrop-filter:blur(4px); }
+
+    .stat.online, .stat.offline-count { cursor:pointer; transition:all .15s; }
+
+    .stat.online:hover, .stat.offline-count:hover { opacity:.8; }
+
+    .stat.active { filter:brightness(1.3); box-shadow:0 0 8px currentColor; }
 
     .stat.online   { background:var(--sc-online-bg);  color:var(--sc-online-color); border:1px solid var(--sc-online-border); }
 
@@ -219,7 +230,7 @@ export const mainCss = css`
 
     .area-chip { display:flex; align-items:center; gap:3px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.08); border-radius:4px; padding:1px 5px; }
 
-    .area-chip .tsc-lbl { font-size:.65em; color:var(--secondary-text-color); }
+    .area-chip .tsc-lbl { font-size:var(--fs-xs); color:var(--secondary-text-color); }
 
     .area-chip .tsc-val { font-size:.72em; font-weight:600; color:var(--sc-text-primary,var(--primary-text-color)); }
 
@@ -316,7 +327,7 @@ export const mainCss = css`
 
     .tile-name { font-size:calc(var(--sc-text-scale,1) * .88em); font-weight:600; color:var(--sc-text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
 
-    .update-dot { color:var(--sc-update-color); font-size:.55em; flex-shrink:0; animation:blink 2s step-end infinite; }
+    .update-dot { color:var(--sc-update-color); font-size:.65em; flex-shrink:0; animation:blink 2s step-end infinite; }
 
     @keyframes blink { 50%{opacity:.3} }
 
@@ -741,24 +752,49 @@ export const mainCss = css`
     .ent-icon-lock2.on  { color:#7ecfff; --ipglow:rgba(126,207,255,0.55); animation:icon-pulse calc(2s / var(--ent-spd,1)) ease-in-out infinite; }
 
 
+    /* Legacy boxed chips — still used by area headers and the detail sheet */
     .tile-sensor-chips { display:flex; flex-wrap:wrap; gap:4px; margin:2px 0 0; min-width:0; }
 
     .tile-sensor-chip { display:flex; flex-direction:column; align-items:center; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.08); border-radius:6px; padding:2px 7px; min-width:38px; max-width:100%; overflow:hidden; }
 
-    .tsc-lbl { font-size:.6em; color:var(--sc-text-muted); text-transform:uppercase; letter-spacing:.03em; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .tsc-lbl { font-size:var(--fs-xs); color:var(--sc-text-muted); letter-spacing:.02em; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
-    .tsc-val { font-size:calc(var(--sc-text-scale,1) * .78em); color:var(--sc-text-primary); font-weight:500; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .tsc-val { font-size:var(--fs-sm); color:var(--sc-text-primary); font-weight:500; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
     .tile-sensor-chip.warn .tsc-val { color:var(--sc-accent); }
+
+    /* ── Three-tier tile stats ──────────────────────────────────── */
+    /* Primary: large unboxed values with inline units */
+    .tile-stats { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 14px; margin:4px 0 0; min-width:0; }
+
+    .stat-item { font-size:var(--fs-md); font-weight:600; color:var(--sc-text-primary); font-variant-numeric:tabular-nums; white-space:nowrap; display:inline-flex; align-items:baseline; gap:4px; }
+
+    .stat-item.warn { color:var(--sc-accent); }
+
+    .stat-lbl { font-size:var(--fs-xs); font-weight:500; color:var(--sc-text-muted); }
+
+    /* Electrical: one compound strip per channel */
+    .tile-elec-wrap { display:flex; flex-direction:column; gap:2px; margin:4px 0 0; min-width:0; }
+
+    .tile-elec { display:flex; align-items:baseline; gap:6px; font-size:var(--fs-sm); color:var(--sc-text-detail); font-variant-numeric:tabular-nums; background:var(--sc-tile-sensor-bg, rgba(255,255,255,.04)); border-radius:6px; padding:3px 8px; width:fit-content; max-width:100%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+
+    /* Diagnostics: single muted footer line */
+    .tile-diag { display:flex; align-items:baseline; gap:6px; margin-top:4px; padding-top:4px; border-top:1px solid rgba(255,255,255,.06); font-size:var(--fs-xs); color:var(--sc-text-muted); white-space:nowrap; overflow:hidden; min-width:0; }
+
+    .tile-diag > span { overflow:hidden; text-overflow:ellipsis; }
+
+    .tile-diag .warn { color:var(--sc-accent); }
+
+    .sep { opacity:.4; flex-shrink:0; }
 
 
     .tile-bot { display:flex; align-items:center; justify-content:space-between; gap:4px; min-width:0; }
 
-    .tile-power { font-size:.95em; font-weight:700; color:var(--sc-power-color); font-variant-numeric:tabular-nums; }
+    .tile-power { font-size:var(--fs-md); font-weight:700; color:var(--sc-power-color); font-variant-numeric:tabular-nums; }
 
     .tile-badges { display:flex; gap:4px; align-items:center; margin-left:auto; }
 
-    .type-badge,.gen-badge,.int-badge-tile { font-size:9px; font-weight:600; letter-spacing:.03em; padding:2px 5px; border-radius:4px; line-height:1.4; white-space:nowrap; }
+    .type-badge,.gen-badge,.int-badge-tile { font-size:10px; font-weight:600; letter-spacing:.03em; padding:2px 5px; border-radius:4px; line-height:1.4; white-space:nowrap; }
 
     .type-relay       { background:rgba(99,102,241,.25);  color:#a5b4fc; }
 
@@ -795,7 +831,7 @@ export const mainCss = css`
     .tile-ui-link:hover { opacity:1; }
 
 
-    .alert-badge { font-size:9px; font-weight:700; padding:2px 5px; border-radius:4px; white-space:nowrap; animation:blink 1.5s step-end infinite; }
+    .alert-badge { font-size:10px; font-weight:700; padding:2px 5px; border-radius:4px; white-space:nowrap; animation:blink 1.5s step-end infinite; }
 
     .alert-overtemp  { background:rgba(251,146,60,.25); color:#fdba74; }
 
@@ -847,7 +883,7 @@ export const mainCss = css`
 
     .dim-slider:hover::-moz-range-thumb { transform:scale(1.15); }
 
-    .dim-pct { font-size:.68em; font-weight:600; color:var(--sc-text-secondary); min-width:30px; text-align:right; }
+    .dim-pct { font-size:var(--fs-sm); font-weight:600; color:var(--sc-text-secondary); min-width:30px; text-align:right; }
 
     .color-swatch { width:30px; height:20px; border-radius:5px; border:none; cursor:pointer; padding:1px; background:transparent; flex-shrink:0; }
 
@@ -1031,7 +1067,7 @@ export const mainCss = css`
 
     .sensor-chip { display:flex; align-items:center; gap:5px; background:var(--sc-sensor-bg); border-radius:20px; padding:4px 10px; white-space:nowrap; }
 
-    .sensor-label { font-size:.65em; text-transform:uppercase; letter-spacing:.05em; color:var(--sc-text-muted); }
+    .sensor-label { font-size:var(--fs-xs); letter-spacing:.02em; color:var(--sc-text-muted); }
 
     .sensor-value { font-size:calc(var(--sc-text-scale,1) * .85em); font-weight:600; color:var(--sc-text-value); font-variant-numeric:tabular-nums; }
 
@@ -1055,7 +1091,7 @@ export const mainCss = css`
 
     .ent-row { display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:6px; background:var(--sc-tile-bg); min-height:28px; }
 
-    .ent-domain { font-size:.62em; font-weight:700; text-transform:uppercase; letter-spacing:.04em; min-width:72px; flex-shrink:0; color:var(--sc-text-muted); }
+    .ent-domain { font-size:var(--fs-xs); font-weight:600; letter-spacing:.02em; min-width:72px; flex-shrink:0; color:var(--sc-text-muted); }
 
     .ent-name { font-size:.82em; color:var(--sc-text-detail); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
@@ -1071,7 +1107,7 @@ export const mainCss = css`
 
     .spark-row { display:flex; align-items:center; gap:6px; min-height:32px; }
 
-    .spark-lbl { font-size:.62em; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--sc-text-muted); width:68px; flex-shrink:0; text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .spark-lbl { font-size:var(--fs-xs); font-weight:600; letter-spacing:.02em; color:var(--sc-text-muted); width:68px; flex-shrink:0; text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
     .spark-svg-wrap { flex:1; position:relative; min-width:0; }
 
@@ -1102,7 +1138,7 @@ export const mainCss = css`
 
     .spark-time-spacer { width:68px; flex-shrink:0; }
 
-    .spark-time-labels { flex:1; display:flex; justify-content:space-between; font-size:.55em; color:var(--sc-text-muted); opacity:.65; user-select:none; }
+    .spark-time-labels { flex:1; display:flex; justify-content:space-between; font-size:.62em; color:var(--sc-text-muted); opacity:.65; user-select:none; }
 
     .spark-time-end { min-width:44px; }
 
@@ -1213,4 +1249,17 @@ export const mainCss = css`
       pointer-events:none;
       white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;
     }
+
+
+    /* ── Ambient effects gate ──────────────────────────────────────
+       Applied when config.effects is off (the default). Disables purely
+       decorative motion/glow; functional cues (alert blink, fan spin,
+       explicit per-device icon animations) stay live. */
+    .no-fx .dot.online { animation:none; box-shadow:none; }
+
+    .no-fx .tile-icon-relay.on { animation:none; filter:none; }
+
+    .no-fx .stat, .no-fx .cloud-chip { backdrop-filter:none; }
+
+    .no-fx .tile:hover { transform:none; box-shadow:none; }
 `;

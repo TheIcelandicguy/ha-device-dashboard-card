@@ -59,7 +59,19 @@ export interface InputChannel {
   lastChanged: string | null;
 }
 export interface FirmwareInfo { entityId: string; current: string; newVersion: string | undefined }
-export interface SensorChip { label: string; value: string; warn?: boolean }
+/** Visual tier for tile chip rendering. Defaults to 'primary' when unset. */
+export type SensorChipTier = 'primary' | 'electrical' | 'diag';
+export interface SensorChip {
+  label: string;
+  value: string;
+  warn?: boolean;
+  /** Sensor key ('power', 'rssi', …) — matches editor SENSOR_GROUPS keys */
+  key?: string;
+  /** Rendering tier — primary (large), electrical (compound strip), diag (muted footer) */
+  tier?: SensorChipTier;
+  /** Channel label for multi-channel devices (e.g. '1', '2') */
+  ch?: string;
+}
 export interface VirtualControl {
   entityId: string;
   domain: 'select' | 'number' | 'button' | 'text' | 'switch';

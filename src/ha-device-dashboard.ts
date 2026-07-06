@@ -9,7 +9,7 @@ import { tilesCss } from './styles/tiles';
 import { detailCss } from './styles/detail';
 import type {
   TileCtx, TrvInfo, CoverInfo, ValveInfo, GraphEntity,
-  FirmwareInfo, SensorChip, VirtualControl, InputChannel, DeviceAlert,
+  FirmwareInfo, SensorChip, SensorChipTier, VirtualControl, InputChannel, DeviceAlert,
 } from './tiles/tile-context';
 import { renderClimateControlTile } from './tiles/climate-control';
 import { renderCoverControlTile } from './tiles/cover-control';
@@ -23,7 +23,7 @@ import {
   getAllDevices, getDeviceProfile,
   getIntegrationLabel, isPrivateIp, PROFILE_DEFAULT_BLOCKS, GRAPH_DC_LABELS, GRAPH_SENSOR_DEFS,
   formatPower, formatEnergy, formatVoltage, formatCurrent, formatTemp,
-  formatUptime, rssiToQuality, formatApparentPower, formatReactivePower,
+  formatUptime, formatApparentPower, formatReactivePower,
   formatFrequency, formatHumidity, formatIlluminance, formatPpm, formatPercent,
 } from './helpers';
 import { renderAnimSvg } from './anim-icons';
@@ -58,7 +58,7 @@ export class HADeviceDashboard extends LitElement {
   @state() private _valveDragPos: number | null = null;
   @state() private _trvDragTemp: number | null = null;
   private _trvBtnTimer: ReturnType<typeof setTimeout> | null = null;
-  @state() private _cloudDetailOpen: 'on' | 'off' | 'unavailable' | null = null;
+  @state() private _cloudDetailOpen: 'on' | 'off' | 'unavailable' | 'dev-on' | 'dev-off' | null = null;
   @state() private _detailDevice: string | null = null;
   @state() private _detailHistoryRange: 24 | 168 | 720 = 24;
   @state() private _activeViewId: string | null = null;
@@ -359,7 +359,8 @@ export class HADeviceDashboard extends LitElement {
     if (st.header_stat_online)           s['--sc-hstat-online']        = st.header_stat_online;
     if (st.header_stat_power)            s['--sc-hstat-power']         = st.header_stat_power;
     if (st.header_stat_offline)          s['--sc-hstat-offline']       = st.header_stat_offline;
-    if (this._config.header_show_orbs === false) s['--sc-header-orb-opacity'] = '0';
+    // Orbs are opt-in: shown only when explicitly enabled or ambient effects are on.
+    if (!(this._config.header_show_orbs ?? this._config.effects ?? false)) s['--sc-header-orb-opacity'] = '0';
     const headerTransparency = this._config.header_opacity ?? 100;
     if (headerTransparency < 100) s['--sc-header-opacity'] = String(headerTransparency / 100);
 
@@ -585,11 +586,26 @@ export class HADeviceDashboard extends LitElement {
     return `${Math.floor(ms / 86_400_000)}d ago`;
   }
 
+  /** Chip visibility cascade: device override → area override → global filter. */
+  private _sensorSelection(device: HADevice): string[] | undefined {
+    const devSel = this._config.device_styles?.[device.device_id]?.sensors;
+    if (devSel?.length) return devSel;
+    const areaSel = device.area ? this._config.area_styles?.[device.area]?.sensors : undefined;
+    if (areaSel?.length) return areaSel;
+    return this._config.sensors;
+  }
+
   private _getSensors(device: HADevice): SensorChip[] {
-    const allowed = this._config.sensors?.length ? new Set(this._config.sensors) : null;
+    const sel = this._sensorSelection(device);
+    const allowed = sel?.length ? new Set(sel) : null;
     const show = (k: string) => !allowed || allowed.has(k);
-    const result: Array<{ label: string; value: string; warn?: boolean }> = [];
+    const result: SensorChip[] = [];
     const seen = new Set<string>();
+    // Rendering tier per sensor key; alert keys are decided at push time by state.
+    const ELEC_TIER = new Set(['voltage', 'current', 'frequency', 'power_factor', 'apparent_power', 'reactive_power']);
+    const DIAG_TIER = new Set(['ip', 'ssid', 'fw_version', 'mac', 'rssi', 'uptime', 'cloud', 'mqtt', 'eth']);
+    const tierOf = (k: string): SensorChipTier =>
+      ELEC_TIER.has(k) ? 'electrical' : DIAG_TIER.has(k) ? 'diag' : 'primary';
 
     // Pre-scan: find which electrical device_classes appear on more than one entity
     // so we can show per-channel labels for multi-channel devices (e.g. Shelly 2.5)
@@ -606,12 +622,13 @@ export class HADeviceDashboard extends LitElement {
     }
     const multiDcs = new Set([...dcIds.entries()].filter(([, ids]) => ids.length > 1).map(([dc]) => dc));
 
-    const push = (k: string, label: string, value: string, warn = false, entityId?: string) => {
+    const push = (k: string, label: string, value: string, warn = false, entityId?: string, tier?: SensorChipTier) => {
       // For multi-channel sensors, key by (device_class + channel label) so that two entities
       // mapping to the same channel slot (e.g. energy_0 and switch_0_energy) only show once,
       // while different channels (Ch 1, Ch 2) and unlabelled totals each get their own slot.
-      const key = (entityId && multiDcs.has(k)) ? `${k}_${this._chLabel(entityId)}` : k;
-      if (!seen.has(key)) { seen.add(key); result.push({ label, value, warn }); }
+      const ch = (entityId && multiDcs.has(k)) ? this._chLabel(entityId) : '';
+      const key = ch ? `${k}_${ch}` : k;
+      if (!seen.has(key)) { seen.add(key); result.push({ label, value, warn, key: k, tier: tier ?? tierOf(k), ch }); }
     };
 
     for (const e of device.entities) {
@@ -627,44 +644,44 @@ export class HADeviceDashboard extends LitElement {
         if (!dc && (id.endsWith('_firmware') || id.endsWith('_fw'))     && show('fw_version')) { push('fw_version', 'FW',       s.state); continue; }
         if (!dc && id.endsWith('_mac')                                  && show('mac'))        { push('mac',        'MAC',      s.state); continue; }
         const v = parseFloat(s.state); if (isNaN(v)) continue;
-        const ch = multiDcs.size ? this._chLabel(id) : '';
-        const chSufx = (k: string) => (multiDcs.has(k) && ch) ? ` ${ch}` : '';
-        if      (dc === 'power'           && show('power'))          push('power',          `Power${chSufx('power')}`,          formatPower(v),           false, id);
-        else if (dc === 'apparent_power'  && show('apparent_power')) push('apparent_power', `App.P${chSufx('apparent_power')}`, formatApparentPower(v),   false, id);
-        else if (dc === 'reactive_power'  && show('reactive_power')) push('reactive_power', `Re.P${chSufx('reactive_power')}`,  formatReactivePower(v),   false, id);
-        else if (dc === 'power_factor'    && show('power_factor'))   push('power_factor',   `PF${chSufx('power_factor')}`,      formatPercent(v),         false, id);
-        else if (dc === 'frequency'       && show('frequency'))      push('frequency',      `Freq${chSufx('frequency')}`,       formatFrequency(v),       false, id);
-        else if (dc === 'energy'          && show('energy'))         push('energy',         `Energy${chSufx('energy')}`,        formatEnergy(v),          false, id);
-        else if (dc === 'voltage'         && show('voltage'))        push('voltage',        `Volt${chSufx('voltage')}`,         formatVoltage(v),         false, id);
-        else if (dc === 'current'         && show('current'))        push('current',        `Curr${chSufx('current')}`,         formatCurrent(v),         false, id);
-        else if (dc === 'temperature'     && show('temperature'))    push('temperature',    'Temp',         formatTemp(v));
-        else if (dc === 'humidity'        && show('humidity'))       push('humidity',       'Hum',          formatHumidity(v));
-        else if (dc === 'illuminance'     && show('illuminance'))    push('illuminance',    'Light',        formatIlluminance(v));
-        else if (dc === 'carbon_dioxide'  && show('co2'))            push('co2',            'CO₂',          formatPpm(v));
-        else if (dc === 'gas'             && show('gas'))            push('gas',            'Gas',          `${v.toFixed(1)} %`);
-        else if (dc === 'battery'         && show('battery'))        push('battery',        'Batt',         formatPercent(v));
+        if      (dc === 'power'           && show('power'))          push('power',          'Power',  formatPower(v),         false, id);
+        else if (dc === 'apparent_power'  && show('apparent_power')) push('apparent_power', 'App.P',  formatApparentPower(v), false, id);
+        else if (dc === 'reactive_power'  && show('reactive_power')) push('reactive_power', 'Re.P',   formatReactivePower(v), false, id);
+        else if (dc === 'power_factor'    && show('power_factor'))   push('power_factor',   'PF',     formatPercent(v),       false, id);
+        else if (dc === 'frequency'       && show('frequency'))      push('frequency',      'Freq',   formatFrequency(v),     false, id);
+        else if (dc === 'energy'          && show('energy'))         push('energy',         'Energy', formatEnergy(v),        false, id);
+        else if (dc === 'voltage'         && show('voltage'))        push('voltage',        'Volt',   formatVoltage(v),       false, id);
+        else if (dc === 'current'         && show('current'))        push('current',        'Curr',   formatCurrent(v),       false, id);
+        else if (dc === 'temperature'     && show('temperature'))    push('temperature',    'Temp',   formatTemp(v));
+        else if (dc === 'humidity'        && show('humidity'))       push('humidity',       'Hum',    formatHumidity(v));
+        else if (dc === 'illuminance'     && show('illuminance'))    push('illuminance',    'Light',  formatIlluminance(v));
+        else if (dc === 'carbon_dioxide'  && show('co2'))            push('co2',            'CO₂',    formatPpm(v));
+        else if (dc === 'gas'             && show('gas'))            push('gas',            'Gas',    `${v.toFixed(1)} %`);
+        else if (dc === 'battery'         && show('battery'))        push('battery',        'Batt',   formatPercent(v));
         else if ((dc === 'signal_strength' || id.includes('rssi'))   && show('rssi'))
-          push('rssi', 'Wi-Fi', `${rssiToQuality(v)} (${v} dBm)`);
-        else if (id.includes('uptime')    && show('uptime'))         push('uptime',         'Uptime',       formatUptime(v));
+          push('rssi', 'Wi-Fi', `${v} dBm`);
+        else if (id.includes('uptime')    && show('uptime'))         push('uptime',         'Up',     formatUptime(v));
       } else if (e.domain === 'binary_sensor') {
+        // Alerts surface as primary chips while triggered, sink to the diag footer when clear.
         const on = s.state === 'on';
-        if      (dc === 'motion'   && show('motion'))    push('motion',    'Motion',    on ? 'Motion'    : 'Clear');
+        const alertTier = (w: boolean): SensorChipTier => (w ? 'primary' : 'diag');
+        if      (dc === 'motion'   && show('motion'))    push('motion',    'Motion',    on ? 'Motion'    : 'Clear',  on, undefined, alertTier(on));
         else if ((dc === 'door' || dc === 'window' || dc === 'opening') && show('door'))
-          push('door', 'Door', on ? 'Open' : 'Closed');
-        else if (dc === 'moisture' && show('flood'))     push('flood',     'Flood',     on ? 'Flooded'   : 'Dry', on);
-        else if (dc === 'smoke'    && show('smoke'))     push('smoke',     'Smoke',     on ? 'Smoke!'    : 'Clear', on);
-        else if (dc === 'gas'      && show('gas'))       push('gas',       'Gas',       on ? 'Gas!'      : 'Clear', on);
-        else if (dc === 'vibration' && show('vibration')) push('vibration', 'Vibr',    on ? 'Vibrating' : 'Clear');
+          push('door', 'Door', on ? 'Open' : 'Closed', false, undefined, alertTier(on));
+        else if (dc === 'moisture' && show('flood'))     push('flood',     'Flood',     on ? 'Flooded'   : 'Dry',    on, undefined, alertTier(on));
+        else if (dc === 'smoke'    && show('smoke'))     push('smoke',     'Smoke',     on ? 'Smoke!'    : 'Clear',  on, undefined, alertTier(on));
+        else if (dc === 'gas'      && show('gas'))       push('gas',       'Gas',       on ? 'Gas!'      : 'Clear',  on, undefined, alertTier(on));
+        else if (dc === 'vibration' && show('vibration')) push('vibration', 'Vibr',     on ? 'Vibrating' : 'Clear',  on, undefined, alertTier(on));
         else if ((dc === 'heat' || id.includes('overtemp')) && show('overtemp'))
-          push('overtemp', 'Overtemp', on ? 'Overtemp!' : 'OK', on);
+          push('overtemp', 'Overtemp', on ? 'Overtemp!' : 'OK', on, undefined, alertTier(on));
         else if ((dc === 'safety' || id.includes('overpower')) && show('overpower'))
-          push('overpower', 'Overpower', on ? 'Overpower!' : 'OK', on);
+          push('overpower', 'Overpower', on ? 'Overpower!' : 'OK', on, undefined, alertTier(on));
         else if (dc === 'connectivity' && id.includes('cloud') && show('cloud'))
-          push('cloud', 'Cloud', on ? 'Connected' : 'Offline', !on);
+          push('cloud', 'Cloud', on ? 'Connected' : 'Offline', !on, undefined, alertTier(!on));
         else if (dc === 'connectivity' && id.includes('mqtt') && show('mqtt'))
-          push('mqtt', 'MQTT', on ? 'Connected' : 'Offline', !on);
+          push('mqtt', 'MQTT', on ? 'Connected' : 'Offline', !on, undefined, alertTier(!on));
         else if (dc === 'connectivity' && id.includes('eth') && show('eth'))
-          push('eth', 'Ethernet', on ? 'Connected' : 'Offline', !on);
+          push('eth', 'Ethernet', on ? 'Connected' : 'Offline', !on, undefined, alertTier(!on));
       }
     }
     return result;
@@ -1891,8 +1908,10 @@ export class HADeviceDashboard extends LitElement {
 
   // ── Area section ──────────────────────────────────────────────────────────
 
-  private _getAreaChips(devices: HADevice[]): Array<{ label: string; value: string }> {
-    const allowed = this._config.sensors?.length ? new Set(this._config.sensors) : null;
+  private _getAreaChips(devices: HADevice[], areaName?: string): Array<{ label: string; value: string }> {
+    const areaSel = areaName ? this._config.area_styles?.[areaName]?.sensors : undefined;
+    const sel = areaSel?.length ? areaSel : this._config.sensors;
+    const allowed = sel?.length ? new Set(sel) : null;
     const show = (k: string) => !allowed || allowed.has(k);
     const acc: Record<string, { sum: number; count: number }> = {};
     const add = (k: string, v: number) => {
@@ -1988,7 +2007,7 @@ export class HADeviceDashboard extends LitElement {
     // Flat grid — no expanded panel
     const areaTileStyle: TileStyle | undefined = areaStyle?.tile_style;
     const gridItems = devices.map(d => this._renderTile(d, areaTileStyle));
-    const areaChips = this._getAreaChips(devices);
+    const areaChips = this._getAreaChips(devices, label);
 
     return html`
       <div class="area-section ${isClosed ? 'closed' : ''}" style=${styleMap(styleObj)}>
@@ -2240,7 +2259,7 @@ export class HADeviceDashboard extends LitElement {
       : nothing;
 
     return html`
-      <ha-card style=${styleMap(cardInlineStyles)} @click=${() => { if (this._cloudDetailOpen) this._cloudDetailOpen = null; }}>
+      <ha-card class=${(this._config.effects ?? false) ? '' : 'no-fx'} style=${styleMap(cardInlineStyles)} @click=${() => { if (this._cloudDetailOpen) this._cloudDetailOpen = null; }}>
         ${detailSheet}
         <div class="dash-header">
           <div class="dash-header-bg"></div>
@@ -2248,12 +2267,17 @@ export class HADeviceDashboard extends LitElement {
             <span class="dash-title">${this._config.title ?? 'Shelly'}</span>` : nothing}
           ${this._config.header_show_stats !== false ? html`
             <div class="dash-stats">
-              <span class="stat online">${online}/${devices.length} online</span>
-              ${offline > 0 ? html`<span class="stat offline-count">${offline} offline</span>` : nothing}
+              <span class="stat online ${this._cloudDetailOpen === 'dev-on' ? 'active' : ''}"
+                @click=${(e: Event) => { e.stopPropagation(); this._cloudDetailOpen = this._cloudDetailOpen === 'dev-on' ? null : 'dev-on'; }}>
+                ${online}/${devices.length} online</span>
+              ${offline > 0 ? html`
+                <span class="stat offline-count ${this._cloudDetailOpen === 'dev-off' ? 'active' : ''}"
+                  @click=${(e: Event) => { e.stopPropagation(); this._cloudDetailOpen = this._cloudDetailOpen === 'dev-off' ? null : 'dev-off'; }}>
+                  ${offline} offline</span>` : nothing}
               <span class="stat power">${formatPower(totalPower)}</span>
               ${alertDevices.length > 0 ? html`<span class="stat alerts-count">⚠ ${alertDevices.length}</span>` : nothing}
             </div>` : nothing}
-          ${this._config.header_show_cloud !== false ? html`
+          ${this._config.header_show_cloud === true ? html`
             <div class="cloud-chips">
               <span class="cloud-chip cloud-on ${this._cloudDetailOpen === 'on' ? 'active' : ''}"
                 @click=${(e: Event) => { e.stopPropagation(); this._cloudDetailOpen = this._cloudDetailOpen === 'on' ? null : 'on'; }}>
@@ -2286,6 +2310,20 @@ export class HADeviceDashboard extends LitElement {
             <div class="cloud-detail-hdr cloud-unavail">● Unavailable — ${cloudUnavail.length} devices</div>
             <div class="cloud-grid">
               ${cloudUnavail.map(s => html`<div class="cloud-item">${cloudName(s)}</div>`)}
+            </div>
+          </div>` : nothing}
+        ${this._cloudDetailOpen === 'dev-on' ? html`
+          <div class="cloud-detail" @click=${(e: Event) => e.stopPropagation()}>
+            <div class="cloud-detail-hdr cloud-on">● Online — ${online} devices</div>
+            <div class="cloud-grid">
+              ${devices.filter(d => this._isOnline(d)).map(d => html`<div class="cloud-item">${d.name}</div>`)}
+            </div>
+          </div>` : nothing}
+        ${this._cloudDetailOpen === 'dev-off' ? html`
+          <div class="cloud-detail" @click=${(e: Event) => e.stopPropagation()}>
+            <div class="cloud-detail-hdr cloud-off">● Offline — ${offline} devices</div>
+            <div class="cloud-grid">
+              ${devices.filter(d => !this._isOnline(d)).map(d => html`<div class="cloud-item">${d.name}</div>`)}
             </div>
           </div>` : nothing}
         ${this._renderViewTabs()}

@@ -3,7 +3,7 @@ import { styleMap } from 'lit/directives/style-map.js';
 import { renderAnimSvg } from '../anim-icons';
 import { formatPower, getIntegrationLabel, isPrivateIp } from '../helpers';
 import type { EntityAnimationType, TileBlockId, HassAttrs } from '../types';
-import type { TileCtx } from './tile-context';
+import type { TileCtx, SensorChip } from './tile-context';
 
 /** Default block-based tile renderer — dispatches to per-block sub-renderers. */
 export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateResult {
@@ -94,17 +94,50 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
       `;
     }
 
-    case 'sensors':
-      return sensors.length ? html`
-        <div class="tile-sensor-chips">
-          ${sensors.map(s => html`
-            <div class="tile-sensor-chip ${s.warn ? 'warn' : ''}">
-              <span class="tsc-lbl">${s.label}</span>
-              <span class="tsc-val">${s.value}</span>
-            </div>
-          `)}
-        </div>
-      ` : html``;
+    case 'sensors': {
+      if (!sensors.length) return html``;
+      // Three-tier layout: primary values large and unboxed, electrical readings
+      // as one compound strip per channel, diagnostics in a single muted line.
+      const primary = sensors.filter(s => (s.tier ?? 'primary') === 'primary');
+      const elec    = sensors.filter(s => s.tier === 'electrical');
+      const diag    = sensors.filter(s => s.tier === 'diag');
+      // Primary values carry their unit; a short label is kept only where the
+      // unit alone is ambiguous (%, ppm) or for alert states.
+      const LABELED = new Set(['humidity', 'battery', 'gas', 'co2', 'door', 'motion', 'flood', 'smoke', 'vibration', 'overtemp', 'overpower']);
+      const elecByCh = new Map<string, typeof elec>();
+      for (const s of elec) {
+        const k = s.ch ?? '';
+        if (!elecByCh.has(k)) elecByCh.set(k, []);
+        elecByCh.get(k)!.push(s);
+      }
+      const connVal = (s: SensorChip) =>
+        (s.key === 'cloud' || s.key === 'mqtt' || s.key === 'eth')
+          ? `${s.label} ${s.value === 'Connected' ? '✓' : '✗'}`
+          : `${s.label} ${s.value}`;
+      return html`
+        ${primary.length ? html`
+          <div class="tile-stats">
+            ${primary.map(s => html`
+              <span class="stat-item ${s.warn ? 'warn' : ''}">
+                ${s.ch ? html`<span class="stat-lbl">${s.ch}</span>` : nothing}
+                ${!s.ch && s.key && LABELED.has(s.key) ? html`<span class="stat-lbl">${s.label}</span>` : nothing}
+                ${s.value}
+              </span>`)}
+          </div>` : nothing}
+        ${elec.length ? html`
+          <div class="tile-elec-wrap">
+            ${[...elecByCh.entries()].map(([chLbl, items]) => html`
+              <div class="tile-elec">
+                ${chLbl ? html`<span class="stat-lbl">${chLbl}</span>` : nothing}
+                ${items.map((s, i) => html`${i > 0 ? html`<span class="sep">·</span>` : nothing}${s.key === 'power_factor' ? `PF ${s.value}` : s.value}`)}
+              </div>`)}
+          </div>` : nothing}
+        ${diag.length ? html`
+          <div class="tile-diag" title=${diag.map(s => `${s.label}: ${s.value}`).join('  ·  ')}>
+            ${diag.map((s, i) => html`${i > 0 ? html`<span class="sep">·</span>` : nothing}<span class="${s.warn ? 'warn' : ''}">${connVal(s)}</span>`)}
+          </div>` : nothing}
+      `;
+    }
 
     case 'graph':
       return ctx.renderSparklines(device);

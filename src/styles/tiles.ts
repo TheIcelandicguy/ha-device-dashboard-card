@@ -30,9 +30,9 @@ export const tilesCss = css`
 
     .ts-chips { display:flex; flex-wrap:wrap; gap:3px; }
 
-    .ts-chip { font-size:.68em; padding:2px 6px; border-radius:4px; background:var(--sc-sensor-bg); border:1px solid var(--sc-tile-border); color:var(--sc-text-muted); }
+    .ts-chip { font-size:var(--fs-sm); padding:2px 6px; border-radius:4px; background:var(--sc-sensor-bg); border:1px solid var(--sc-tile-border); color:var(--sc-text-muted); }
 
-    .ts-uptime { font-size:.68em; color:var(--sc-text-muted); white-space:nowrap; }
+    .ts-uptime { font-size:var(--fs-sm); color:var(--sc-text-muted); white-space:nowrap; }
 
 
     /* ── STYLE: DONUT RING ──────────────────────────────── */
@@ -46,7 +46,7 @@ export const tilesCss = css`
 
     .ts-ring-stat  { display:flex; flex-direction:column; gap:1px; }
 
-    .ts-ring-stat-k { font-size:.6em; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--sc-text-muted); }
+    .ts-ring-stat-k { font-size:var(--fs-xs); font-weight:600; letter-spacing:.03em; color:var(--sc-text-muted); }
 
     .ts-ring-stat-v { font-size:.82em; color:var(--sc-text-secondary); }
 
@@ -80,13 +80,13 @@ export const tilesCss = css`
 
     .ts-hbar-sstat { text-align:center; }
 
-    .ts-hbar-sk { font-size:.58em; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--sc-text-muted); }
+    .ts-hbar-sk { font-size:var(--fs-xs); font-weight:600; letter-spacing:.03em; color:var(--sc-text-muted); }
 
     .ts-hbar-sv { font-size:.78em; color:var(--sc-text-secondary); margin-top:1px; }
 
     .ts-hbar-footer { display:flex; align-items:center; justify-content:space-between; padding:7px 10px; border-top:1px solid var(--sc-tile-border); }
 
-    .ts-hbar-badge { font-size:.68em; padding:2px 7px; border-radius:4px; background:color-mix(in srgb,var(--ts-accent,var(--sc-accent)) 12%,transparent); color:var(--ts-accent,var(--sc-accent)); border:1px solid color-mix(in srgb,var(--ts-accent,var(--sc-accent)) 22%,transparent); }
+    .ts-hbar-badge { font-size:var(--fs-sm); padding:2px 7px; border-radius:4px; background:color-mix(in srgb,var(--ts-accent,var(--sc-accent)) 12%,transparent); color:var(--ts-accent,var(--sc-accent)); border:1px solid color-mix(in srgb,var(--ts-accent,var(--sc-accent)) 22%,transparent); }
 
 
     /* ── STYLE: SPARKLINE FOCUS ─────────────────────────── */
@@ -100,7 +100,7 @@ export const tilesCss = css`
 
     .ts-spark-big    { font-size:1.6em; font-weight:800; line-height:1; letter-spacing:-0.02em; }
 
-    .ts-spark-sub    { font-size:.68em; color:var(--sc-text-muted); margin-top:2px; }
+    .ts-spark-sub    { font-size:var(--fs-sm); color:var(--sc-text-muted); margin-top:2px; }
 
     .ts-spark-meta   { text-align:right; }
 
@@ -161,7 +161,7 @@ export const tilesCss = css`
 
     .ts-light-row { display:flex;align-items:center;gap:8px }
 
-    .ts-light-lbl { font-size:.68em;color:var(--sc-text-muted);width:52px;flex-shrink:0;text-transform:uppercase;letter-spacing:.06em }
+    .ts-light-lbl { font-size:var(--fs-xs);color:var(--sc-text-muted);width:52px;flex-shrink:0;letter-spacing:.02em }
 
     .ts-light-pct { font-size:.72em;color:var(--sc-text-secondary);width:36px;text-align:right;flex-shrink:0 }
 
@@ -185,7 +185,7 @@ export const tilesCss = css`
 
     .ts-cover-graphic { position:relative;color:var(--sc-text-primary) }
 
-    .ts-cover-state { position:absolute;bottom:2px;left:50%;transform:translateX(-50%);font-size:.65em;color:var(--sc-text-muted);white-space:nowrap }
+    .ts-cover-state { position:absolute;bottom:2px;left:50%;transform:translateX(-50%);font-size:var(--fs-xs);color:var(--sc-text-muted);white-space:nowrap }
 
     .ts-cover-btns { display:flex;gap:6px }
 
@@ -201,7 +201,7 @@ export const tilesCss = css`
 
     .ts-sensor-top { display:flex;align-items:center;justify-content:space-between;margin-bottom:2px }
 
-    .ts-sensor-dc { font-size:.65em;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--sc-text-muted) }
+    .ts-sensor-dc { font-size:var(--fs-xs);font-weight:600;letter-spacing:.03em;color:var(--sc-text-muted) }
 
     .ts-sensor-main { display:flex;align-items:baseline;gap:4px }
 
@@ -235,7 +235,7 @@ export const tilesCss = css`
 
     .ts-scene-name { font-size:.9em;font-weight:700;color:var(--sc-text-primary);text-align:center }
 
-    .ts-scene-time { font-size:.68em;color:var(--sc-text-muted) }
+    .ts-scene-time { font-size:var(--fs-sm);color:var(--sc-text-muted) }
 
     .ts-scene-ripple { position:absolute;inset:0;border-radius:inherit;pointer-events:none }
 
