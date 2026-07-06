@@ -1,0 +1,46 @@
+import { html, nothing, TemplateResult } from 'lit';
+import { renderAnimSvg } from '../anim-icons';
+import type { EntityAnimationType } from '../types';
+import type { TileCtx } from './tile-context';
+import { renderNameDot } from './tile-parts';
+
+export function renderSceneButtonTile(ctx: TileCtx): TemplateResult {
+  const { device, accent, online, config } = ctx;
+  const inputs = ctx.getInputChannels(device);
+  const devSt = config.device_styles?.[device.device_id];
+  const tileIconType = (devSt?.tile_icon ?? 'pulse') as EntityAnimationType;
+  const cmdIcon = renderAnimSvg(tileIconType, true, `--ent-spd:${devSt?.tile_icon_speed ?? 1};color:${accent}`, 'ts-scene-icon');
+
+  const lastChanged = device.entities.reduce((best, e) => {
+    const lc = ctx.hass.states[e.entity_id]?.last_changed ?? '';
+    return lc > best ? lc : best;
+  }, '');
+  const timeAgoStr = lastChanged ? ctx.timeAgo(lastChanged) : '';
+
+  if (inputs.length > 0) {
+    return html`
+      <div class="ts-scene" style="--ts-accent:${accent}">
+        <div class="ts-scene-top">
+          ${renderNameDot(device, online)}
+        </div>
+        <div class="tile-inputs">
+          ${inputs.map(ch => html`
+            <div class="input-row ${ch.isButton ? 'btn-mode' : ch.isOn ? 'active' : ''}">
+              <span class="${ch.isButton ? 'input-btn-dot' : 'input-row-dot'}"></span>
+              <span class="input-row-name">${ch.label}</span>
+              <span class="input-row-event">${ch.lastEvent ? ch.lastEvent.replace(/_/g, ' ') : '—'}</span>
+              <span class="input-row-time">${ctx.timeAgo(ch.lastChanged)}</span>
+            </div>`)}
+        </div>
+      </div>`;
+  }
+
+  return html`
+    <div class="ts-scene ts-scene-centered" style="--ts-accent:${accent}"
+      @click=${(e: Event) => { e.stopPropagation(); ctx.handleScenePress(device); }}>
+      <div class="ts-scene-icon-wrap">${cmdIcon}</div>
+      <div class="ts-scene-name">${device.name}</div>
+      ${timeAgoStr ? html`<div class="ts-scene-time">${timeAgoStr}</div>` : nothing}
+      <div class="ts-scene-ripple"></div>
+    </div>`;
+}

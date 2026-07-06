@@ -1,11 +1,24 @@
-import { LitElement, html, svg, css, TemplateResult, nothing } from 'lit';
+import { LitElement, html, svg, unsafeCSS, TemplateResult, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { styleMap } from 'lit/directives/style-map.js';
-import { HomeAssistant } from 'custom-card-helpers';
-import {
-  HADeviceDashboardConfig, HADevice, HAEntity,
-  TileBlockId, DeviceProfileResult, EntityAnimationType,
-} from './types';
+import { HomeAssistant, fireEvent } from 'custom-card-helpers';
+import { HADeviceDashboardConfig, HADevice, HAEntity, TileBlockId, DeviceProfileResult, EntityAnimationType, TileStyle, PowerMonitorVariant, SensorRange, HassAttrs, ViewConfig } from './types';
+import { BUNDLED_FONT_CSS } from './fonts';
+import { mainCss } from './styles/main';
+import { tilesCss } from './styles/tiles';
+import { detailCss } from './styles/detail';
+import type {
+  TileCtx, TrvInfo, CoverInfo, ValveInfo, GraphEntity,
+  FirmwareInfo, SensorChip, VirtualControl, InputChannel, DeviceAlert,
+} from './tiles/tile-context';
+import { renderClimateControlTile } from './tiles/climate-control';
+import { renderCoverControlTile } from './tiles/cover-control';
+import { renderSceneButtonTile } from './tiles/scene-button';
+import { renderSensorCardTile } from './tiles/sensor-card';
+import { renderPowerMonitorTile } from './tiles/power-monitor';
+import { renderLightControlTile } from './tiles/light-control';
+import { renderBlockTile } from './tiles/block-tile';
+import { renderDetailSheet } from './detail/detail-sheet';
 import {
   getAllDevices, getDeviceProfile,
   getIntegrationLabel, isPrivateIp, PROFILE_DEFAULT_BLOCKS, GRAPH_DC_LABELS, GRAPH_SENSOR_DEFS,
@@ -14,6 +27,23 @@ import {
   formatFrequency, formatHumidity, formatIlluminance, formatPpm, formatPercent,
 } from './helpers';
 import { renderAnimSvg } from './anim-icons';
+
+// ─── Google Fonts CDN loader (for display fonts selected in editor) ──────────
+// Keep in sync with FONT_OPTIONS.cdn in editor.ts
+const CDN_FONT_FAMILIES = [
+  'Alfa+Slab+One','Bebas+Neue','Black+Ops+One','Bungee','Bungee+Shade','Cinzel',
+  'Dancing+Script','Fredericka+the+Great','Great+Vibes','Monoton','Permanent+Marker',
+  'Shrikhand','Ultra',
+];
+let _cdnFontsInjected = false;
+function ensureCdnFontsLoaded(): void {
+  if (_cdnFontsInjected || typeof document === 'undefined') return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = `https://fonts.googleapis.com/css2?${CDN_FONT_FAMILIES.map(f => `family=${f}`).join('&')}&display=swap`;
+  document.head.appendChild(link);
+  _cdnFontsInjected = true;
+}
 
 // ─── Ha Device Dashboard Card ──────────────────────────────────────────────────
 
@@ -28,8 +58,13 @@ export class HADeviceDashboard extends LitElement {
   @state() private _valveDragPos: number | null = null;
   @state() private _trvDragTemp: number | null = null;
   private _trvBtnTimer: ReturnType<typeof setTimeout> | null = null;
-  @state() private _graphDialog: string | null = null;
   @state() private _cloudDetailOpen: 'on' | 'off' | 'unavailable' | null = null;
+  @state() private _detailDevice: string | null = null;
+  @state() private _detailHistoryRange: 24 | 168 | 720 = 24;
+  @state() private _activeViewId: string | null = null;
+
+  // Tap-gesture tracking (not @state — no re-render needed)
+  private _lpStart: { x: number; y: number } | null = null;
 
   private readonly _graphFetching = new Set<string>();
   private readonly _graphFetchedAt = new Map<string, number>();
@@ -39,6 +74,12 @@ export class HADeviceDashboard extends LitElement {
   private _cacheEntitiesRef: unknown = null;
   private _cacheDevicesRef: unknown = null;
   private _cacheConfigRef: HADeviceDashboardConfig | null = null;
+
+  // Card-level CSS var map — recomputed only when config changes.
+  // Rebuilding this every render would re-stringify embedded data URLs
+  // (card_bg_image / tile_bg_image), which can be ~500 KB each.
+  private _cachedCardStyles: Record<string, string> | null = null;
+  private _cardStylesConfigRef: HADeviceDashboardConfig | null = null;
 
   private static readonly BRIGHTNESS_MAX = 255;
 
@@ -58,9 +99,62 @@ export class HADeviceDashboard extends LitElement {
 
   setConfig(config: HADeviceDashboardConfig) {
     this._config = config;
+    // Only fetch the CDN stylesheet if the user selected a CDN-only display font
+    const ff = config.style?.font_family ?? '';
+    if (CDN_FONT_FAMILIES.some(f => ff.includes(f.replace(/\+/g, ' ')))) ensureCdnFontsLoaded();
+  }
+
+  /**
+   * Skip re-rendering when only unrelated entities changed in `hass`.
+   * On large HA instances (2k+ entities) Lit otherwise re-renders the whole
+   * card on every state push, which is expensive when tiles carry large
+   * background images.
+   */
+  protected shouldUpdate(changed: Map<string, unknown>): boolean {
+    // Always re-render on config or local UI state changes
+    if (
+      changed.has('_config') ||
+      changed.has('_closedAreas') ||
+      changed.has('_entityListOpen') ||
+      changed.has('_graphData') ||
+      changed.has('_valveDragPos') ||
+      changed.has('_trvDragTemp') ||
+      changed.has('_detailDevice') ||
+      changed.has('_detailHistoryRange') ||
+      changed.has('_activeViewId') ||
+      changed.has('_cloudDetailOpen') ||
+      changed.has('preview')
+    ) {
+      return true;
+    }
+    if (!changed.has('hass')) return true;
+
+    const oldHass = changed.get('hass') as HomeAssistant | undefined;
+    if (!oldHass || !this.hass) return true;
+
+    // If we don't have a device cache yet, fall back to default behaviour
+    const devices = this._cachedDevices;
+    if (!devices) return true;
+
+    // Re-render only if a state for one of OUR entities actually changed
+    for (const dev of devices) {
+      const ents = dev.entities;
+      if (!ents) continue;
+      for (const e of ents) {
+        const id = e.entity_id;
+        if (!id) continue;
+        if (oldHass.states[id] !== this.hass.states[id]) return true;
+      }
+    }
+    return false;
   }
 
   getCardSize() { return 6; }
+
+  connectedCallback() {
+    super.connectedCallback();
+    this._loadActiveView();
+  }
 
   disconnectedCallback() {
     super.disconnectedCallback();
@@ -110,6 +204,179 @@ export class HADeviceDashboard extends LitElement {
 
     this._cachedDevices = devices;
     return devices;
+  }
+
+  /** Returns the currently-active view, or null if the card has no `views` configured. */
+  private _getActiveView(): ViewConfig | null {
+    const views = this._config.views;
+    if (!views?.length) return null;
+    const targetId =
+      this._activeViewId
+      ?? this._config.default_view
+      ?? views[0].id;
+    return views.find(v => v.id === targetId) ?? views[0];
+  }
+
+  /** Apply a view's filter on top of the baseline device list. No-op if no filter present. */
+  private _applyViewFilter(devices: HADevice[], view: ViewConfig): HADevice[] {
+    const f = view.filter;
+    if (!f) return devices;
+    let out = devices;
+
+    if (f.profiles?.length) {
+      const allow = new Set(f.profiles);
+      out = out.filter(d => allow.has(getDeviceProfile(d).type));
+    }
+    if (f.domains?.length) {
+      const allow = new Set(f.domains);
+      out = out.filter(d => d.entities.some(e => allow.has(e.domain)));
+    }
+    if (f.areas?.length) {
+      const allow = new Set(f.areas.map(a => a.toLowerCase()));
+      out = out.filter(d => allow.has((d.area ?? '').toLowerCase()));
+    }
+    if (f.devices?.length) {
+      const allow = new Set(f.devices);
+      out = out.filter(d => allow.has(d.device_id));
+    }
+    if (f.exclude_devices?.length) {
+      const block = new Set(f.exclude_devices);
+      out = out.filter(d => !block.has(d.device_id));
+    }
+    if (f.entity_id_pattern) {
+      let re: RegExp | null = null;
+      try { re = new RegExp(f.entity_id_pattern); }
+      catch { console.warn(`[ha-device-dashboard] invalid entity_id_pattern in view "${view.id}": ${f.entity_id_pattern}`); }
+      if (re) out = out.filter(d => d.entities.some(e => re!.test(e.entity_id)));
+    }
+    return out;
+  }
+
+  private _viewStorageKey(): string {
+    return `shelly-dashboard:activeView:${this._config.title ?? 'default'}`;
+  }
+
+  private _persistActiveView(): void {
+    try {
+      if (this._activeViewId) localStorage.setItem(this._viewStorageKey(), this._activeViewId);
+    } catch { /* localStorage unavailable (privacy mode, SSR) — silent */ }
+  }
+
+  private _loadActiveView(): void {
+    try {
+      const stored = localStorage.getItem(this._viewStorageKey());
+      if (stored) this._activeViewId = stored;
+    } catch { /* ignore */ }
+  }
+
+  private _setActiveView(id: string): void {
+    this._activeViewId = id;
+    this._persistActiveView();
+  }
+
+  /**
+   * Build the card-level CSS variable map from `this._config`.
+   * Memoized against config identity — recomputed only when config changes.
+   */
+  private _buildCardStyles(): Record<string, string> {
+    if (this._cardStylesConfigRef === this._config && this._cachedCardStyles) {
+      return this._cachedCardStyles;
+    }
+    const st = this._config.style ?? {};
+    const s: Record<string, string> = {};
+
+    if (st.accent_color)  s['--sc-accent']       = st.accent_color;
+    if (st.tile_radius)   s['--tile-radius']     = `${st.tile_radius}px`;
+    if (st.tile_gap)      s['--tile-gap']        = `${st.tile_gap}px`;
+    if (st.font_family)   s['--sc-font-family']  = st.font_family;
+    if (st.text_size_scale)  s['--sc-text-scale']     = String(st.text_size_scale);
+    if (st.tile_bg)            s['--sc-tile-bg']         = st.tile_bg;
+    if (st.tile_bg_image)      s['--sc-tile-bg-image']   = `url("${st.tile_bg_image}")`;
+    if (st.tile_bg_image_size) s['--sc-tile-bg-image-sz']= st.tile_bg_image_size === 'stretch' ? '100% 100%' : st.tile_bg_image_size;
+    if (this._config.card_bg_image)      s['--sc-card-bg-image']   = `url("${this._config.card_bg_image}")`;
+    if (this._config.card_bg_image_size) s['--sc-card-bg-image-sz']= this._config.card_bg_image_size === 'stretch' ? '100% 100%' : this._config.card_bg_image_size;
+    if (st.tile_border)        s['--sc-tile-border']      = st.tile_border;
+    if (st.tile_border_width != null) s['--sc-tile-border-width'] = `${st.tile_border_width}px`;
+    if (st.tile_hover_bg)      s['--sc-tile-hover-bg']    = st.tile_hover_bg;
+    if (st.tile_hover_shadow)  s['--sc-tile-hover-shad']  = st.tile_hover_shadow;
+    if (st.tile_sensor_bg)     s['--sc-sensor-bg']        = st.tile_sensor_bg;
+    if (st.tile_exp_bg)        s['--sc-tile-exp-bg']      = st.tile_exp_bg;
+    if (st.card_radius != null) s['--sc-card-radius']     = `${st.card_radius}px`;
+    if (st.text_primary)       s['--sc-text-primary']     = st.text_primary;
+    if (st.text_secondary)     s['--sc-text-secondary']   = st.text_secondary;
+    if (st.text_muted)         s['--sc-text-muted']       = st.text_muted;
+    if (st.offline_color)      s['--sc-offline-dot']      = st.offline_color;
+    if (st.online_color)       s['--sc-online-color']     = st.online_color;
+    if (st.power_color)        s['--sc-power-color']      = st.power_color;
+    if (st.area_header_color)  s['--sc-area-header-color']= st.area_header_color;
+    if (this._config.graph_line_color) s['--sc-graph-line'] = this._config.graph_line_color;
+
+    const shadowMap: Record<string, string> = {
+      soft:   '0 2px 8px rgba(0,0,0,0.25)',
+      medium: '0 4px 16px rgba(0,0,0,0.40)',
+      strong: '0 8px 28px rgba(0,0,0,0.60)',
+    };
+    if (st.tile_box_shadow && st.tile_box_shadow !== 'none')
+      s['--sc-tile-shadow'] = shadowMap[st.tile_box_shadow] ?? 'none';
+    else if (st.tile_box_shadow === 'none')
+      s['--sc-tile-shadow'] = 'none';
+
+    const btnShape   = st.button_shape   ?? 'pill';
+    const btnVariant = st.button_variant ?? 'fill';
+    const btnSize    = st.button_size    ?? 'md';
+    const togPadMap: Record<string,string>   = { sm: '2px 8px', md: '4px 11px', lg: '6px 16px' };
+    const togPadSqMap: Record<string,string> = { sm: '3px 5px', md: '4px 8px',  lg: '6px 12px' };
+    const isSquarish = btnShape === 'square' || btnShape === 'circle';
+    s['--tog-radius'] = btnShape === 'pill' ? '20px' : btnShape === 'rect' ? '6px' : btnShape === 'square' ? '6px' : '50%';
+    s['--tog-pad']    = isSquarish ? togPadSqMap[btnSize] ?? togPadSqMap.md : togPadMap[btnSize] ?? togPadMap.md;
+    s['--tog-fsize']  = btnSize === 'sm' ? '.65em' : btnSize === 'lg' ? '.8em' : '.72em';
+    s['--tog-aspect'] = isSquarish ? '1' : 'auto';
+    if (btnVariant === 'outline') {
+      s['--tog-on-bg']     = 'transparent';
+      s['--tog-on-border'] = '1px solid var(--sc-accent)';
+      s['--tog-on-color']  = 'var(--sc-accent)';
+      s['--tog-on-shadow'] = 'none';
+    } else if (btnVariant === 'ghost') {
+      s['--tog-on-bg']     = 'transparent';
+      s['--tog-on-border'] = 'none';
+      s['--tog-on-color']  = 'var(--sc-accent)';
+      s['--tog-on-shadow'] = 'none';
+    }
+
+    if (st.header_bg && st.header_bg2) {
+      s['--sc-header-bg'] = `linear-gradient(135deg, ${st.header_bg} 0%, ${st.header_bg2} 100%)`;
+    } else if (st.header_bg) {
+      s['--sc-header-bg'] = st.header_bg;
+    }
+    if (st.header_text_color)            s['--sc-header-text']         = st.header_text_color;
+    if (st.header_orb_color)             s['--sc-header-orb2']         = st.header_orb_color;
+    if (st.header_icon !== undefined)    s['--sc-header-icon']         = `'${st.header_icon}'`;
+    if (st.header_title_size)            s['--sc-header-title-size']   = `${st.header_title_size}em`;
+    if (st.header_radius != null)        s['--sc-header-radius']       = `${st.header_radius}px`;
+    if (st.header_padding != null)       s['--sc-header-padding']      = `${st.header_padding}px`;
+    if (st.header_border_color)          s['--sc-header-border-color'] = st.header_border_color;
+    if (st.header_border_width != null)  s['--sc-header-border-width'] = `${st.header_border_width}px`;
+    if (st.header_stat_online)           s['--sc-hstat-online']        = st.header_stat_online;
+    if (st.header_stat_power)            s['--sc-hstat-power']         = st.header_stat_power;
+    if (st.header_stat_offline)          s['--sc-hstat-offline']       = st.header_stat_offline;
+    if (this._config.header_show_orbs === false) s['--sc-header-orb-opacity'] = '0';
+    const headerTransparency = this._config.header_opacity ?? 100;
+    if (headerTransparency < 100) s['--sc-header-opacity'] = String(headerTransparency / 100);
+
+    const cardBgBase = st.card_bg ?? 'var(--ha-card-background, #1c1c1e)';
+    if (st.card_bg) s['--sc-card-bg'] = st.card_bg;
+    const cardTransparency = this._config.card_opacity ?? 100;
+    if (cardTransparency < 100) {
+      s['--sc-card-bg'] = `color-mix(in srgb, ${cardBgBase} ${cardTransparency}%, transparent)`;
+    }
+    const tileTransparency = this._config.tile_opacity ?? 100;
+    if (tileTransparency < 100) {
+      s['--sc-tile-bg-opacity'] = String(tileTransparency / 100);
+    }
+
+    this._cardStylesConfigRef = this._config;
+    this._cachedCardStyles = s;
+    return s;
   }
 
   private _groupByArea(devices: HADevice[]): Map<string, HADevice[]> {
@@ -199,7 +466,7 @@ export class HADeviceDashboard extends LitElement {
     return null;
   }
 
-  private _getTrv(device: HADevice) {
+  private _getTrv(device: HADevice): TrvInfo | null {
     const ent = device.entities.find(e => e.domain === 'climate');
     if (!ent) return null;
     const s = this.hass.states[ent.entity_id];
@@ -225,22 +492,22 @@ export class HADeviceDashboard extends LitElement {
     };
   }
 
-  private _getCover(device: HADevice) {
+  private _getCover(device: HADevice): CoverInfo | null {
     const ent = device.entities.find(e => e.domain === 'cover');
     if (!ent) return null;
     const s = this.hass.states[ent.entity_id];
     if (!s) return null;
-    return { entityId: ent.entity_id, state: s.state, position: (s.attributes as any)?.current_position as number | undefined };
+    return { entityId: ent.entity_id, state: s.state, position: (s.attributes as HassAttrs)?.current_position as number | undefined };
   }
 
-  private _getValve(device: HADevice) {
+  private _getValve(device: HADevice): ValveInfo | null {
     const ent = device.entities.find(e => e.domain === 'valve');
     if (!ent) return null;
     const s = this.hass.states[ent.entity_id];
     if (!s) return null;
     // feature bit 4 = SET_POSITION support
-    const supportsPosition = !!((s.attributes as any)?.supported_features & 4);
-    let position: number | undefined = (s.attributes as any)?.current_position;
+    const supportsPosition = !!(((s.attributes as HassAttrs)?.supported_features ?? 0) & 4);
+    let position: number | undefined = (s.attributes as HassAttrs)?.current_position;
     if (position == null) {
       const pe = device.entities.find(e => e.domain === 'sensor' && e.entity_id.includes('position'));
       if (pe) { const v = parseFloat(this.hass.states[pe.entity_id]?.state ?? ''); if (!isNaN(v)) position = v; }
@@ -251,11 +518,11 @@ export class HADeviceDashboard extends LitElement {
       if (e.domain !== 'number') return false;
       const ns = this.hass.states[e.entity_id];
       if (!ns) return false;
-      const a = ns.attributes as any;
+      const a = ns.attributes as HassAttrs;
       return (a.min === 0 && a.max === 100) || e.entity_id.includes('position');
     });
     let temperature: number | undefined;
-    const te = device.entities.find(e => e.domain === 'sensor' && (this.hass.states[e.entity_id]?.attributes as any)?.device_class === 'temperature');
+    const te = device.entities.find(e => e.domain === 'sensor' && (this.hass.states[e.entity_id]?.attributes as HassAttrs)?.device_class === 'temperature');
     if (te) { const v = parseFloat(this.hass.states[te.entity_id]?.state ?? ''); if (!isNaN(v)) temperature = v; }
     return { entityId: ent.entity_id, state: s.state, position, supportsPosition, numEntityId: numEnt?.entity_id, temperature };
   }
@@ -271,25 +538,25 @@ export class HADeviceDashboard extends LitElement {
     }
   }
 
-  private _getAlerts(device: HADevice): Array<'overtemp' | 'overpower'> {
+  private _getAlerts(device: HADevice): DeviceAlert[] {
     const alerts: Array<'overtemp' | 'overpower'> = [];
     for (const e of device.entities) {
       if (e.domain !== 'binary_sensor') continue;
       const s = this.hass.states[e.entity_id];
       if (!s || s.state !== 'on') continue;
-      const dc = (s.attributes as any).device_class ?? '';
+      const dc = (s.attributes as HassAttrs).device_class ?? '';
       if (dc === 'heat' || e.entity_id.includes('overtemp')) alerts.push('overtemp');
       else if (dc === 'safety' || e.entity_id.includes('overpower')) alerts.push('overpower');
     }
     return alerts;
   }
 
-  private _getFirmware(device: HADevice) {
+  private _getFirmware(device: HADevice): FirmwareInfo | null {
     for (const e of device.entities) {
       if (e.domain !== 'update') continue;
       const s = this.hass.states[e.entity_id];
       if (!s || s.state !== 'on') continue;
-      const attrs = s.attributes as any;
+      const attrs = s.attributes as HassAttrs;
       return { entityId: e.entity_id, current: attrs.installed_version ?? '', newVersion: attrs.latest_version };
     }
     return null;
@@ -318,7 +585,7 @@ export class HADeviceDashboard extends LitElement {
     return `${Math.floor(ms / 86_400_000)}d ago`;
   }
 
-  private _getSensors(device: HADevice): Array<{ label: string; value: string; warn?: boolean }> {
+  private _getSensors(device: HADevice): SensorChip[] {
     const allowed = this._config.sensors?.length ? new Set(this._config.sensors) : null;
     const show = (k: string) => !allowed || allowed.has(k);
     const result: Array<{ label: string; value: string; warn?: boolean }> = [];
@@ -331,7 +598,7 @@ export class HADeviceDashboard extends LitElement {
     for (const e of device.entities) {
       const s = this.hass.states[e.entity_id];
       if (!s || s.state === 'unavailable' || s.state === 'unknown') continue;
-      const dc = (s.attributes as any)?.device_class as string ?? '';
+      const dc = (s.attributes as HassAttrs)?.device_class as string ?? '';
       if (ELECTRICAL_DCS.has(dc)) {
         if (!dcIds.has(dc)) dcIds.set(dc, []);
         dcIds.get(dc)!.push(e.entity_id);
@@ -403,17 +670,17 @@ export class HADeviceDashboard extends LitElement {
     return result;
   }
 
-  private _getInputChannels(device: HADevice) {
+  private _getInputChannels(device: HADevice): InputChannel[] {
     const bsInputs = device.entities.filter(e =>
       e.domain === 'binary_sensor' && (
         e.entity_id.includes('input') || e.entity_id.includes('button') ||
         e.entity_id.includes('channel') ||
-        (e.attributes as any)?.device_class == null
+        (e.attributes as HassAttrs)?.device_class == null
       )
     );
     const eventInputs = device.entities.filter(e =>
       e.domain === 'event' && (
-        (e.attributes as any)?.device_class === 'button' ||
+        (e.attributes as HassAttrs)?.device_class === 'button' ||
         e.entity_id.includes('channel') || e.entity_id.includes('input')
       )
     );
@@ -421,7 +688,7 @@ export class HADeviceDashboard extends LitElement {
     if (bsInputs.length > 0) {
       return bsInputs.map(e => {
         const s = this.hass.states[e.entity_id];
-        const friendly = (s?.attributes as any)?.friendly_name ?? '';
+        const friendly = (s?.attributes as HassAttrs)?.friendly_name ?? '';
         const m = e.entity_id.match(/(?:input|channel|button)[_\s]*(\d+)/i) ?? friendly.match(/(\d+)\s*$/);
         const ch = m ? parseInt(m[1]) : 0;
         const base = e.entity_id.replace(/^binary_sensor\./, '');
@@ -430,7 +697,7 @@ export class HADeviceDashboard extends LitElement {
         );
         const evState = evEnt ? this.hass.states[evEnt.entity_id] : null;
         const lastEvent: string | null =
-          (evState?.attributes as any)?.event_type ??
+          (evState?.attributes as HassAttrs)?.event_type ??
           (evState?.state && evState.state !== 'unknown' && evState.state !== 'unavailable' ? evState.state : null);
         return {
           entityId: e.entity_id,
@@ -447,11 +714,11 @@ export class HADeviceDashboard extends LitElement {
     // Event-only input device (e.g. Shelly i3 Gen1)
     return eventInputs.map(e => {
       const s = this.hass.states[e.entity_id];
-      const friendly = (s?.attributes as any)?.friendly_name ?? '';
+      const friendly = (s?.attributes as HassAttrs)?.friendly_name ?? '';
       const m = e.entity_id.match(/(?:input|channel|button)[_\s]*(\d+)/i) ?? friendly.match(/(\d+)\s*$/);
       const ch = m ? parseInt(m[1]) : 0;
       const lastEvent: string | null =
-        (s?.attributes as any)?.event_type ??
+        (s?.attributes as HassAttrs)?.event_type ??
         (s?.state && s.state !== 'unknown' && s.state !== 'unavailable' ? s.state : null);
       // For event entities, the state IS the last-triggered timestamp
       const lastChanged: string | null =
@@ -548,7 +815,7 @@ export class HADeviceDashboard extends LitElement {
 
   // ── Sparkline system ──────────────────────────────────────────────────────
 
-  private _getGraphEntities(device: HADevice): Array<{ entityId: string; label: string; dc: string; unit: string }> {
+  private _getGraphEntities(device: HADevice): GraphEntity[] {
     const dcList = this._config.graph_sensors ?? [];
     if (!dcList.length) return [];
     const results: Array<{ entityId: string; label: string; dc: string; unit: string }> = [];
@@ -557,12 +824,12 @@ export class HADeviceDashboard extends LitElement {
         if (e.domain !== 'sensor') return false;
         const st = this.hass.states[e.entity_id];
         if (!st || st.state === 'unavailable' || st.state === 'unknown') return false;
-        const attrDc = (st.attributes as any)?.device_class ?? (e.attributes as any)?.device_class;
+        const attrDc = (st.attributes as HassAttrs)?.device_class ?? (e.attributes as HassAttrs)?.device_class;
         return attrDc === dc || (dc === 'signal_strength' && e.entity_id.includes('rssi'));
       });
       const seenLabels = new Set<string>();
       for (const ent of ents) {
-        const unit = (this.hass.states[ent.entity_id]?.attributes as any)?.unit_of_measurement ?? '';
+        const unit = (this.hass.states[ent.entity_id]?.attributes as HassAttrs)?.unit_of_measurement ?? '';
         // Use compact channel number (e.g. " 1"/" 2") in graph labels to keep them short
         const chNum = ents.length > 1 ? this._chLabel(ent.entity_id).replace('Ch ', '') : '';
         const label = (GRAPH_DC_LABELS[dc] ?? dc) + (chNum ? ` ${chNum}` : '');
@@ -577,13 +844,17 @@ export class HADeviceDashboard extends LitElement {
   private _fetchQueue: string[] = [];
   private _fetchQueueRunning = false;
 
-  private _requestGraphData(entityId: string) {
-    if (this._graphFetching.has(entityId)) return;
-    const age = Date.now() - (this._graphFetchedAt.get(entityId) ?? 0);
-    if (age < 5 * 60_000 && this._graphData.has(entityId)) return;
-    // Add to queue and drain — prevents simultaneous history API hammering
-    if (!this._fetchQueue.includes(entityId)) {
-      this._fetchQueue.push(entityId);
+  /** Compound key for graph data cache: entityId::hours */
+  private _gk(entityId: string, hours: number): string { return `${entityId}::${hours}`; }
+
+  private _requestGraphData(entityId: string, hours?: number) {
+    const h = hours ?? this._config.graph_hours ?? 24;
+    const key = this._gk(entityId, h);
+    if (this._graphFetching.has(key)) return;
+    const age = Date.now() - (this._graphFetchedAt.get(key) ?? 0);
+    if (age < 5 * 60_000 && this._graphData.has(key)) return;
+    if (!this._fetchQueue.includes(key)) {
+      this._fetchQueue.push(key);
     }
     this._drainFetchQueue();
   }
@@ -595,32 +866,36 @@ export class HADeviceDashboard extends LitElement {
     Promise.resolve().then(async () => {
       await this._fetchGraphData(next);
       this._fetchQueueRunning = false;
-      this._drainFetchQueue(); // process next in queue
+      this._drainFetchQueue();
     });
   }
 
-  private _retryGraphData(entityId: string) {
-    if (this._graphFetching.has(entityId)) return;
-    this._graphFetchedAt.delete(entityId);
-    const next = new Map(this._graphData); next.delete(entityId);
+  private _retryGraphData(entityId: string, hours?: number) {
+    const h = hours ?? this._config.graph_hours ?? 24;
+    const key = this._gk(entityId, h);
+    if (this._graphFetching.has(key)) return;
+    this._graphFetchedAt.delete(key);
+    const next = new Map(this._graphData); next.delete(key);
     this._graphData = next;
-    // Route through the queue so concurrent fetches don't bypass the anti-hammering guard
-    this._fetchQueue = this._fetchQueue.filter(id => id !== entityId);
-    this._requestGraphData(entityId);
+    this._fetchQueue = this._fetchQueue.filter(id => id !== key);
+    this._requestGraphData(entityId, h);
   }
 
   private _refreshAllGraphs(device: HADevice) {
-    const ids = this._getGraphEntities(device).map(e => e.entityId).filter(id => !this._graphFetching.has(id));
-    ids.forEach(id => this._graphFetchedAt.delete(id));
-    const next = new Map(this._graphData); ids.forEach(id => next.delete(id));
+    const h = this._config.graph_hours ?? 24;
+    const keys = this._getGraphEntities(device).map(e => this._gk(e.entityId, h)).filter(k => !this._graphFetching.has(k));
+    keys.forEach(k => this._graphFetchedAt.delete(k));
+    const next = new Map(this._graphData); keys.forEach(k => next.delete(k));
     this._graphData = next;
-    ids.forEach(id => this._fetchGraphData(id));
+    keys.forEach(k => this._fetchGraphData(k));
   }
 
-  private async _fetchGraphData(entityId: string) {
-    this._graphFetching.add(entityId);
+  /** Fetch history data. Key is compound "entityId::hours". */
+  private async _fetchGraphData(key: string) {
+    this._graphFetching.add(key);
+    const [entityId, hoursStr] = key.split('::');
+    const hours = parseInt(hoursStr, 10) || 24;
     try {
-      const hours = this._config.graph_hours ?? 24;
       const start = new Date(Date.now() - hours * 3600_000);
       const path = `history/period/${start.toISOString()}?filter_entity_id=${entityId}&minimal_response=true&no_attributes=true`;
       const raw = await (this.hass as any).callApi('GET', path) as Array<Array<{ state: string; last_changed: string }>>;
@@ -630,21 +905,28 @@ export class HADeviceDashboard extends LitElement {
         const live = parseFloat(this.hass.states[entityId]?.state ?? '');
         points.push({ t: Date.now(), v: isNaN(live) ? points[0].v : live });
       }
-      const next = new Map(this._graphData); next.set(entityId, points);
+      const next = new Map(this._graphData); next.set(key, points);
       this._graphData = next;
     } catch (err) {
       console.warn('[ha-device-dashboard] history fetch failed', entityId, err);
-      // Store empty array so the retry guard works — prevents hammering HA on every render
-      const next = new Map(this._graphData); next.set(entityId, []);
+      const next = new Map(this._graphData); next.set(key, []);
       this._graphData = next;
     } finally {
-      this._graphFetchedAt.set(entityId, Date.now());
-      this._graphFetching.delete(entityId);
+      this._graphFetchedAt.set(key, Date.now());
+      this._graphFetching.delete(key);
     }
   }
 
-  private _renderSparklines(device: HADevice, expanded = false): TemplateResult {
-    const entities = this._getGraphEntities(device);
+  private _renderSparklines(device: HADevice, expanded = false, hours?: number): TemplateResult {
+    return this._renderSparklinesFiltered(device, this._getGraphEntities(device), expanded, hours);
+  }
+
+  private _renderSparklinesFiltered(
+    device: HADevice,
+    entities: Array<{ entityId: string; label: string; unit: string; dc: string }>,
+    expanded = false,
+    hours?: number,
+  ): TemplateResult {
     if (!entities.length) return html``;
 
     const gs = this._config.graph_style ?? {};
@@ -658,7 +940,7 @@ export class HADeviceDashboard extends LitElement {
     const graphType = gs.type ?? 'line';
     // 'area' type always fills; 'line' type never fills; 'bar' type is separate
     const fill = graphType === 'area';
-    const graphHours = this._config.graph_hours ?? 24;
+    const graphHours = hours ?? this._config.graph_hours ?? 24;
     const tickMs = graphHours <= 1 ? 60_000 : graphHours <= 5 ? 120_000 : 300_000;
     const sensorColors = this._config.graph_sensor_colors ?? {};
     const globalColor = this._config.graph_line_color;
@@ -667,10 +949,10 @@ export class HADeviceDashboard extends LitElement {
     const fmtTime = (ts: number) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     const rows = entities.map(({ entityId, label, unit, dc }) => {
-      // Resolve to a concrete color so SVG elements never rely on CSS variable resolution
       const lineColor = sensorColors[dc] ?? globalColor ?? GRAPH_SENSOR_DEFS.find(s => s.key === dc)?.defaultColor ?? '#f4601e';
-      const points = this._graphData.get(entityId);
-      this._requestGraphData(entityId);  // no-op if already fetched/fetching
+      const gk = this._gk(entityId, graphHours);
+      const points = this._graphData.get(gk);
+      this._requestGraphData(entityId, graphHours);  // no-op if already fetched/fetching
 
       if (!points) {
         return html`
@@ -685,12 +967,14 @@ export class HADeviceDashboard extends LitElement {
           <div class="spark-row">
             <span class="spark-lbl">${label}</span>
             <span class="spark-no-data">no history</span>
-            <button class="spark-retry" @click=${(e: Event) => { e.stopPropagation(); this._retryGraphData(entityId); }}>↺</button>
+            <button class="spark-retry" @click=${(e: Event) => { e.stopPropagation(); this._retryGraphData(entityId, graphHours); }}>↺</button>
           </div>`;
       }
 
       const vals = points.map(p => p.v);
-      const min = Math.min(...vals), max = Math.max(...vals);
+      const srng = (this._config.graph_style?.sensor_ranges ?? {})[dc] ?? {};
+      const min = srng.min ?? Math.min(...vals);
+      const max = srng.max ?? Math.max(...vals);
       const range = max - min || 1;
       const tMin = points[0].t, tMax = points[points.length - 1].t;
       const tRange = (tMax - tMin) || 1;
@@ -747,7 +1031,7 @@ export class HADeviceDashboard extends LitElement {
         if (tip) tip.style.display = 'none';
       };
 
-      const openDialog = (e: Event) => { e.stopPropagation(); this._graphDialog = device.device_id; };
+      const openDialog = (e: Event) => { e.stopPropagation(); this._detailDevice = device.device_id; };
       return html`
         <div class="spark-group">
           <div class="spark-row ${expanded ? '' : 'spark-row-clickable'}" @click=${expanded ? nothing : openDialog}>
@@ -822,21 +1106,7 @@ export class HADeviceDashboard extends LitElement {
       </div>`;
   }
 
-  private _renderGraphDialog(): TemplateResult {
-    if (!this._graphDialog) return html``;
-    const device = this._getDevices().find(d => d.device_id === this._graphDialog);
-    if (!device) return html``;
-    return html`
-      <div class="graph-dialog-backdrop" @click=${() => this._graphDialog = null}>
-        <div class="graph-dialog" @click=${(e: Event) => e.stopPropagation()}>
-          <div class="graph-dialog-header">
-            <span>${device.name}</span>
-            <button class="graph-dialog-close" @click=${() => this._graphDialog = null}>✕</button>
-          </div>
-          ${this._renderSparklines(device, true)}
-        </div>
-      </div>`;
-  }
+  private _closeDetailSheet(): void { this._detailDevice = null; }
 
   // ── Tile block renderer ───────────────────────────────────────────────────
 
@@ -869,7 +1139,7 @@ export class HADeviceDashboard extends LitElement {
     return `rgb(${r},${g},${b})`;
   }
 
-  private _renderTrvDial(trv: NonNullable<ReturnType<typeof this._getTrv>>) {
+  private _renderTrvDial(trv: TrvInfo) {
     const { minTemp, maxTemp, targetTemp, currentTemp, step, entityId } = trv;
     const cx = 80, cy = 70, r = 54;
     const display = this._trvDragTemp ?? targetTemp ?? minTemp;
@@ -960,7 +1230,7 @@ export class HADeviceDashboard extends LitElement {
     return Math.round((arcDeg / 300) * 100);
   }
 
-  private _renderValveDial(vc: NonNullable<ReturnType<typeof this._getValve>>) {
+  private _renderValveDial(vc: ValveInfo) {
     const pos = vc.position ?? (vc.state === 'open' ? 100 : 0);
     const cx = 80, cy = 68, r = 54;
     const toAngle = (v: number) => 210 + (v / 100) * 300;
@@ -1023,7 +1293,7 @@ export class HADeviceDashboard extends LitElement {
     `;
   }
 
-  private _getVirtualControls(device: HADevice) {
+  private _getVirtualControls(device: HADevice): VirtualControl[] {
     return device.entities
       .filter(e => {
         if (e.domain === 'select' && /_enum_\d+$/i.test(e.entity_id))    return true;
@@ -1169,364 +1439,8 @@ export class HADeviceDashboard extends LitElement {
     device: HADevice,
     profile: DeviceProfileResult
   ): TemplateResult {
-    const sw = this._getPrimarySwitch(device);
-    const trv = this._getTrv(device);
-    const cover = this._getCover(device);
-    const valve = this._getValve(device);
-    const alerts = this._getAlerts(device);
-    const online = this._isOnline(device);
-    const fw = this._getFirmware(device);
-    const power = this._getPower(device);
-    const sensors = this._getSensors(device);
-    const inputs = this._getInputChannels(device);
-    const isOn = sw?.isOn ?? false;
-    const isDimmable = sw?.brightness !== undefined;
-    const bPct = isDimmable && isOn ? Math.max(1, sw!.brightness ?? 1) : 0;
-    const hasColor = !!(sw?.colorModes?.length);
-    const hexColor = hasColor && sw!.rgbColor ? this._rgbToHex(...sw!.rgbColor) : '#ffffff';
-    const isRgbw = hasColor && (sw!.colorModes?.some(m => m === 'rgbw' || m === 'rgbww') ?? false);
-    const isHeating = trv?.hvacMode === 'heat';
-    const genLabel = profile.gen === 'ble' ? 'BLE' : profile.gen === 'other' ? '' : `G${profile.gen}`;
-    const intLabel = getIntegrationLabel(device.integration);
-
-    switch (blockId) {
-
-      case 'name_row': {
-        const devSt = this._config.device_styles?.[device.device_id];
-        const tileIconType = isOn
-          ? devSt?.tile_icon
-          : (devSt?.tile_icon_off ?? devSt?.tile_icon);
-        let tileIcon: TemplateResult;
-        if (tileIconType) {
-          tileIcon = renderAnimSvg(tileIconType, isOn, `--ent-spd:${devSt?.tile_icon_speed ?? 1}`, 'tile-icon');
-        } else if (valve) {
-          const pos = valve.position ?? (valve.state === 'open' ? 100 : 0);
-          const valveIconType: EntityAnimationType | undefined =
-            pos > 66 ? 'water2' :   // waves — fully open
-            pos > 33 ? 'water3' :   // ripple — ~2/3 open
-            pos > 0  ? 'water'  :   // drop — ~1/3 open
-            undefined;              // closed — no icon
-          tileIcon = valveIconType
-            ? renderAnimSvg(valveIconType, true, '--ent-spd:1', 'tile-icon')
-            : html``;
-        } else if (trv) {
-          const heating = trv.hvacAction === 'heating';
-          const pos = trv.valvePosition;
-          const trvIconType: EntityAnimationType | undefined = heating
-            ? (pos != null
-                ? (pos > 66 ? 'flame3' :   // campfire — wide open
-                   pos > 33 ? 'flame2' :   // double flame — medium
-                   'flame')                // single flame — low
-                : 'flame')                 // no position data — single flame
-            : undefined;                   // idle / off — no icon
-          tileIcon = trvIconType
-            ? renderAnimSvg(trvIconType, true, '--ent-spd:1', 'tile-icon')
-            : html``;
-        } else {
-          tileIcon = html``;
-        }
-        const swAnimIcon = sw ? this._renderEntityAnim(sw.entityId, isOn, device.device_id) : html``;
-        return html`
-          <div class="tile-top">
-            <div class="tile-left">
-              <span class="dot ${online ? 'online' : 'offline'}"></span>
-              ${tileIcon}
-              ${swAnimIcon}
-              <span class="tile-name">${device.name}</span>
-              ${fw ? html`<span class="update-dot" title="Firmware update">●</span>` : nothing}
-            </div>
-            ${cover ? html`
-              <div class="cov-btns" @click=${(e: Event) => e.stopPropagation()}>
-                <button class="cov-btn" @click=${(e: Event) => this._coverAction(cover.entityId, 'open', e)}>▲</button>
-                <button class="cov-btn stop" @click=${(e: Event) => this._coverAction(cover.entityId, 'stop', e)}>■</button>
-                <button class="cov-btn" @click=${(e: Event) => this._coverAction(cover.entityId, 'close', e)}>▼</button>
-              </div>
-            ` : sw ? html`
-              <button class="tog ${isOn ? 'on' : 'off'}"
-                @click=${(e: Event) => this._toggle(sw.entityId, isOn, e)}>
-                ${isOn ? 'ON' : 'OFF'}
-              </button>
-            ` : trv ? html`
-              <button class="tog ${isHeating ? 'on' : 'off'}"
-                @click=${(e: Event) => this._setHvacMode(trv.entityId, isHeating ? 'off' : 'heat', e)}>
-                ${isHeating ? 'HEAT' : 'OFF'}
-              </button>
-            ` : nothing}
-          </div>
-        `;
-      }
-
-      case 'sensors':
-        return sensors.length ? html`
-          <div class="tile-sensor-chips">
-            ${sensors.map(s => html`
-              <div class="tile-sensor-chip ${s.warn ? 'warn' : ''}">
-                <span class="tsc-lbl">${s.label}</span>
-                <span class="tsc-val">${s.value}</span>
-              </div>
-            `)}
-          </div>
-        ` : html``;
-
-      case 'graph':
-        return this._renderSparklines(device);
-
-      case 'dimmer': {
-        const swState = sw ? this.hass.states[sw.entityId] : null;
-        const effectList: string[] = (swState?.attributes as any)?.effect_list ?? [];
-        const currentEffect: string | null = (swState?.attributes as any)?.effect ?? null;
-        const whiteVal = sw?.whiteValue ?? 0;
-        return sw && isDimmable ? html`
-          <div class="tile-dim-row" @click=${(e: Event) => e.stopPropagation()}>
-            ${hasColor ? html`
-              <input type="color" class="color-swatch tile-color-swatch" .value=${hexColor}
-                ?disabled=${!isOn}
-                @change=${(e: Event) => { e.stopPropagation(); this._setColor(sw.entityId, (e.target as HTMLInputElement).value, whiteVal, isRgbw); }}/>
-            ` : nothing}
-            <input type="range" class="dim-slider" min="1" max="100"
-              style=${styleMap(hasColor ? { accentColor: hexColor } : {})}
-              .value=${String(isOn ? Math.max(1, sw.brightness ?? 1) : 1)}
-              ?disabled=${!isOn}
-              @input=${(e: Event) => {
-                const pct = (e.target as HTMLInputElement).closest('.tile-dim-row')?.querySelector('.dim-pct');
-                if (pct) pct.textContent = `${(e.target as HTMLInputElement).value}%`;
-              }}
-              @change=${(e: Event) => { this._setBrightness(sw.entityId, parseInt((e.target as HTMLInputElement).value, 10)); }}/>
-            <span class="dim-pct">${bPct}%</span>
-          </div>
-          ${isRgbw ? html`
-            <div class="tile-dim-row tile-white-row" @click=${(e: Event) => e.stopPropagation()}>
-              <span class="dim-white-lbl">W</span>
-              <input type="range" class="dim-slider white-slider" min="0" max="255"
-                .value=${String(whiteVal)}
-                @input=${(e: Event) => {
-                  const el = (e.target as HTMLInputElement).closest('.tile-white-row')?.querySelector('.white-pct');
-                  if (el) el.textContent = (e.target as HTMLInputElement).value;
-                }}
-                @change=${(e: Event) => {
-                  const w = parseInt((e.target as HTMLInputElement).value, 10);
-                  this._setColor(sw.entityId, hexColor, w, true);
-                }}/>
-              <span class="white-pct dim-pct">${whiteVal}</span>
-            </div>
-          ` : nothing}
-          ${effectList.length > 1 ? html`
-            <div class="tile-effects" @click=${(e: Event) => e.stopPropagation()}>
-              ${effectList.filter(fx => fx !== 'Off').map(fx => html`
-                <button class="effect-btn ${currentEffect === fx ? 'active' : ''}"
-                  @click=${(e: Event) => {
-                    e.stopPropagation();
-                    const isActive = currentEffect === fx;
-                    this.hass.callService('light', 'turn_on', { entity_id: sw.entityId, effect: isActive ? 'Off' : fx });
-                  }}>
-                  ${fx}
-                </button>`)}
-            </div>
-          ` : nothing}
-        ` : html``;
-      }
-
-      case 'cover_controls':
-        return cover ? html`
-          <div class="cov-pos-row" @click=${(e: Event) => e.stopPropagation()}>
-            <div class="cov-bar">
-              <div class="cov-fill" style="width:${cover.position ?? (cover.state === 'open' ? 100 : 0)}%"></div>
-            </div>
-            <span class="cov-pct">${cover.position != null ? `${Math.round(cover.position)}%` : cover.state}</span>
-          </div>
-        ` : html``;
-
-      case 'trv_control': {
-        const battEnt = device.entities.find(e => e.domain === 'sensor' &&
-          (this.hass.states[e.entity_id]?.attributes as any)?.device_class === 'battery');
-        const batteryPct = battEnt != null ? parseFloat(this.hass.states[battEnt.entity_id]?.state ?? '') || null : null;
-        const PRESET_ICONS: Record<string, string> = { comfort: '🏠', eco: '🌿', boost: '🚀', away: '🌙', none: '❄️' };
-        return trv ? html`
-          <div class="tile-trv-dial" @click=${(e: Event) => e.stopPropagation()}>
-            ${this._renderTrvDial(trv)}
-            <div class="trv-dial-btns">
-              <button class="trv-step" @click=${() => {
-                const cur = this._trvDragTemp ?? trv.targetTemp;
-                if (cur == null) return;
-                const next = Math.max(trv.minTemp, Math.round((cur - trv.step) * 100) / 100);
-                this._trvDragTemp = next;
-                if (this._trvBtnTimer) clearTimeout(this._trvBtnTimer);
-                this._trvBtnTimer = setTimeout(() => { this._setTemp(trv.entityId, this._trvDragTemp ?? next); this._trvDragTemp = null; }, 600);
-              }}>−</button>
-              <span class="trv-flame">${trv.hvacAction === 'heating' ? '🔥' : ''}</span>
-              <button class="trv-step" @click=${() => {
-                const cur = this._trvDragTemp ?? trv.targetTemp;
-                if (cur == null) return;
-                const next = Math.min(trv.maxTemp, Math.round((cur + trv.step) * 100) / 100);
-                this._trvDragTemp = next;
-                if (this._trvBtnTimer) clearTimeout(this._trvBtnTimer);
-                this._trvBtnTimer = setTimeout(() => { this._setTemp(trv.entityId, this._trvDragTemp ?? next); this._trvDragTemp = null; }, 600);
-              }}>+</button>
-            </div>
-            <div class="trv-stat-row">
-              <div class="trv-stat"><span class="trv-stat-lbl">Now</span><span class="trv-stat-val">${trv.currentTemp != null ? `${trv.currentTemp}°` : '—'}</span></div>
-              <div class="trv-stat"><span class="trv-stat-lbl">Set</span><span class="trv-stat-val">${trv.targetTemp != null ? `${trv.targetTemp.toFixed(1)}°` : '—'}</span></div>
-              ${trv.valvePosition != null ? html`<div class="trv-stat"><span class="trv-stat-lbl">Valve</span><span class="trv-stat-val">${Math.round(trv.valvePosition)}%</span></div>` : nothing}
-              ${batteryPct != null ? html`<div class="trv-stat"><span class="trv-stat-lbl">Batt</span><span class="trv-stat-val">${batteryPct}%</span></div>` : nothing}
-            </div>
-            ${trv.presetModes.length ? html`
-              <div class="trv-presets">
-                ${trv.presetModes.map(p => html`
-                  <button class="trv-preset-btn ${trv.presetMode === p ? 'active' : ''}"
-                    @click=${() => this._setPresetMode(trv.entityId, p)}>
-                    ${(PRESET_ICONS[p] ?? '') + p}
-                  </button>
-                `)}
-              </div>
-            ` : nothing}
-          </div>
-        ` : html``;
-      }
-
-      case 'input_channels':
-        return inputs.length ? html`
-          <div class="tile-inputs" @click=${(e: Event) => e.stopPropagation()}>
-            ${inputs.map(ch => html`
-              <div class="input-row ${ch.isButton ? 'btn-mode' : (ch.isOn ? 'active' : '')}">
-                <span class="${ch.isButton ? 'input-btn-dot' : 'input-row-dot'}"></span>
-                <span class="input-row-name">${ch.label}</span>
-                <span class="input-row-event">${ch.lastEvent ? ch.lastEvent.replace(/_/g, ' ') : '—'}</span>
-                <span class="input-row-time">${this._timeAgo(ch.lastChanged)}</span>
-              </div>
-            `)}
-          </div>
-        ` : html``;
-
-      case 'virtual_controls': {
-        const virtuals = this._getVirtualControls(device);
-        if (!virtuals.length) return html``;
-        return html`
-          <div class="tile-virtuals" @click=${(e: Event) => e.stopPropagation()}>
-            ${virtuals.map(v => {
-              if (v.value === 'unavailable') return nothing;
-              if (v.domain === 'select') {
-                const opts = v.options ?? [];
-                const cur = opts.indexOf(v.value);
-                return html`
-                  <div class="virt-row">
-                    <span class="virt-lbl">${v.label}</span>
-                    <div class="virt-select">
-                      <button class="virt-arr" @click=${() => {
-                        const next = opts[(cur - 1 + opts.length) % opts.length];
-                        this._selectOption(v.entityId, next);
-                      }}>‹</button>
-                      <span class="virt-val">${v.value.replace(/_/g, ' ')}</span>
-                      <button class="virt-arr" @click=${() => {
-                        const next = opts[(cur + 1) % opts.length];
-                        this._selectOption(v.entityId, next);
-                      }}>›</button>
-                    </div>
-                  </div>`;
-              }
-              if (v.domain === 'number') {
-                const num = parseFloat(v.value);
-                const step = v.step ?? 1;
-                const decimals = step < 1 ? String(step).split('.')[1]?.length ?? 1 : 0;
-                return html`
-                  <div class="virt-row">
-                    <span class="virt-lbl">${v.label}</span>
-                    <div class="virt-num">
-                      <button class="virt-arr" @click=${() => this._setNumberValue(v.entityId, Math.max(v.min ?? 0, +(num - step).toFixed(decimals)))}>−</button>
-                      <span class="virt-val">${isNaN(num) ? v.value : num.toFixed(decimals)}</span>
-                      <button class="virt-arr" @click=${() => this._setNumberValue(v.entityId, Math.min(v.max ?? 100, +(num + step).toFixed(decimals)))}>+</button>
-                    </div>
-                  </div>`;
-              }
-              if (v.domain === 'button') {
-                return html`
-                  <div class="virt-row">
-                    <button class="virt-btn" @click=${(e: Event) => this._pressButton(v.entityId, e)}>${v.label}</button>
-                  </div>`;
-              }
-              if (v.domain === 'text') {
-                return html`
-                  <div class="virt-row">
-                    <span class="virt-lbl">${v.label}</span>
-                    <span class="virt-val">${v.value}</span>
-                  </div>`;
-              }
-              if (v.domain === 'switch') {
-                return html`
-                  <div class="virt-row">
-                    <span class="virt-lbl">${v.label}</span>
-                    <button class="tog sm ${v.isOn ? 'on' : 'off'}"
-                      @click=${(e: Event) => this._toggle(v.entityId, v.isOn, e)}>
-                      ${v.isOn ? 'ON' : 'OFF'}
-                    </button>
-                  </div>`;
-              }
-              return nothing;
-            })}
-          </div>`;
-      }
-
-      case 'relay_channels': {
-        const relayEnts = device.entities.filter(e =>
-          e.domain === 'switch' && /_(switch|relay|channel)_\d/.test(e.entity_id)
-        );
-        if (relayEnts.length <= 1) return html``;
-        return html`
-          <div class="relay-channels" @click=${(e: Event) => e.stopPropagation()}>
-            ${relayEnts.map(e => {
-              const s = this.hass.states[e.entity_id];
-              const on = s?.state === 'on';
-              const name = (s?.attributes as any)?.friendly_name ?? e.entity_id;
-              return html`
-                <div class="relay-ch-row">
-                  <span class="relay-ch-dot ${on ? 'on' : ''}"></span>
-                  ${this._renderEntityAnim(e.entity_id, on, device.device_id)}
-                  <span class="relay-ch-name">${name}</span>
-                  <button class="tog sm ${on ? 'on' : 'off'}"
-                    @click=${(ev: Event) => this._toggle(e.entity_id, on, ev)}>
-                    ${on ? 'ON' : 'OFF'}
-                  </button>
-                </div>`;
-            })}
-          </div>`;
-      }
-
-      case 'valve_controls': {
-        const vc = this._getValve(device);
-        return vc ? html`
-          <div class="tile-trv-dial" @click=${(e: Event) => e.stopPropagation()}>
-            ${this._renderValveDial(vc)}
-            <div class="valve-dial-btns">
-              <button class="valve-btn close" @click=${(e: Event) => this._valveAction(vc.entityId, 'close', e)}>Close</button>
-              <button class="valve-btn stop" @click=${(e: Event) => this._valveAction(vc.entityId, 'stop', e)}>■</button>
-              <button class="valve-btn open" @click=${(e: Event) => this._valveAction(vc.entityId, 'open', e)}>Open</button>
-            </div>
-          </div>
-        ` : html``;
-      }
-
-      case 'power_bar':
-        return this._renderPowerBar(device);
-
-      case 'badges':
-        return html`
-          <div class="tile-bot">
-            ${power != null ? html`<span class="tile-power">${formatPower(power)}</span>` : nothing}
-            <div class="tile-badges">
-              ${alerts.map(a => html`<span class="alert-badge alert-${a}">${a === 'overtemp' ? '🌡' : '⚡'}!</span>`)}
-              ${profile.label ? html`<span class="type-badge type-${profile.type}">${profile.label}</span>` : nothing}
-              ${genLabel ? html`<span class="gen-badge gen-${profile.gen}">${genLabel}</span>` : nothing}
-              ${intLabel ? html`<span class="int-badge-tile">${intLabel}</span>` : nothing}
-              ${device.isShelly && device.ip && isPrivateIp(device.ip) ? html`
-                <a href="http://${device.ip}" target="_blank" class="tile-ui-link"
-                  @click=${(e: Event) => e.stopPropagation()}>↗</a>
-              ` : nothing}
-            </div>
-          </div>
-        `;
-
-      default:
-        return html``;
-    }
+    const accent = this._tileAccent(device, device.area ?? '');
+    return renderBlockTile(this._buildTileCtx(device, profile, accent), blockId);
   }
 
   private _renderPowerBar(device: HADevice): TemplateResult {
@@ -1541,29 +1455,438 @@ export class HADeviceDashboard extends LitElement {
 
   // ── Tile render ───────────────────────────────────────────────────────────
 
-  private _renderTile(device: HADevice): TemplateResult {
-    const online = this._isOnline(device);
-    const profile = getDeviceProfile(device);
-    const tileSize = this._config.tile_size ?? 'md';
-    const accentColor = this._config.device_styles?.[device.device_id]?.color;
-    const tileStyle: Record<string, string> = {};
-    if (accentColor) {
-      tileStyle['borderColor'] = accentColor;
-      tileStyle['boxShadow'] = `0 0 12px ${accentColor}50`;
+  /** Quick sensor snapshot used by alternative tile styles */
+  private _tileSensors(device: HADevice): {
+    power: number | null; voltage: number | null; current: number | null;
+    temp: number | null; energy: number | null; rssi: number | null;
+    uptime: number | null;
+  } {
+    let power: number | null = null, voltage: number | null = null,
+        current: number | null = null, temp: number | null = null,
+        energy: number | null = null, rssi: number | null = null,
+        uptime: number | null = null;
+    for (const e of device.entities) {
+      if (e.domain !== 'sensor') continue;
+      const s = this.hass.states[e.entity_id];
+      if (!s || s.state === 'unavailable' || s.state === 'unknown') continue;
+      const dc = (s.attributes as HassAttrs).device_class as string ?? '';
+      const v = parseFloat(s.state);
+      if (dc === 'power'       && power   == null) power   = isNaN(v) ? null : v;
+      if (dc === 'voltage'     && voltage == null) voltage = isNaN(v) ? null : v;
+      if (dc === 'current'     && current == null) current = isNaN(v) ? null : v;
+      if (dc === 'temperature' && temp    == null) temp    = isNaN(v) ? null : v;
+      if (dc === 'energy'      && energy  == null) energy  = isNaN(v) ? null : v;
+      const uid = e.entity_id;
+      if (uid.includes('rssi') || uid.includes('signal')) rssi = isNaN(v) ? null : v;
+      if (uid.includes('uptime')) uptime = isNaN(v) ? null : v;
     }
-    const _defaultBlocks: TileBlockId[] = ['name_row', 'sensors', 'graph', 'dimmer', 'cover_controls', 'trv_control', 'valve_controls', 'input_channels', 'relay_channels', 'power_bar', 'badges'];
-    const blockOrder: TileBlockId[] =
-      this._config.device_styles?.[device.device_id]?.tile_layout ??
-      this._config.tile_layout ??
-      PROFILE_DEFAULT_BLOCKS[profile.type] ??
-      _defaultBlocks;
+    return { power, voltage, current, temp, energy, rssi, uptime };
+  }
+
+  /** Accent colour: device override → area accent → global accent → orange fallback */
+  private _tileAccent(device: HADevice, areaLabel: string): string {
+    const devClr = this._config.device_styles?.[device.device_id]?.color;
+    if (devClr) return devClr;
+    const areaStyle = this._config.area_styles?.[areaLabel];
+    if (areaStyle?.accentColor) return areaStyle.accentColor;
+    return this._config.style?.accent_color ?? 'var(--sc-accent)';
+  }
+
+  // ── Alternative tile style renderers ─────────────────────────────────────
+
+  /**
+   * Shared lower body for all alternative tile styles.
+   * Renders whatever functional blocks the device actually needs, in order:
+   *   graphs → dimmer/colour → TRV dial → valve controls → cover controls → relay channels
+   * Skips any block that doesn't apply to this device.
+   * Pass skipPowerSpark=true for the spark style (already shows power as its centrepiece).
+   */
+  private _renderTileLowerBody(
+    device: HADevice,
+    profile: DeviceProfileResult,
+    opts: { skipGraphs?: boolean; skipPowerGraph?: boolean } = {}
+  ): TemplateResult {
+    const sw     = this._getPrimarySwitch(device);
+    const trv    = this._getTrv(device);
+    const valve  = this._getValve(device);
+    const cover  = this._getCover(device);
+    const isOn   = sw?.isOn ?? false;
+
+    // ── Graphs ──────────────────────────────────────────────────
+    const graphEntities = this._getGraphEntities(device);
+    const visibleEntities = opts.skipGraphs
+      ? []
+      : opts.skipPowerGraph
+        ? graphEntities.filter(e => e.dc !== 'power')
+        : graphEntities;
+    const graphBlock = visibleEntities.length
+      ? html`<div class="ts-lower-section ts-lower-graphs">
+          ${this._renderSparklinesFiltered(device, visibleEntities)}
+        </div>`
+      : nothing;
+
+    // ── Dimmer / colour slider ───────────────────────────────────
+    const isDimmable  = sw?.brightness !== undefined;
+    const hasColor    = !!(sw?.colorModes?.length);
+    const hexColor    = hasColor && sw!.rgbColor ? this._rgbToHex(...sw!.rgbColor) : '#ffffff';
+    const isRgbw      = hasColor && (sw!.colorModes?.some(m => m === 'rgbw' || m === 'rgbww') ?? false);
+    const bPct        = isDimmable && isOn ? Math.max(1, sw!.brightness ?? 1) : 0;
+    const whiteVal    = sw?.whiteValue ?? 0;
+    const swState     = sw ? this.hass.states[sw.entityId] : null;
+    const effectList: string[] = (swState?.attributes as HassAttrs)?.effect_list ?? [];
+    const currentEffect: string | null = (swState?.attributes as HassAttrs)?.effect ?? null;
+
+    const dimmerBlock = isDimmable ? html`
+      <div class="ts-lower-section ts-lower-dimmer" @click=${(e: Event) => e.stopPropagation()}>
+        <div class="tile-dim-row">
+          ${hasColor ? html`
+            <input type="color" class="color-swatch tile-color-swatch" .value=${hexColor}
+              ?disabled=${!isOn}
+              @change=${(e: Event) => { e.stopPropagation(); this._setColor(sw!.entityId, (e.target as HTMLInputElement).value, whiteVal, isRgbw); }}/>
+          ` : nothing}
+          <input type="range" class="dim-slider" min="1" max="100"
+            .value=${String(isOn ? bPct : 1)}
+            ?disabled=${!isOn}
+            @input=${(e: Event) => {
+              const pct = (e.target as HTMLInputElement).closest('.tile-dim-row')?.querySelector('.dim-pct');
+              if (pct) pct.textContent = `${(e.target as HTMLInputElement).value}%`;
+            }}
+            @change=${(e: Event) => { this._setBrightness(sw!.entityId, parseInt((e.target as HTMLInputElement).value, 10)); }}/>
+          <span class="dim-pct">${bPct}%</span>
+        </div>
+        ${isRgbw ? html`
+          <div class="tile-dim-row tile-white-row">
+            <span class="dim-white-lbl">W</span>
+            <input type="range" class="dim-slider white-slider" min="0" max="255"
+              .value=${String(whiteVal)}
+              @input=${(e: Event) => {
+                const el = (e.target as HTMLInputElement).closest('.tile-white-row')?.querySelector('.white-pct');
+                if (el) el.textContent = (e.target as HTMLInputElement).value;
+              }}
+              @change=${(e: Event) => { this._setColor(sw!.entityId, hexColor, parseInt((e.target as HTMLInputElement).value, 10), true); }}/>
+            <span class="white-pct dim-pct">${whiteVal}</span>
+          </div>
+        ` : nothing}
+        ${effectList.length > 1 ? html`
+          <div class="tile-effects">
+            ${effectList.filter(fx => fx !== 'Off').map(fx => html`
+              <button class="effect-btn ${currentEffect === fx ? 'active' : ''}"
+                @click=${(e: Event) => { e.stopPropagation(); this.hass.callService('light', 'turn_on', { entity_id: sw!.entityId, effect: currentEffect === fx ? 'Off' : fx }); }}>
+                ${fx}
+              </button>`)}
+          </div>
+        ` : nothing}
+      </div>
+    ` : nothing;
+
+    // ── TRV dial ─────────────────────────────────────────────────
+    const trvBlock = trv ? html`
+      <div class="ts-lower-section ts-lower-trv" @click=${(e: Event) => e.stopPropagation()}>
+        ${this._renderBlock('trv_control', device, profile)}
+      </div>
+    ` : nothing;
+
+    // ── Valve controls ───────────────────────────────────────────
+    const valveBlock = valve ? html`
+      <div class="ts-lower-section ts-lower-valve" @click=${(e: Event) => e.stopPropagation()}>
+        ${this._renderBlock('valve_controls', device, profile)}
+      </div>
+    ` : nothing;
+
+    // ── Cover controls ───────────────────────────────────────────
+    const coverBlock = cover ? html`
+      <div class="ts-lower-section ts-lower-cover" @click=${(e: Event) => e.stopPropagation()}>
+        ${this._renderBlock('cover_controls', device, profile)}
+      </div>
+    ` : nothing;
+
+    // ── Relay channels (multi-channel devices) ───────────────────
+    const relayEnts = device.entities.filter(e =>
+      e.domain === 'switch' && /_(switch|relay|channel)_\d/.test(e.entity_id)
+    );
+    const relayBlock = relayEnts.length > 1 ? html`
+      <div class="ts-lower-section ts-lower-relay" @click=${(e: Event) => e.stopPropagation()}>
+        ${this._renderBlock('relay_channels', device, profile)}
+      </div>
+    ` : nothing;
+
+    // Only render the wrapper if there's actually something to show
+    const hasContent = visibleEntities.length || isDimmable || trv || valve || cover || relayEnts.length > 1;
+    if (!hasContent) return html``;
 
     return html`
-      <div class="tile ${!online ? 'offline' : ''} tile-${tileSize}"
-        style=${styleMap(tileStyle)}>
-        ${blockOrder.map(blockId => this._renderBlock(blockId, device, profile))}
-      </div>
-    `;
+      <div class="ts-lower-body">
+        ${graphBlock}
+        ${dimmerBlock}
+        ${trvBlock}
+        ${valveBlock}
+        ${coverBlock}
+        ${relayBlock}
+      </div>`;
+  }
+
+  /** Ensures power graph data is being fetched for a device (used by alt tile styles) */
+  private _ensureGraphData(device: HADevice): void {
+    const powerEnt = device.entities.find(e => {
+      if (e.domain !== 'sensor') return false;
+      const s = this.hass.states[e.entity_id];
+      return s && (s.attributes as HassAttrs)?.device_class === 'power';
+    });
+    if (!powerEnt) return;
+    this._requestGraphData(powerEnt.entity_id);
+  }
+
+  /** Get the first available power sparkline data for a device */
+  private _getPowerSparks(device: HADevice): Array<{ t: number; v: number }> {
+    const powerEnt = device.entities.find(e => {
+      if (e.domain !== 'sensor') return false;
+      const s = this.hass.states[e.entity_id];
+      return s && (s.attributes as HassAttrs)?.device_class === 'power';
+    });
+    if (!powerEnt) return [];
+    return this._graphData.get(this._gk(powerEnt.entity_id, this._config.graph_hours ?? 24)) ?? [];
+  }
+  // ── Style resolution helpers ─────────────────────────────────────────────
+
+  /** Auto-detect the best style for a device profile */
+  private _autoStyle(profile: DeviceProfileResult): TileStyle {
+    switch (profile.type) {
+      case 'relay': case 'plug': case 'energy': case 'uni': return 'power-monitor';
+      case 'dimmer': case 'rgb':                             return 'light-control';
+      case 'climate': case 'wall_display':                   return 'climate-control';
+      case 'cover':                                          return 'cover-control';
+      case 'sensor':                                         return 'sensor-card';
+      case 'input':                                          return 'scene-button';
+      default:                                               return 'default';
+    }
+  }
+
+  /** Remap legacy style names to new purposeful names */
+  private _resolveStyle(raw: TileStyle | undefined, profile: DeviceProfileResult): { style: TileStyle; variant: PowerMonitorVariant } {
+    const legacyVariantMap: Partial<Record<TileStyle, PowerMonitorVariant>> = {
+      hero: 'big-number', ring: 'gauge', spark: 'graph', hbar: 'compact', list: 'table',
+    };
+    if (raw && raw in legacyVariantMap) {
+      return { style: 'power-monitor', variant: legacyVariantMap[raw]! };
+    }
+    if (raw === 'command') return { style: 'scene-button', variant: 'big-number' };
+    return { style: raw ?? 'default', variant: 'big-number' };
+  }
+
+  private _handleScenePress(device: HADevice): void {
+    const buttonEnts = device.entities.filter(e => e.domain === 'button');
+    for (const e of buttonEnts) {
+      this.hass.callService('button', 'press', { entity_id: e.entity_id });
+    }
+    const el = this.renderRoot?.querySelector(`.ts-scene[data-dev="${device.device_id}"] .ts-scene-ripple`) as HTMLElement | null;
+    if (el) { el.classList.add('active'); setTimeout(() => el.classList.remove('active'), 600); }
+  }
+
+  private _adjustTrvTemp(trv: TrvInfo, direction: -1 | 1): void {
+    const cur = this._trvDragTemp ?? trv.targetTemp;
+    if (cur == null) return;
+    const raw = cur + direction * trv.step;
+    const next = direction > 0
+      ? Math.min(trv.maxTemp, Math.round(raw * 100) / 100)
+      : Math.max(trv.minTemp, Math.round(raw * 100) / 100);
+    this._trvDragTemp = next;
+    if (this._trvBtnTimer) clearTimeout(this._trvBtnTimer);
+    this._trvBtnTimer = setTimeout(() => {
+      this._setTemp(trv.entityId, this._trvDragTemp ?? next);
+      this._trvDragTemp = null;
+    }, 600);
+  }
+
+  private _buildTileCtx(device: HADevice, profile: DeviceProfileResult, accent: string): TileCtx {
+    const online = this._isOnline(device);
+    const sw = this._getPrimarySwitch(device);
+    const isOn = sw?.isOn ?? false;
+    return {
+      hass: this.hass,
+      config: this._config,
+      device,
+      profile,
+      accent,
+      online,
+      isOn,
+      getPrimarySwitch: (d) => this._getPrimarySwitch(d),
+      getTrv: (d) => this._getTrv(d),
+      getCover: (d) => this._getCover(d),
+      getValve: (d) => this._getValve(d),
+      getPower: (d) => this._getPower(d),
+      tileSensors: (d) => this._tileSensors(d),
+      getGraphEntities: (d) => this._getGraphEntities(d),
+      getPowerSparks: (d) => this._getPowerSparks(d),
+      ensureGraphData: (d) => this._ensureGraphData(d),
+      renderEntityAnim: (id, on, devId) => this._renderEntityAnim(id, on, devId),
+      renderSparklinesFiltered: (d, ents) => this._renderSparklinesFiltered(d, ents),
+      renderTileLowerBody: (d, p, opts) => this._renderTileLowerBody(d, p, opts),
+      renderTrvDial: (trv) => this._renderTrvDial(trv),
+      renderValveDial: (vc) => this._renderValveDial(vc),
+      setTemp: (id, t) => this._setTemp(id, t),
+      setHvacMode: (id, m, e) => this._setHvacMode(id, m, e),
+      setPresetMode: (id, p) => this._setPresetMode(id, p),
+      coverAction: (id, a, e) => this._coverAction(id, a, e),
+      valveAction: (id, a, e) => this._valveAction(id, a, e),
+      toggle: (id, on, e) => this._toggle(id, on, e),
+      pressButton: (id, e) => this._pressButton(id, e),
+      setNumberValue: (id, v) => this._setNumberValue(id, v),
+      selectOption: (id, opt) => this._selectOption(id, opt),
+      timeAgo: (ts) => this._timeAgo(ts),
+      getInputChannels: (d) => this._getInputChannels(d),
+      handleScenePress: (d) => this._handleScenePress(d),
+      adjustTrvTemp: (trv, dir) => this._adjustTrvTemp(trv, dir),
+      requestGraphData: (id, h) => this._requestGraphData(id, h),
+      getGraphPoints: (id, h) => this._graphData.get(this._gk(id, h)) ?? [],
+      rgbToHex: (r, g, b) => this._rgbToHex(r, g, b),
+      setBrightness: (id, pct) => this._setBrightness(id, pct),
+      setColor: (id, hex, w, rgbw) => this._setColor(id, hex, w, rgbw),
+      getAlerts: (d) => this._getAlerts(d),
+      getFirmware: (d) => this._getFirmware(d),
+      getSensors: (d) => this._getSensors(d),
+      getVirtualControls: (d) => this._getVirtualControls(d),
+      renderSparklines: (d) => this._renderSparklines(d),
+      renderSparklinesExpanded: (d, h) => this._renderSparklines(d, true, h),
+      renderPowerBar: (d) => this._renderPowerBar(d),
+      closeDetailSheet: () => this._closeDetailSheet(),
+      getDetailHistoryRange: () => this._detailHistoryRange,
+      setDetailHistoryRange: (r) => { this._detailHistoryRange = r; },
+      fireMoreInfo: (id) => { fireEvent(this as any, 'hass-more-info' as any, { entityId: id } as any); },
+    };
+  }
+
+  private _renderTile(device: HADevice, areaTileStyle?: TileStyle): TemplateResult {
+    const online  = this._isOnline(device);
+    const profile = getDeviceProfile(device);
+    const activeView = this._getActiveView();
+    const tileSize = activeView?.tile_size ?? this._config.tile_size ?? 'md';
+
+    // Accent / border override
+    const accentColor = this._config.device_styles?.[device.device_id]?.color;
+    const tileStyleObj: Record<string, string> = {};
+    if (accentColor) {
+      tileStyleObj['borderColor'] = accentColor;
+      tileStyleObj['boxShadow']   = `0 0 12px ${accentColor}50`;
+    }
+
+    // Priority: device tile_style → area tile_style → active view → default
+    const devStyle = this._config.device_styles?.[device.device_id];
+    const rawStyle = devStyle?.tile_style ?? areaTileStyle ?? activeView?.tile_style;
+
+    // Resolve variant — device → area → view → default
+    const areaVariant = this._config.area_styles?.[device.area ?? '']?.power_monitor_variant;
+    const { style, variant: legacyVariant } = this._resolveStyle(rawStyle, profile);
+    const variant: PowerMonitorVariant =
+      devStyle?.power_monitor_variant
+      ?? areaVariant
+      ?? activeView?.power_monitor_variant
+      ?? legacyVariant;
+
+    if (style === 'default' || !style) {
+      // Original block-based layout
+      const _defaultBlocks: TileBlockId[] = ['name_row', 'sensors', 'graph', 'dimmer', 'cover_controls', 'trv_control', 'valve_controls', 'input_channels', 'relay_channels', 'power_bar', 'badges'];
+      const blockOrder: TileBlockId[] =
+        devStyle?.tile_layout ?? this._config.tile_layout ??
+        PROFILE_DEFAULT_BLOCKS[profile.type] ?? _defaultBlocks;
+      const areaAccent = this._tileAccent(device, device.area ?? '');
+      const blockCtx = this._buildTileCtx(device, profile, areaAccent);
+      return html`
+        <div class="tile tile--clickable ${!online ? 'offline' : ''} tile-${tileSize}" style=${styleMap(tileStyleObj)}
+          @pointerdown=${(e: PointerEvent) => this._onTilePointerDown(device, e)}
+          @pointerup=${(e: PointerEvent) => this._onTilePointerUp(device, e)}
+          @pointercancel=${() => this._onTilePointerCancel()}
+          @pointermove=${(e: PointerEvent) => this._onTilePointerMove(e)}>
+          ${blockOrder.map(b => renderBlockTile(blockCtx, b))}
+        </div>`;
+    }
+
+    // Alt styles — shared setup
+    const areaLabel = device.area ?? '';
+    const accent    = this._tileAccent(device, areaLabel);
+    const sw        = this._getPrimarySwitch(device);
+    const isOn      = sw?.isOn ?? false;
+    const base      = `tile tile-${tileSize} ${!online ? 'offline' : ''} tile--clickable`;
+
+    return html`<div class="${base}" style=${styleMap(tileStyleObj)}
+      @pointerdown=${(e: PointerEvent) => this._onTilePointerDown(device, e)}
+      @pointerup=${(e: PointerEvent) => this._onTilePointerUp(device, e)}
+      @pointercancel=${() => this._onTilePointerCancel()}
+      @pointermove=${(e: PointerEvent) => this._onTilePointerMove(e)}>
+      ${style === 'power-monitor'   ? renderPowerMonitorTile(this._buildTileCtx(device, profile, accent), variant)
+      : style === 'light-control'   ? renderLightControlTile(this._buildTileCtx(device, profile, accent))
+      : style === 'climate-control' ? renderClimateControlTile(this._buildTileCtx(device, profile, accent))
+      : style === 'cover-control'   ? renderCoverControlTile(this._buildTileCtx(device, profile, accent))
+      : style === 'sensor-card'     ? renderSensorCardTile(this._buildTileCtx(device, profile, accent))
+      : style === 'scene-button'    ? renderSceneButtonTile(this._buildTileCtx(device, profile, accent))
+      : nothing}
+    </div>`;
+  }
+
+  // ── Tile click / long-press ────────────────────────────────────────────────
+
+  private _onTilePointerDown(_device: HADevice, e: PointerEvent): void {
+    if (!(e.target as Element | null)?.closest?.('.tile-trigger')) return;
+    this._lpStart = { x: e.clientX, y: e.clientY };
+  }
+
+  private _onTilePointerUp(device: HADevice, e: PointerEvent): void {
+    if (!(e.target as Element | null)?.closest?.('.tile-trigger')) return;
+    const start = this._lpStart;
+    this._lpStart = null;
+    if (!start) return; // cancelled by move or pointercancel
+    this._detailDevice = device.device_id;
+    this._detailHistoryRange = 24;
+  }
+
+  private _onTilePointerCancel(): void {
+    this._lpStart = null;
+  }
+
+  private _onTilePointerMove(e: PointerEvent): void {
+    if (!this._lpStart) return;
+    const dx = e.clientX - this._lpStart.x;
+    const dy = e.clientY - this._lpStart.y;
+    if (dx * dx + dy * dy > 100) this._lpStart = null; // 10px threshold squared → cancel tap on drag
+  }
+
+  // ── Favourites section ───────────────────────────────────────────────────
+
+  private _renderFavoritesSection(allDevices: HADevice[]): TemplateResult {
+    const ids = this._config.favorites;
+    if (!ids?.length) return html``;
+
+    // Preserve the user-defined pin order
+    const idOrder = new Map(ids.map((id, i) => [id, i]));
+    const favDevices = allDevices
+      .filter(d => idOrder.has(d.device_id))
+      .sort((a, b) => (idOrder.get(a.device_id) ?? 0) - (idOrder.get(b.device_id) ?? 0));
+
+    if (!favDevices.length) return html``;
+
+    const totalPower  = favDevices.reduce((s, d) => s + (this._getPower(d) ?? 0), 0);
+    const onlineCount = favDevices.filter(d => this._isOnline(d)).length;
+    const cols        = this._config.columns ?? 3;
+    const tileStyle   = this._config.area_styles?.['Favourites']?.tile_style;
+
+    return html`
+      <div class="fav-section">
+        <div class="fav-header">
+          <span class="fav-star">★</span>
+          <span class="fav-label">Favourites</span>
+          <div class="fav-chips">
+            <span class="fav-chip fav-chip-count">${onlineCount}/${favDevices.length}</span>
+            ${totalPower > 0 ? html`<span class="fav-chip fav-chip-power">${formatPower(totalPower)}</span>` : nothing}
+          </div>
+        </div>
+        <div class="device-grid fav-grid" style="--cols:${cols}">
+          ${favDevices.map(d => html`
+            <div class="fav-tile-wrap">
+              ${d.area ? html`<span class="tile-room-badge">${d.area}</span>` : nothing}
+              ${this._renderTile(d, tileStyle)}
+            </div>
+          `)}
+        </div>
+      </div>`;
   }
 
   // ── Area section ──────────────────────────────────────────────────────────
@@ -1614,14 +1937,6 @@ export class HADeviceDashboard extends LitElement {
 
     const styleObj: Record<string, string> = {};
     if (areaStyle) {
-      if (areaStyle.bgImage) {
-        styleObj['backgroundImage'] = `url('${areaStyle.bgImage}')`;
-        styleObj['backgroundSize']  = areaStyle.bgImageSize === 'stretch' ? '100% 100%' : (areaStyle.bgImageSize ?? 'contain');
-        styleObj['backgroundPosition'] = 'center';
-        styleObj['backgroundRepeat'] = 'no-repeat';
-      } else if (areaStyle.bgColor) {
-        styleObj['background'] = areaStyle.bgColor;
-      }
       if (areaStyle.borderColor || areaStyle.borderWidth) {
         styleObj['border'] = `${areaStyle.borderWidth ?? 1}px ${areaStyle.borderStyle ?? 'solid'} ${areaStyle.borderColor ?? 'var(--divider-color)'}`;
       }
@@ -1634,7 +1949,7 @@ export class HADeviceDashboard extends LitElement {
       if (areaStyle.textColor)       styleObj['--area-header-color'] = areaStyle.textColor;
       if (areaStyle.fontSize)        styleObj['--area-name-size']    = `${areaStyle.fontSize}px`;
       if (areaStyle.fontWeight)      styleObj['--area-name-weight']  = areaStyle.fontWeight;
-      if (areaStyle.tileBgColor)     styleObj['--sc-tile-bg']        = areaStyle.tileBgColor;
+      if (areaStyle.tileBgColor)     styleObj['--sc-tile-bg']           = areaStyle.tileBgColor;
       if (areaStyle.tileBorderColor) styleObj['--sc-tile-border']    = areaStyle.tileBorderColor;
       if (areaStyle.tileBorderRadius != null) styleObj['--tile-radius'] = `${areaStyle.tileBorderRadius}px`;
       if (areaStyle.tileGap != null) styleObj['--tile-gap']          = `${areaStyle.tileGap}px`;
@@ -1644,10 +1959,35 @@ export class HADeviceDashboard extends LitElement {
         styleObj['--sc-graph-line']  = areaStyle.accentColor;
         styleObj['--sc-accent-glow'] = `${areaStyle.accentColor}59`;
       }
+      // Per-room button style overrides
+      if (areaStyle.buttonShape || areaStyle.buttonVariant || areaStyle.buttonSize) {
+        const shape   = areaStyle.buttonShape   ?? 'pill';
+        const variant = areaStyle.buttonVariant ?? 'fill';
+        const size    = areaStyle.buttonSize    ?? 'md';
+        const isSquarish = shape === 'square' || shape === 'circle';
+        const padMap: Record<string,string>   = { sm:'2px 8px',   md:'4px 11px',  lg:'6px 16px' };
+        const padSqMap: Record<string,string> = { sm:'3px 5px',   md:'4px 8px',   lg:'6px 12px' };
+        styleObj['--tog-radius'] = shape === 'pill' ? '20px' : shape === 'rect' ? '6px' : shape === 'square' ? '6px' : '50%';
+        styleObj['--tog-pad']    = isSquarish ? (padSqMap[size] ?? padSqMap.md) : (padMap[size] ?? padMap.md);
+        styleObj['--tog-fsize']  = size === 'sm' ? '.65em' : size === 'lg' ? '.8em' : '.72em';
+        styleObj['--tog-aspect'] = isSquarish ? '1' : 'auto';
+        if (variant === 'outline') {
+          styleObj['--tog-on-bg']     = 'transparent';
+          styleObj['--tog-on-border'] = '1px solid var(--sc-accent)';
+          styleObj['--tog-on-color']  = 'var(--sc-accent)';
+          styleObj['--tog-on-shadow'] = 'none';
+        } else if (variant === 'ghost') {
+          styleObj['--tog-on-bg']     = 'transparent';
+          styleObj['--tog-on-border'] = 'none';
+          styleObj['--tog-on-color']  = 'var(--sc-accent)';
+          styleObj['--tog-on-shadow'] = 'none';
+        }
+      }
     }
 
     // Flat grid — no expanded panel
-    const gridItems = devices.map(d => this._renderTile(d));
+    const areaTileStyle: TileStyle | undefined = areaStyle?.tile_style;
+    const gridItems = devices.map(d => this._renderTile(d, areaTileStyle));
     const areaChips = this._getAreaChips(devices);
 
     return html`
@@ -1808,8 +2148,8 @@ export class HADeviceDashboard extends LitElement {
                   .map(e => {
                     const s = this.hass.states[e.entity_id];
                     const rawState = s?.state ?? 'unavailable';
-                    const unit = (s?.attributes as any)?.unit_of_measurement ?? '';
-                    const name = (s?.attributes as any)?.friendly_name ?? e.entity_id.split('.')[1].replace(/_/g, ' ');
+                    const unit = (s?.attributes as HassAttrs)?.unit_of_measurement ?? '';
+                    const name = (s?.attributes as HassAttrs)?.friendly_name ?? e.entity_id.split('.')[1].replace(/_/g, ' ');
                     const isToggleable = ['switch', 'light', 'input_boolean', 'fan'].includes(e.domain);
                     return html`
                       <div class="ent-row">
@@ -1860,7 +2200,6 @@ export class HADeviceDashboard extends LitElement {
     }
 
     const devices = this._getDevices();
-    const st = this._config.style ?? {};
 
     if (!devices.length) {
       return html`
@@ -1876,7 +2215,11 @@ export class HADeviceDashboard extends LitElement {
     const offline = devices.length - online;
     const totalPower = devices.reduce((s, d) => s + (this._getPower(d) ?? 0), 0);
     const alertDevices = devices.filter(d => this._getAlerts(d).length > 0);
-    const grouped = this._groupByArea(devices);
+    const activeView = this._getActiveView();
+    const viewDevices = activeView ? this._applyViewFilter(devices, activeView) : devices;
+    const grouped = this._groupByArea(viewDevices);
+    const showFavourites = !activeView || activeView.show_favourites === true;
+    const showRooms = !activeView || activeView.show_rooms !== false;
 
     // Cloud connectivity stats from binary_sensor.*_cloud entities
     const cloudSensors = Object.values(this.hass.states)
@@ -1887,104 +2230,18 @@ export class HADeviceDashboard extends LitElement {
     const cloudName = (s: (typeof cloudSensors)[0]) =>
       ((s.attributes.friendly_name as string) ?? s.entity_id).replace(/\s*[Cc]loud$/, '').trim();
 
-    // Build CSS variable inline styles from config.style
-    const cardInlineStyles: Record<string, string> = {};
-    if (st.accent_color)  cardInlineStyles['--sc-accent']       = st.accent_color;
-    if (st.tile_radius)   cardInlineStyles['--tile-radius']     = `${st.tile_radius}px`;
-    if (st.tile_gap)      cardInlineStyles['--tile-gap']        = `${st.tile_gap}px`;
-    if (st.font_family)      cardInlineStyles['--sc-font-family']    = st.font_family;
-    if (st.text_transform)   cardInlineStyles['--sc-text-transform'] = st.text_transform;
-    if (st.text_size_scale)  cardInlineStyles['--sc-text-scale']     = String(st.text_size_scale);
-    if (st.tile_bg)            cardInlineStyles['--sc-tile-bg']         = st.tile_bg;
-    if (st.tile_bg_image)      cardInlineStyles['--sc-tile-bg-image']   = `url("${st.tile_bg_image}")`;
-    if (st.tile_bg_image_size) cardInlineStyles['--sc-tile-bg-image-sz']= st.tile_bg_image_size === 'stretch' ? '100% 100%' : st.tile_bg_image_size;
-    if (this._config.card_bg_image)      cardInlineStyles['--sc-card-bg-image']   = `url("${this._config.card_bg_image}")`;
-    if (this._config.card_bg_image_size) cardInlineStyles['--sc-card-bg-image-sz']= this._config.card_bg_image_size === 'stretch' ? '100% 100%' : this._config.card_bg_image_size;
-    if (st.tile_border)        cardInlineStyles['--sc-tile-border']      = st.tile_border;
-    if (st.tile_border_width != null) cardInlineStyles['--sc-tile-border-width'] = `${st.tile_border_width}px`;
-    if (st.tile_hover_bg)      cardInlineStyles['--sc-tile-hover-bg']    = st.tile_hover_bg;
-    if (st.tile_hover_shadow)  cardInlineStyles['--sc-tile-hover-shad']  = st.tile_hover_shadow;
-    if (st.tile_sensor_bg)     cardInlineStyles['--sc-sensor-bg']        = st.tile_sensor_bg;
-    if (st.tile_exp_bg)        cardInlineStyles['--sc-tile-exp-bg']      = st.tile_exp_bg;
-    if (st.card_radius != null) cardInlineStyles['--sc-card-radius']     = `${st.card_radius}px`;
-    if (st.text_primary)       cardInlineStyles['--sc-text-primary']     = st.text_primary;
-    if (st.text_secondary)     cardInlineStyles['--sc-text-secondary']   = st.text_secondary;
-    if (st.text_muted)         cardInlineStyles['--sc-text-muted']       = st.text_muted;
-    if (st.offline_color)      cardInlineStyles['--sc-offline-dot']      = st.offline_color;
-    if (st.online_color)       cardInlineStyles['--sc-online-color']     = st.online_color;
-    if (st.power_color)        cardInlineStyles['--sc-power-color']      = st.power_color;
-    if (st.area_header_color)  cardInlineStyles['--sc-area-header-color']= st.area_header_color;
-    if (this._config.graph_line_color) cardInlineStyles['--sc-graph-line'] = this._config.graph_line_color;
-    // Tile box shadow preset
-    const shadowMap: Record<string, string> = {
-      soft:   '0 2px 8px rgba(0,0,0,0.25)',
-      medium: '0 4px 16px rgba(0,0,0,0.40)',
-      strong: '0 8px 28px rgba(0,0,0,0.60)',
-    };
-    if (st.tile_box_shadow && st.tile_box_shadow !== 'none')
-      cardInlineStyles['--sc-tile-shadow'] = shadowMap[st.tile_box_shadow] ?? 'none';
-    else if (st.tile_box_shadow === 'none')
-      cardInlineStyles['--sc-tile-shadow'] = 'none';
+    const cardInlineStyles = this._buildCardStyles();
 
-    // Button style vars
-    const btnShape   = st.button_shape   ?? 'pill';
-    const btnVariant = st.button_variant ?? 'fill';
-    const btnSize    = st.button_size    ?? 'md';
-    const togPadMap: Record<string,string> = { sm: '2px 8px', md: '4px 11px', lg: '6px 16px' };
-    const togPadSqMap: Record<string,string> = { sm: '3px 5px', md: '4px 8px', lg: '6px 12px' };
-    const isSquarish = btnShape === 'square' || btnShape === 'circle';
-    cardInlineStyles['--tog-radius'] = btnShape === 'pill' ? '20px' : btnShape === 'rect' ? '6px' : btnShape === 'square' ? '6px' : '50%';
-    cardInlineStyles['--tog-pad']    = isSquarish ? togPadSqMap[btnSize] ?? togPadSqMap.md : togPadMap[btnSize] ?? togPadMap.md;
-    cardInlineStyles['--tog-fsize']  = btnSize === 'sm' ? '.65em' : btnSize === 'lg' ? '.8em' : '.72em';
-    cardInlineStyles['--tog-aspect'] = isSquarish ? '1' : 'auto';
-    if (btnVariant === 'outline') {
-      cardInlineStyles['--tog-on-bg']     = 'transparent';
-      cardInlineStyles['--tog-on-border'] = '1px solid var(--sc-accent)';
-      cardInlineStyles['--tog-on-color']  = 'var(--sc-accent)';
-      cardInlineStyles['--tog-on-shadow'] = 'none';
-    } else if (btnVariant === 'ghost') {
-      cardInlineStyles['--tog-on-bg']     = 'transparent';
-      cardInlineStyles['--tog-on-border'] = 'none';
-      cardInlineStyles['--tog-on-color']  = 'var(--sc-accent)';
-      cardInlineStyles['--tog-on-shadow'] = 'none';
-    } else {
-      // fill (default) — no override needed, existing CSS handles it
-    }
-
-    if (st.header_bg && st.header_bg2) {
-      cardInlineStyles['--sc-header-bg'] = `linear-gradient(135deg, ${st.header_bg} 0%, ${st.header_bg2} 100%)`;
-    } else if (st.header_bg) {
-      cardInlineStyles['--sc-header-bg'] = st.header_bg;
-    }
-    if (st.header_text_color)            cardInlineStyles['--sc-header-text']         = st.header_text_color;
-    if (st.header_orb_color)             cardInlineStyles['--sc-header-orb2']         = st.header_orb_color;
-    if (st.header_icon !== undefined)    cardInlineStyles['--sc-header-icon']         = `'${st.header_icon}'`;
-    if (st.header_title_size)            cardInlineStyles['--sc-header-title-size']   = `${st.header_title_size}em`;
-    if (st.header_radius != null)        cardInlineStyles['--sc-header-radius']       = `${st.header_radius}px`;
-    if (st.header_padding != null)       cardInlineStyles['--sc-header-padding']      = `${st.header_padding}px`;
-    if (st.header_border_color)          cardInlineStyles['--sc-header-border-color'] = st.header_border_color;
-    if (st.header_border_width != null)  cardInlineStyles['--sc-header-border-width'] = `${st.header_border_width}px`;
-    if (st.header_stat_online)           cardInlineStyles['--sc-hstat-online']        = st.header_stat_online;
-    if (st.header_stat_power)            cardInlineStyles['--sc-hstat-power']         = st.header_stat_power;
-    if (st.header_stat_offline)          cardInlineStyles['--sc-hstat-offline']       = st.header_stat_offline;
-    if (this._config.header_show_orbs === false) cardInlineStyles['--sc-header-orb-opacity'] = '0';
-    const headerTransparency = this._config.header_opacity ?? 100;
-    if (headerTransparency < 100) cardInlineStyles['--sc-header-opacity'] = String(headerTransparency / 100);
-
-    const cardBgBase = st.card_bg ?? 'var(--ha-card-background, #1c1c1e)';
-    if (st.card_bg) cardInlineStyles['--sc-card-bg'] = st.card_bg;
-    const cardTransparency = this._config.card_opacity ?? 100;
-    if (cardTransparency < 100) {
-      cardInlineStyles['--sc-card-bg'] = `color-mix(in srgb, ${cardBgBase} ${cardTransparency}%, transparent)`;
-    }
-    const tileTransparency = this._config.tile_opacity ?? 100;
-    if (tileTransparency < 100) {
-      cardInlineStyles['--sc-tile-bg-opacity'] = String(tileTransparency / 100);
-    }
+    const detailDev = this._detailDevice
+      ? this._getDevices().find(d => d.device_id === this._detailDevice) ?? null
+      : null;
+    const detailSheet = detailDev
+      ? renderDetailSheet(this._buildTileCtx(detailDev, getDeviceProfile(detailDev), this._tileAccent(detailDev, detailDev.area ?? '')))
+      : nothing;
 
     return html`
       <ha-card style=${styleMap(cardInlineStyles)} @click=${() => { if (this._cloudDetailOpen) this._cloudDetailOpen = null; }}>
-        ${this._renderGraphDialog()}
+        ${detailSheet}
         <div class="dash-header">
           <div class="dash-header-bg"></div>
           ${this._config.header_show_title !== false ? html`
@@ -2031,676 +2288,43 @@ export class HADeviceDashboard extends LitElement {
               ${cloudUnavail.map(s => html`<div class="cloud-item">${cloudName(s)}</div>`)}
             </div>
           </div>` : nothing}
+        ${this._renderViewTabs()}
         <div class="dash-body">
-          ${[...grouped.entries()].map(([area, areaDevices]) =>
-            this._renderAreaSection(area, areaDevices)
-          )}
+          ${showFavourites ? this._renderFavoritesSection(devices) : nothing}
+          ${showRooms
+            ? [...grouped.entries()].map(([area, areaDevices]) => this._renderAreaSection(area, areaDevices))
+            : html`<div class="device-grid" style="--cols:${activeView?.columns ?? this._config.columns ?? 3}">
+                ${viewDevices.map(d => this._renderTile(d))}
+              </div>`}
         </div>
       </ha-card>
     `;
   }
 
+  /** Horizontal tab bar — rendered only when the card has ≥2 views. */
+  private _renderViewTabs(): TemplateResult {
+    const views = this._config.views;
+    if (!views?.length || views.length < 2) return html``;
+    const activeId = this._getActiveView()?.id;
+    return html`
+      <div class="view-tabs">
+        ${views.map(v => html`
+          <button class="view-tab ${v.id === activeId ? 'active' : ''}"
+            @click=${() => this._setActiveView(v.id)}>
+            ${v.icon ? html`<ha-icon class="view-tab-icon" .icon=${v.icon}></ha-icon>` : nothing}
+            <span>${v.name}</span>
+          </button>`)}
+      </div>`;
+  }
+
   // ── Styles ─────────────────────────────────────────────────────────────────
 
-  static styles = css`
-    :host {
-      --sc-accent:          #f4601e;
-      --sc-accent-glow:     rgba(244,96,30,0.35);
-      --sc-graph-line:      var(--sc-accent);
-      --tile-radius:        12px;
-      --tile-gap:           10px;
-      --sc-header-bg:       linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);
-      --sc-header-orb2:     #3b82f6;
-      --sc-header-text:     #ffffff;
-      --sc-online-color:    #4ade80;
-      --sc-online-bg:       rgba(74,222,128,0.2);
-      --sc-online-border:   rgba(74,222,128,0.3);
-      --sc-online-glow:     rgba(74,222,128,0.4);
-      --sc-power-color:     #fb923c;
-      --sc-offline-dot:     #ef4444;
-      --sc-tile-bg:         rgba(255,255,255,0.04);
-      --sc-tile-bg-image:   none;
-      --sc-tile-bg-image-sz:cover;
-      --sc-tile-border:     rgba(255,255,255,0.07);
-      --sc-tile-hover-bg:   rgba(255,255,255,0.07);
-      --sc-tile-hover-shad: rgba(0,0,0,0.30);
-      --sc-tile-exp-bg:     rgba(255,255,255,0.06);
-      --sc-sensor-bg:       rgba(255,255,255,0.04);
-      --sc-text-primary:    #e5e7eb;
-      --sc-text-secondary:  #9ca3af;
-      --sc-text-muted:      #6b7280;
-      --sc-text-value:      #f9fafb;
-      --sc-text-detail:     #d1d5db;
-      --sc-tog-off-bg:      rgba(255,255,255,0.08);
-      --sc-tog-off-border:  rgba(255,255,255,0.10);
-      --sc-update-color:    #f59e0b;
-      --sc-update-glow:     rgba(245,158,11,0.40);
-      --sc-font-family:     'DM Sans', sans-serif;
-      --sc-text-transform:  uppercase;
-      --sc-text-scale:      1;
-      --sc-card-bg:         var(--ha-card-background, var(--card-background-color, #1c1c1e));
-      --sc-card-bg-image:   none;
-      --sc-card-bg-image-sz:cover;
-      --sc-tile-bg-opacity:      1;
-      --sc-header-opacity:       1;
-      --sc-header-orb-opacity:   0.5;
-      --sc-header-radius:        0px;
-      --sc-header-padding:       16px;
-      --sc-header-title-size:    1.1em;
-      --sc-header-icon:          '⚡';
-      --sc-header-border-width:  0px;
-      --sc-header-border-color:  transparent;
-      --sc-tile-border-width:    1px;
-      --sc-tile-shadow:          none;
-      --sc-card-radius:          var(--ha-card-border-radius, 12px);
-      --sc-area-header-color:    var(--sc-accent);
-    }
-
-    ha-card {
-      overflow-x: hidden; overflow-y: visible;
-      background: var(--sc-card-bg-image) center / var(--sc-card-bg-image-sz) no-repeat, var(--sc-card-bg);
-      container-type: inline-size; container-name: ha-dash;
-      font-family: var(--sc-font-family);
-      border-radius: var(--sc-card-radius);
-    }
-
-    .dash-header {
-      position: relative; display: flex; align-items: center; gap:10px;
-      padding: var(--sc-header-padding, 16px) 18px; overflow: hidden;
-      border-radius: var(--sc-header-radius, 0px);
-      border-bottom: var(--sc-header-border-width, 0px) solid var(--sc-header-border-color, transparent);
-    }
-    .dash-header-bg {
-      position: absolute; inset: 0; background: var(--sc-header-bg);
-      opacity: var(--sc-header-opacity, 1); pointer-events: none; z-index: 0;
-    }
-    .dash-stats { margin-right: auto; }
-    .dash-header::before,.dash-header::after {
-      content:''; position:absolute; border-radius:50%; filter:blur(40px);
-      opacity: var(--sc-header-orb-opacity, 0.5);
-      animation: drift 8s ease-in-out infinite alternate;
-    }
-    .dash-header::before { width:120px;height:120px; background:var(--sc-accent); top:-40px;left:-20px; }
-    .dash-header::after  { width:100px;height:100px; background:var(--sc-header-orb2); bottom:-30px;right:20px; animation-delay:-4s; }
-    @keyframes drift { from{transform:translate(0,0) scale(1)} to{transform:translate(15px,8px) scale(1.15)} }
-
-    .dash-title {
-      font-size: var(--sc-header-title-size, 1.1em); font-weight:800; color:var(--sc-header-text);
-      letter-spacing:0.02em; position:relative; z-index:1;
-      display:flex; align-items:center; gap:8px;
-    }
-    .dash-title::before { content: var(--sc-header-icon, '⚡'); }
-
-    .dash-stats { display:flex; gap:8px; align-items:center; position:relative; z-index:1; flex-shrink:0; }
-    .stat { font-size:0.78em; padding:3px 10px; border-radius:20px; font-weight:600; backdrop-filter:blur(4px); }
-    .stat.online   { background:var(--sc-online-bg);  color:var(--sc-online-color); border:1px solid var(--sc-online-border); }
-    .stat.power    { background:color-mix(in srgb,var(--sc-accent) 20%,transparent); color:var(--sc-power-color); border:1px solid color-mix(in srgb,var(--sc-accent) 30%,transparent); }
-    .stat.offline-count { background:rgba(75,85,99,.25); color:#9ca3af; border:1px solid rgba(75,85,99,.35); }
-    .stat.alerts-count  { background:rgba(239,68,68,.2); color:#fca5a5; border:1px solid rgba(239,68,68,.3); animation:blink 2s step-end infinite; }
-    /* Scoped header stat chip color overrides */
-    .dash-header .stat.online       { color:var(--sc-hstat-online, var(--sc-online-color)); background:color-mix(in srgb,var(--sc-hstat-online, var(--sc-online-color)) 18%,transparent); border-color:color-mix(in srgb,var(--sc-hstat-online, var(--sc-online-color)) 30%,transparent); }
-    .dash-header .stat.power        { color:var(--sc-hstat-power, var(--sc-power-color)); }
-    .dash-header .stat.offline-count { color:var(--sc-hstat-offline, #9ca3af); }
-
-    /* ── Cloud status chips ── */
-    .cloud-chips { display:flex; gap:5px; align-items:center; position:relative; z-index:1; flex-shrink:0; }
-    .cloud-chip { font-size:0.72em; font-weight:700; padding:3px 10px; border-radius:20px; backdrop-filter:blur(4px); cursor:pointer; transition:all .15s; white-space:nowrap; }
-    .cloud-chip:hover { opacity:.8; }
-    .cloud-chip.cloud-on    { background:rgba(74,222,128,.18); color:#4ade80; border:1px solid rgba(74,222,128,.3); }
-    .cloud-chip.cloud-off   { background:rgba(239,68,68,.18);  color:#f87171; border:1px solid rgba(239,68,68,.3); }
-    .cloud-chip.cloud-unavail { background:rgba(107,114,128,.2); color:#9ca3af; border:1px solid rgba(107,114,128,.3); }
-    .cloud-chip.active { filter:brightness(1.3); box-shadow:0 0 8px currentColor; }
-
-    /* ── Cloud detail panel ── */
-    .cloud-detail { padding:12px 18px 14px; background:rgba(0,0,0,.3); border-bottom:1px solid rgba(255,255,255,.06); animation:slide-in .15s ease; }
-    .cloud-detail-hdr { font-size:.7em; font-weight:700; text-transform:uppercase; letter-spacing:.06em; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid rgba(255,255,255,.08); }
-    .cloud-detail-hdr.cloud-on    { color:#4ade80; }
-    .cloud-detail-hdr.cloud-off   { color:#f87171; }
-    .cloud-detail-hdr.cloud-unavail { color:#9ca3af; }
-    .cloud-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:4px 16px; }
-    .cloud-item { font-size:.82em; color:var(--sc-text-secondary); padding:3px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-
-    .dash-body { padding:0 0 8px; }
-    .empty { padding:32px; text-align:center; color:var(--secondary-text-color); }
-    .empty .hint { font-size:.85em; margin-top:4px; }
-
-    .area-section {
-      position:relative; overflow:hidden; margin:6px 10px 2px;
-      border:1px solid var(--sc-tile-border); border-radius:10px;
-    }
-    .area-header {
-      display:flex; align-items:center; justify-content:space-between;
-      background:var(--area-header-bg,rgba(255,255,255,0.04));
-      padding:8px 14px; cursor:pointer; user-select:none;
-      border-radius:10px; transition:filter 0.15s;
-    }
-    .area-header:hover { filter:brightness(1.08); }
-    .area-section:not(.closed) .area-header { border-radius:10px 10px 0 0; border-bottom:1px solid var(--sc-tile-border); }
-    .area-name { font-size:var(--area-name-size,0.78em); font-weight:var(--area-name-weight,700); text-transform:var(--sc-text-transform,uppercase); letter-spacing:0.08em; color:var(--area-header-color,var(--sc-area-header-color,var(--sc-accent))); }
-    .area-chips { display:flex; align-items:center; flex-wrap:wrap; gap:4px; flex:1; margin:0 10px; }
-    .area-chip { display:flex; align-items:center; gap:3px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.08); border-radius:4px; padding:1px 5px; }
-    .area-chip .tsc-lbl { font-size:.65em; color:var(--secondary-text-color); }
-    .area-chip .tsc-val { font-size:.72em; font-weight:600; color:var(--sc-text-primary,var(--primary-text-color)); }
-    .area-meta { display:flex; align-items:center; gap:8px; }
-    .area-count { font-size:.75em; color:var(--secondary-text-color); }
-    .area-power { font-size:.78em; font-weight:600; color:var(--sc-power-color); }
-    .chevron { font-size:.6em; color:var(--secondary-text-color); transition:transform 0.25s; display:inline-block; }
-    .chevron.open { transform:rotate(180deg); }
-
-    .device-grid {
-      display:grid; grid-template-columns:repeat(var(--cols,3),1fr);
-      gap:var(--tile-gap,10px); padding:4px 12px 14px;
-    }
-    @container ha-dash (max-width:600px) { .device-grid { --cols:2; } }
-    @container ha-dash (max-width:380px) { .device-grid { --cols:1; } }
-    @container ha-dash (min-width:700px) { .sparkline-svg.exp { height:56px; } }
-
-    .tile {
-      border: var(--sc-tile-border-width, 1px) solid var(--sc-tile-border);
-      border-radius:var(--tile-radius); padding:11px 13px; cursor:pointer;
-      transition:transform 0.15s, box-shadow 0.15s;
-      display:flex; flex-direction:column; gap:6px; position:relative; overflow:hidden;
-      isolation:isolate; box-shadow: var(--sc-tile-shadow, none);
-    }
-    .tile::after {
-      content:''; position:absolute; inset:0; z-index:-1; pointer-events:none;
-      background:var(--sc-tile-bg);
-      background-image:var(--sc-tile-bg-image); background-size:var(--sc-tile-bg-image-sz); background-position:center;
-      opacity:var(--sc-tile-bg-opacity,1); transition:opacity 0.15s, background 0.15s;
-    }
-    .tile::before {
-      content:''; position:absolute; top:0;left:0;right:0; height:2px;
-      background:linear-gradient(90deg,var(--sc-accent),transparent); opacity:0; transition:opacity 0.2s; z-index:1;
-    }
-    .tile:hover { transform:translateY(-2px); box-shadow:0 6px 20px var(--sc-tile-hover-shad); }
-    .tile:hover::after { background-color:var(--sc-tile-hover-bg); }
-    .tile:hover::before { opacity:1; }
-    .tile.offline { opacity:.45; filter:grayscale(.4); }
-    .tile.expanded { border-color:var(--sc-accent); box-shadow:0 0 0 1px var(--sc-accent),0 4px 12px var(--sc-accent-glow); transform:none; }
-    .tile.expanded::after { background-color:var(--sc-tile-exp-bg); }
-    .tile.expanded::before { opacity:1; }
-    .tile.tile-sm { padding:7px 9px; gap:4px; }
-    .tile.tile-lg { padding:15px 17px; gap:9px; }
-
-    .tile-expanded-panel {
-      grid-column:1/-1; margin:2px 4px 6px; padding:14px;
-      border:1px solid var(--sc-accent); border-radius:8px;
-      background:var(--sc-tile-exp-bg);
-      box-shadow:0 0 0 1px var(--sc-accent),0 8px 24px var(--sc-accent-glow);
-      animation:slide-in 0.2s ease; cursor:default;
-    }
-    @keyframes slide-in { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
-
-    .tile-top { display:flex; align-items:center; justify-content:space-between; gap:6px; min-width:0; }
-    .tile-left { display:flex; align-items:center; gap:6px; min-width:0; flex:1; }
-
-    .dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
-    .dot.online { background:var(--sc-online-color); box-shadow:0 0 0 0 var(--sc-online-glow); animation:pulse-dot 2.5s ease-in-out infinite; }
-    .dot.offline { background:var(--sc-offline-dot); }
-    @keyframes pulse-dot { 0%{box-shadow:0 0 0 0 var(--sc-online-glow)} 60%{box-shadow:0 0 0 5px transparent} 100%{box-shadow:0 0 0 0 var(--sc-online-glow)} }
-
-    .tile-name { font-size:calc(var(--sc-text-scale,1) * .88em); font-weight:600; color:var(--sc-text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
-    .update-dot { color:var(--sc-update-color); font-size:.55em; flex-shrink:0; animation:blink 2s step-end infinite; }
-    @keyframes blink { 50%{opacity:.3} }
-
-    /* ── Tile icons ── */
-    .tile-icon { width:18px; height:18px; flex-shrink:0; color:var(--sc-text-muted); transition:color .3s, filter .3s; }
-
-    /* Relay / plug — lightning bolt */
-    .tile-icon-relay.on { color:var(--sc-accent); animation:icon-pulse 2s ease-in-out infinite; }
-    @keyframes icon-pulse { 0%,100%{filter:drop-shadow(0 0 3px var(--ipglow,var(--sc-accent-glow)))} 50%{filter:drop-shadow(0 0 8px var(--ipglow,var(--sc-accent-glow)))} }
-
-    /* Fan — spinning blades */
-    .tile-icon-fan .fan-blades { transform-origin:10px 10px; }
-    .tile-icon-fan.on { color:var(--sc-accent); }
-    .tile-icon-fan.on .fan-blades { animation:fan-spin 1s linear infinite; }
-    @keyframes fan-spin { to{transform:rotate(360deg)} }
-
-    /* Sun — rotate + glow */
-    .tile-icon-sun { transform-origin:10px 10px; }
-    .tile-icon-sun.on { color:#fbbf24; filter:drop-shadow(0 0 5px rgba(251,191,36,0.6)); animation:sun-spin 8s linear infinite; }
-    @keyframes sun-spin { to{transform:rotate(360deg)} }
-
-    /* Cover — slat movement */
-    .tile-icon-cover.moving { animation:cover-bounce 1s ease-in-out infinite; }
-    @keyframes cover-bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-1.5px)} }
-
-    /* Flame — flicker */
-    .tile-icon-flame.on { color:#f97316; filter:drop-shadow(0 0 5px rgba(249,115,22,0.6)); }
-    .tile-icon-flame.on .flame-main { animation:flicker 1.5s ease-in-out infinite alternate; transform-origin:10px 18px; }
-    .tile-icon-flame.on .flame-inner { animation:flicker 1.5s ease-in-out infinite alternate-reverse; transform-origin:10px 18px; }
-    @keyframes flicker { 0%{transform:scaleX(1) scaleY(1)} 33%{transform:scaleX(.95) scaleY(1.04)} 66%{transform:scaleX(1.04) scaleY(.97)} 100%{transform:scaleX(.97) scaleY(1.03)} }
-
-    /* Valve — drip pulse */
-    .tile-icon-valve.on { color:#38bdf8; filter:drop-shadow(0 0 4px rgba(56,189,248,0.5)); }
-    .tile-icon-valve.on .drop-body { animation:drip 2s ease-in-out infinite; transform-origin:10px 10px; }
-    @keyframes drip { 0%,100%{transform:scaleY(1)} 50%{transform:scaleY(1.06) translateY(1px)} }
-
-    /* Energy — wave scroll */
-    .tile-icon-energy { color:var(--sc-accent); }
-    .tile-icon-energy .energy-wave { stroke-dasharray:40; animation:wave-scroll 2s linear infinite; }
-    @keyframes wave-scroll { to{stroke-dashoffset:-40} }
-
-    /* Input — ripple */
-    .tile-icon-input.on { color:var(--sc-accent); }
-    .tile-icon-input.on .input-ripple { animation:input-ripple .8s ease-out forwards; }
-    @keyframes input-ripple { 0%{r:0;opacity:.8} 100%{r:6;opacity:0} }
-
-    /* ── Entity-level state animation icons ─────────────────────────────── */
-    .ent-icon { width:15px; height:15px; flex-shrink:0; transition:color .3s,filter .3s; }
-    .ent-icon-flame.off { color:#4b5563; }
-    .ent-icon-flame.on  { color:#f97316; filter:drop-shadow(0 0 5px rgba(249,115,22,0.55)); }
-    .ent-icon-flame.on .flame-main { animation:flicker calc(1.5s / var(--ent-spd,1)) ease-in-out infinite alternate; transform-origin:10px 18px; }
-    .ent-icon-flame.on .flame-inner { animation:flicker calc(1.5s / var(--ent-spd,1)) ease-in-out infinite alternate-reverse; transform-origin:10px 18px; }
-    .ent-icon-snowflake { color:#7dd3fc; }
-    .ent-icon-snowflake .snow-arms { animation:snow-spin calc(6s / var(--ent-spd,1)) linear infinite; }
-    @keyframes snow-spin { to { transform:rotate(360deg); } }
-    .ent-icon-fan.off { color:#4b5563; }
-    .ent-icon-fan.on  { color:var(--sc-accent); }
-    .ent-icon-fan.on .fan-blades { animation:fan-spin calc(1s / var(--ent-spd,1)) linear infinite; }
-    .ent-icon-pulse.off { color:#4b5563; }
-    .ent-icon-pulse.on  { color:var(--sc-accent); }
-    .ent-icon-pulse.on .pulse-ring { animation:icon-pulse calc(2s / var(--ent-spd,1)) ease-in-out infinite; transform-origin:10px 10px; }
-    .ent-icon-wave { color:var(--sc-accent); }
-    .ent-icon-wave .energy-wave { stroke-dasharray:40; animation:wave-scroll calc(2s / var(--ent-spd,1)) linear infinite; }
-    .ent-icon-sun.off { color:#4b5563; }
-    .ent-icon-sun.on  { color:#fbbf24; filter:drop-shadow(0 0 6px rgba(251,191,36,0.55)); }
-    .ent-icon-sun.on .sun-group { animation:snow-spin calc(8s / var(--ent-spd,1)) linear infinite; }
-    .ent-icon-lightning.off { color:#4b5563; }
-    .ent-icon-lightning.on  { --ipglow:rgba(251,191,36,0.55); color:#fbbf24; animation:icon-pulse calc(1.5s / var(--ent-spd,1)) ease-in-out infinite; }
-    .ent-icon-heart.off { color:#4b5563; }
-    .ent-icon-heart.on  { color:#f43f5e; filter:drop-shadow(0 0 5px rgba(244,63,94,0.55)); }
-    .ent-icon-heart.on .heart-shape { animation:heartbeat calc(1s / var(--ent-spd,1)) ease-in-out infinite; transform-origin:10px 10px; }
-    @keyframes heartbeat { 0%,100%{transform:scale(1)} 20%{transform:scale(1.22)} 40%{transform:scale(1)} 60%{transform:scale(1.15)} }
-    .ent-icon-bulb.off { color:#6b7280; }
-    .ent-icon-bulb.off .bulb-body { fill:none; stroke:currentColor; stroke-width:1.2; opacity:0.6; }
-    .ent-icon-bulb.off .bulb-base1,.ent-icon-bulb.off .bulb-base2 { opacity:0.3; }
-    .ent-icon-bulb.on  { --ipglow:rgba(253,224,71,0.65); color:#fde047; animation:icon-pulse calc(2.5s / var(--ent-spd,1)) ease-in-out infinite; }
-    .ent-icon-leaf.off { color:#4b5563; }
-    .ent-icon-leaf.on  { color:#4ade80; filter:drop-shadow(0 0 5px rgba(74,222,128,0.5)); }
-    .ent-icon-leaf.on .leaf-body { animation:leaf-sway calc(3s / var(--ent-spd,1)) ease-in-out infinite; transform-origin:10px 17px; }
-    @keyframes leaf-sway { 0%,100%{transform:rotate(0deg)} 33%{transform:rotate(6deg)} 66%{transform:rotate(-6deg)} }
-    .ent-icon-moon.off { color:#4b5563; }
-    .ent-icon-moon.on  { --ipglow:rgba(196,181,253,0.55); color:#c4b5fd; animation:icon-pulse calc(3s / var(--ent-spd,1)) ease-in-out infinite; }
-    .ent-icon-water.off { color:#4b5563; }
-    .ent-icon-water.on  { color:#38bdf8; filter:drop-shadow(0 0 5px rgba(56,189,248,0.5)); }
-    .ent-icon-water.on .drop-body { animation:drip calc(2s / var(--ent-spd,1)) ease-in-out infinite; transform-origin:10px 10px; }
-    .ent-icon-lock.off { color:#4b5563; }
-    .ent-icon-lock.on  { --ipglow:rgba(167,139,250,0.55); color:#a78bfa; animation:icon-pulse calc(2s / var(--ent-spd,1)) ease-in-out infinite; }
-    /* ── Flame variants ── */
-    .ent-icon-flame2.off,.ent-icon-flame3.off { color:#4b5563; }
-    .ent-icon-flame2.on  { color:#f97316; filter:drop-shadow(0 0 6px rgba(249,115,22,0.55)); }
-    .ent-icon-flame2.on .flame-main { animation:flicker calc(1.5s / var(--ent-spd,1)) ease-in-out infinite alternate; transform-origin:10px 18px; }
-    .ent-icon-flame2.on .flame-b { animation:flicker calc(1.5s / var(--ent-spd,1)) ease-in-out infinite alternate-reverse; transform-origin:10px 18px; animation-delay:calc(-0.4s / var(--ent-spd,1)); }
-    .ent-icon-flame3.on  { color:#f97316; filter:drop-shadow(0 0 5px rgba(249,115,22,0.5)); }
-    .ent-icon-flame3.on .flame-main { animation:flicker calc(1.2s / var(--ent-spd,1)) ease-in-out infinite alternate; transform-origin:10px 15px; }
-    /* ── Snowflake variants ── */
-    .ent-icon-snowflake2 { color:#7dd3fc; }
-    .ent-icon-snowflake2 .snow-arms { animation:snow-spin calc(8s / var(--ent-spd,1)) linear infinite; }
-    .ent-icon-snowflake3 { color:#7dd3fc; }
-    .ent-icon-snowflake3 .snow-drift-g { animation:snow-drift calc(4s / var(--ent-spd,1)) ease-in-out infinite; }
-    @keyframes snow-drift { 0%{transform:translateY(-3px) rotate(0deg)} 50%{transform:translateY(3px) rotate(180deg)} 100%{transform:translateY(-3px) rotate(360deg)} }
-    /* ── Fan variants ── */
-    .ent-icon-fan2.off,.ent-icon-fan3.off { color:#4b5563; }
-    .ent-icon-fan2.on  { color:var(--sc-accent); }
-    .ent-icon-fan2.on .fan-blades { animation:fan-spin calc(0.8s / var(--ent-spd,1)) linear infinite; }
-    .ent-icon-fan3.on  { color:var(--sc-accent); }
-    .ent-icon-fan3.on .fan-blades { animation:fan-spin calc(1.2s / var(--ent-spd,1)) linear infinite; }
-    /* ── Lightning variants ── */
-    .ent-icon-lightning2.off,.ent-icon-lightning3.off { color:#4b5563; }
-    .ent-icon-lightning2.on { --ipglow:rgba(251,191,36,0.6); color:#fbbf24; filter:drop-shadow(0 0 5px rgba(251,191,36,0.5)); }
-    .ent-icon-lightning2.on .bolt-a { animation:bolt-flash calc(1.2s / var(--ent-spd,1)) ease-in-out infinite; }
-    .ent-icon-lightning2.on .bolt-b { animation:bolt-flash calc(1.2s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.6s / var(--ent-spd,1)); }
-    @keyframes bolt-flash { 0%,100%{opacity:1} 50%{opacity:0.2} }
-    .ent-icon-lightning3.off .arc-path { opacity:0.2; }
-    .ent-icon-lightning3.on  { color:#fbbf24; filter:drop-shadow(0 0 6px rgba(251,191,36,0.6)); }
-    .ent-icon-lightning3.on .arc-path { animation:arc-flash calc(0.8s / var(--ent-spd,1)) ease-in-out infinite; }
-    @keyframes arc-flash { 0%,100%{opacity:0.15} 50%{opacity:1} }
-    /* ── Bulb variants ── */
-    .ent-icon-bulb2.off { color:#6b7280; }
-    .ent-icon-bulb2.off .bulb-body { fill:none; stroke:currentColor; stroke-width:1.2; opacity:0.6; }
-    .ent-icon-bulb2.off .bulb-filament { display:none; }
-    .ent-icon-bulb2.off .bulb-base1,.ent-icon-bulb2.off .bulb-base2 { opacity:0.3; }
-    .ent-icon-bulb2.on { --ipglow:rgba(251,191,36,0.7); color:#fbbf24; animation:icon-pulse calc(2.5s / var(--ent-spd,1)) ease-in-out infinite; }
-    .ent-icon-bulb3.off { color:#6b7280; }
-    .ent-icon-bulb3.off .bulb-chip { fill:none; stroke:currentColor; stroke-width:1; opacity:0.5; }
-    .ent-icon-bulb3.on { --ipglow:rgba(224,242,254,0.7); color:#e0f2fe; animation:icon-pulse calc(2s / var(--ent-spd,1)) ease-in-out infinite; }
-    /* ── Water variants ── */
-    .ent-icon-water2 { color:#38bdf8; }
-    .ent-icon-water2 .wave-a { animation:wave-scroll calc(2s / var(--ent-spd,1)) linear infinite; }
-    .ent-icon-water2 .wave-b { animation:wave-scroll calc(2s / var(--ent-spd,1)) linear infinite; animation-delay:calc(-0.5s / var(--ent-spd,1)); }
-    .ent-icon-water3.off { color:#4b5563; }
-    .ent-icon-water3.on  { --ipglow:rgba(56,189,248,0.5); color:#38bdf8; }
-    .ent-icon-water3.on .ripple1 { animation:ripple-out calc(2s / var(--ent-spd,1)) ease-out infinite; }
-    .ent-icon-water3.on .ripple2 { animation:ripple-out calc(2s / var(--ent-spd,1)) ease-out infinite; animation-delay:calc(-1s / var(--ent-spd,1)); }
-    @keyframes ripple-out { 0%{r:2;opacity:0.8} 100%{r:9;opacity:0} }
-    /* ── Sun variants ── */
-    .ent-icon-sun2.off,.ent-icon-sun3.off { color:#4b5563; }
-    .ent-icon-sun2.on { --ipglow:rgba(251,191,36,0.5); color:#fbbf24; animation:icon-pulse calc(3s / var(--ent-spd,1)) ease-in-out infinite; }
-    .ent-icon-sun3.on { color:#fbbf24; filter:drop-shadow(0 0 6px rgba(251,191,36,0.55)); }
-    .ent-icon-sun3.on .sun-group { animation:snow-spin calc(4s / var(--ent-spd,1)) linear infinite; }
-    /* ── Moon variants ── */
-    .ent-icon-moon2.off,.ent-icon-moon3.off { color:#4b5563; }
-    .ent-icon-moon2.on { --ipglow:rgba(241,245,249,0.6); color:#f1f5f9; animation:icon-pulse calc(3s / var(--ent-spd,1)) ease-in-out infinite; }
-    .ent-icon-moon3.on { color:#c4b5fd; filter:drop-shadow(0 0 6px rgba(196,181,253,0.55)); }
-    .ent-icon-moon3.on .star1 { animation:twinkle calc(2s / var(--ent-spd,1)) ease-in-out infinite; }
-    .ent-icon-moon3.on .star2 { animation:twinkle calc(2s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.7s / var(--ent-spd,1)); }
-    .ent-icon-moon3.on .star3 { animation:twinkle calc(2s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-1.4s / var(--ent-spd,1)); }
-    @keyframes twinkle { 0%,100%{opacity:1} 50%{opacity:0.15} }
-    @keyframes wind-blow { 0%{transform:translateX(0);opacity:0.3} 50%{opacity:1} 100%{transform:translateX(4px);opacity:0.3} }
-    @keyframes bell-ring { 0%,100%{transform:rotate(0deg)} 20%{transform:rotate(-10deg)} 40%{transform:rotate(10deg)} 60%{transform:rotate(-7deg)} 80%{transform:rotate(7deg)} }
-    @keyframes therm-pulse { 0%,100%{transform:scaleY(1)} 50%{transform:scaleY(0.65)} }
-    @keyframes star-pulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.15);opacity:0.7} }
-    @keyframes star-shoot { 0%{transform:translate(0,0);opacity:1} 100%{transform:translate(6px,-6px);opacity:0.15} }
-    @keyframes ekg-scan { to{stroke-dashoffset:-50} }
-    @keyframes bar-bounce { 0%,100%{transform:scaleY(0.3)} 50%{transform:scaleY(1)} }
-
-    /* ── Wind ──────────────────────────────────────────────────── */
-    .ent-icon-wind.off,.ent-icon-wind2.off,.ent-icon-wind3.off { color:#4b5563; }
-    .ent-icon-wind.on  { color:#a5f3fc; filter:drop-shadow(0 0 5px rgba(165,243,252,0.45)); }
-    .ent-icon-wind.on .wind-line-a { animation:wave-scroll calc(1.4s / var(--ent-spd,1)) linear infinite; stroke-dasharray:24; }
-    .ent-icon-wind.on .wind-line-b { animation:wave-scroll calc(1.6s / var(--ent-spd,1)) linear infinite; stroke-dasharray:20; animation-delay:calc(-0.25s / var(--ent-spd,1)); }
-    .ent-icon-wind.on .wind-line-c { animation:wave-scroll calc(1.9s / var(--ent-spd,1)) linear infinite; stroke-dasharray:16; animation-delay:calc(-0.5s / var(--ent-spd,1)); }
-    .ent-icon-wind2.on { color:#a5f3fc; filter:drop-shadow(0 0 4px rgba(165,243,252,0.4)); }
-    .ent-icon-wind2.on .gust-a { animation:wind-blow calc(1s / var(--ent-spd,1)) ease-in-out infinite; }
-    .ent-icon-wind2.on .gust-b { animation:wind-blow calc(1s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.33s / var(--ent-spd,1)); }
-    .ent-icon-wind2.on .gust-c { animation:wind-blow calc(1s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.66s / var(--ent-spd,1)); }
-    .ent-icon-wind3.on { color:#a5f3fc; --ipglow:rgba(165,243,252,0.5); animation:icon-pulse calc(2s / var(--ent-spd,1)) ease-in-out infinite; }
-
-    /* ── Bell ──────────────────────────────────────────────────── */
-    .ent-icon-bell.off,.ent-icon-bell2.off,.ent-icon-bell3.off { color:#4b5563; }
-    .ent-icon-bell.on  { color:#fde68a; --ipglow:rgba(253,230,138,0.55); filter:drop-shadow(0 0 5px rgba(253,230,138,0.4)); animation:bell-ring calc(1.2s / var(--ent-spd,1)) ease-in-out infinite; transform-origin:10px 2.5px; }
-    .ent-icon-bell2.on { color:#fde68a; --ipglow:rgba(253,230,138,0.55); filter:drop-shadow(0 0 4px rgba(253,230,138,0.35)); }
-    .ent-icon-bell2.on .ring-a { animation:arc-flash calc(0.8s / var(--ent-spd,1)) ease-in-out infinite; }
-    .ent-icon-bell2.on .ring-b { animation:arc-flash calc(0.8s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.25s / var(--ent-spd,1)); }
-    .ent-icon-bell2.on .ring-c { animation:arc-flash calc(0.8s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.5s / var(--ent-spd,1)); }
-    .ent-icon-bell3.on { color:#fca5a5; --ipglow:rgba(252,165,165,0.55); animation:icon-pulse calc(1.2s / var(--ent-spd,1)) ease-in-out infinite; }
-
-    /* ── Thermometer ────────────────────────────────────────────── */
-    .ent-icon-thermometer.off,.ent-icon-thermometer2.off,.ent-icon-thermometer3.off { color:#4b5563; }
-    .ent-icon-thermometer.on  { color:#fb923c; filter:drop-shadow(0 0 5px rgba(251,146,60,0.5)); }
-    .ent-icon-thermometer.on .therm-mercury { animation:therm-pulse calc(2s / var(--ent-spd,1)) ease-in-out infinite; transform-origin:10px 13px; }
-    .ent-icon-thermometer2.on { color:#f87171; filter:drop-shadow(0 0 5px rgba(248,113,113,0.5)); }
-    .ent-icon-thermometer2.on .therm-arrow { animation:cover-bounce calc(1.2s / var(--ent-spd,1)) ease-in-out infinite; }
-    .ent-icon-thermometer3.on { color:#fb923c; filter:drop-shadow(0 0 4px rgba(251,146,60,0.45)); }
-    .ent-icon-thermometer3.on .therm-up   { animation:cover-bounce calc(1.4s / var(--ent-spd,1)) ease-in-out infinite; }
-    .ent-icon-thermometer3.on .therm-down { animation:cover-bounce calc(1.4s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.7s / var(--ent-spd,1)); }
-
-    /* ── Battery ────────────────────────────────────────────────── */
-    .ent-icon-battery.off,.ent-icon-battery2.off { color:#4b5563; }
-    .ent-icon-battery.on  { color:#4ade80; --ipglow:rgba(74,222,128,0.5); animation:icon-pulse calc(2s / var(--ent-spd,1)) ease-in-out infinite; }
-    .ent-icon-battery2.on { color:#fbbf24; filter:drop-shadow(0 0 5px rgba(251,191,36,0.5)); }
-    .ent-icon-battery2.on .charge-bolt { animation:bolt-flash calc(0.9s / var(--ent-spd,1)) ease-in-out infinite; }
-    .ent-icon-battery3      { color:#f87171; }
-    .ent-icon-battery3.off  { color:#6b7280; }
-    .ent-icon-battery3.on   { color:#f87171; filter:drop-shadow(0 0 4px rgba(248,113,113,0.5)); animation:blink calc(1.2s / var(--ent-spd,1)) step-end infinite; }
-
-    /* ── Star ───────────────────────────────────────────────────── */
-    .ent-icon-star.off,.ent-icon-star2.off,.ent-icon-star3.off { color:#4b5563; }
-    .ent-icon-star.on  { color:#fde047; --ipglow:rgba(253,224,71,0.55); filter:drop-shadow(0 0 6px rgba(253,224,71,0.45)); animation:star-pulse calc(2s / var(--ent-spd,1)) ease-in-out infinite; transform-origin:10px 10px; }
-    .ent-icon-star2.on { color:#fde047; filter:drop-shadow(0 0 5px rgba(253,224,71,0.4)); }
-    .ent-icon-star2.on .star-body { animation:fan-spin calc(3s / var(--ent-spd,1)) linear infinite; transform-origin:10px 10px; }
-    .ent-icon-star3.on { color:#fde047; filter:drop-shadow(0 0 4px rgba(253,224,71,0.4)); animation:star-shoot calc(1.5s / var(--ent-spd,1)) ease-in-out infinite alternate; }
-
-    /* ── Pulse variants ─────────────────────────────────────────── */
-    .ent-icon-pulse2.off,.ent-icon-pulse3.off { color:#4b5563; }
-    .ent-icon-pulse2.on { color:var(--sc-accent); }
-    .ent-icon-pulse2.on .pulse-ring  { animation:ripple-out calc(1.2s / var(--ent-spd,1)) ease-out infinite; }
-    .ent-icon-pulse2.on .pulse-ring2 { animation:ripple-out calc(1.2s / var(--ent-spd,1)) ease-out infinite; animation-delay:calc(-0.5s / var(--ent-spd,1)); }
-    .ent-icon-pulse3.on { color:#f43f5e; filter:drop-shadow(0 0 4px rgba(244,63,94,0.45)); }
-    .ent-icon-pulse3.on .ekg-line { animation:ekg-scan calc(1.5s / var(--ent-spd,1)) linear infinite; stroke-dasharray:50; stroke-dashoffset:0; }
-
-    /* ── Wave variants ──────────────────────────────────────────── */
-    .ent-icon-wave2.off,.ent-icon-wave3.off,.ent-icon-wave4.off { color:#4b5563; }
-    .ent-icon-wave2.on { color:#5eead4; filter:drop-shadow(0 0 4px rgba(94,234,212,0.4)); }
-    .ent-icon-wave2.on .bar-odd  { animation:bar-bounce calc(0.6s / var(--ent-spd,1)) ease-in-out infinite alternate; transform-origin:50% 100%; }
-    .ent-icon-wave2.on .bar-even { animation:bar-bounce calc(0.6s / var(--ent-spd,1)) ease-in-out infinite alternate-reverse; transform-origin:50% 100%; }
-    .ent-icon-wave3.on { color:#7dd3fc; filter:drop-shadow(0 0 4px rgba(125,211,252,0.4)); }
-    .ent-icon-wave3.on .arc-a { animation:twinkle calc(1.5s / var(--ent-spd,1)) ease-in-out infinite; }
-    .ent-icon-wave3.on .arc-b { animation:twinkle calc(1.5s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.5s / var(--ent-spd,1)); }
-    .ent-icon-wave3.on .arc-c { animation:twinkle calc(1.5s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-1s / var(--ent-spd,1)); }
-    .ent-icon-wave4.on { color:#93c5fd; filter:drop-shadow(0 0 4px rgba(147,197,253,0.4)); }
-    .ent-icon-wave4.on .wifi-a { animation:twinkle calc(1.4s / var(--ent-spd,1)) ease-in-out infinite; }
-    .ent-icon-wave4.on .wifi-b { animation:twinkle calc(1.4s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.45s / var(--ent-spd,1)); }
-    .ent-icon-wave4.on .wifi-c { animation:twinkle calc(1.4s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.9s / var(--ent-spd,1)); }
-
-    /* ── Heart variant ──────────────────────────────────────────── */
-    .ent-icon-heart2.off { color:#4b5563; }
-    .ent-icon-heart2.on  { color:#f43f5e; filter:drop-shadow(0 0 5px rgba(244,63,94,0.5)); }
-    .ent-icon-heart2.on .heart-shape { animation:heartbeat calc(0.8s / var(--ent-spd,1)) ease-in-out infinite; transform-origin:10px 10px; }
-
-    /* ── Leaf variant ───────────────────────────────────────────── */
-    .ent-icon-leaf2.off { color:#4b5563; }
-    .ent-icon-leaf2.on  { color:#4ade80; filter:drop-shadow(0 0 5px rgba(74,222,128,0.45)); animation:leaf-sway calc(2.5s / var(--ent-spd,1)) ease-in-out infinite; transform-origin:10px 18px; }
-
-    /* ── Lock variant ───────────────────────────────────────────── */
-    .ent-icon-lock2.off { color:#4b5563; }
-    .ent-icon-lock2.on  { color:#7ecfff; --ipglow:rgba(126,207,255,0.55); animation:icon-pulse calc(2s / var(--ent-spd,1)) ease-in-out infinite; }
-
-    .tile-sensor-chips { display:flex; flex-wrap:wrap; gap:4px; margin:2px 0 0; }
-    .tile-sensor-chip { display:flex; flex-direction:column; align-items:center; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.08); border-radius:6px; padding:2px 7px; min-width:38px; }
-    .tsc-lbl { font-size:.6em; color:var(--sc-text-muted); text-transform:uppercase; letter-spacing:.03em; }
-    .tsc-val { font-size:calc(var(--sc-text-scale,1) * .78em); color:var(--sc-text-primary); font-weight:500; }
-    .tile-sensor-chip.warn .tsc-val { color:var(--sc-accent); }
-
-    .tile-bot { display:flex; align-items:center; justify-content:space-between; gap:4px; min-width:0; }
-    .tile-power { font-size:.95em; font-weight:700; color:var(--sc-power-color); font-variant-numeric:tabular-nums; }
-    .tile-badges { display:flex; gap:4px; align-items:center; margin-left:auto; }
-    .type-badge,.gen-badge,.int-badge-tile { font-size:9px; font-weight:600; letter-spacing:.03em; padding:2px 5px; border-radius:4px; line-height:1.4; white-space:nowrap; }
-    .type-relay       { background:rgba(99,102,241,.25);  color:#a5b4fc; }
-    .type-dimmer      { background:rgba(234,179,8,.20);   color:#fde047; }
-    .type-rgb         { background:rgba(236,72,153,.22);  color:#f9a8d4; }
-    .type-plug        { background:rgba(34,197,94,.20);   color:#86efac; }
-    .type-cover       { background:rgba(14,165,233,.20);  color:#7dd3fc; }
-    .type-energy      { background:rgba(245,158,11,.22);  color:#fcd34d; }
-    .type-sensor      { background:rgba(20,184,166,.20);  color:#5eead4; }
-    .type-input       { background:rgba(168,85,247,.20);  color:#d8b4fe; }
-    .type-climate     { background:rgba(239,68,68,.22);   color:#fca5a5; }
-    .gen-1   { background:rgba(107,114,128,.25); color:#9ca3af; }
-    .gen-2   { background:rgba(59,130,246,.22);  color:#93c5fd; }
-    .gen-3   { background:rgba(34,197,94,.20);   color:#86efac; }
-    .gen-4   { background:rgba(168,85,247,.20);  color:#d8b4fe; }
-    .gen-ble { background:rgba(6,182,212,.20);   color:#67e8f9; }
-    .int-badge-tile { background:rgba(255,255,255,.06); color:var(--sc-text-muted); }
-    .tile-ui-link { font-size:11px; font-weight:700; color:var(--sc-accent); text-decoration:none; padding:1px 4px; border-radius:4px; opacity:.75; transition:opacity .15s; }
-    .tile-ui-link:hover { opacity:1; }
-
-    .alert-badge { font-size:9px; font-weight:700; padding:2px 5px; border-radius:4px; white-space:nowrap; animation:blink 1.5s step-end infinite; }
-    .alert-overtemp  { background:rgba(251,146,60,.25); color:#fdba74; }
-    .alert-overpower { background:rgba(239,68,68,.25);  color:#fca5a5; }
-
-    .tog { padding:var(--tog-pad,4px 11px); border:none; border-radius:var(--tog-radius,20px); aspect-ratio:var(--tog-aspect,auto); cursor:pointer; font-size:var(--tog-fsize,.72em); font-weight:700; letter-spacing:.05em; flex-shrink:0; transition:transform .1s,opacity .15s,box-shadow .15s; position:relative; overflow:hidden; display:inline-flex; align-items:center; justify-content:center; }
-    .tog::after { content:''; position:absolute; inset:0; background:white; opacity:0; transition:opacity .15s; }
-    .tog:active::after { opacity:.15; }
-    .tog.sm { padding:2px 9px; font-size:.68em; }
-    .tog.on { background:var(--tog-on-bg,linear-gradient(135deg,var(--sc-accent),color-mix(in srgb,var(--sc-accent) 70%,#f97316))); color:var(--tog-on-color,white); box-shadow:var(--tog-on-shadow,0 2px 8px var(--sc-accent-glow)); border:var(--tog-on-border,none); }
-    .tog.off { background:var(--sc-tog-off-bg); color:var(--sc-text-secondary); border:1px solid var(--sc-tog-off-border); }
-    .tog.update { background:linear-gradient(135deg,var(--sc-update-color),color-mix(in srgb,var(--sc-update-color) 60%,#f97316)); color:white; box-shadow:0 2px 6px var(--sc-update-glow); }
-    .tog:hover { opacity:.85; transform:scale(1.04); }
-    .tog:active { transform:scale(.96); }
-
-    .tile-dim-row { display:flex; align-items:center; gap:8px; padding:2px 0 0; }
-    .dim-slider { flex:1; min-width:0; cursor:pointer; accent-color:var(--sc-accent); }
-    .dim-slider:disabled { opacity:.3; }
-    .dim-pct { font-size:.68em; font-weight:600; color:var(--sc-text-secondary); min-width:30px; text-align:right; }
-    .color-swatch { width:30px; height:20px; border-radius:5px; border:none; cursor:pointer; padding:1px; background:transparent; flex-shrink:0; }
-    .color-swatch:disabled { opacity:.3; }
-
-    .cov-btns { display:flex; gap:2px; }
-    .cov-btn { background:var(--sc-tog-off-bg); border:1px solid var(--sc-tog-off-border); border-radius:6px; color:var(--sc-text-primary); cursor:pointer; font-size:10px; padding:3px 7px; transition:background .15s; }
-    .cov-btn:hover { background:rgba(255,255,255,.15); }
-    .cov-btn.stop { color:var(--sc-text-muted); }
-    .cov-pos-row { display:flex; align-items:center; gap:6px; padding:4px 0 2px; }
-    .cov-bar { flex:1; height:4px; background:rgba(255,255,255,.10); border-radius:3px; overflow:hidden; }
-    .cov-fill { height:100%; background:var(--sc-accent); border-radius:3px; transition:width .4s; }
-    .cov-pct { font-size:10px; color:var(--sc-text-secondary); min-width:34px; text-align:right; }
-
-    .tile-trv-row { display:flex; align-items:center; gap:8px; padding:2px 0 0; }
-    .trv-temps { display:flex; align-items:baseline; gap:4px; flex:1; min-width:0; }
-    .trv-cur { font-size:.82em; color:var(--sc-text-secondary); font-variant-numeric:tabular-nums; }
-    .trv-sep { font-size:.7em; color:var(--sc-text-muted); }
-    .trv-target { font-size:.95em; font-weight:700; color:var(--sc-text-value); font-variant-numeric:tabular-nums; }
-    .trv-target.heating { color:var(--sc-accent); }
-    .trv-flame { font-size:.75em; flex-shrink:0; }
-    .trv-step-btns { display:flex; gap:3px; flex-shrink:0; }
-    .trv-step { width:22px;height:22px; border:1px solid var(--sc-tog-off-border); border-radius:6px; background:var(--sc-tog-off-bg); color:var(--sc-text-secondary); font-size:1em; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; }
-    .trv-step:hover { background:var(--sc-accent); color:white; }
-    .trv-ctrl-row { display:flex; align-items:center; gap:12px; margin-bottom:6px; }
-    .trv-big-btn { width:36px;height:36px; border:1px solid var(--sc-tog-off-border); border-radius:50%; background:var(--sc-tog-off-bg); color:var(--sc-text-primary); font-size:1.3em; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; flex-shrink:0; }
-    .trv-big-btn:hover { background:var(--sc-accent); color:white; }
-    .trv-display { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; }
-    .trv-target-big { font-size:1.8em; font-weight:700; color:var(--sc-text-primary); font-variant-numeric:tabular-nums; }
-    .trv-current-sub { font-size:.78em; color:var(--sc-text-secondary); }
-    .trv-action-badge { font-size:.65em; font-weight:700; letter-spacing:.06em; text-transform:uppercase; padding:2px 7px; border-radius:10px; }
-    .trv-action-badge.heating { background:color-mix(in srgb,var(--sc-accent) 20%,transparent); color:var(--sc-accent); }
-    .trv-mode-row { display:flex; gap:6px; margin-bottom:6px; }
-    .trv-range-lbl { font-size:.68em; color:var(--sc-text-muted); flex-shrink:0; }
-    .dim-wrap { display:flex; flex-direction:row; align-items:center; gap:6px; flex:1; min-width:0; }
-
-    .tile-trv-dial { display:flex; flex-direction:column; align-items:center; justify-content:center; flex:1; width:100%; padding:4px 0; }
-    .trv-dial-svg { width:100%; max-width:360px; height:auto; overflow:visible; }
-    .dial-target-text { font-size:30px; font-weight:700; fill:var(--sc-text-primary,#fff); }
-    .dial-sub-text { font-size:11px; fill:var(--sc-text-secondary,rgba(255,255,255,0.5)); }
-    .dial-current-text { font-size:13px; fill:var(--sc-text-secondary,rgba(255,255,255,0.65)); }
-    .dial-range-text { font-size:11px; fill:var(--sc-text-secondary,rgba(255,255,255,0.5)); }
-    .trv-dial-btns { display:flex; align-items:center; gap:12px; margin-top:2px; }
-    .trv-stat-row { display:flex; gap:10px; justify-content:center; margin-top:4px; }
-    .trv-stat { display:flex; flex-direction:column; align-items:center; }
-    .trv-stat-lbl { font-size:10px; color:var(--sc-text-secondary,rgba(255,255,255,0.55)); }
-    .trv-stat-val { font-size:13px; font-weight:600; color:var(--sc-text-primary,#fff); }
-    .trv-presets { display:flex; flex-wrap:wrap; gap:4px; justify-content:center; margin-top:6px; }
-    .trv-preset-btn { font-size:11px; padding:3px 8px; border-radius:12px; border:1px solid var(--sc-border); background:transparent; color:var(--sc-text-primary); cursor:pointer; white-space:nowrap; }
-    .trv-preset-btn.active { background:var(--sc-accent,#e67e22); border-color:var(--sc-accent,#e67e22); color:#fff; }
-
-    .valve-interactive { cursor:pointer; touch-action:none; }
-    .valve-dial-btns { display:flex; align-items:center; gap:8px; margin-top:10px; }
-    .valve-btn { padding:4px 14px; border-radius:8px; border:1px solid var(--sc-tog-off-border); background:var(--sc-tog-off-bg); color:var(--sc-text-primary); font-size:12px; font-weight:600; cursor:pointer; transition:background .15s; }
-    .valve-btn:hover { background:rgba(255,255,255,.15); }
-    .valve-btn.open:hover { background:#0ea5e9; border-color:#0ea5e9; color:#fff; }
-    .valve-btn.close:hover { background:#6b7280; border-color:#6b7280; color:#fff; }
-    .valve-btn.stop { color:var(--sc-text-muted); font-size:10px; }
-    .valve-slider-row { display:flex; align-items:center; gap:6px; width:100%; padding:4px 8px 0; box-sizing:border-box; }
-
-    .tile-inputs { display:flex; flex-direction:column; gap:5px; padding:4px 0 2px; }
-    .input-row { display:flex; align-items:center; gap:8px; padding:5px 8px; border-radius:8px; border:1px solid rgba(255,255,255,.06); background:rgba(255,255,255,.04); transition:all .15s; }
-    .input-row.active { background:color-mix(in srgb,var(--sc-accent) 15%,transparent); border-color:color-mix(in srgb,var(--sc-accent) 35%,transparent); }
-    .input-row-dot { width:8px; height:8px; border-radius:50%; background:var(--sc-text-muted); flex-shrink:0; transition:background .15s; }
-    .input-row.active .input-row-dot { background:var(--sc-accent); }
-    .input-btn-dot { width:8px; height:8px; border-radius:2px; background:rgba(129,140,248,0.5); flex-shrink:0; }
-    .input-row.btn-mode { border-color:rgba(129,140,248,0.18); }
-    .input-row-name { font-size:13px; font-weight:600; color:var(--sc-text-primary); min-width:60px; }
-    .input-row-event { flex:1; font-size:12px; color:var(--sc-text-secondary); text-transform:capitalize; }
-    .input-row-time { font-size:11px; color:var(--sc-text-muted); white-space:nowrap; }
-    .input-chip { display:flex; align-items:center; gap:4px; padding:4px 10px 4px 8px; border-radius:14px; border:1px solid rgba(255,255,255,.08); background:rgba(255,255,255,.05); font-size:12px; color:var(--sc-text-muted); transition:all .15s; }
-    .input-chip.active { background:color-mix(in srgb,var(--sc-accent) 20%,transparent); color:var(--sc-accent); border-color:color-mix(in srgb,var(--sc-accent) 40%,transparent); }
-    .input-dot { width:7px;height:7px; border-radius:50%; background:currentColor; flex-shrink:0; }
-    .input-lbl { font-weight:600; }
-
-    /* ── Virtual controls ── */
-    .tile-virtuals { display:flex; flex-direction:column; gap:4px; padding:4px 0 2px; }
-    .virt-row { display:flex; align-items:center; gap:8px; padding:4px 8px; border-radius:7px; border:1px solid rgba(255,255,255,.06); background:rgba(255,255,255,.03); }
-    .virt-lbl { font-size:11px; color:var(--sc-text-muted); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .virt-val { font-size:12px; color:var(--sc-text-primary); font-weight:500; max-width:90px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-transform:capitalize; }
-    .virt-select, .virt-num { display:flex; align-items:center; gap:3px; }
-    .virt-arr { background:none; border:none; color:var(--sc-text-secondary); cursor:pointer; font-size:15px; padding:0 3px; line-height:1; border-radius:4px; transition:color .12s; }
-    .virt-arr:hover { color:var(--sc-accent); }
-    .virt-btn { background:color-mix(in srgb,var(--sc-accent) 12%,transparent); border:1px solid color-mix(in srgb,var(--sc-accent) 30%,transparent); color:var(--sc-accent); font-size:11px; font-weight:600; padding:3px 10px; border-radius:6px; cursor:pointer; transition:all .15s; width:100%; text-align:left; }
-    .virt-btn:hover { background:color-mix(in srgb,var(--sc-accent) 22%,transparent); }
-
-    .power-bar { position:absolute; bottom:0;left:0;right:0; height:3px; background:rgba(255,255,255,.06); border-radius:0 0 var(--tile-radius) var(--tile-radius); overflow:hidden; }
-    .power-bar-fill { height:100%; background:linear-gradient(90deg,var(--sc-accent),#f97316); border-radius:inherit; transition:width .4s; }
-
-    /* ── Expanded panel ── */
-    .expanded { margin-top:10px; border-top:1px solid color-mix(in srgb,var(--sc-accent) 25%,transparent); padding-top:12px; display:flex; flex-wrap:wrap; gap:16px; align-items:flex-start; animation:slide-in .2s ease; }
-    .exp-section { flex:1; min-width:140px; }
-    .exp-section--full { flex:1 1 100%; min-width:0; }
-    .exp-label { font-size:.68em; text-transform:uppercase; letter-spacing:.08em; color:var(--sc-text-muted); margin-bottom:7px; font-weight:600; }
-    .exp-row { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:3px 0; }
-    .exp-name { font-size:.84em; color:var(--sc-text-detail); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:40%; }
-    .sensor-row { display:flex; flex-wrap:wrap; gap:6px; }
-    .sensor-chip { display:flex; align-items:center; gap:5px; background:var(--sc-sensor-bg); border-radius:20px; padding:4px 10px; white-space:nowrap; }
-    .sensor-label { font-size:.65em; text-transform:uppercase; letter-spacing:.05em; color:var(--sc-text-muted); }
-    .sensor-value { font-size:calc(var(--sc-text-scale,1) * .85em); font-weight:600; color:var(--sc-text-value); font-variant-numeric:tabular-nums; }
-    .sensor-value.warn { color:var(--error-color,#ef4444); }
-    .expanded-graph-header { display:flex; justify-content:flex-end; padding:0 0 4px; }
-    .spark-refresh-all { background:none; border:1px solid rgba(255,255,255,.12); border-radius:6px; color:var(--sc-text-muted); font-size:.75em; cursor:pointer; padding:3px 10px; transition:color .15s,border-color .15s; }
-    .spark-refresh-all:hover { color:var(--sc-accent); border-color:var(--sc-accent); }
-
-    /* ── Entity list ── */
-    .ent-list-header { display:flex; align-items:center; justify-content:space-between; cursor:pointer; user-select:none; padding:4px 0; }
-    .ent-caret { font-size:.65em; color:var(--sc-text-muted); transition:transform .2s; flex-shrink:0; }
-    .ent-caret.open { transform:rotate(180deg); }
-    .ent-list { display:flex; flex-direction:column; gap:2px; margin-top:6px; }
-    .ent-row { display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:6px; background:var(--sc-tile-bg); min-height:28px; }
-    .ent-domain { font-size:.62em; font-weight:700; text-transform:uppercase; letter-spacing:.04em; min-width:72px; flex-shrink:0; color:var(--sc-text-muted); }
-    .ent-name { font-size:.82em; color:var(--sc-text-detail); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .ent-state { font-size:.78em; color:var(--sc-text-secondary); font-family:monospace; white-space:nowrap; flex-shrink:0; }
-
-    /* ── Sparklines ── */
-    .sparklines-block { display:flex; flex-direction:column; gap:4px; padding:4px 8px 2px; }
-    .sparklines-block.exp { padding:6px 8px 4px; gap:8px; }
-    .spark-group { display:flex; flex-direction:column; gap:0; }
-    .spark-row { display:flex; align-items:center; gap:6px; min-height:32px; }
-    .spark-lbl { font-size:.62em; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--sc-text-muted); width:68px; flex-shrink:0; text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .spark-svg-wrap { flex:1; position:relative; min-width:0; }
-    .sparkline-svg { width:100%; height:32px; display:block; overflow:visible; cursor:crosshair; }
-    .sparkline-svg.exp { height:48px; }
-    .spark-tick { stroke:rgba(255,255,255,.2); stroke-width:.5; stroke-dasharray:3 3; pointer-events:none; }
-    .spark-crosshair { stroke:rgba(255,255,255,.35); stroke-width:.6; stroke-dasharray:2 2; pointer-events:none; }
-    .spark-hover-dot { fill:var(--sc-graph-line); stroke:var(--sc-card-bg,#1e1e2e); stroke-width:1.5; pointer-events:none; }
-    .spark-tooltip {
-      position:absolute; bottom:calc(100% + 4px); transform:translateX(-50%);
-      background:rgba(14,14,28,.92); border:1px solid rgba(255,255,255,.12); border-radius:6px;
-      padding:4px 8px; pointer-events:none; white-space:nowrap; z-index:20;
-      display:flex; flex-direction:column; align-items:center; gap:1px;
-    }
-    .spark-tooltip-val  { font-size:.78em; font-weight:700; color:var(--sc-graph-line); }
-    .spark-tooltip-time { font-size:.65em; color:var(--sc-text-muted); }
-    .spark-val { font-size:.75em; font-weight:600; color:var(--sc-text-secondary); white-space:nowrap; min-width:44px; text-align:right; }
-    .spark-time-row { display:flex; align-items:center; gap:6px; padding-bottom:1px; }
-    .spark-time-spacer { width:68px; flex-shrink:0; }
-    .spark-time-labels { flex:1; display:flex; justify-content:space-between; font-size:.55em; color:var(--sc-text-muted); opacity:.65; user-select:none; }
-    .spark-time-end { min-width:44px; }
-    .spark-no-data { flex:1; font-size:.7em; color:var(--sc-text-muted); opacity:.6; display:flex; align-items:center; padding-left:4px; }
-    .spark-retry { background:none; border:none; color:var(--sc-text-muted); font-size:1em; cursor:pointer; padding:0 4px; opacity:.6; }
-    .spark-retry:hover { opacity:1; color:var(--sc-accent); }
-    @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
-    .sparkline-loading { flex:1; height:32px; border-radius:4px;
-      background:linear-gradient(90deg,rgba(255,255,255,.03) 0%,rgba(255,255,255,.08) 50%,rgba(255,255,255,.03) 100%);
-      background-size:200% 100%; animation:shimmer 1.6s ease-in-out infinite; }
-    .sparkline-loading.exp { height:48px; }
-
-    /* ── RGBW white + effects ── */
-    .tile-white-row { margin-top:2px; }
-    .dim-white-lbl { font-size:.6em; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--sc-text-muted); width:14px; flex-shrink:0; text-align:center; }
-    .white-slider { accent-color:#e5e7eb; }
-    .tile-effects { display:flex; flex-wrap:wrap; gap:4px; padding:4px 8px 2px; }
-    .effect-btn { padding:2px 9px; border-radius:12px; border:1px solid rgba(255,255,255,.12); background:rgba(255,255,255,.05); color:var(--sc-text-secondary); font-size:10px; cursor:pointer; transition:all .15s; white-space:nowrap; }
-    .effect-btn:hover { background:rgba(255,255,255,.1); color:var(--sc-text-primary); }
-    .effect-btn.active { background:color-mix(in srgb,var(--sc-accent) 25%,transparent); border-color:color-mix(in srgb,var(--sc-accent) 50%,transparent); color:var(--sc-accent); }
-
-    /* ── Graph dialog ── */
-    .graph-dialog-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.65); backdrop-filter:blur(4px); z-index:9999; display:flex; align-items:center; justify-content:center; }
-    .graph-dialog { background:var(--sc-card-bg); border:1px solid rgba(255,255,255,.12); border-radius:16px; padding:20px; width:min(720px,92vw); max-height:85vh; overflow-y:auto; }
-    .graph-dialog-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; font-size:15px; font-weight:600; color:var(--sc-text-primary); }
-    .graph-dialog-close { background:none; border:none; color:var(--sc-text-muted); font-size:18px; cursor:pointer; padding:4px 8px; border-radius:6px; transition:all .15s; }
-    .graph-dialog-close:hover { color:var(--sc-text-primary); background:rgba(255,255,255,.08); }
-    .spark-row-clickable { cursor:pointer; border-radius:6px; transition:background .15s; }
-    .spark-row-clickable:hover { background:rgba(255,255,255,.05); }
-    .graph-dialog .sparklines-block { padding:0; }
-    .graph-dialog .spark-lbl { width:90px; font-size:.7em; }
-    .graph-dialog .sparkline-svg { height:120px !important; }
-    .graph-dialog .sparkline-loading { height:120px !important; }
-    .graph-dialog .spark-group { margin-bottom:12px; }
-
-    /* ── Relay channels ── */
-    .relay-channels { display:flex; flex-direction:column; gap:4px; padding:2px 8px 4px; }
-    .relay-ch-row { display:flex; align-items:center; gap:8px; padding:3px 0; }
-    .relay-ch-dot { width:7px; height:7px; border-radius:50%; background:var(--sc-offline-dot); flex-shrink:0; transition:background .15s; }
-    .relay-ch-dot.on { background:var(--sc-online-color); }
-    .relay-ch-name { flex:1; font-size:12px; color:var(--sc-text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-
-  `;
+  static styles = [
+    unsafeCSS(BUNDLED_FONT_CSS),
+    mainCss,
+    tilesCss,
+    detailCss,
+  ];
 }
 
 declare global {

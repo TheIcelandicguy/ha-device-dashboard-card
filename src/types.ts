@@ -66,13 +66,18 @@ export type ButtonShape   = 'pill' | 'rect' | 'square' | 'circle';
 export type ButtonVariant = 'fill' | 'outline' | 'ghost';
 export type ButtonSize    = 'sm' | 'md' | 'lg';
 export type GraphType     = 'line' | 'area' | 'bar';
-export type ViewMode      = 'grid' | 'list' | 'compact';
+export type DetailHistoryRange = 24 | 168 | 720;
 export type TileSize      = 'sm' | 'md' | 'lg';
 export type SortBy        = 'name' | 'power' | 'online' | 'area';
 export type BoxShadow     = 'none' | 'soft' | 'medium' | 'strong';
 export type ThemePreset   = 'dark_industrial' | 'teal_terminal' | 'brutalist' | 'frosted_light' | 'nordic_warm' | 'midnight_purple' | 'custom';
 
 /** Global graph display settings */
+export interface SensorRange {
+  min?: number;
+  max?: number;
+}
+
 export interface GraphStyle {
   type?: GraphType;           // default: 'line'
   line_width?: number;        // px, default 1.5
@@ -82,14 +87,14 @@ export interface GraphStyle {
   time_labels?: boolean;      // time axis labels, default true
   tick_lines?: boolean;       // vertical tick marks, default true
   bar_radius?: number;        // bar corner radius px, default 2
+  /** Manual y-axis min/max per sensor device_class key */
+  sensor_ranges?: Record<string, SensorRange>;
 }
 
 /** Per-area visual overrides */
 export interface AreaStyle {
   // Background
   bgColor?: string;
-  bgImage?: string;
-  bgImageSize?: 'contain' | 'cover' | 'stretch';
   // Border
   borderColor?: string;
   borderWidth?: number;
@@ -116,7 +121,39 @@ export interface AreaStyle {
   columns?: number;
   // Effects
   boxShadow?: BoxShadow;
+  // Tile layout style for this area
+  tile_style?: TileStyle;
+  // Sub-variant for the power-monitor style
+  power_monitor_variant?: PowerMonitorVariant;
+  // Per-room button styling
+  buttonShape?: ButtonShape;
+  buttonVariant?: ButtonVariant;
+  buttonSize?: ButtonSize;
 }
+
+/**
+ * Purpose-driven tile layout styles.
+ * Legacy generic names (hero/ring/hbar/spark/list/command) are silently
+ * remapped at render time — no existing YAML breaks.
+ */
+export type TileStyle =
+  | 'default'          // original adaptive block-grid tile
+  | 'power-monitor'    // relay/plug/energy — power number, gauge, graph or table
+  | 'light-control'    // dimmer/rgb — colour wheel + brightness sliders
+  | 'climate-control'  // TRV/wall_display — thermostat dial front-and-centre
+  | 'cover-control'    // blind/shutter — shutter graphic + open/stop/close
+  | 'sensor-card'      // sensor — big primary value + sparkline + trend badge
+  | 'scene-button'     // input/generic — large tappable icon button
+  // Legacy aliases (remapped, not shown in picker)
+  | 'hero' | 'ring' | 'hbar' | 'spark' | 'list' | 'command';
+
+/** Sub-variants for the power-monitor style */
+export type PowerMonitorVariant =
+  | 'big-number'  // dominant watt reading + area-fill sparkline  (was: hero)
+  | 'gauge'       // stacked multi-ring arcs with arrow needles    (was: ring)
+  | 'graph'       // tall sparkline dominates                      (was: spark)
+  | 'compact'     // horizontal split: number left, stats right    (was: hbar)
+  | 'table';      // all sensor rows + mini sparkline footer       (was: list)
 
 /** Animation preset for entity state icons */
 export type EntityAnimationType =
@@ -196,6 +233,10 @@ export type EntityAnimationType =
 export interface DeviceStyle {
   color?: string;             // accent colour override
   tile_layout?: TileBlockId[]; // per-device block order/visibility
+  /** Per-device tile style — overrides area tile_style */
+  tile_style?: TileStyle;
+  /** Sub-variant for power-monitor style */
+  power_monitor_variant?: PowerMonitorVariant;
   /** Custom icon shown in the tile header when entity is ON */
   tile_icon?: EntityAnimationType;
   /** Custom icon shown in the tile header when entity is OFF (falls back to tile_icon if unset) */
@@ -206,15 +247,63 @@ export interface DeviceStyle {
   entity_animations?: Record<string, { on?: EntityAnimationType; off?: EntityAnimationType; speed?: number }>;
 }
 
+/** Per-view filter — all fields AND-ed; within a list values OR-ed. */
+export interface ViewFilter {
+  profiles?: DeviceProfile[];
+  /** Device matches if ANY of its entities has a domain in this list. */
+  domains?: string[];
+  /** Case-insensitive area name whitelist. */
+  areas?: string[];
+  /** device_id whitelist. */
+  devices?: string[];
+  /** device_id blacklist (applied after all include gates). */
+  exclude_devices?: string[];
+  /** RegExp source tested against every entity_id; device matches if any hit. */
+  entity_id_pattern?: string;
+}
+
+/** A single named dashboard view. */
+export interface ViewConfig {
+  /** Stable identifier; used for tab highlighting and localStorage persistence. */
+  id: string;
+  /** Tab label. */
+  name: string;
+  /** Tab icon — mdi:* passed to <ha-icon>, otherwise treated as EntityAnimationType. */
+  icon?: string;
+
+  /** Show the Favourites section in this view. Default: false. */
+  show_favourites?: boolean;
+  /** Group devices by room (area) inside this view. Default: true. */
+  show_rooms?: boolean;
+
+  /** Filter pipeline; omitting = show all devices (subject to global hidden_devices/areas). */
+  filter?: ViewFilter;
+
+  // Layout / style overrides — applied between area_styles and defaults.
+  tile_style?: TileStyle;
+  power_monitor_variant?: PowerMonitorVariant;
+  columns?: number;
+  tile_size?: TileSize;
+  sort_by?: SortBy;
+}
+
 /** Full card config */
 export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   type: string;
+
+  // ── Views (optional multi-dashboard) ──────────────────────────
+  /** Ordered list of named views. If absent, the card renders the single default view. */
+  views?: ViewConfig[];
+  /** id of the view selected on first load. Falls back to the first view. */
+  default_view?: string;
 
   // ── Device discovery ──────────────────────────────────────────
   /** Area filter. undefined = all; [] = none; ['Eldhús'] = specific */
   areas?: string[];
   /** Device IDs to hide */
   hidden_devices?: string[];
+  /** Device IDs pinned to the Favourites section at the top of the card */
+  favorites?: string[];
   /** Entity IDs to hide from the All Entities list in expanded view */
   hidden_entities?: string[];
   /** Show devices whose all entities are unavailable/unknown. Default: true */
@@ -224,7 +313,6 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
 
   // ── Layout ────────────────────────────────────────────────────
   columns?: number;                    // default: 3
-  view_mode?: ViewMode;                // default: 'grid'
   tile_size?: TileSize;                // default: 'md'
   sort_by?: SortBy;                    // default: 'name'
   /** Ordered list of tile blocks. Omit a block to hide it. */
@@ -249,7 +337,6 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
     tile_radius?: number;
     tile_gap?: number;
     font_family?: string;
-    text_transform?: 'uppercase' | 'capitalize' | 'none';
     text_size_scale?: number;
     button_shape?: ButtonShape;
     button_variant?: ButtonVariant;
@@ -330,6 +417,43 @@ export interface HAEntity {
   device_id?: string;
   area_id?: string;
   platform?: string;
+}
+
+/** Narrow structural type for the common HA state.attributes shape.
+ *  Use as `(state.attributes as HassAttrs).device_class` instead of `as any`. */
+export interface HassAttrs {
+  device_class?: string;
+  friendly_name?: string;
+  unit_of_measurement?: string;
+  effect_list?: string[];
+  effect?: string;
+  min_mireds?: number;
+  max_mireds?: number;
+  color_temp?: number;
+  supported_color_modes?: string[];
+  supported_features?: number;
+  brightness?: number;
+  rgb_color?: [number, number, number];
+  rgbw_color?: number[];
+  current_position?: number;
+  current_temperature?: number;
+  temperature?: number;
+  min_temp?: number;
+  max_temp?: number;
+  target_temp_step?: number;
+  hvac_action?: string;
+  preset_mode?: string;
+  preset_modes?: string[];
+  current_valve_position?: number;
+  valve_position?: number;
+  options?: string[];
+  min?: number;
+  max?: number;
+  step?: number;
+  event_type?: string;
+  latest_version?: string;
+  installed_version?: string;
+  [key: string]: unknown;
 }
 
 // ─── Global augmentation ────────────────────────────────────────────────────────
