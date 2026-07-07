@@ -76,6 +76,9 @@ export class HADeviceDashboard extends LitElement {
   private _cacheEntitiesRef: unknown = null;
   private _cacheDevicesRef: unknown = null;
   private _cacheConfigRef: HADeviceDashboardConfig | null = null;
+  /** Device profile is static per device; cache it, cleared whenever the
+   *  device list is rebuilt (registry/config change). */
+  private _profileCache = new Map<string, DeviceProfileResult>();
 
   // Card-level CSS var map — recomputed only when config changes.
   // Rebuilding this every render would re-stringify embedded data URLs
@@ -192,6 +195,10 @@ export class HADeviceDashboard extends LitElement {
       clearTimeout(this._sensorRenderTimer);
       this._sensorRenderTimer = null;
     }
+    if (this._trvBtnTimer != null) {
+      clearTimeout(this._trvBtnTimer);
+      this._trvBtnTimer = null;
+    }
   }
 
   // ── Device data ───────────────────────────────────────────────────────────
@@ -212,6 +219,7 @@ export class HADeviceDashboard extends LitElement {
     this._cacheEntitiesRef = entitiesRef;
     this._cacheDevicesRef  = devicesRef;
     this._cacheConfigRef   = this._config;
+    this._profileCache.clear();
 
     let devices = getAllDevices(this.hass);
 
@@ -237,6 +245,14 @@ export class HADeviceDashboard extends LitElement {
     return devices;
   }
 
+  /** Memoized device profile — avoids recomputing the domain-set/entity scan
+   *  for every tile on every render. Cache is cleared with the device list. */
+  private _profile(device: HADevice): DeviceProfileResult {
+    let p = this._profileCache.get(device.device_id);
+    if (!p) { p = getDeviceProfile(device); this._profileCache.set(device.device_id, p); }
+    return p;
+  }
+
   /** Returns the currently-active view, or null if the card has no `views` configured. */
   private _getActiveView(): ViewConfig | null {
     const views = this._config.views;
@@ -256,7 +272,7 @@ export class HADeviceDashboard extends LitElement {
 
     if (f.profiles?.length) {
       const allow = new Set(f.profiles);
-      out = out.filter(d => allow.has(getDeviceProfile(d).type));
+      out = out.filter(d => allow.has(this._profile(d).type));
     }
     if (f.domains?.length) {
       const allow = new Set(f.domains);
@@ -931,15 +947,6 @@ export class HADeviceDashboard extends LitElement {
     this._requestGraphData(entityId, h);
   }
 
-  private _refreshAllGraphs(device: HADevice) {
-    const h = this._config.graph_hours ?? 24;
-    const keys = this._getGraphEntities(device).map(e => this._gk(e.entityId, h)).filter(k => !this._graphFetching.has(k));
-    keys.forEach(k => this._graphFetchedAt.delete(k));
-    const next = new Map(this._graphData); keys.forEach(k => next.delete(k));
-    this._graphData = next;
-    keys.forEach(k => this._fetchGraphData(k));
-  }
-
   /** Long-range series from the recorder statistics API — 288 five-minute rows
    *  for 24h (or hourly rows beyond 48h) instead of tens of thousands of raw
    *  state changes. Returns null when the entity has no statistics (no
@@ -983,6 +990,28 @@ export class HADeviceDashboard extends LitElement {
     return points;
   }
 
+  /** Upper bound on cached series (entities × ranges). Opening the detail
+   *  sheet on many devices across 24h/7d/30d would otherwise retain every
+   *  series for the whole session. */
+  private readonly _graphDataCap = 160;
+
+  /** Evict least-recently-fetched series until under the cap. Never evicts
+   *  the key just written or one currently in flight. */
+  private _capGraphMap(map: Map<string, Array<{ t: number; v: number }>>, protectKey: string) {
+    while (map.size > this._graphDataCap) {
+      let oldestKey: string | null = null;
+      let oldestAt = Infinity;
+      for (const k of map.keys()) {
+        if (k === protectKey || this._graphFetching.has(k)) continue;
+        const at = this._graphFetchedAt.get(k) ?? 0;
+        if (at < oldestAt) { oldestAt = at; oldestKey = k; }
+      }
+      if (!oldestKey) break;
+      map.delete(oldestKey);
+      this._graphFetchedAt.delete(oldestKey);
+    }
+  }
+
   /** Fetch history data. Key is compound "entityId::hours". */
   private async _fetchGraphData(key: string) {
     this._graphFetching.add(key);
@@ -994,10 +1023,12 @@ export class HADeviceDashboard extends LitElement {
       if (!points) points = await this._fetchRawHistory(entityId, hours);
       points = downsamplePoints(points);
       const next = new Map(this._graphData); next.set(key, points);
+      this._capGraphMap(next, key);
       this._graphData = next;
     } catch (err) {
       console.warn('[ha-device-dashboard] history fetch failed', entityId, err);
       const next = new Map(this._graphData); next.set(key, []);
+      this._capGraphMap(next, key);
       this._graphData = next;
     } finally {
       this._graphFetchedAt.set(key, Date.now());
@@ -1612,10 +1643,40 @@ export class HADeviceDashboard extends LitElement {
         !!x.fw?.newVersion && x.fw.newVersion !== x.fw.current);
   }
 
+  /** Aggregate all selected numeric-metric chips in ONE pass over devices —
+   *  each device's entities are scanned once, not once per metric chip. */
+  private _headerMetricAggs(devices: HADevice[], keys: string[]): Map<string, { sum: number; count: number }> {
+    const DC: Record<string, string> = { energy: 'energy', temperature: 'temperature', humidity: 'humidity', illuminance: 'illuminance' };
+    const dcKeys = keys.filter(k => DC[k]);
+    const wantPower = keys.includes('power');
+    const wantRssi = keys.includes('rssi');
+    const agg = new Map<string, { sum: number; count: number }>();
+    const add = (k: string, v: number) => {
+      const a = agg.get(k) ?? { sum: 0, count: 0 };
+      a.sum += v; a.count++; agg.set(k, a);
+    };
+    for (const d of devices) {
+      if (wantPower) { const p = this._getPower(d); if (p != null) add('power', p); }
+      if (!dcKeys.length && !wantRssi) continue;
+      const seen = new Set<string>();  // first match per device, matching _deviceMetric semantics
+      for (const e of d.entities) {
+        if (e.domain !== 'sensor') continue;
+        const s = this.hass.states[e.entity_id];
+        if (!s || s.state === 'unavailable' || s.state === 'unknown') continue;
+        const v = parseFloat(s.state); if (isNaN(v)) continue;
+        const dc = (s.attributes as HassAttrs).device_class as string ?? '';
+        if (wantRssi && !seen.has('rssi') && (dc === 'signal_strength' || e.entity_id.includes('rssi'))) { seen.add('rssi'); add('rssi', v); }
+        for (const k of dcKeys) { if (!seen.has(k) && dc === DC[k]) { seen.add(k); add(k, v); } }
+      }
+    }
+    return agg;
+  }
+
   /** Header stat chips — each clickable, opening a high→low device list for its metric. */
   private _renderHeaderChips(devices: HADevice[]): TemplateResult {
     const selected = this._config.header_chips ?? DEFAULT_HEADER_CHIPS;
     const online = devices.filter(d => this._isOnline(d)).length;
+    const metricAggs = this._headerMetricAggs(devices, selected);
     const toggle = (key: string) => (e: Event) => {
       e.stopPropagation();
       this._cloudDetailOpen = this._cloudDetailOpen === `m:${key}` ? null : `m:${key}`;
@@ -1641,10 +1702,9 @@ export class HADeviceDashboard extends LitElement {
             if (!n) return nothing;
             text = `⬆ ${n} update${n > 1 ? 's' : ''}`; cls = 'updates-count';
           } else {
-            const vals = devices.map(d => this._deviceMetric(d, key)).filter((v): v is number => v != null);
-            if (!vals.length) return nothing;
-            const sum = vals.reduce((a, b) => a + b, 0);
-            const v = def.agg === 'sum' ? sum : sum / vals.length;
+            const a = metricAggs.get(key);
+            if (!a || !a.count) return nothing;
+            const v = def.agg === 'sum' ? a.sum : a.sum / a.count;
             text = key === 'power' ? this._formatHeaderMetric(key, v) : `${def.label} ${this._formatHeaderMetric(key, v)}`;
             if (key === 'power') cls = 'power';
           }
@@ -1973,7 +2033,7 @@ export class HADeviceDashboard extends LitElement {
 
   private _renderTile(device: HADevice, areaTileStyle?: TileStyle): TemplateResult {
     const online  = this._isOnline(device);
-    const profile = getDeviceProfile(device);
+    const profile = this._profile(device);
     const activeView = this._getActiveView();
     const tileSize = activeView?.tile_size ?? this._config.tile_size ?? 'md';
 
@@ -2450,7 +2510,7 @@ export class HADeviceDashboard extends LitElement {
       ? this._getDevices().find(d => d.device_id === this._detailDevice) ?? null
       : null;
     const detailSheet = detailDev
-      ? renderDetailSheet(this._buildTileCtx(detailDev, getDeviceProfile(detailDev), this._tileAccent(detailDev, detailDev.area ?? '')))
+      ? renderDetailSheet(this._buildTileCtx(detailDev, this._profile(detailDev), this._tileAccent(detailDev, detailDev.area ?? '')))
       : nothing;
 
     return html`

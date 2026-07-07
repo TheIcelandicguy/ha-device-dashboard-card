@@ -1,4 +1,5 @@
 import { LitElement, html, css, TemplateResult, nothing } from 'lit';
+import { repeat } from 'lit/directives/repeat.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile } from './types';
@@ -182,11 +183,17 @@ export class HADeviceDashboardEditor extends LitElement {
     this._config = config;
   }
 
+  // Editor dialog-sizing plumbing — tracked so we can tear it all down.
+  private _editorResizeHandler?: () => void;
+  private _editorRO?: ResizeObserver;
+  private _editorLayoutTimers: number[] = [];
+  private _editorRAF?: number;
+
   connectedCallback() {
     super.connectedCallback();
     ensureCdnFontsLoaded();
     window.addEventListener('mousedown', this._onIconPickerOutsideClick, true);
-    requestAnimationFrame(() => {
+    this._editorRAF = requestAnimationFrame(() => {
       const root1 = this.getRootNode() as ShadowRoot;
       const cardElementEditor = root1?.host as HTMLElement | null;
       if (!cardElementEditor) return;
@@ -235,15 +242,18 @@ export class HADeviceDashboardEditor extends LitElement {
       };
 
       apply();
-      setTimeout(apply, 50);
-      setTimeout(apply, 250);
-      setTimeout(apply, 700);
+      this._editorLayoutTimers.push(
+        window.setTimeout(apply, 50),
+        window.setTimeout(apply, 250),
+        window.setTimeout(apply, 700),
+      );
+      this._editorResizeHandler = apply;
       window.addEventListener('resize', apply);
 
       if (typeof ResizeObserver !== 'undefined') {
-        const ro = new ResizeObserver(apply);
+        this._editorRO = new ResizeObserver(apply);
         const editorDiv = dialogShadow.querySelector<HTMLElement>('div.element-editor');
-        if (editorDiv) ro.observe(editorDiv);
+        if (editorDiv) this._editorRO.observe(editorDiv);
       }
     });
   }
@@ -251,6 +261,16 @@ export class HADeviceDashboardEditor extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     window.removeEventListener('mousedown', this._onIconPickerOutsideClick, true);
+    // Tear down the dialog-sizing plumbing so it doesn't leak across editor opens.
+    if (this._editorRAF != null) { cancelAnimationFrame(this._editorRAF); this._editorRAF = undefined; }
+    this._editorLayoutTimers.forEach(t => clearTimeout(t));
+    this._editorLayoutTimers = [];
+    if (this._editorResizeHandler) {
+      window.removeEventListener('resize', this._editorResizeHandler);
+      this._editorResizeHandler = undefined;
+    }
+    this._editorRO?.disconnect();
+    this._editorRO = undefined;
     this._flushConfig();   // don't lose a pending debounced change when the editor closes
   }
 
@@ -486,25 +506,6 @@ export class HADeviceDashboardEditor extends LitElement {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  private _getAllHADevices(): Array<{ device_id: string; name: string; area?: string }> {
-    if (!this.hass) return [];
-    const dr: Record<string,any> = (this.hass as any).devices ?? {};
-    const er: Record<string,any> = (this.hass as any).entities ?? {};
-    const seen = new Set<string>();
-    const res: Array<{device_id:string;name:string;area?:string}> = [];
-    for (const e of Object.values(er)) {
-      const id: string = (e as any)?.device_id;
-      if (!id || seen.has(id)) continue;
-      seen.add(id);
-      const dev = dr[id];
-      if (!dev) continue;
-      const aId = dev.area_id ?? (e as any).area_id;
-      const area = aId ? (this.hass as any).areas?.[aId]?.name : undefined;
-      res.push({ device_id: id, name: dev.name_by_user ?? dev.name ?? id, area });
-    }
-    return res.sort((a,b)=>a.name.localeCompare(b.name));
-  }
-
   // getAllDevices scans the full HA entity/device registry (thousands of
   // entries) — never call it in a loop. Cached per hass reference.
   private _devCacheHass?: HomeAssistant;
@@ -528,17 +529,6 @@ export class HADeviceDashboardEditor extends LitElement {
     }
     return raw.map(d => ({ device_id: d.device_id, name: d.name, area: d.area }))
               .sort((a,b)=>a.name.localeCompare(b.name));
-  }
-
-  private _getEntitiesForDevice(deviceId: string) {
-    const er: Record<string,any> = (this.hass as any).entities ?? {};
-    const res: Array<{entity_id:string;name:string;domain:string}> = [];
-    for (const [eid, e] of Object.entries(er)) {
-      if ((e as any).device_id !== deviceId) continue;
-      const s = this.hass.states[eid];
-      res.push({ entity_id: eid, name: (s?.attributes as any)?.friendly_name ?? eid, domain: eid.split('.')[0] });
-    }
-    return res.sort((a,b)=>a.name.localeCompare(b.name));
   }
 
   // ── Area style helpers ──────────────────────────────────────────────────────
@@ -1402,14 +1392,17 @@ export class HADeviceDashboardEditor extends LitElement {
     this._flushConfig();   // structural change — apply immediately
   }
 
-  /** Editor-side mirror of the runtime filter — returns how many discovered devices a view matches. */
-  private _countViewMatches(v: ViewConfig): number {
+  /** Editor-side mirror of the runtime filter — returns how many discovered devices a view matches.
+   *  `discovered` (sorted list) and `byId` (device_id → full device) are built ONCE by the caller
+   *  and shared across all view cards, so we don't re-scan/sort per view on every re-render. */
+  private _countViewMatches(
+    v: ViewConfig,
+    discovered: Array<{ device_id: string; name: string; area?: string }>,
+    byId: Map<string, ReturnType<typeof getAllDevices>[number]>,
+  ): number {
     const f = v.filter;
-    let pool = this._getDiscoveredDevices();
+    let pool = discovered;
     if (!f) return pool.length;
-    // Build a device_id → full device map ONCE (the cached registry scan),
-    // instead of re-scanning per device inside each filter's callback.
-    const byId = new Map(this._allDevices().map(d => [d.device_id, d]));
     if (f.profiles?.length) {
       const allow = new Set(f.profiles);
       pool = pool.filter(d => {
@@ -1451,6 +1444,8 @@ export class HADeviceDashboardEditor extends LitElement {
     const DOMAIN_OPTS = ['light', 'switch', 'sensor', 'binary_sensor', 'climate', 'cover', 'valve', 'button', 'select', 'number'];
     const allAreas = this._getAreas();
     const allDiscovered = this._getDiscoveredDevices();
+    // Build the id→device map once and share it across all view cards.
+    const byId = new Map(this._allDevices().map(d => [d.device_id, d]));
 
     return html`
       <div class="views-header">
@@ -1476,7 +1471,7 @@ export class HADeviceDashboardEditor extends LitElement {
         </div>
       `}
 
-      ${views.map((v, i) => this._renderViewCard(v, i, views.length, PROFILE_OPTS, DOMAIN_OPTS, allAreas, allDiscovered))}
+      ${views.map((v, i) => this._renderViewCard(v, i, views.length, PROFILE_OPTS, DOMAIN_OPTS, allAreas, allDiscovered, byId))}
     `;
   }
 
@@ -1485,12 +1480,13 @@ export class HADeviceDashboardEditor extends LitElement {
     profiles: DeviceProfile[], domains: string[],
     areas: Array<{ id: string; name: string }>,
     allDevices: Array<{ device_id: string; name: string; area?: string }>,
+    byId: Map<string, ReturnType<typeof getAllDevices>[number]>,
   ): TemplateResult {
     const expanded = this._expandedViewId === v.id;
     const filter = v.filter ?? {};
     const selectedDevices = new Set(filter.devices ?? []);
     const excludedDevices = new Set(filter.exclude_devices ?? []);
-    const matchCount = this._countViewMatches(v);
+    const matchCount = this._countViewMatches(v, allDevices, byId);
     const totalCount = allDevices.length;
     const setViewField = <K extends keyof ViewConfig>(key: K, val: ViewConfig[K]) =>
       this._updateView(v.id, { [key]: val } as Partial<ViewConfig>);
@@ -1584,7 +1580,7 @@ export class HADeviceDashboardEditor extends LitElement {
             <div class="field">
               <div class="field-lbl">Include specific devices (overrides profiles/domains filter — AND with other gates)</div>
               <div class="view-dev-list">
-                ${allDevices.map(d => html`
+                ${repeat(allDevices, d => d.device_id, d => html`
                   <label class="view-dev-row">
                     <input type="checkbox" .checked=${selectedDevices.has(d.device_id)}
                       @change=${() => this._toggleViewFilterValue(v.id, 'devices', d.device_id)}>
@@ -1597,7 +1593,7 @@ export class HADeviceDashboardEditor extends LitElement {
             <div class="field">
               <div class="field-lbl">Exclude devices</div>
               <div class="view-dev-list">
-                ${allDevices.map(d => html`
+                ${repeat(allDevices, d => d.device_id, d => html`
                   <label class="view-dev-row">
                     <input type="checkbox" .checked=${excludedDevices.has(d.device_id)}
                       @change=${() => this._toggleViewFilterValue(v.id, 'exclude_devices', d.device_id)}>
