@@ -436,6 +436,18 @@ export class HADeviceDashboard extends LitElement {
     }
 
     const sortBy = this._config.sort_by ?? 'name';
+    // Precompute the sort key once per device (Schwartzian transform) so the
+    // comparator doesn't rescan the device's entities on every comparison.
+    let comparator: (a: HADevice, b: HADevice) => number;
+    if (sortBy === 'power') {
+      const powerOf = new Map(devices.map(d => [d.device_id, this._getPower(d) ?? -1]));
+      comparator = (a, b) => (powerOf.get(b.device_id)! - powerOf.get(a.device_id)!);
+    } else if (sortBy === 'online') {
+      const onlineOf = new Map(devices.map(d => [d.device_id, this._isOnline(d) ? 1 : 0]));
+      comparator = (a, b) => (onlineOf.get(b.device_id)! - onlineOf.get(a.device_id)!) || a.name.localeCompare(b.name);
+    } else {
+      comparator = (a, b) => a.name.localeCompare(b.name);
+    }
     return new Map(
       [...map.entries()]
         .sort(([a], [b]) => {
@@ -443,16 +455,7 @@ export class HADeviceDashboard extends LitElement {
           if (!b) return -1;
           return a.localeCompare(b);
         })
-        .map(([area, devs]) => [
-          area,
-          devs.sort(
-            sortBy === 'power'
-              ? (a, b) => (this._getPower(b) ?? -1) - (this._getPower(a) ?? -1)
-              : sortBy === 'online'
-              ? (a, b) => (Number(this._isOnline(b)) - Number(this._isOnline(a))) || a.name.localeCompare(b.name)
-              : (a, b) => a.name.localeCompare(b.name)
-          ),
-        ])
+        .map(([area, devs]) => [area, devs.sort(comparator)])
     );
   }
 
@@ -1556,10 +1559,11 @@ export class HADeviceDashboard extends LitElement {
   private _renderBlock(
     blockId: TileBlockId,
     device: HADevice,
-    profile: DeviceProfileResult
+    profile: DeviceProfileResult,
+    ctx?: TileCtx,
   ): TemplateResult {
-    const accent = this._tileAccent(device, device.area ?? '');
-    return renderBlockTile(this._buildTileCtx(device, profile, accent), blockId);
+    const c = ctx ?? this._buildTileCtx(device, profile, this._tileAccent(device, device.area ?? ''));
+    return renderBlockTile(c, blockId);
   }
 
   private _renderPowerBar(device: HADevice): TemplateResult {
@@ -1787,6 +1791,10 @@ export class HADeviceDashboard extends LitElement {
     const valve  = this._getValve(device);
     const cover  = this._getCover(device);
     const isOn   = sw?.isOn ?? false;
+    // Build ONE shared ctx for the sub-blocks below (lazily — only if one is
+    // shown) instead of rebuilding it inside every _renderBlock call.
+    let _lctx: TileCtx | null = null;
+    const lctx = () => (_lctx ??= this._buildTileCtx(device, profile, this._tileAccent(device, device.area ?? '')));
 
     // ── Graphs ──────────────────────────────────────────────────
     const graphEntities = this._getGraphEntities(device);
@@ -1858,21 +1866,21 @@ export class HADeviceDashboard extends LitElement {
     // ── TRV dial ─────────────────────────────────────────────────
     const trvBlock = trv ? html`
       <div class="ts-lower-section ts-lower-trv" @click=${(e: Event) => e.stopPropagation()}>
-        ${this._renderBlock('trv_control', device, profile)}
+        ${this._renderBlock('trv_control', device, profile, lctx())}
       </div>
     ` : nothing;
 
     // ── Valve controls ───────────────────────────────────────────
     const valveBlock = valve ? html`
       <div class="ts-lower-section ts-lower-valve" @click=${(e: Event) => e.stopPropagation()}>
-        ${this._renderBlock('valve_controls', device, profile)}
+        ${this._renderBlock('valve_controls', device, profile, lctx())}
       </div>
     ` : nothing;
 
     // ── Cover controls ───────────────────────────────────────────
     const coverBlock = cover ? html`
       <div class="ts-lower-section ts-lower-cover" @click=${(e: Event) => e.stopPropagation()}>
-        ${this._renderBlock('cover_controls', device, profile)}
+        ${this._renderBlock('cover_controls', device, profile, lctx())}
       </div>
     ` : nothing;
 
@@ -1882,7 +1890,7 @@ export class HADeviceDashboard extends LitElement {
     );
     const relayBlock = relayEnts.length > 1 ? html`
       <div class="ts-lower-section ts-lower-relay" @click=${(e: Event) => e.stopPropagation()}>
-        ${this._renderBlock('relay_channels', device, profile)}
+        ${this._renderBlock('relay_channels', device, profile, lctx())}
       </div>
     ` : nothing;
 
@@ -1974,8 +1982,19 @@ export class HADeviceDashboard extends LitElement {
   }
 
   private _buildTileCtx(device: HADevice, profile: DeviceProfileResult, accent: string): TileCtx {
+    // Per-ctx memo: a fresh ctx is built once per tile per render, so caching
+    // here collapses the repeated getX(device) calls each block/renderer makes
+    // (renderBlockTile re-derives all of these at the top of every block).
+    const memo = <T,>(fn: (d: HADevice) => T): ((d: HADevice) => T) => {
+      const cache = new Map<string, T>();
+      return (d: HADevice) => {
+        if (cache.has(d.device_id)) return cache.get(d.device_id)!;
+        const v = fn(d); cache.set(d.device_id, v); return v;
+      };
+    };
+    const getPrimarySwitch = memo((d: HADevice) => this._getPrimarySwitch(d));
     const online = this._isOnline(device);
-    const sw = this._getPrimarySwitch(device);
+    const sw = getPrimarySwitch(device);
     const isOn = sw?.isOn ?? false;
     return {
       hass: this.hass,
@@ -1985,14 +2004,14 @@ export class HADeviceDashboard extends LitElement {
       accent,
       online,
       isOn,
-      getPrimarySwitch: (d) => this._getPrimarySwitch(d),
-      getTrv: (d) => this._getTrv(d),
-      getCover: (d) => this._getCover(d),
-      getValve: (d) => this._getValve(d),
-      getPower: (d) => this._getPower(d),
-      tileSensors: (d) => this._tileSensors(d),
-      getGraphEntities: (d) => this._getGraphEntities(d),
-      getPowerSparks: (d) => this._getPowerSparks(d),
+      getPrimarySwitch,
+      getTrv: memo((d) => this._getTrv(d)),
+      getCover: memo((d) => this._getCover(d)),
+      getValve: memo((d) => this._getValve(d)),
+      getPower: memo((d) => this._getPower(d)),
+      tileSensors: memo((d) => this._tileSensors(d)),
+      getGraphEntities: memo((d) => this._getGraphEntities(d)),
+      getPowerSparks: memo((d) => this._getPowerSparks(d)),
       ensureGraphData: (d) => this._ensureGraphData(d),
       renderEntityAnim: (id, on, devId) => this._renderEntityAnim(id, on, devId),
       renderSparklinesFiltered: (d, ents) => this._renderSparklinesFiltered(d, ents),
@@ -2009,7 +2028,7 @@ export class HADeviceDashboard extends LitElement {
       setNumberValue: (id, v) => this._setNumberValue(id, v),
       selectOption: (id, opt) => this._selectOption(id, opt),
       timeAgo: (ts) => this._timeAgo(ts),
-      getInputChannels: (d) => this._getInputChannels(d),
+      getInputChannels: memo((d) => this._getInputChannels(d)),
       handleScenePress: (d) => this._handleScenePress(d),
       adjustTrvTemp: (trv, dir) => this._adjustTrvTemp(trv, dir),
       requestGraphData: (id, h) => this._requestGraphData(id, h),
@@ -2017,10 +2036,10 @@ export class HADeviceDashboard extends LitElement {
       rgbToHex: (r, g, b) => this._rgbToHex(r, g, b),
       setBrightness: (id, pct) => this._setBrightness(id, pct),
       setColor: (id, hex, w, rgbw) => this._setColor(id, hex, w, rgbw),
-      getAlerts: (d) => this._getAlerts(d),
-      getFirmware: (d) => this._getFirmware(d),
-      getSensors: (d) => this._getSensors(d),
-      getVirtualControls: (d) => this._getVirtualControls(d),
+      getAlerts: memo((d) => this._getAlerts(d)),
+      getFirmware: memo((d) => this._getFirmware(d)),
+      getSensors: memo((d) => this._getSensors(d)),
+      getVirtualControls: memo((d) => this._getVirtualControls(d)),
       renderSparklines: (d) => this._renderSparklines(d),
       renderSparklinesExpanded: (d, h) => this._renderSparklines(d, true, h),
       renderPowerBar: (d) => this._renderPowerBar(d),
@@ -2299,159 +2318,6 @@ export class HADeviceDashboard extends LitElement {
     `;
   }
 
-  // ── Expanded tile panel ───────────────────────────────────────────────────
-
-  private _renderExpanded(device: HADevice): TemplateResult {
-    const sensors = this._getSensors(device);
-    const fw = this._getFirmware(device);
-    const trv = this._getTrv(device);
-    const cover = this._getCover(device);
-    const valve = this._getValve(device);
-
-    const showEntityList = this._config.show_entity_list !== false;
-    const isOpen = this._entityListOpen.has(device.device_id);
-
-    return html`
-      <div class="expanded" @click=${(e: Event) => e.stopPropagation()}>
-
-        ${cover ? html`
-          <div class="exp-section exp-section--cover">
-            <div class="exp-label">Cover</div>
-            <div class="trv-mode-row">
-              <button class="tog sm ${cover.state === 'open' ? 'on' : 'off'}" @click=${(e: Event) => this._coverAction(cover.entityId, 'open', e)}>Open</button>
-              <button class="tog sm off" @click=${(e: Event) => this._coverAction(cover.entityId, 'stop', e)}>Stop</button>
-              <button class="tog sm ${cover.state === 'closed' ? 'on' : 'off'}" @click=${(e: Event) => this._coverAction(cover.entityId, 'close', e)}>Close</button>
-            </div>
-            ${cover.position != null ? html`
-              <div class="dim-wrap" style="margin-top:8px">
-                <span class="trv-range-lbl">0%</span>
-                <input type="range" class="dim-slider" min="0" max="100" step="5"
-                  style="accent-color:var(--sc-accent)"
-                  .value=${String(cover.position)}
-                  @change=${(e: Event) => { e.stopPropagation(); this._setCoverPosition(cover.entityId, parseFloat((e.target as HTMLInputElement).value)); }}/>
-                <span class="trv-range-lbl">100%</span>
-              </div>
-              <div style="text-align:center;font-size:12px;color:var(--sc-text-secondary);margin-top:2px">Position: ${Math.round(cover.position)}%</div>
-            ` : nothing}
-          </div>
-        ` : nothing}
-
-        ${trv ? html`
-          <div class="exp-section exp-section--trv">
-            <div class="exp-label">Thermostat</div>
-            <div class="trv-ctrl-row">
-              <button class="trv-big-btn" @click=${(e: Event) => { e.stopPropagation(); if (trv.targetTemp != null) this._setTemp(trv.entityId, Math.max(trv.minTemp, trv.targetTemp - trv.step)); }}>−</button>
-              <div class="trv-display">
-                <span class="trv-target-big">${trv.targetTemp != null ? trv.targetTemp.toFixed(1) : '—'}°</span>
-                ${trv.currentTemp != null ? html`<span class="trv-current-sub">now ${trv.currentTemp}°</span>` : nothing}
-                ${trv.hvacAction === 'heating' ? html`<span class="trv-action-badge heating">Heating</span>` : nothing}
-              </div>
-              <button class="trv-big-btn" @click=${(e: Event) => { e.stopPropagation(); if (trv.targetTemp != null) this._setTemp(trv.entityId, Math.min(trv.maxTemp, trv.targetTemp + trv.step)); }}>+</button>
-            </div>
-            <div class="dim-wrap" style="margin:4px 0 8px">
-              <span class="trv-range-lbl">${trv.minTemp}°</span>
-              <input type="range" class="dim-slider" .min=${String(trv.minTemp)} .max=${String(trv.maxTemp)} .step=${String(trv.step)}
-                style="accent-color:var(--sc-accent)" .value=${String(trv.targetTemp ?? trv.minTemp)}
-                @change=${(e: Event) => { e.stopPropagation(); this._setTemp(trv.entityId, parseFloat((e.target as HTMLInputElement).value)); }}/>
-              <span class="trv-range-lbl">${trv.maxTemp}°</span>
-            </div>
-            <div class="trv-mode-row">
-              <button class="tog sm ${trv.hvacMode === 'heat' ? 'on' : 'off'}" @click=${(e: Event) => this._setHvacMode(trv.entityId, 'heat', e)}>Heat</button>
-              <button class="tog sm ${trv.hvacMode === 'off' ? 'on' : 'off'}" @click=${(e: Event) => this._setHvacMode(trv.entityId, 'off', e)}>Off</button>
-            </div>
-          </div>
-        ` : nothing}
-
-        ${valve ? html`
-          <div class="exp-section">
-            <div class="exp-label">Valve</div>
-            <div class="trv-mode-row">
-              <button class="tog sm ${valve.state === 'open' ? 'on' : 'off'}" @click=${(e: Event) => this._valveAction(valve.entityId, 'open', e)}>Open</button>
-              <button class="tog sm off" @click=${(e: Event) => this._valveAction(valve.entityId, 'stop', e)}>Stop</button>
-              <button class="tog sm ${valve.state === 'closed' ? 'on' : 'off'}" @click=${(e: Event) => this._valveAction(valve.entityId, 'close', e)}>Close</button>
-            </div>
-            ${valve.position != null ? html`
-              <div class="dim-wrap" style="margin-top:8px">
-                <span class="trv-range-lbl">0%</span>
-                <input type="range" class="dim-slider" min="0" max="100" step="5"
-                  style="accent-color:var(--sc-accent)"
-                  .value=${String(valve.position)}
-                  @change=${(e: Event) => { e.stopPropagation(); this._setValvePosition(valve.entityId, parseFloat((e.target as HTMLInputElement).value)); }}/>
-                <span class="trv-range-lbl">100%</span>
-              </div>
-              <div style="text-align:center;font-size:12px;color:var(--sc-text-secondary);margin-top:2px">Position: ${Math.round(valve.position)}%</div>
-            ` : nothing}
-          </div>
-        ` : nothing}
-
-        ${sensors.length ? html`
-          <div class="exp-section">
-            <div class="exp-label">Sensors</div>
-            <div class="sensor-row">
-              ${sensors.map(s => html`
-                <div class="sensor-chip">
-                  <span class="sensor-label">${s.label}</span>
-                  <span class="sensor-value ${s.warn ? 'warn' : ''}">${s.value}</span>
-                </div>
-              `)}
-            </div>
-          </div>
-        ` : nothing}
-
-        ${fw ? html`
-          <div class="exp-section">
-            <div class="exp-label">Firmware update available</div>
-            <div class="exp-row">
-              <span class="exp-name">${fw.newVersion ?? 'New version'}</span>
-              <button class="tog sm update" @click=${(e: Event) => this._installUpdate(fw.entityId, e)}>Install</button>
-            </div>
-          </div>
-        ` : nothing}
-
-        ${showEntityList ? html`
-          <div class="exp-section exp-section--full">
-            <div class="ent-list-header" @click=${(e: Event) => {
-              e.stopPropagation();
-              const next = new Set(this._entityListOpen);
-              isOpen ? next.delete(device.device_id) : next.add(device.device_id);
-              this._entityListOpen = next;
-            }}>
-              <span class="exp-label" style="margin:0">All Entities (${device.entities.length})</span>
-              <span class="ent-caret ${isOpen ? 'open' : ''}">▼</span>
-            </div>
-            ${isOpen ? html`
-              <div class="ent-list">
-                ${device.entities
-                  .filter(e => !(this._config.hidden_entities ?? []).includes(e.entity_id))
-                  .map(e => {
-                    const s = this.hass.states[e.entity_id];
-                    const rawState = s?.state ?? 'unavailable';
-                    const unit = (s?.attributes as HassAttrs)?.unit_of_measurement ?? '';
-                    const name = (s?.attributes as HassAttrs)?.friendly_name ?? e.entity_id.split('.')[1].replace(/_/g, ' ');
-                    const isToggleable = ['switch', 'light', 'input_boolean', 'fan'].includes(e.domain);
-                    return html`
-                      <div class="ent-row">
-                        <span class="ent-domain">${e.domain}</span>
-                        <span class="ent-name">${name}</span>
-                        <span class="ent-state">${unit ? `${rawState} ${unit}` : rawState}</span>
-                        ${isToggleable ? html`
-                          <button class="tog sm ${rawState === 'on' ? 'on' : 'off'}"
-                            @click=${(ev: Event) => this._toggle(e.entity_id, rawState === 'on', ev)}>
-                            ${rawState === 'on' ? 'ON' : 'OFF'}
-                          </button>
-                        ` : nothing}
-                      </div>
-                    `;
-                  })}
-              </div>
-            ` : nothing}
-          </div>
-        ` : nothing}
-
-      </div>
-    `;
-  }
-
   // ── Main render ───────────────────────────────────────────────────────────
 
   protected render(): TemplateResult {
@@ -2495,13 +2361,16 @@ export class HADeviceDashboard extends LitElement {
     const showFavourites = !activeView || activeView.show_favourites === true;
     const showRooms = !activeView || activeView.show_rooms !== false;
 
-    // Cloud connectivity stats from binary_sensor.*_cloud entities
-    const cloudSensors = Object.values(this.hass.states)
-      .filter(s => s.entity_id.startsWith('binary_sensor.') && s.entity_id.endsWith('_cloud'));
-    const cloudOnline    = cloudSensors.filter(s => s.state === 'on');
-    const cloudOffline   = cloudSensors.filter(s => s.state === 'off');
-    const cloudUnavail   = cloudSensors.filter(s => s.state === 'unavailable');
-    const cloudName = (s: (typeof cloudSensors)[0]) =>
+    // Cloud connectivity stats from binary_sensor.*_cloud entities — only
+    // scanned when the cloud chips are enabled (opt-in). The Object.values
+    // scan is over ALL hass states (thousands), so skip it otherwise.
+    const cloudMatches = this._config.header_show_cloud === true
+      ? Object.values(this.hass.states).filter(s => s.entity_id.startsWith('binary_sensor.') && s.entity_id.endsWith('_cloud'))
+      : [];
+    const cloudOnline    = cloudMatches.filter(s => s.state === 'on');
+    const cloudOffline   = cloudMatches.filter(s => s.state === 'off');
+    const cloudUnavail   = cloudMatches.filter(s => s.state === 'unavailable');
+    const cloudName = (s: (typeof cloudMatches)[number]) =>
       ((s.attributes.friendly_name as string) ?? s.entity_id).replace(/\s*[Cc]loud$/, '').trim();
 
     const cardInlineStyles = this._buildCardStyles();
