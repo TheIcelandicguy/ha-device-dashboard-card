@@ -2118,17 +2118,18 @@ export class HADeviceDashboard extends LitElement {
       tileStyleObj['boxShadow']   = `0 0 12px ${accentColor}50`;
     }
 
-    // Priority: device tile_style → area tile_style → active view → default
+    // Priority: device tile_style → area tile_style → active view → global default
     const devStyle = this._config.device_styles?.[device.device_id];
-    const rawStyle = devStyle?.tile_style ?? areaTileStyle ?? activeView?.tile_style;
+    const rawStyle = devStyle?.tile_style ?? areaTileStyle ?? activeView?.tile_style ?? this._config.tile_style;
 
-    // Resolve variant — device → area → view → default
+    // Resolve variant — device → area → view → global default → legacy alias
     const areaVariant = this._config.area_styles?.[device.area ?? '']?.power_monitor_variant;
     const { style, variant: legacyVariant } = this._resolveStyle(rawStyle, profile);
     const variant: PowerMonitorVariant =
       devStyle?.power_monitor_variant
       ?? areaVariant
       ?? activeView?.power_monitor_variant
+      ?? this._config.power_monitor_variant
       ?? legacyVariant;
 
     if (style === 'default' || !style) {

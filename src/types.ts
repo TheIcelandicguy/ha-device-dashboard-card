@@ -319,6 +319,12 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   columns?: number;                    // default: 3
   tile_size?: TileSize;                // default: 'md'
   sort_by?: SortBy;                    // default: 'name'
+  /** Global default tile style — lowest-priority in the cascade
+   *  (device → area → view → this). Omit = 'default' (adaptive blocks). */
+  tile_style?: TileStyle;
+  /** Global default power-monitor variant, used when tile_style resolves to
+   *  power-monitor and no closer scope sets one. */
+  power_monitor_variant?: PowerMonitorVariant;
   /** Ordered list of tile blocks. Omit a block to hide it. */
   tile_layout?: TileBlockId[];
   tile_opacity?: number;               // 0-100, default 100 — tile background only
