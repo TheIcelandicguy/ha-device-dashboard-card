@@ -23,7 +23,7 @@ import { renderDetailSheet } from './detail/detail-sheet';
 import {
   getAllDevices, getDeviceProfile,
   getIntegrationLabel, isPrivateIp, PROFILE_DEFAULT_BLOCKS, GRAPH_DC_LABELS, GRAPH_SENSOR_DEFS,
-  HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, downsamplePoints,
+  HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, downsamplePoints, normalizeGraphKey,
   formatPower, formatEnergy, formatVoltage, formatCurrent, formatTemp,
   formatUptime, formatApparentPower, formatReactivePower,
   formatFrequency, formatHumidity, formatIlluminance, formatPpm, formatPercent,
@@ -884,7 +884,8 @@ export class HADeviceDashboard extends LitElement {
   // ── Sparkline system ──────────────────────────────────────────────────────
 
   private _getGraphEntities(device: HADevice): GraphEntity[] {
-    const dcList = this._config.graph_sensors ?? [];
+    // Normalize to device_class keys so legacy 'co2'/'rssi' configs still match.
+    const dcList = (this._config.graph_sensors ?? []).map(normalizeGraphKey);
     if (!dcList.length) return [];
     const results: Array<{ entityId: string; label: string; dc: string; unit: string }> = [];
     for (const dc of dcList) {

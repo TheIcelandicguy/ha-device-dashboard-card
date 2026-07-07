@@ -3,7 +3,7 @@ import { repeat } from 'lit/directives/repeat.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile } from './types';
-import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS } from './helpers';
+import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, normalizeGraphKey } from './helpers';
 import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -97,23 +97,6 @@ const SENSOR_GROUPS: Array<{ group: string; icon: string; iconColor: string; ico
       { key: 'flood',     label: 'Flood',        unit: '', defaultColor: '#f87171' },
       { key: 'smoke',     label: 'Smoke',        unit: '', defaultColor: '#f87171' },
     ] },
-];
-
-const GRAPH_SENSOR_DEFS_LOCAL = [
-  { key: 'power', label: 'Power', unit: 'W', color: '#f4601e' },
-  { key: 'voltage', label: 'Voltage', unit: 'V', color: '#a78bfa' },
-  { key: 'current', label: 'Current', unit: 'A', color: '#fbbf24' },
-  { key: 'energy', label: 'Energy', unit: 'kWh', color: '#4ade80' },
-  { key: 'apparent_power', label: 'App. Power', unit: 'VA', color: '#f472b6' },
-  { key: 'reactive_power', label: 'React. Power', unit: 'VAr', color: '#818cf8' },
-  { key: 'frequency', label: 'Frequency', unit: 'Hz', color: '#34d399' },
-  { key: 'power_factor', label: 'Power Factor', unit: '%', color: '#fb923c' },
-  { key: 'temperature', label: 'Temperature', unit: '°C', color: '#4fc3f7' },
-  { key: 'humidity', label: 'Humidity', unit: '%', color: '#2dd4bf' },
-  { key: 'illuminance', label: 'Illuminance', unit: 'lx', color: '#fde047' },
-  { key: 'co2', label: 'CO₂', unit: 'ppm', color: '#a3e635' },
-  { key: 'battery', label: 'Battery', unit: '%', color: '#86efac' },
-  { key: 'rssi', label: 'RSSI', unit: 'dBm', color: '#7dd3fc' },
 ];
 
 const TILE_BLOCKS: Array<{ id: TileBlockId; label: string; sub: string }> = [
@@ -2165,7 +2148,7 @@ export class HADeviceDashboardEditor extends LitElement {
     const gs = c.graph_style ?? {};
     const graphType = gs.type ?? 'line';
     const sensorColors = c.graph_sensor_colors ?? {};
-    const getColor = (key: string) => sensorColors[key] ?? GRAPH_SENSOR_DEFS_LOCAL.find(s=>s.key===key)?.color ?? '#f4601e';
+    const getColor = (key: string) => sensorColors[key] ?? GRAPH_SENSOR_DEFS.find(s=>s.key===key)?.defaultColor ?? '#f4601e';
 
     const gtBody = html`
       <div class="field">
@@ -2242,19 +2225,22 @@ export class HADeviceDashboardEditor extends LitElement {
       ${selectedGraphs.filter(k => !GAUGE_SENSORS.find(g => g.key === k)).length ? html`
         <div class="field-lbl" style="margin:10px 0 6px">Sparkline colours</div>
         ${selectedGraphs.filter(k => !GAUGE_SENSORS.find(g => g.key === k)).map(key => {
-          const meta = GRAPH_SENSOR_DEFS_LOCAL.find(s => s.key === key);
+          const meta = GRAPH_SENSOR_DEFS.find(s => s.key === key);
           return colorRow(key, meta?.label ?? key, getColor(key));
         })}` : nothing}
       <div class="field" style="margin-top:10px">
         <div class="field-lbl">Which sensors to graph</div>
         <div class="pill-grp">
-          ${GRAPH_SENSOR_DEFS_LOCAL.map(s => html`
-            <span class="pill ${selectedGraphs.includes(s.key) ? 'on' : ''}" @click=${() => {
-              const next = selectedGraphs.includes(s.key)
-                ? selectedGraphs.filter(k => k !== s.key)
+          ${GRAPH_SENSOR_DEFS.map(s => {
+            const on = selectedGraphs.some(k => normalizeGraphKey(k) === s.key);
+            return html`
+            <span class="pill ${on ? 'on' : ''}" @click=${() => {
+              const next = on
+                ? selectedGraphs.filter(k => normalizeGraphKey(k) !== s.key)
                 : [...selectedGraphs, s.key];
               this._set('graph_sensors', next);
-            }}>${s.label}</span>`)}
+            }}>${s.label}</span>`;
+          })}
         </div>
       </div>`;
 
@@ -2346,9 +2332,11 @@ export class HADeviceDashboardEditor extends LitElement {
           <div class="sensor-grid">
             ${grp.items.map(s => {
               const on = selected.includes(s.key);
-              const isGraphable = !!GRAPH_SENSOR_DEFS_LOCAL.find(g => g.key === s.key);
+              // graph_sensors is keyed by device_class; map the chip key (e.g. 'co2').
+              const graphKey = normalizeGraphKey(s.key);
+              const isGraphable = !!GRAPH_SENSOR_DEFS.find(g => g.key === graphKey);
               const graphSensors = c.graph_sensors ?? [];
-              const graphOn = graphSensors.includes(s.key);
+              const graphOn = graphSensors.some(k => normalizeGraphKey(k) === graphKey);
               return html`
                 <div class="sensor-item ${on ? 'active' : ''}" @click=${()=>{
                   const next = on ? selected.filter(k=>k!==s.key) : [...selected,s.key];
@@ -2363,7 +2351,7 @@ export class HADeviceDashboardEditor extends LitElement {
                     title="${graphOn ? 'Remove from graphs' : 'Add to graphs'}"
                     @click=${(e:Event) => {
                       e.stopPropagation();
-                      const next = graphOn ? graphSensors.filter(k=>k!==s.key) : [...graphSensors, s.key];
+                      const next = graphOn ? graphSensors.filter(k=>normalizeGraphKey(k)!==graphKey) : [...graphSensors, graphKey];
                       this._set('graph_sensors', next);
                     }}>∿</button>` : nothing}
                 </div>`;

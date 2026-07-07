@@ -461,6 +461,20 @@ export const GRAPH_DC_LABELS: Record<string, string> = Object.fromEntries(
   GRAPH_SENSOR_DEFS.map(d => [d.key, d.label.split(' ')[0]])
 );
 
+/**
+ * graph_sensors / graph_sensor_colors are keyed by HA device_class, but the
+ * sensor-chip UI uses the shorter chip keys 'co2' and 'rssi'. Older configs
+ * (and the per-sensor "add to graph" button) may store those. Normalize any
+ * graph key to its device_class so selection, colours and matching line up.
+ */
+export const GRAPH_KEY_ALIASES: Record<string, string> = {
+  co2: 'carbon_dioxide',
+  rssi: 'signal_strength',
+};
+export function normalizeGraphKey(key: string): string {
+  return GRAPH_KEY_ALIASES[key] ?? key;
+}
+
 // ─── Header stat chips ─────────────────────────────────────────────────────────
 
 /** Header chip catalogue: which fleet-level stats the card header can show.
