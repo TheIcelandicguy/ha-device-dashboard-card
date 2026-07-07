@@ -192,6 +192,11 @@ export class HADeviceDashboard extends LitElement {
     this._graphFetching.clear();
     this._graphFetchedAt.clear();
     this._graphData = new Map();
+    if (this._graphCommitTimer != null) {
+      clearTimeout(this._graphCommitTimer);
+      this._graphCommitTimer = null;
+    }
+    this._graphCommitPending = null;
     if (this._sensorRenderTimer != null) {
       clearTimeout(this._sensorRenderTimer);
       this._sensorRenderTimer = null;
@@ -1021,6 +1026,31 @@ export class HADeviceDashboard extends LitElement {
     }
   }
 
+  // Coalesce graph-data writes. Each finished series used to reassign
+  // `_graphData` immediately, and since shouldUpdate() re-renders on any
+  // _graphData change, a view with ~160 sparklines produced ~160 full card
+  // re-renders as fetches trickled in — a visible top-to-bottom render sweep.
+  // Instead we stage completed series into a pending map and commit once per
+  // window, collapsing a fetch burst into one render.
+  private _graphCommitPending: Map<string, Array<{ t: number; v: number }>> | null = null;
+  private _graphCommitTimer: number | null = null;
+  private readonly _graphCommitWindowMs = 150;
+
+  private _commitGraphPoints(key: string, points: Array<{ t: number; v: number }>) {
+    const work = this._graphCommitPending ?? new Map(this._graphData);
+    work.set(key, points);
+    this._capGraphMap(work, key);
+    this._graphCommitPending = work;
+    if (this._graphCommitTimer == null) {
+      this._graphCommitTimer = window.setTimeout(() => {
+        this._graphCommitTimer = null;
+        const w = this._graphCommitPending;
+        this._graphCommitPending = null;
+        if (w) this._graphData = w; // single reassignment → one render for the burst
+      }, this._graphCommitWindowMs);
+    }
+  }
+
   /** Fetch history data. Key is compound "entityId::hours". */
   private async _fetchGraphData(key: string) {
     this._graphFetching.add(key);
@@ -1031,14 +1061,10 @@ export class HADeviceDashboard extends LitElement {
       let points = hours >= 24 ? await this._fetchStatistics(entityId, hours) : null;
       if (!points) points = await this._fetchRawHistory(entityId, hours);
       points = downsamplePoints(points);
-      const next = new Map(this._graphData); next.set(key, points);
-      this._capGraphMap(next, key);
-      this._graphData = next;
+      this._commitGraphPoints(key, points);
     } catch (err) {
       console.warn('[ha-device-dashboard] history fetch failed', entityId, err);
-      const next = new Map(this._graphData); next.set(key, []);
-      this._capGraphMap(next, key);
-      this._graphData = next;
+      this._commitGraphPoints(key, []);
     } finally {
       this._graphFetchedAt.set(key, Date.now());
       this._graphFetching.delete(key);
