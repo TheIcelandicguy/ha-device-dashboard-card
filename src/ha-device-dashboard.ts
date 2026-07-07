@@ -1006,8 +1006,15 @@ export class HADeviceDashboard extends LitElement {
 
   /** Upper bound on cached series (entities × ranges). Opening the detail
    *  sheet on many devices across 24h/7d/30d would otherwise retain every
-   *  series for the whole session. */
-  private readonly _graphDataCap = 160;
+   *  series for the whole session.
+   *
+   *  MUST stay comfortably above the number of series a single view can show at
+   *  once. When the cap was 160 and the "All" view demanded ~168 sparklines, the
+   *  cache thrashed: every render evicted a *visible* series (its graph vanished,
+   *  shrinking that tile) to fetch another, then re-demanded the evicted one next
+   *  render — a perpetual appear/disappear that resized tiles and made the whole
+   *  view jump. 512 covers a large Shelly fleet on one screen with headroom. */
+  private readonly _graphDataCap = 512;
 
   /** Evict least-recently-fetched series until under the cap. Never evicts
    *  the key just written or one currently in flight. */
