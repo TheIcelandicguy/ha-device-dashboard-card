@@ -21,7 +21,7 @@ import { renderLightControlTile } from './tiles/light-control';
 import { renderBlockTile } from './tiles/block-tile';
 import { renderDetailSheet } from './detail/detail-sheet';
 import {
-  getAllDevices, getDeviceProfile,
+  getAllDevices, getDeviceProfile, migrateConfig,
   getIntegrationLabel, isPrivateIp, PROFILE_DEFAULT_BLOCKS, GRAPH_DC_LABELS, GRAPH_SENSOR_DEFS,
   HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, downsamplePoints, normalizeGraphKey,
   formatPower, formatEnergy, formatVoltage, formatCurrent, formatTemp,
@@ -104,7 +104,7 @@ export class HADeviceDashboard extends LitElement {
   }
 
   setConfig(config: HADeviceDashboardConfig) {
-    this._config = config;
+    this._config = migrateConfig(config);
     // Only fetch the CDN stylesheet if the user selected a CDN-only display font
     const ff = config.style?.font_family ?? '';
     if (CDN_FONT_FAMILIES.some(f => ff.includes(f.replace(/\+/g, ' ')))) ensureCdnFontsLoaded();

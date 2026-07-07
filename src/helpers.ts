@@ -492,6 +492,63 @@ export function normalizeGraphKey(key: string): string {
   return GRAPH_KEY_ALIASES[key] ?? key;
 }
 
+/**
+ * Normalize a saved config so persisted keys match what the runtime expects,
+ * so an older dashboard keeps working and its stored YAML is cleaned up on the
+ * next save. Currently rewrites `graph_sensors` / `graph_sensor_colors` chip-key
+ * aliases ('co2' → 'carbon_dioxide', 'rssi' → 'signal_strength') to device_class
+ * form (mirrors {@link normalizeGraphKey}, which the runtime already applies on
+ * read).
+ *
+ * Contract:
+ *  - Returns the SAME reference when nothing changed, so the card's
+ *    config-identity memoization (`_cardStylesConfigRef === this._config`) is not
+ *    busted on every load.
+ *  - Spreads rather than reconstructs, so unknown / future keys are preserved.
+ *
+ * NOTE: legacy `tile_style` aliases (hero/ring/hbar/spark/list/command) are
+ * intentionally NOT migrated here. `_resolveStyle()` already remaps them
+ * losslessly at render time, and each alias also carries a variant that sits at
+ * the *lowest* priority of the variant cascade (device → area → view → legacy);
+ * rewriting the stored value in place would risk promoting that variant above an
+ * explicit one and changing the rendered output. Leave them to the runtime.
+ */
+export function migrateConfig<T extends { graph_sensors?: string[]; graph_sensor_colors?: Record<string, string> }>(config: T): T {
+  if (!config) return config;
+  let changed = false;
+
+  let graphSensors = config.graph_sensors;
+  if (Array.isArray(graphSensors)) {
+    const seen = new Set<string>();
+    const next = graphSensors
+      .map(normalizeGraphKey)
+      .filter(k => (seen.has(k) ? false : (seen.add(k), true)));
+    if (next.length !== graphSensors.length || next.some((k, i) => k !== graphSensors![i])) {
+      graphSensors = next;
+      changed = true;
+    }
+  }
+
+  let graphColors = config.graph_sensor_colors;
+  if (graphColors && typeof graphColors === 'object') {
+    let colorsChanged = false;
+    const next: Record<string, string> = {};
+    for (const [k, v] of Object.entries(graphColors)) {
+      const nk = normalizeGraphKey(k);
+      if (nk !== k) colorsChanged = true;
+      // device_class key wins if both an alias and its canonical form are present
+      if (!(nk in next)) next[nk] = v;
+    }
+    if (colorsChanged) { graphColors = next; changed = true; }
+  }
+
+  if (!changed) return config;
+  const out: T = { ...config };
+  if (graphSensors) out.graph_sensors = graphSensors;
+  if (graphColors)  out.graph_sensor_colors = graphColors;
+  return out;
+}
+
 // ─── Header stat chips ─────────────────────────────────────────────────────────
 
 /** Header chip catalogue: which fleet-level stats the card header can show.
