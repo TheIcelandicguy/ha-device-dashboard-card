@@ -1357,6 +1357,12 @@ export class HADeviceDashboardEditor extends LitElement {
     this._expandedViewId = newView.id;
   }
 
+  /** Returns an error message if the pattern is set but not a valid RegExp, else null. */
+  private _regexError(pattern?: string): string | null {
+    if (!pattern) return null;
+    try { new RegExp(pattern); return null; } catch (e) { return (e as Error).message; }
+  }
+
   private _deleteView(id: string): void {
     const next = (this._config.views ?? []).filter(v => v.id !== id);
     this._set('views', next.length ? next : undefined);
@@ -1588,9 +1594,12 @@ export class HADeviceDashboardEditor extends LitElement {
 
             <div class="field">
               <div class="field-lbl">Entity-ID regex (optional)</div>
-              <input type="text" class="inline-text" placeholder="e.g. ^light\\..*"
+              <input type="text" class="inline-text ${this._regexError(filter.entity_id_pattern) ? 'input-invalid' : ''}" placeholder="e.g. ^light\\..*"
                 .value=${filter.entity_id_pattern ?? ''}
                 @change=${(e: Event) => this._updateViewFilter(v.id, { entity_id_pattern: (e.target as HTMLInputElement).value || undefined })}/>
+              ${this._regexError(filter.entity_id_pattern)
+                ? html`<div class="input-err">Invalid regex: ${this._regexError(filter.entity_id_pattern)}</div>`
+                : nothing}
             </div>
 
             <!-- Layout overrides -->
@@ -2562,6 +2571,8 @@ export class HADeviceDashboardEditor extends LitElement {
     .sl-row:last-child { border-bottom:none; }
     .sl-val { font-family:monospace; font-size:11px; color:var(--accent); min-width:36px; text-align:right; }
     .inline-text { flex:1; background:var(--s2); border:1px solid var(--border2); border-radius:6px; padding:4px 8px; font-size:11px; color:var(--text); outline:none; min-width:0; }
+    .inline-text.input-invalid { border-color:#f87171; }
+    .input-err { color:#f87171; font-size:10px; margin-top:3px; }
     .font-select { width:100%; background:var(--s2); border:1px solid var(--border2); border-radius:6px; padding:8px 10px; font-size:13px; color:var(--text); outline:none; cursor:pointer; }
     .font-select:focus { border-color:var(--accent); }
     .font-select option { background:var(--s2); color:var(--text); padding:4px 8px; }
