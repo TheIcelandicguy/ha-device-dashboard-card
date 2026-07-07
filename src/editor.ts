@@ -4,7 +4,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset } from './types';
 import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, normalizeGraphKey, migrateConfig } from './helpers';
-import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, applyThemePalette, detectTheme } from './themes';
+import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, applyThemePalette, detectTheme, type ThemePalette } from './themes';
 import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons';
 
 /** The global `style` sub-object — typed so key access catches typos. */
@@ -165,6 +165,10 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _advanced = false;
   /** Whether the "Defaults" quick-setup panel is open. */
   @state() private _defaultsOpen = false;
+  /** Theme awaiting a "replace custom colours?" confirmation, and the last
+   *  saved custom palette (a restorable swatch). */
+  @state() private _pendingTheme: Exclude<ThemePreset, 'custom'> | null = null;
+  @state() private _savedTheme: ThemePalette | null = null;
   @state() private _expandedViewId: string | null = null;
   @state() private _openSections: Record<string, boolean> = {
     rooms: true,
@@ -194,6 +198,25 @@ export class HADeviceDashboardEditor extends LitElement {
   setConfig(config: HADeviceDashboardConfig) {
     this._config = migrateConfig(config);
     this._loadAdvanced();
+    this._loadSavedTheme();
+  }
+
+  private _savedThemeKey(): string {
+    return `shelly-dashboard:savedTheme:${this._config?.title ?? 'default'}`;
+  }
+  private _loadSavedTheme(): void {
+    try {
+      const raw = localStorage.getItem(this._savedThemeKey());
+      this._savedTheme = raw ? JSON.parse(raw) as ThemePalette : null;
+    } catch { /* privacy mode / bad JSON */ }
+  }
+  /** Snapshot the current style colours as a restorable "Saved" theme. */
+  private _saveCurrentTheme(): void {
+    const sty = this._config.style ?? {};
+    const pal: ThemePalette = {};
+    for (const k of THEME_KEYS) if (sty[k] !== undefined) (pal as Record<string, unknown>)[k] = sty[k];
+    this._savedTheme = pal;
+    try { localStorage.setItem(this._savedThemeKey(), JSON.stringify(pal)); } catch { /* ignore */ }
   }
 
   /** Advanced-mode is an editor UI preference keyed per card, kept out of config. */
@@ -2479,12 +2502,27 @@ export class HADeviceDashboardEditor extends LitElement {
     this._set('style', applyThemePalette(this._config.style, name));
   }
 
+  /** Pick a theme — warn first if the current colours are custom (would be lost).
+   *  Switching between presets is lossless, so it applies immediately. */
+  private _onPickTheme(name: Exclude<ThemePreset, 'custom'>) {
+    const sty = this._config.style ?? {};
+    const hasColours = THEME_KEYS.some(k => sty[k] !== undefined);
+    if (hasColours && detectTheme(sty) === 'custom') this._pendingTheme = name;
+    else this._applyTheme(name);
+  }
+
+  /** Restore the saved custom palette over the current style. */
+  private _applySaved() {
+    if (this._savedTheme) this._set('style', { ...(this._config.style ?? {}), ...this._savedTheme });
+  }
+
   /** "Defaults" quick-setup panel: the four global defaults in one place. */
   private _renderDefaultsPanel(): TemplateResult {
     const c = this._config;
     const sty = c.style ?? {};
     const views = c.views ?? [];
     const activeTheme = detectTheme(sty);
+    const savedActive = !!this._savedTheme && Object.entries(this._savedTheme).every(([k, v]) => (sty as Record<string, unknown>)[k] === v);
     return html`
       <div class="defaults-panel">
         <div class="dp-grid">
@@ -2501,11 +2539,20 @@ export class HADeviceDashboardEditor extends LitElement {
           <div class="dp-group">
             <div class="dp-title">Colour theme</div>
             <div class="theme-grid">
+              ${this._savedTheme ? html`
+                <button class="theme-swatch saved ${savedActive ? 'on' : ''}" title="Your saved colours — click to restore"
+                  @click=${() => this._applySaved()}>
+                  <span class="ts-preview" style="background:${this._savedTheme.card_bg ?? '#1e1a17'}">
+                    <span class="ts-tile" style="background:${this._savedTheme.tile_bg ?? 'rgba(255,255,255,.04)'};border:1px solid ${this._savedTheme.tile_border ?? 'rgba(255,255,255,.08)'}"></span>
+                    <span class="ts-accent" style="background:${this._savedTheme.accent_color ?? '#c98a63'}"></span>
+                  </span>
+                  <span class="ts-name">★ Saved</span>
+                </button>` : nothing}
               ${THEME_ORDER.map(name => {
                 const pal = THEME_PRESETS[name];
                 return html`
                   <button class="theme-swatch ${activeTheme === name ? 'on' : ''}" title=${THEME_LABELS[name]}
-                    @click=${() => this._applyTheme(name)}>
+                    @click=${() => this._onPickTheme(name)}>
                     <span class="ts-preview" style="background:${pal.card_bg}">
                       <span class="ts-tile" style="background:${pal.tile_bg};border:1px solid ${pal.tile_border}"></span>
                       <span class="ts-accent" style="background:${pal.accent_color}"></span>
@@ -2514,7 +2561,16 @@ export class HADeviceDashboardEditor extends LitElement {
                   </button>`;
               })}
             </div>
-            ${activeTheme === 'custom' ? html`<div class="hint">Custom — your colours don't match a preset. Pick one to reset the palette.</div>` : nothing}
+            ${this._pendingTheme ? html`
+              <div class="theme-warn">
+                <div class="tw-msg">Replace your current custom colours with <b>${THEME_LABELS[this._pendingTheme]}</b>?</div>
+                <div class="tw-btns">
+                  <button class="tw-save" @click=${() => { this._saveCurrentTheme(); if (this._pendingTheme) this._applyTheme(this._pendingTheme); this._pendingTheme = null; }}>💾 Save current &amp; apply</button>
+                  <button class="tw-apply" @click=${() => { if (this._pendingTheme) this._applyTheme(this._pendingTheme); this._pendingTheme = null; }}>Apply anyway</button>
+                  <button class="tw-cancel" @click=${() => { this._pendingTheme = null; }}>Cancel</button>
+                </div>
+              </div>`
+              : (activeTheme === 'custom' ? html`<div class="hint">Custom — your colours don't match a preset.${this._savedTheme ? '' : ' Applying one will offer to save these first.'}</div>` : nothing)}
           </div>
 
           <div class="dp-group">
@@ -2670,6 +2726,14 @@ export class HADeviceDashboardEditor extends LitElement {
     .ts-accent { position:absolute; right:5px; top:9px; width:12px; height:12px; border-radius:50%; }
     .ts-name { font-size:9px; font-weight:600; color:var(--t2); text-align:center; line-height:1.1; }
     .theme-swatch.on .ts-name { color:var(--text); }
+    .theme-swatch.saved .ts-name { color:var(--accent); }
+    .theme-warn { margin-top:8px; padding:9px 11px; border:1px solid var(--accentbdr); background:var(--accentbg); border-radius:8px; }
+    .tw-msg { font-size:11px; color:var(--text); margin-bottom:7px; }
+    .tw-btns { display:flex; flex-wrap:wrap; gap:6px; }
+    .tw-btns button { font-size:10px; padding:5px 9px; border-radius:5px; cursor:pointer; border:1px solid var(--border2); background:transparent; color:var(--t2); transition:all .15s; }
+    .tw-save { border-color:var(--accentbdr) !important; color:var(--accent) !important; font-weight:600; }
+    .tw-save:hover { background:var(--accentbg); }
+    .tw-apply:hover, .tw-cancel:hover { color:var(--text); border-color:var(--accent); }
     .sec-toolbar-btn { font-size:10px; padding:4px 9px; border-radius:4px; border:1px solid var(--border2); background:transparent; color:var(--t2); cursor:pointer; transition:all .15s; }
     .sec-toolbar-btn:hover { background:var(--s3); color:var(--text); border-color:var(--accent); }
     .tab-body { padding:16px; background:var(--bg); overflow-y:auto; flex:1; min-height:0; }

@@ -185,6 +185,10 @@ export const THEME_LABELS: Record<ThemePreset, string> = {
 /** The ship default preset — a card with no `theme` set renders as this. */
 export const DEFAULT_THEME: Exclude<ThemePreset, 'custom'> = 'warm_dusk';
 
+/** The colour keys a palette covers (all presets share this key set). Used to
+ *  snapshot the current colours when saving a custom theme before overwriting. */
+export const THEME_KEYS = Object.keys(THEME_PRESETS.dark_industrial) as Array<keyof ThemePalette>;
+
 /** Merge a preset's palette over the current style object. */
 export function applyThemePalette(
   style: NonNullable<HADeviceDashboardConfig['style']> | undefined,
