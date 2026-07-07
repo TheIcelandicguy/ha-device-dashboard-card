@@ -2,9 +2,12 @@ import { LitElement, html, css, TemplateResult, nothing } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
-import { HADeviceDashboardConfig, AreaStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile } from './types';
+import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile } from './types';
 import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, normalizeGraphKey } from './helpers';
 import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons';
+
+/** The global `style` sub-object — typed so key access catches typos. */
+type StyleCfg = NonNullable<HADeviceDashboardConfig['style']>;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -461,7 +464,12 @@ export class HADeviceDashboardEditor extends LitElement {
     this._copyJson = JSON.stringify(snapshot);
     this._copyAreaOpen = true;
     this._pasteOpen = false;
-    navigator.clipboard.writeText(this._copyJson).catch((err) => { console.warn('[editor] clipboard write failed', err); });
+    navigator.clipboard.writeText(this._copyJson)
+      .then(() => this._showStyleFeedback('Copied to clipboard'))
+      .catch((err) => {
+        console.warn('[editor] clipboard write failed', err);
+        this._showStyleFeedback('Copy failed — select the text below and copy manually');
+      });
   }
 
   private _applyPastedStyle() {
@@ -952,10 +960,10 @@ export class HADeviceDashboardEditor extends LitElement {
   }
 
   private _renderDeviceStylePanel(deviceId: string): TemplateResult {
-    const devStyle = this._config.device_styles?.[deviceId] ?? {};
+    const devStyle: DeviceStyle = this._config.device_styles?.[deviceId] ?? {};
     const globalLayout: TileBlockId[] = this._config.tile_layout ?? TILE_BLOCKS.map(b => b.id);
-    const devLayout: TileBlockId[] | null = (devStyle as any).tile_layout ?? null;
-    const entityAnims: Record<string, { on?: string; off?: string; speed?: number }> = (devStyle as any).entity_animations ?? {};
+    const devLayout: TileBlockId[] | null = devStyle.tile_layout ?? null;
+    const entityAnims: Record<string, { on?: string; off?: string; speed?: number }> = devStyle.entity_animations ?? {};
 
     const toggleBlock = (blockId: TileBlockId) => {
       const isVisible = devLayout === null ? globalLayout.includes(blockId) : devLayout.includes(blockId);
@@ -995,8 +1003,8 @@ export class HADeviceDashboardEditor extends LitElement {
       input: 'scene-button', generic: 'scene-button',
     };
     const recommended: TileStyle | undefined = profile ? profileStyleMap[profile.type] : undefined;
-    const curDevStyle: TileStyle | undefined = (devStyle as any).tile_style;
-    const curVariant: PowerMonitorVariant = (devStyle as any).power_monitor_variant ?? 'big-number';
+    const curDevStyle: TileStyle | undefined = devStyle.tile_style;
+    const curVariant: PowerMonitorVariant = devStyle.power_monitor_variant ?? 'big-number';
 
     const STYLE_OPTIONS: Array<{ v: TileStyle; label: string; icon: string; desc: string }> = [
       { v: 'default',         label: 'Default',   icon: '⊟', desc: 'Adaptive blocks' },
@@ -1050,10 +1058,10 @@ export class HADeviceDashboardEditor extends LitElement {
         ${stylePickerHtml}
         <div class="color-row">
           <span class="color-key">Accent colour</span>
-          <span class="color-val">${(devStyle as any).color ?? '#f4601e'}</span>
-          <input type="color" .value=${(devStyle as any).color ?? '#f4601e'}
+          <span class="color-val">${devStyle.color ?? '#f4601e'}</span>
+          <input type="color" .value=${devStyle.color ?? '#f4601e'}
             @input=${(e: Event) => this._setDeviceStyle(deviceId, { color: (e.target as HTMLInputElement).value })}/>
-          ${(devStyle as any).color ? html`<button class="color-reset"
+          ${devStyle.color ? html`<button class="color-reset"
             @click=${() => this._setDeviceStyle(deviceId, { color: undefined })}>↺</button>` : nothing}
         </div>
         <div class="tile-icon-row">
@@ -1062,30 +1070,30 @@ export class HADeviceDashboardEditor extends LitElement {
             <span class="tile-icon-state-lbl">ON</span>
             ${this._iconPicker(
               `tile-on-${deviceId}`,
-              (devStyle as any).tile_icon,
+              devStyle.tile_icon,
               true,
               (val) => this._setDeviceStyle(deviceId, { tile_icon: val as EntityAnimationType | undefined })
             )}
             <span class="tile-icon-state-lbl">OFF</span>
             ${this._iconPicker(
               `tile-off-${deviceId}`,
-              (devStyle as any).tile_icon_off,
+              devStyle.tile_icon_off,
               false,
               (val) => this._setDeviceStyle(deviceId, { tile_icon_off: val as EntityAnimationType | undefined })
             )}
           </div>
-          <select class="anim-select" style="width:90px" .value=${String((devStyle as any).tile_icon_speed ?? 1)}
+          <select class="anim-select" style="width:90px" .value=${String(devStyle.tile_icon_speed ?? 1)}
             @change=${(ev: Event) => {
               const v = Number((ev.target as HTMLSelectElement).value);
               this._setDeviceStyle(deviceId, { tile_icon_speed: v === 1 ? undefined : v });
             }}>
-            <option value="0.25" ?selected=${((devStyle as any).tile_icon_speed ?? 1) === 0.25}>0.25× Slow</option>
-            <option value="0.5"  ?selected=${((devStyle as any).tile_icon_speed ?? 1) === 0.5}>0.5× Slow</option>
-            <option value="1"    ?selected=${((devStyle as any).tile_icon_speed ?? 1) === 1}>1× Normal</option>
-            <option value="1.5"  ?selected=${((devStyle as any).tile_icon_speed ?? 1) === 1.5}>1.5× Fast</option>
-            <option value="2"    ?selected=${((devStyle as any).tile_icon_speed ?? 1) === 2}>2× Fast</option>
-            <option value="3"    ?selected=${((devStyle as any).tile_icon_speed ?? 1) === 3}>3× Rapid</option>
-            <option value="5"    ?selected=${((devStyle as any).tile_icon_speed ?? 1) === 5}>5× Frantic</option>
+            <option value="0.25" ?selected=${(devStyle.tile_icon_speed ?? 1) === 0.25}>0.25× Slow</option>
+            <option value="0.5"  ?selected=${(devStyle.tile_icon_speed ?? 1) === 0.5}>0.5× Slow</option>
+            <option value="1"    ?selected=${(devStyle.tile_icon_speed ?? 1) === 1}>1× Normal</option>
+            <option value="1.5"  ?selected=${(devStyle.tile_icon_speed ?? 1) === 1.5}>1.5× Fast</option>
+            <option value="2"    ?selected=${(devStyle.tile_icon_speed ?? 1) === 2}>2× Fast</option>
+            <option value="3"    ?selected=${(devStyle.tile_icon_speed ?? 1) === 3}>3× Rapid</option>
+            <option value="5"    ?selected=${(devStyle.tile_icon_speed ?? 1) === 5}>5× Frantic</option>
           </select>
         </div>
         <div class="field-lbl" style="margin-bottom:4px">Visible blocks</div>
@@ -1101,7 +1109,7 @@ export class HADeviceDashboardEditor extends LitElement {
         ${(() => {
           const areaSel = dev?.area ? this._config.area_styles?.[dev.area]?.sensors : undefined;
           return this._chipPicker(
-            (devStyle as any).sensors,
+            devStyle.sensors,
             areaSel?.length ? areaSel : this._config.sensors,
             areaSel?.length ? `area (${dev?.area})` : 'global',
             (next) => this._setDeviceStyle(deviceId, { sensors: next }),
@@ -1148,6 +1156,22 @@ export class HADeviceDashboardEditor extends LitElement {
                 </select>
               </div>`;
           })}
+        ` : nothing}
+        ${dev?.entities.length ? html`
+          <div class="field-lbl" style="margin:6px 0 4px">Hidden entities
+            <span style="font-weight:400;color:var(--t3)">— removed from the detail sheet's entity list</span></div>
+          <div class="block-toggles">
+            ${dev.entities.map(e => {
+              const hiddenList = this._config.hidden_entities ?? [];
+              const hidden = hiddenList.includes(e.entity_id);
+              const nm = (this.hass?.states[e.entity_id]?.attributes as any)?.friendly_name
+                ?? e.entity_id.split('.').pop() ?? e.entity_id;
+              return html`<span class="block-tog ${hidden ? '' : 'on'}"
+                @click=${() => this._set('hidden_entities',
+                  hidden ? hiddenList.filter(x => x !== e.entity_id) : [...hiddenList, e.entity_id])}>
+                ${hidden ? '🚫' : '👁'} ${nm}</span>`;
+            })}
+          </div>
         ` : nothing}
         <button class="room-style-btn" style="align-self:flex-end;margin-top:2px" @click=${() => {
           const updated = { ...(this._config.device_styles ?? {}) };
@@ -1744,19 +1768,19 @@ export class HADeviceDashboardEditor extends LitElement {
 
   private _renderStyleTab(): TemplateResult {
     const c = this._config;
-    const sty = c.style ?? {};
+    const sty: StyleCfg = c.style ?? {};
 
-    const hStyleSet = (key: string, val: unknown) => this._set('style', { ...sty, [key]: val });
-    const hStyleDel = (key: string) => { const s={...sty}; delete (s as any)[key]; this._set('style', s); };
-    const hColorRow = (label: string, key: string, def: string) => {
-      const cur = (sty as any)[key] ?? def;
+    const hStyleSet = (key: keyof StyleCfg, val: unknown) => this._set('style', { ...sty, [key]: val });
+    const hStyleDel = (key: keyof StyleCfg) => { const s = { ...sty }; delete s[key]; this._set('style', s); };
+    const hColorRow = (label: string, key: keyof StyleCfg, def: string) => {
+      const cur = sty[key] ?? def;
       return html`
         <div class="color-row">
           <div class="color-preview-swatch" style="background:${cur}"></div>
           <span class="color-key">${label}</span>
           <input type="color" .value=${cur}
             @input=${(e:Event) => hStyleSet(key, (e.target as HTMLInputElement).value)}/>
-          ${(sty as any)[key] ? html`<button class="color-reset" @click=${() => hStyleDel(key)}>↺</button>` : nothing}
+          ${sty[key] ? html`<button class="color-reset" @click=${() => hStyleDel(key)}>↺</button>` : nothing}
         </div>`;
     };
 
@@ -1867,15 +1891,15 @@ export class HADeviceDashboardEditor extends LitElement {
           @input=${(e:Event) => { const v=parseInt((e.target as HTMLInputElement).value); this._set('header_opacity', v===100?undefined:v); }}/>
       </div>`;
 
-    const colorRow = (label: string, key: string, def: string) => {
-      const cur = (sty as any)[key] ?? def;
+    const colorRow = (label: string, key: keyof StyleCfg, def: string) => {
+      const cur = sty[key] ?? def;
       return html`
         <div class="color-row">
           <div class="color-preview-swatch" style="background:${cur}"></div>
           <span class="color-key">${label}</span>
           <input type="color" .value=${cur}
             @input=${(e:Event)=>this._set('style',{...sty,[key]:(e.target as HTMLInputElement).value})}/>
-          ${(sty as any)[key] ? html`<button class="color-reset" @click=${()=>{const s={...sty};delete(s as any)[key];this._set('style',s)}}>↺</button>` : nothing}
+          ${sty[key] ? html`<button class="color-reset" @click=${()=>{const s={...sty};delete s[key];this._set('style',s)}}>↺</button>` : nothing}
         </div>`;
     };
     const colorBody = html`

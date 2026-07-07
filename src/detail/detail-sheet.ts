@@ -89,10 +89,12 @@ function renderSheetEntityList(ctx: TileCtx): TemplateResult {
     d === 'binary_sensor' ? '◉' : d === 'climate' ? '🌡' : d === 'cover' ? '🪟' :
     d === 'update' ? '⬆' : d === 'button' ? '⏺' : d === 'number' ? '#' :
     d === 'select' ? '☰' : d === 'text' ? 'Aa' : '•';
+  const hidden = new Set(ctx.config.hidden_entities ?? []);
+  const shownEntities = device.entities.filter(e => !hidden.has(e.entity_id));
   return html`
     <div class="ds-section">
       <div class="ds-section-title">All Entities</div>
-      ${device.entities.map(e => {
+      ${shownEntities.map(e => {
         const s = hass.states[e.entity_id];
         const name = (s?.attributes as HassAttrs)?.friendly_name ?? e.entity_id;
         const state = s?.state ?? 'unknown';
