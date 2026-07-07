@@ -3,7 +3,7 @@ import { repeat } from 'lit/directives/repeat.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile } from './types';
-import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, normalizeGraphKey } from './helpers';
+import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, normalizeGraphKey, migrateConfig } from './helpers';
 import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons';
 
 /** The global `style` sub-object — typed so key access catches typos. */
@@ -138,6 +138,9 @@ export class HADeviceDashboardEditor extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
   @state() private _config!: HADeviceDashboardConfig;
   @state() private _tab: 'devices'|'views'|'layout'|'graphs'|'yaml' = 'devices';
+  /** Editor-only preference (persisted in localStorage, never written to config):
+   *  when false, power-user controls are hidden to keep the common path simple. */
+  @state() private _advanced = false;
   @state() private _expandedViewId: string | null = null;
   @state() private _openSections: Record<string, boolean> = {
     rooms: true,
@@ -166,7 +169,25 @@ export class HADeviceDashboardEditor extends LitElement {
   private _styleClipTimer?: number;
 
   setConfig(config: HADeviceDashboardConfig) {
-    this._config = config;
+    this._config = migrateConfig(config);
+    this._loadAdvanced();
+  }
+
+  /** Advanced-mode is an editor UI preference keyed per card, kept out of config. */
+  private _advKey(): string {
+    return `shelly-dashboard:editorAdvanced:${this._config?.title ?? 'default'}`;
+  }
+  private _loadAdvanced(): void {
+    try { this._advanced = localStorage.getItem(this._advKey()) === '1'; } catch { /* privacy mode */ }
+  }
+  private _setAdvanced(on: boolean): void {
+    this._advanced = on;
+    try { localStorage.setItem(this._advKey(), on ? '1' : '0'); } catch { /* privacy mode */ }
+  }
+  /** Wrap advanced-only content — renders it only when advanced mode is on.
+   *  Works for both individual rows and whole `_sec(...)` accordions. */
+  private _adv<T>(body: T): T | typeof nothing {
+    return this._advanced ? body : nothing;
   }
 
   // Editor dialog-sizing plumbing — tracked so we can tear it all down.
@@ -1064,6 +1085,7 @@ export class HADeviceDashboardEditor extends LitElement {
           ${devStyle.color ? html`<button class="color-reset"
             @click=${() => this._setDeviceStyle(deviceId, { color: undefined })}>↺</button>` : nothing}
         </div>
+        ${this._adv(html`
         <div class="tile-icon-row">
           <span class="color-key">Tile icon</span>
           <div class="tile-icon-pickers">
@@ -1095,7 +1117,7 @@ export class HADeviceDashboardEditor extends LitElement {
             <option value="3"    ?selected=${(devStyle.tile_icon_speed ?? 1) === 3}>3× Rapid</option>
             <option value="5"    ?selected=${(devStyle.tile_icon_speed ?? 1) === 5}>5× Frantic</option>
           </select>
-        </div>
+        </div>`)}
         <div class="field-lbl" style="margin-bottom:4px">Visible blocks</div>
         <div class="block-toggles">
           ${TILE_BLOCKS.map(b => {
@@ -1115,7 +1137,7 @@ export class HADeviceDashboardEditor extends LitElement {
             (next) => this._setDeviceStyle(deviceId, { sensors: next }),
           );
         })()}
-        ${switchEnts.length ? html`
+        ${this._adv(switchEnts.length ? html`
           <div class="field-lbl" style="margin:6px 0 4px">Entity animations</div>
           <div class="ent-anim-header">
             <span class="ent-anim-hcol name">Entity</span>
@@ -1156,8 +1178,8 @@ export class HADeviceDashboardEditor extends LitElement {
                 </select>
               </div>`;
           })}
-        ` : nothing}
-        ${dev?.entities.length ? html`
+        ` : nothing)}
+        ${this._adv(dev?.entities.length ? html`
           <div class="field-lbl" style="margin:6px 0 4px">Hidden entities
             <span style="font-weight:400;color:var(--t3)">— removed from the detail sheet's entity list</span></div>
           <div class="block-toggles">
@@ -1172,7 +1194,7 @@ export class HADeviceDashboardEditor extends LitElement {
                 ${hidden ? '🚫' : '👁'} ${nm}</span>`;
             })}
           </div>
-        ` : nothing}
+        ` : nothing)}
         <button class="room-style-btn" style="align-self:flex-end;margin-top:2px" @click=${() => {
           const updated = { ...(this._config.device_styles ?? {}) };
           delete updated[deviceId];
@@ -1255,17 +1277,19 @@ export class HADeviceDashboardEditor extends LitElement {
         ${sectionLbl('Tile appearance')}
         ${colorRow('Accent colour', 'accentColor', '#f4601e')}
         ${colorRow('Tile background', 'tileBgColor', '#1c1c1e')}
+        ${this._adv(html`
         ${colorRow('Tile border', 'tileBorderColor', 'rgba(255,255,255,0.07)')}
-        ${slRow('Tile radius', 'tileBorderRadius', 0, 20, 1, 12, 'px')}
+        ${slRow('Tile corner radius', 'tileBorderRadius', 0, 20, 1, 12, 'px')}
         ${slRow('Tile opacity', 'tileOpacity', 0, 100, 1, 100, '%')}
-        ${slRow('Border width', 'borderWidth', 0, 8, 1, 1, 'px')}
-        ${slRow('Border radius', 'borderRadius', 0, 32, 2, 10, 'px')}
+        ${slRow('Room block border', 'borderWidth', 0, 8, 1, 1, 'px')}
+        ${slRow('Room block radius', 'borderRadius', 0, 32, 2, 10, 'px')}
 
         ${sectionLbl('Room header')}
         ${colorRow('Gradient start', 'headerBgColor', '#1a1a2e')}
         ${colorRow('Gradient end', 'headerBgColor2', '#0f3460')}
         ${colorRow('Header text', 'textColor', '#f4601e')}
         ${slRow('Font size', 'fontSize', 8, 32, 1, 12, 'px')}
+        `)}
 
         ${sectionLbl('Sensor chips')}
         ${this._chipPicker(
@@ -1275,6 +1299,7 @@ export class HADeviceDashboardEditor extends LitElement {
           (next) => this._setAreaStyle(name, 'sensors', next),
         )}
 
+        ${this._adv(html`
         ${sectionLbl('ON / OFF buttons')}
         ${(() => {
           const shape   = st.buttonShape   ?? 'pill';
@@ -1333,6 +1358,7 @@ export class HADeviceDashboardEditor extends LitElement {
               </div>
             </div>`;
         })()}
+        `)}
       </div>`;
   }
 
@@ -1522,6 +1548,7 @@ export class HADeviceDashboardEditor extends LitElement {
         ${expanded ? html`
           <div class="view-card-body">
             <!-- Identity -->
+            ${this._adv(html`
             <div class="field">
               <div class="field-lbl">ID (used in URL / localStorage)</div>
               <input type="text" class="inline-text" .value=${v.id}
@@ -1533,7 +1560,7 @@ export class HADeviceDashboardEditor extends LitElement {
                   if (this._config.default_view === v.id) this._set('default_view', newId);
                   this._expandedViewId = newId;
                 }}/>
-            </div>
+            </div>`)}
             <div class="field">
               <div class="field-lbl">Name (tab label)</div>
               <input type="text" class="inline-text" .value=${v.name}
@@ -1571,6 +1598,7 @@ export class HADeviceDashboardEditor extends LitElement {
               </div>
             </div>
 
+            ${this._adv(html`
             <div class="field">
               <div class="field-lbl">Entity domains</div>
               <div class="pill-grp">
@@ -1578,7 +1606,7 @@ export class HADeviceDashboardEditor extends LitElement {
                   <span class="pill ${(filter.domains ?? []).includes(d) ? 'on' : ''}"
                     @click=${() => this._toggleViewFilterValue(v.id, 'domains', d)}>${d}</span>`)}
               </div>
-            </div>
+            </div>`)}
 
             ${areas.length ? html`
               <div class="field">
@@ -1616,6 +1644,7 @@ export class HADeviceDashboardEditor extends LitElement {
               </div>
             </div>
 
+            ${this._adv(html`
             <div class="field">
               <div class="field-lbl">Entity-ID regex (optional)</div>
               <input type="text" class="inline-text ${this._regexError(filter.entity_id_pattern) ? 'input-invalid' : ''}" placeholder="e.g. ^light\\..*"
@@ -1624,8 +1653,9 @@ export class HADeviceDashboardEditor extends LitElement {
               ${this._regexError(filter.entity_id_pattern)
                 ? html`<div class="input-err">Invalid regex: ${this._regexError(filter.entity_id_pattern)}</div>`
                 : nothing}
-            </div>
+            </div>`)}
 
+            ${this._adv(html`
             <!-- Layout overrides -->
             <div class="subgroup-lbl" style="margin-top:10px">Layout &amp; style overrides (optional)</div>
 
@@ -1663,7 +1693,7 @@ export class HADeviceDashboardEditor extends LitElement {
                 <span class="pill ${v.tile_size === undefined ? 'on' : ''}"
                   @click=${() => setViewField('tile_size', undefined)}>inherit</span>
               </div>
-            </div>
+            </div>`)}
           </div>` : nothing}
       </div>`;
   }
@@ -1800,6 +1830,7 @@ export class HADeviceDashboardEditor extends LitElement {
             style="width:48px;text-align:center;font-size:16px"/>
         </div>
       </div>
+      ${this._adv(html`
       <!-- Appearance sliders -->
       <div class="field">
         <div class="field-lbl">Title size — <span style="color:#f4601e">${(sty.header_title_size ?? 1.1).toFixed(1)}em</span>${this._resetBtn(sty.header_title_size !== undefined, () => this._clearStyle('header_title_size'))}</div>
@@ -1823,6 +1854,7 @@ export class HADeviceDashboardEditor extends LitElement {
           @input=${(e:Event) => { const v=parseInt((e.target as HTMLInputElement).value); hStyleSet('header_border_width', v===0?undefined:v); }}/>
       </div>
       ${(sty.header_border_width ?? 0) > 0 ? hColorRow('Border color', 'header_border_color', '#4ade80') : nothing}
+      `)}
       <!-- Visibility toggles -->
       <div class="tog-row" style="border:none;padding:4px 0 0">
         <div class="tog-lbl">Show title</div>
@@ -1863,6 +1895,7 @@ export class HADeviceDashboardEditor extends LitElement {
           @change=${(e:Event) => this._set('header_show_cloud', (e.target as HTMLInputElement).checked ? true : undefined)}>
           <span class="sw-t"></span><span class="sw-b"></span></label>
       </div>
+      ${this._adv(html`
       <div class="tog-row" style="border:none;padding:4px 0 0">
         <div class="tog-lbl">Show glow orbs</div>
         <label class="sw"><input type="checkbox" .checked=${(c.header_show_orbs ?? c.effects ?? false) === true}
@@ -1889,7 +1922,7 @@ export class HADeviceDashboardEditor extends LitElement {
         <div class="field-lbl">Background opacity — <span style="color:#f4601e">${c.header_opacity ?? 100}%</span>${this._resetBtn(c.header_opacity !== undefined, () => this._clearCfg('header_opacity'))}</div>
         <input type="range" min="0" max="100" step="5" .value=${String(c.header_opacity ?? 100)}
           @input=${(e:Event) => { const v=parseInt((e.target as HTMLInputElement).value); this._set('header_opacity', v===100?undefined:v); }}/>
-      </div>`;
+      </div>`)}`;
 
     const colorRow = (label: string, key: keyof StyleCfg, def: string) => {
       const cur = sty[key] ?? def;
@@ -1974,6 +2007,7 @@ export class HADeviceDashboardEditor extends LitElement {
         <input type="range" min="0" max="24" .value=${String(sty.tile_radius ?? 12)}
           @input=${(e:Event)=>this._set('style',{...sty,tile_radius:parseInt((e.target as HTMLInputElement).value,10)})}/>
       </div>
+      ${this._adv(html`
       <div class="field">
         <div class="field-lbl">Tile border width — <span style="color:#f4601e">${sty.tile_border_width ?? 1}px</span>${this._resetBtn(sty.tile_border_width !== undefined, () => this._clearStyle('tile_border_width'))}</div>
         <input type="range" min="0" max="4" step="1" .value=${String(sty.tile_border_width ?? 1)}
@@ -2072,7 +2106,8 @@ export class HADeviceDashboardEditor extends LitElement {
                 @click=${()=>this._set('style',{...sty,tile_bg_image_size:v})}>${v[0].toUpperCase()+v.slice(1)}</span>`)}
           </div>
         ` : nothing}
-      </div>`;
+      </div>`)}
+    `;
 
     const allAreas = this._getAreas();
 
@@ -2144,6 +2179,7 @@ export class HADeviceDashboardEditor extends LitElement {
       </div>`;
 
     return html`
+      ${this._adv(html`
       <div class="style-toolbar">
         <button class="btn-copy ${this._copyAreaOpen ? 'active' : ''}" @click=${() => { this._copyStyle(); }}>⧉ Copy style</button>
         <button class="btn-copy ${this._pasteOpen ? 'active' : ''}" @click=${() => { this._pasteOpen = !this._pasteOpen; this._copyAreaOpen = false; }}>⬇ Paste style</button>
@@ -2164,11 +2200,12 @@ export class HADeviceDashboardEditor extends LitElement {
             @input=${(e: Event) => { this._pasteText = (e.target as HTMLTextAreaElement).value; }}></textarea>
           <button class="btn-copy" @click=${() => this._applyPastedStyle()}>Apply</button>
         </div>` : nothing}
+      `)}
       ${previewPreview}
       ${this._sec('header','◈','rgba(99,102,241,0.1)','#818cf8','Header', nothing, headerBody)}
-      ${this._sec('colors','◐','rgba(244,96,30,0.12)','#f4601e','Colors', nothing, colorBody)}
+      ${this._adv(this._sec('colors','◐','rgba(244,96,30,0.12)','#f4601e','Colors', nothing, colorBody))}
       ${this._sec('tiles','⊡','rgba(45,212,191,0.1)','#2dd4bf','Tiles', nothing, tilesBody)}
-      ${this._sec('typography','T','rgba(251,191,36,0.1)','#fbbf24','Typography', nothing, typogBody)}`;
+      ${this._adv(this._sec('typography','T','rgba(251,191,36,0.1)','#fbbf24','Typography', nothing, typogBody))}`;
   }
 
 
@@ -2191,6 +2228,7 @@ export class HADeviceDashboardEditor extends LitElement {
             <span class="pill ${graphType === t ? 'on' : ''}" @click=${()=>this._set('graph_style',{...gs,type:t})}>${t[0].toUpperCase()+t.slice(1)}</span>`)}
         </div>
       </div>
+      ${this._adv(html`
       <div class="field" style="opacity:${graphType==='bar'?0.4:1}">
         <div class="field-lbl">Line thickness — <span style="color:#f4601e">${gs.line_width ?? 1.5}px</span>${this._resetBtn(gs.line_width !== undefined, () => this._clearGraphStyle('line_width'))}</div>
         <input type="range" min="0.5" max="4" step="0.5" ?disabled=${graphType==='bar'} .value=${String(gs.line_width ?? 1.5)}
@@ -2204,12 +2242,13 @@ export class HADeviceDashboardEditor extends LitElement {
         <div class="field-lbl">Graph height — <span style="color:#f4601e">${gs.height ?? 32}px</span>${this._resetBtn(gs.height !== undefined, () => this._clearGraphStyle('height'))}</div>
         <input type="range" min="20" max="80" step="4" .value=${String(gs.height ?? 32)}
           @input=${(e:Event)=>this._set('graph_style',{...gs,height:parseInt((e.target as HTMLInputElement).value,10)})}/>
-      </div>
+      </div>`)}
       <div class="field">
         <div class="field-lbl">History window — <span style="color:#f4601e">${c.graph_hours ?? 24}h</span>${this._resetBtn(c.graph_hours !== undefined, () => this._clearCfg('graph_hours'))}</div>
         <input type="range" min="1" max="168" step="1" .value=${String(c.graph_hours ?? 24)}
           @input=${(e:Event)=>this._set('graph_hours',parseInt((e.target as HTMLInputElement).value,10))}/>
       </div>
+      ${this._adv(html`
       <div class="tog-row">
         <div class="tog-lbl">Show time axis labels</div>
         <label class="sw"><input type="checkbox" .checked=${gs.time_labels !== false} @change=${(e:Event)=>this._set('graph_style',{...gs,time_labels:(e.target as HTMLInputElement).checked})}><span class="sw-t"></span><span class="sw-b"></span></label>
@@ -2221,7 +2260,7 @@ export class HADeviceDashboardEditor extends LitElement {
       <div class="tog-row">
         <div class="tog-lbl">Tick grid lines</div>
         <label class="sw"><input type="checkbox" .checked=${gs.tick_lines !== false} @change=${(e:Event)=>this._set('graph_style',{...gs,tick_lines:(e.target as HTMLInputElement).checked})}><span class="sw-t"></span><span class="sw-b"></span></label>
-      </div>`;
+      </div>`)}`;
 
     const selectedGraphs = c.graph_sensors ?? [];
 
@@ -2330,10 +2369,10 @@ export class HADeviceDashboardEditor extends LitElement {
 
     return html`
       ${this._sec('graphtype','∿','rgba(45,212,191,0.1)','#2dd4bf','Graph Type', nothing, gtBody)}
-      ${this._sec('graphcolors','◐','rgba(244,96,30,0.12)','#f4601e','Per-sensor Colors', nothing, colorBody)}
-      ${this._sec('graphranges','⇕','rgba(251,191,36,0.1)','#fbbf24','Sensor Min / Max',
+      ${this._adv(this._sec('graphcolors','◐','rgba(244,96,30,0.12)','#f4601e','Per-sensor Colors', nothing, colorBody))}
+      ${this._adv(this._sec('graphranges','⇕','rgba(251,191,36,0.1)','#fbbf24','Sensor Min / Max',
         Object.keys(ranges).length ? this._badge(`${Object.keys(ranges).length} set`, '#fbbf24', 'rgba(251,191,36,0.1)') : nothing,
-        rangeBody)}`;
+        rangeBody))}`;
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -2390,7 +2429,10 @@ export class HADeviceDashboardEditor extends LitElement {
                 </div>`;
             })}
           </div>`;
-        return this._sec(grp.group.toLowerCase().replace(' ',''), grp.icon, grp.iconBg, grp.iconColor, grp.group, badge, body);
+        const secId = grp.group.toLowerCase().replace(' ','');
+        const sec = this._sec(secId, grp.icon, grp.iconBg, grp.iconColor, grp.group, badge, body);
+        // Device Info + Alerts are power-user detail — hide unless advanced.
+        return (secId === 'deviceinfo' || secId === 'alerts') ? this._adv(sec) : sec;
       })}`;
   }
 
@@ -2440,13 +2482,21 @@ export class HADeviceDashboardEditor extends LitElement {
       {id:'graphs', label:'Graphs & Sensors',icon:'∿'},
       {id:'yaml',   label:'YAML',           icon:'</>'},
     ];
-    const tabSectionKeys: Record<TabId, string[]> = {
+    // Section ids that only exist / matter in advanced mode — dropped from the
+    // expand/collapse-all set (and their sections aren't rendered) when off.
+    const ADV_SECTIONS = new Set(['colors','typography','graphcolors','graphranges','deviceinfo','alerts']);
+    const allTabSectionKeys: Record<TabId, string[]> = {
       devices: ['rooms'],
       views:   [],
       layout:  ['grid','tileorder','header','colors','tiles','typography'],
       graphs:  ['graphtype','graphcolors','graphranges','electrical','environmental','deviceinfo','alerts'],
       yaml:    [],
     };
+    const tabSectionKeys: Record<TabId, string[]> = Object.fromEntries(
+      (Object.entries(allTabSectionKeys) as Array<[TabId,string[]]>).map(
+        ([t, keys]) => [t, this._advanced ? keys : keys.filter(k => !ADV_SECTIONS.has(k))]
+      )
+    ) as Record<TabId, string[]>;
     const setAllSections = (open: boolean) => {
       const keys = tabSectionKeys[this._tab];
       if (!keys.length) return;
@@ -2463,11 +2513,21 @@ export class HADeviceDashboardEditor extends LitElement {
               <span class="tab-icon">${t.icon}</span>${t.label}
             </div>`)}
         </div>
-        ${showSectionToggle ? html`
-          <div class="sec-toolbar">
+        <div class="sec-toolbar">
+          <label class="adv-toggle" title="Show advanced, power-user controls">
+            <span class="sw">
+              <input type="checkbox" .checked=${this._advanced}
+                @change=${(e:Event)=>this._setAdvanced((e.target as HTMLInputElement).checked)}>
+              <span class="sw-t"></span><span class="sw-b"></span>
+            </span>
+            <span class="adv-lbl">Advanced</span>
+          </label>
+          ${showSectionToggle ? html`
+            <span class="sec-toolbar-spacer"></span>
             <button class="sec-toolbar-btn" title="Expand all sections" @click=${() => setAllSections(true)}>▾ Expand all</button>
             <button class="sec-toolbar-btn" title="Collapse all sections" @click=${() => setAllSections(false)}>▸ Collapse all</button>
-          </div>` : nothing}
+          ` : nothing}
+        </div>
         <div class="tab-body">
           ${this._tab==='devices' ? this._renderDevicesTab()
            :this._tab==='views'   ? this._renderViewsTab()
@@ -2505,7 +2565,11 @@ export class HADeviceDashboardEditor extends LitElement {
     .tab:hover { color:var(--t2); }
     .tab.active { color:var(--accent); border-bottom-color:var(--accent); }
     .tab-icon { margin-right:5px; font-size:10px; opacity:0.7; }
-    .sec-toolbar { display:flex; gap:6px; padding:8px 16px 0; background:var(--s1); flex-shrink:0; }
+    .sec-toolbar { display:flex; align-items:center; gap:6px; padding:8px 16px 0; background:var(--s1); flex-shrink:0; }
+    .sec-toolbar-spacer { flex:1; }
+    .adv-toggle { display:inline-flex; align-items:center; gap:7px; cursor:pointer; user-select:none; }
+    .adv-lbl { font-size:11px; font-weight:600; letter-spacing:.02em; color:var(--t2); }
+    .adv-toggle:hover .adv-lbl { color:var(--text); }
     .sec-toolbar-btn { font-size:10px; padding:4px 9px; border-radius:4px; border:1px solid var(--border2); background:transparent; color:var(--t2); cursor:pointer; transition:all .15s; }
     .sec-toolbar-btn:hover { background:var(--s3); color:var(--text); border-color:var(--accent); }
     .tab-body { padding:16px; background:var(--bg); overflow-y:auto; flex:1; min-height:0; }
