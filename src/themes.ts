@@ -8,7 +8,30 @@ export type ThemePalette = Partial<NonNullable<HADeviceDashboardConfig['style']>
  *  ship default and is deliberately identical to the runtime fallback colours in
  *  `_buildCardStyles`, so a fresh card with no `theme` renders as this preset. */
 export const THEME_PRESETS: Record<Exclude<ThemePreset, 'custom'>, ThemePalette> = {
-  // ── Ship default — Shelly orange on near-black (== runtime fallbacks) ──
+  // ── Ship default — subtle & warm: muted terracotta on warm charcoal
+  //    (== runtime CSS-default colours, so a fresh card renders as this) ──
+  warm_dusk: {
+    accent_color: '#c98a63',
+    card_bg: '#1e1a17',
+    tile_bg: 'rgba(255,244,232,0.035)',
+    tile_border: 'rgba(255,244,232,0.08)',
+    tile_hover_bg: 'rgba(255,244,232,0.06)',
+    tile_hover_shadow: 'rgba(0,0,0,0.35)',
+    tile_sensor_bg: 'rgba(255,244,232,0.045)',
+    tile_exp_bg: 'rgba(255,244,232,0.05)',
+    text_primary: '#ece5dc',
+    text_secondary: '#b3a596',
+    text_muted: '#7e7265',
+    header_bg: '#241f1b',
+    header_bg2: '#33291f',
+    header_text_color: '#f3ece3',
+    header_orb_color: '#c98a63',
+    online_color: '#93b384',
+    offline_color: '#d47f62',
+    power_color: '#dba25c',
+    area_header_color: '#c98a63',
+  },
+  // ── Shelly orange on near-black, industrial ──
   dark_industrial: {
     accent_color: '#f4601e',
     card_bg: '#1c1c1e',
@@ -144,11 +167,12 @@ export const THEME_PRESETS: Record<Exclude<ThemePreset, 'custom'>, ThemePalette>
 
 /** Display order + labels for the theme picker. */
 export const THEME_ORDER: Array<Exclude<ThemePreset, 'custom'>> = [
-  'dark_industrial', 'teal_terminal', 'brutalist',
+  'warm_dusk', 'dark_industrial', 'teal_terminal', 'brutalist',
   'frosted_light', 'nordic_warm', 'midnight_purple',
 ];
 
 export const THEME_LABELS: Record<ThemePreset, string> = {
+  warm_dusk: 'Warm Dusk',
   dark_industrial: 'Dark Industrial',
   teal_terminal: 'Teal Terminal',
   brutalist: 'Brutalist',
@@ -159,7 +183,7 @@ export const THEME_LABELS: Record<ThemePreset, string> = {
 };
 
 /** The ship default preset — a card with no `theme` set renders as this. */
-export const DEFAULT_THEME: Exclude<ThemePreset, 'custom'> = 'dark_industrial';
+export const DEFAULT_THEME: Exclude<ThemePreset, 'custom'> = 'warm_dusk';
 
 /** Merge a preset's palette over the current style object. */
 export function applyThemePalette(

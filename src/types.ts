@@ -70,7 +70,7 @@ export type DetailHistoryRange = 24 | 168 | 720;
 export type TileSize      = 'sm' | 'md' | 'lg';
 export type SortBy        = 'name' | 'power' | 'online' | 'area';
 export type BoxShadow     = 'none' | 'soft' | 'medium' | 'strong';
-export type ThemePreset   = 'dark_industrial' | 'teal_terminal' | 'brutalist' | 'frosted_light' | 'nordic_warm' | 'midnight_purple' | 'custom';
+export type ThemePreset   = 'warm_dusk' | 'dark_industrial' | 'teal_terminal' | 'brutalist' | 'frosted_light' | 'nordic_warm' | 'midnight_purple' | 'custom';
 
 /** Global graph display settings */
 export interface SensorRange {

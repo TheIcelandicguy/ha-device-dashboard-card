@@ -1932,24 +1932,24 @@ export class HADeviceDashboardEditor extends LitElement {
     };
     // Tile colours live inside the Tiles section; brand/text/status in Colours.
     const tileColorRows = html`
-      ${colorRow('Tile background',    'tile_bg',           'rgba(255,255,255,0.04)')}
-      ${colorRow('Tile border',        'tile_border',       'rgba(255,255,255,0.07)')}
-      ${colorRow('Tile hover BG',      'tile_hover_bg',     'rgba(255,255,255,0.07)')}
-      ${colorRow('Tile hover shadow',  'tile_hover_shadow', 'rgba(0,0,0,0.30)')}
-      ${colorRow('Sensor chip BG',     'tile_sensor_bg',    'rgba(255,255,255,0.04)')}
-      ${colorRow('Expanded panel BG',  'tile_exp_bg',       'rgba(255,255,255,0.06)')}`;
+      ${colorRow('Tile background',    'tile_bg',           'rgba(255,244,232,0.035)')}
+      ${colorRow('Tile border',        'tile_border',       'rgba(255,244,232,0.08)')}
+      ${colorRow('Tile hover BG',      'tile_hover_bg',     'rgba(255,244,232,0.06)')}
+      ${colorRow('Tile hover shadow',  'tile_hover_shadow', 'rgba(0,0,0,0.35)')}
+      ${colorRow('Sensor chip BG',     'tile_sensor_bg',    'rgba(255,244,232,0.045)')}
+      ${colorRow('Expanded panel BG',  'tile_exp_bg',       'rgba(255,244,232,0.05)')}`;
     const colorsBody = html`
       <div class="subgroup-lbl">Brand</div>
-      ${colorRow('Accent / brand',     'accent_color',      '#f4601e')}
-      ${colorRow('Room header label',  'area_header_color', '#f4601e')}
+      ${colorRow('Accent / brand',     'accent_color',      '#c98a63')}
+      ${colorRow('Room header label',  'area_header_color', '#c98a63')}
 
       <div class="subgroup-lbl">Text &amp; status</div>
-      ${colorRow('Text primary',       'text_primary',      '#e5e7eb')}
-      ${colorRow('Text secondary',     'text_secondary',    '#9ca3af')}
-      ${colorRow('Text muted',         'text_muted',        '#6b7280')}
-      ${colorRow('Online dot',         'online_color',      '#4ade80')}
-      ${colorRow('Offline dot',        'offline_color',     '#ef4444')}
-      ${colorRow('Power reading',      'power_color',       '#fb923c')}`;
+      ${colorRow('Text primary',       'text_primary',      '#ece5dc')}
+      ${colorRow('Text secondary',     'text_secondary',    '#b3a596')}
+      ${colorRow('Text muted',         'text_muted',        '#7e7265')}
+      ${colorRow('Online dot',         'online_color',      '#93b384')}
+      ${colorRow('Offline dot',        'offline_color',     '#d47f62')}
+      ${colorRow('Power reading',      'power_color',       '#dba25c')}`;
 
     const currentFont = sty.font_family ?? '';
     const fontGroups = ['System', 'Bundled', 'Display'];
@@ -2058,7 +2058,7 @@ export class HADeviceDashboardEditor extends LitElement {
     `;
 
     const cardBody = html`
-      ${colorRow('Dashboard background', 'card_bg', '#1c1c1e')}
+      ${colorRow('Dashboard background', 'card_bg', '#1e1a17')}
       <div class="field">
         <div class="field-lbl">Card corner radius — <span style="color:#f4601e">${sty.card_radius ?? 12}px</span>${this._resetBtn(sty.card_radius !== undefined, () => this._clearStyle('card_radius'))}</div>
         <input type="range" min="0" max="32" step="2" .value=${String(sty.card_radius ?? 12)}
