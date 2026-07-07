@@ -3,13 +3,13 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { styleMap } from 'lit/directives/style-map.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
-import { HADeviceDashboardConfig, HADevice, HAEntity, TileBlockId, DeviceProfileResult, EntityAnimationType, TileStyle, PowerMonitorVariant, SensorRange, HassAttrs, ViewConfig } from './types';
+import { HADeviceDashboardConfig, HADevice, HAEntity, TileBlockId, DeviceProfileResult, EntityAnimationType, TileStyle, PowerMonitorVariant, SensorRange, HassAttrs, ViewConfig, DeviceStyle, AreaStyle } from './types';
 import { BUNDLED_FONT_CSS } from './fonts';
 import { mainCss } from './styles/main';
 import { tilesCss } from './styles/tiles';
 import { detailCss } from './styles/detail';
 import type {
-  TileCtx, TrvInfo, CoverInfo, ValveInfo, GraphEntity,
+  TileCtx, TileCustomize, TrvInfo, CoverInfo, ValveInfo, GraphEntity,
   FirmwareInfo, SensorChip, SensorChipTier, VirtualControl, InputChannel, DeviceAlert,
 } from './tiles/tile-context';
 import { renderClimateControlTile } from './tiles/climate-control';
@@ -22,7 +22,7 @@ import { renderBlockTile } from './tiles/block-tile';
 import { renderDetailSheet } from './detail/detail-sheet';
 import {
   getAllDevices, getDeviceProfile, migrateConfig,
-  getIntegrationLabel, isPrivateIp, PROFILE_DEFAULT_BLOCKS, GRAPH_DC_LABELS, GRAPH_SENSOR_DEFS,
+  getIntegrationLabel, isPrivateIp, PROFILE_DEFAULT_BLOCKS, BLOCK_LABELS, GRAPH_DC_LABELS, GRAPH_SENSOR_DEFS,
   HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, downsamplePoints, normalizeGraphKey,
   formatPower, formatEnergy, formatVoltage, formatCurrent, formatTemp,
   formatUptime, formatApparentPower, formatReactivePower,
@@ -65,6 +65,14 @@ export class HADeviceDashboard extends LitElement {
   @state() private _detailDevice: string | null = null;
   @state() private _detailHistoryRange: 24 | 168 | 720 = 24;
   @state() private _activeViewId: string | null = null;
+  /** Per-viewer "what to show" overrides, persisted in localStorage (durable in
+   *  view mode) and baked into config when the dashboard is edited. Highest
+   *  priority in the block/chip resolution. */
+  @state() private _tileBlockOverride = new Map<string, TileBlockId[]>();
+  @state() private _tileChipOverride = new Map<string, string[]>();
+  @state() private _areaHeaderOverride = new Map<string, string[]>();
+  /** Which area's header-customise popover is open. */
+  @state() private _areaCustomizeOpen: string | null = null;
 
   // Tap-gesture tracking (not @state — no re-render needed)
   private _lpStart: { x: number; y: number } | null = null;
@@ -185,6 +193,7 @@ export class HADeviceDashboard extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this._loadActiveView();
+    this._loadCustomizations();
   }
 
   disconnectedCallback() {
@@ -325,6 +334,148 @@ export class HADeviceDashboard extends LitElement {
   private _setActiveView(id: string): void {
     this._activeViewId = id;
     this._persistActiveView();
+  }
+
+  // ── "What to show" per-viewer overrides (tile blocks/chips, area header) ──────
+  private _custPrefix(kind: string): string {
+    return `shelly-dashboard:${kind}:${this._config.title ?? 'default'}:`;
+  }
+
+  /** Hydrate the override maps from localStorage on mount. */
+  private _loadCustomizations(): void {
+    const load = (kind: string, map: Map<string, string[]>) => {
+      const pfx = this._custPrefix(kind);
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (!k || !k.startsWith(pfx)) continue;
+          const raw = localStorage.getItem(k);
+          if (raw == null) continue;
+          try { const v = JSON.parse(raw); if (Array.isArray(v)) map.set(k.slice(pfx.length), v); } catch { /* skip bad entry */ }
+        }
+      } catch { /* localStorage unavailable */ }
+    };
+    load('tileBlocks', this._tileBlockOverride as Map<string, string[]>);
+    load('tileChips', this._tileChipOverride);
+    load('areaHdrChips', this._areaHeaderOverride);
+  }
+
+  /** Is the dashboard currently in Lovelace edit mode? Walks up through shadow
+   *  boundaries to hui-root. Only then does firing config-changed persist. */
+  private _isEditMode(): boolean {
+    try {
+      let el: unknown = this;
+      for (let i = 0; i < 24 && el; i++) {
+        const node = el as { localName?: string; lovelace?: { editMode?: boolean }; parentNode?: unknown; getRootNode?: () => { host?: unknown } };
+        if (node.localName === 'hui-root') return !!node.lovelace?.editMode;
+        const root = node.getRootNode?.();
+        el = node.parentNode ?? (root && (root as { host?: unknown }).host) ?? null;
+      }
+    } catch { /* ignore */ }
+    return false;
+  }
+
+  /** Write a per-viewer override to localStorage (always) and, when editing,
+   *  bake it into config via `patch`. `value===null` clears the override. */
+  private _persistCust(kind: string, id: string, value: string[] | null): void {
+    const key = this._custPrefix(kind) + id;
+    try {
+      if (value === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, JSON.stringify(value));
+    } catch { /* ignore */ }
+  }
+
+  private _emitConfigIfEditing(config: HADeviceDashboardConfig): void {
+    if (this._isEditMode()) { this._config = config; fireEvent(this, 'config-changed', { config }); }
+  }
+
+  private _setTileBlocks(deviceId: string, blocks: TileBlockId[] | null): void {
+    const next = new Map(this._tileBlockOverride);
+    if (blocks === null) next.delete(deviceId); else next.set(deviceId, blocks);
+    this._tileBlockOverride = next;
+    this._persistCust('tileBlocks', deviceId, blocks);
+    this._emitConfigIfEditing(this._patchDeviceStyle(deviceId, { tile_layout: blocks ?? undefined }));
+  }
+
+  private _setTileChips(deviceId: string, chips: string[] | null): void {
+    const next = new Map(this._tileChipOverride);
+    if (chips === null) next.delete(deviceId); else next.set(deviceId, chips);
+    this._tileChipOverride = next;
+    this._persistCust('tileChips', deviceId, chips);
+    this._emitConfigIfEditing(this._patchDeviceStyle(deviceId, { sensors: chips ?? undefined }));
+  }
+
+  private _setAreaHeaderChips(area: string, chips: string[] | null): void {
+    const next = new Map(this._areaHeaderOverride);
+    if (chips === null) next.delete(area); else next.set(area, chips);
+    this._areaHeaderOverride = next;
+    this._persistCust('areaHdrChips', area, chips);
+    this._emitConfigIfEditing(this._patchAreaStyle(area, { header_chips: chips ?? undefined }));
+  }
+
+  private _patchDeviceStyle(deviceId: string, patch: Partial<DeviceStyle>): HADeviceDashboardConfig {
+    const styles: Record<string, DeviceStyle> = { ...(this._config.device_styles ?? {}) };
+    const cur: DeviceStyle = { ...(styles[deviceId] ?? {}) };
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === undefined) delete (cur as Record<string, unknown>)[k];
+      else (cur as Record<string, unknown>)[k] = v;
+    }
+    if (Object.keys(cur).length) styles[deviceId] = cur; else delete styles[deviceId];
+    return { ...this._config, device_styles: Object.keys(styles).length ? styles : undefined };
+  }
+
+  private _patchAreaStyle(area: string, patch: Partial<AreaStyle>): HADeviceDashboardConfig {
+    const styles: Record<string, AreaStyle> = { ...(this._config.area_styles ?? {}) };
+    const cur: AreaStyle = { ...(styles[area] ?? {}) };
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === undefined) delete (cur as Record<string, unknown>)[k];
+      else (cur as Record<string, unknown>)[k] = v;
+    }
+    if (Object.keys(cur).length) styles[area] = cur; else delete styles[area];
+    return { ...this._config, area_styles: Object.keys(styles).length ? styles : undefined };
+  }
+
+  /** Build the "what to show on this tile" model for the detail-dialog panel. */
+  private _tileCustomize(device: HADevice, profile: DeviceProfileResult): TileCustomize {
+    const id = device.device_id;
+    // Blocks — universe = the profile's canonical blocks + anything currently shown.
+    const canonical = PROFILE_DEFAULT_BLOCKS[profile.type] ?? PROFILE_DEFAULT_BLOCKS.generic;
+    const effective = this._getBlockOrder(device, profile);
+    const blockUniverse: TileBlockId[] = [...canonical, ...effective.filter(b => !canonical.includes(b))];
+    const visibleBlocks = new Set(effective);
+    const blocks = blockUniverse.map(b => ({ id: b as string, label: BLOCK_LABELS[b] ?? b, visible: visibleBlocks.has(b) }));
+
+    // Chips — every candidate chip the device produces, with current visibility.
+    const allChips = this._getSensors(device, true);
+    const chipSel = this._tileChipOverride.get(id) ?? this._sensorSelection(device);
+    const chipAllowed = chipSel?.length ? new Set(chipSel) : (chipSel && chipSel.length === 0 ? new Set<string>() : null);
+    const seen = new Set<string>();
+    const chips: Array<{ key: string; label: string; visible: boolean }> = [];
+    for (const c of allChips) {
+      const key = c.key;
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      chips.push({ key, label: c.label ?? key, visible: !chipAllowed || chipAllowed.has(key) });
+    }
+
+    const customized = this._tileBlockOverride.has(id) || this._tileChipOverride.has(id)
+      || !!this._config.device_styles?.[id]?.tile_layout || !!this._config.device_styles?.[id]?.sensors;
+
+    return {
+      blocks, chips, customized,
+      setBlock: (bid: string, vis: boolean) => {
+        const wanted = new Set(this._getBlockOrder(device, profile));
+        if (vis) wanted.add(bid as TileBlockId); else wanted.delete(bid as TileBlockId);
+        this._setTileBlocks(id, blockUniverse.filter(b => wanted.has(b)));
+      },
+      setChip: (key: string, vis: boolean) => {
+        const allKeys = chips.map(c => c.key);
+        const wanted = new Set(chips.filter(c => c.visible).map(c => c.key));
+        if (vis) wanted.add(key); else wanted.delete(key);
+        this._setTileChips(id, allKeys.filter(k => wanted.has(k)));
+      },
+      reset: () => { this._setTileBlocks(id, null); this._setTileChips(id, null); },
+    };
   }
 
   /**
@@ -651,9 +802,15 @@ export class HADeviceDashboard extends LitElement {
     return this._config.sensors;
   }
 
-  private _getSensors(device: HADevice): SensorChip[] {
-    const sel = this._sensorSelection(device);
-    const allowed = sel?.length ? new Set(sel) : null;
+  private _getSensors(device: HADevice, ignoreSelection = false): SensorChip[] {
+    // A viewer chip override is authoritative: an empty list means "no chips",
+    // unlike the config whitelist where empty/undefined means "show all".
+    // ignoreSelection=true returns every candidate chip (for the Customize panel).
+    const override = this._tileChipOverride.get(device.device_id);
+    const sel = override ?? this._sensorSelection(device);
+    const allowed = ignoreSelection
+      ? null
+      : (override !== undefined ? new Set(override) : (sel?.length ? new Set(sel) : null));
     const show = (k: string) => !allowed || allowed.has(k);
     const result: SensorChip[] = [];
     const seen = new Set<string>();
@@ -1287,6 +1444,8 @@ export class HADeviceDashboard extends LitElement {
    * Priority: device_styles > config.tile_layout > profile default
    */
   private _getBlockOrder(device: HADevice, profile: DeviceProfileResult): TileBlockId[] {
+    const viewerOverride = this._tileBlockOverride.get(device.device_id);
+    if (viewerOverride) return viewerOverride;
     const deviceOverride = this._config.device_styles?.[device.device_id]?.tile_layout;
     if (deviceOverride) return deviceOverride;
     if (this._config.tile_layout) return this._config.tile_layout;
@@ -2036,6 +2195,7 @@ export class HADeviceDashboard extends LitElement {
   }
 
   private _buildTileCtx(device: HADevice, profile: DeviceProfileResult, accent: string): TileCtx {
+    const self = this;
     // Per-ctx memo: a fresh ctx is built once per tile per render, so caching
     // here collapses the repeated getX(device) calls each block/renderer makes
     // (renderBlockTile re-derives all of these at the top of every block).
@@ -2097,6 +2257,8 @@ export class HADeviceDashboard extends LitElement {
       renderSparklines: (d) => this._renderSparklines(d),
       renderSparklinesExpanded: (d, h) => this._renderSparklines(d, true, h),
       renderPowerBar: (d) => this._renderPowerBar(d),
+      // Lazy: only the detail sheet reads this, so tile renders never pay for it.
+      get customize(): TileCustomize { return self._tileCustomize(device, profile); },
       closeDetailSheet: () => this._closeDetailSheet(),
       getDetailHistoryRange: () => this._detailHistoryRange,
       setDetailHistoryRange: (r) => { this._detailHistoryRange = r; },
@@ -2242,9 +2404,19 @@ export class HADeviceDashboard extends LitElement {
   // ── Area section ──────────────────────────────────────────────────────────
 
   private _getAreaChips(devices: HADevice[], areaName?: string): Array<{ label: string; value: string }> {
-    const areaSel = areaName ? this._config.area_styles?.[areaName]?.sensors : undefined;
-    const sel = areaSel?.length ? areaSel : this._config.sensors;
-    const allowed = sel?.length ? new Set(sel) : null;
+    // Precedence: viewer override (localStorage) → area header_chips (config) →
+    // area sensors → global sensors. The first two are explicit (empty = none);
+    // the sensor whitelists keep legacy semantics (empty/undefined = show all).
+    const override = areaName ? this._areaHeaderOverride.get(areaName) : undefined;
+    const headerChips = areaName ? this._config.area_styles?.[areaName]?.header_chips : undefined;
+    let allowed: Set<string> | null;
+    if (override !== undefined) allowed = new Set(override);
+    else if (headerChips !== undefined) allowed = new Set(headerChips);
+    else {
+      const areaSel = areaName ? this._config.area_styles?.[areaName]?.sensors : undefined;
+      const sel = areaSel?.length ? areaSel : this._config.sensors;
+      allowed = sel?.length ? new Set(sel) : null;
+    }
     const show = (k: string) => !allowed || allowed.has(k);
     const acc: Record<string, { sum: number; count: number }> = {};
     const add = (k: string, v: number) => {
@@ -2275,6 +2447,62 @@ export class HADeviceDashboard extends LitElement {
     if (acc['co2'])         chips.push({ label: 'CO₂',   value: formatPpm(acc['co2'].sum / acc['co2'].count) });
     if (acc['illuminance']) chips.push({ label: 'Light',  value: formatIlluminance(acc['illuminance'].sum / acc['illuminance'].count) });
     return chips;
+  }
+
+  /** Candidate summary chips for a room header + their current visibility. */
+  private _areaHeaderCandidates(devices: HADevice[], areaName: string): Array<{ key: string; label: string; visible: boolean }> {
+    const DEFS: Array<[string, string, string]> = [
+      ['power', 'Power', 'power'], ['energy', 'Energy', 'energy'], ['temperature', 'Temp', 'temperature'],
+      ['humidity', 'Hum', 'humidity'], ['co2', 'CO₂', 'carbon_dioxide'], ['illuminance', 'Light', 'illuminance'],
+    ];
+    const present = new Set<string>();
+    for (const d of devices) for (const e of d.entities) {
+      if (e.domain !== 'sensor') continue;
+      const s = this.hass.states[e.entity_id];
+      if (!s) continue;
+      present.add(((s.attributes as Record<string, unknown>).device_class as string) ?? '');
+    }
+    // Same precedence as _getAreaChips for the current visibility.
+    const override = this._areaHeaderOverride.get(areaName);
+    const headerChips = this._config.area_styles?.[areaName]?.header_chips;
+    let allowed: Set<string> | null;
+    if (override !== undefined) allowed = new Set(override);
+    else if (headerChips !== undefined) allowed = new Set(headerChips);
+    else {
+      const areaSel = this._config.area_styles?.[areaName]?.sensors;
+      const sel = areaSel?.length ? areaSel : this._config.sensors;
+      allowed = sel?.length ? new Set(sel) : null;
+    }
+    const out: Array<{ key: string; label: string; visible: boolean }> = [];
+    for (const [key, label, dc] of DEFS) {
+      if (!present.has(dc)) continue;
+      out.push({ key, label, visible: !allowed || allowed.has(key) });
+    }
+    return out;
+  }
+
+  private _renderAreaHeaderCustomize(area: string, devices: HADevice[]): TemplateResult {
+    const cands = this._areaHeaderCandidates(devices, area);
+    const customized = this._areaHeaderOverride.has(area) || this._config.area_styles?.[area]?.header_chips !== undefined;
+    const setChip = (key: string, vis: boolean) => {
+      const wanted = new Set(cands.filter(c => c.visible).map(c => c.key));
+      if (vis) wanted.add(key); else wanted.delete(key);
+      this._setAreaHeaderChips(area, cands.map(c => c.key).filter(k => wanted.has(k)));
+    };
+    return html`
+      <div class="area-cog-pop" @click=${(e: Event) => e.stopPropagation()}>
+        <div class="acp-title">Show in room header</div>
+        ${cands.length ? html`
+          <div class="acp-list">
+            ${cands.map(c => html`
+              <label class="acp-row">
+                <input type="checkbox" .checked=${c.visible}
+                  @change=${(e: Event) => setChip(c.key, (e.target as HTMLInputElement).checked)}>
+                <span>${c.label}</span>
+              </label>`)}
+          </div>` : html`<div class="acp-empty">No summary sensors in this room.</div>`}
+        ${customized ? html`<button class="acp-reset" @click=${() => this._setAreaHeaderChips(area, null)}>↺ Reset</button>` : nothing}
+      </div>`;
   }
 
   private _renderAreaSection(area: string, devices: HADevice[]): TemplateResult {
@@ -2360,9 +2588,12 @@ export class HADeviceDashboard extends LitElement {
           <div class="area-meta">
             <span class="area-count">${onlineCount}/${devices.length}</span>
             ${areaPower > 0 ? html`<span class="area-power">${formatPower(areaPower)}</span>` : nothing}
+            <button class="area-cog ${this._areaCustomizeOpen === area ? 'on' : ''}" title="Customise room header"
+              @click=${(e: Event) => { e.stopPropagation(); this._areaCustomizeOpen = this._areaCustomizeOpen === area ? null : area; }}>⚙</button>
             <span class="chevron ${isClosed ? '' : 'open'}">▼</span>
           </div>
         </div>
+        ${this._areaCustomizeOpen === area ? this._renderAreaHeaderCustomize(area, devices) : nothing}
         ${isClosed ? nothing : html`
           <div class="device-grid" style="--cols:${cols}">
             ${repeat(devices, (d) => d.device_id, (d) => this._renderTile(d, areaTileStyle))}

@@ -131,6 +131,10 @@ export interface AreaStyle {
   buttonSize?: ButtonSize;
   /** Sensor chip keys for tiles in this area. undefined = inherit global `sensors`. */
   sensors?: string[];
+  /** Summary chip keys shown in this area's HEADER row (power/energy/temperature/
+   *  humidity/co2/illuminance). Independent of `sensors` (which drives the tiles).
+   *  undefined = inherit; an explicit (possibly empty) list is authoritative. */
+  header_chips?: string[];
 }
 
 /**
