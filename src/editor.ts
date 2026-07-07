@@ -2,8 +2,9 @@ import { LitElement, html, css, TemplateResult, nothing } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
-import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile } from './types';
+import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset } from './types';
 import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, normalizeGraphKey, migrateConfig } from './helpers';
+import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, applyThemePalette, detectTheme } from './themes';
 import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons';
 
 /** The global `style` sub-object — typed so key access catches typos. */
@@ -162,6 +163,8 @@ export class HADeviceDashboardEditor extends LitElement {
   /** Editor-only preference (persisted in localStorage, never written to config):
    *  when false, power-user controls are hidden to keep the common path simple. */
   @state() private _advanced = false;
+  /** Whether the "Defaults" quick-setup panel is open. */
+  @state() private _defaultsOpen = false;
   @state() private _expandedViewId: string | null = null;
   @state() private _openSections: Record<string, boolean> = {
     rooms: true,
@@ -2466,6 +2469,85 @@ export class HADeviceDashboardEditor extends LitElement {
   //  MAIN RENDER
   // ══════════════════════════════════════════════════════════════
 
+  /** Apply a colour-theme preset — merges its palette over the current style.
+   *  Colours only; radius/font/sizes are left untouched. The active theme is
+   *  derived from the colours (detectTheme), so no separate flag is stored. */
+  private _applyTheme(name: Exclude<ThemePreset, 'custom'>) {
+    this._set('style', applyThemePalette(this._config.style, name));
+  }
+
+  /** "Defaults" quick-setup panel: the four global defaults in one place. */
+  private _renderDefaultsPanel(): TemplateResult {
+    const c = this._config;
+    const sty = c.style ?? {};
+    const views = c.views ?? [];
+    const activeTheme = detectTheme(sty);
+    return html`
+      <div class="defaults-panel">
+        <div class="dp-grid">
+          <div class="dp-group">
+            <div class="dp-title">Default view</div>
+            ${views.length ? html`
+              <div class="pill-grp">
+                ${views.map((v, i) => html`
+                  <span class="pill ${(c.default_view ?? views[0].id) === v.id ? 'on' : ''}"
+                    @click=${() => this._set('default_view', i === 0 ? undefined : v.id)}>${v.name || v.id}</span>`)}
+              </div>` : html`<div class="hint">No views yet — add them in the Views tab.</div>`}
+          </div>
+
+          <div class="dp-group">
+            <div class="dp-title">Colour theme</div>
+            <div class="theme-grid">
+              ${THEME_ORDER.map(name => {
+                const pal = THEME_PRESETS[name];
+                return html`
+                  <button class="theme-swatch ${activeTheme === name ? 'on' : ''}" title=${THEME_LABELS[name]}
+                    @click=${() => this._applyTheme(name)}>
+                    <span class="ts-preview" style="background:${pal.card_bg}">
+                      <span class="ts-tile" style="background:${pal.tile_bg};border:1px solid ${pal.tile_border}"></span>
+                      <span class="ts-accent" style="background:${pal.accent_color}"></span>
+                    </span>
+                    <span class="ts-name">${THEME_LABELS[name]}</span>
+                  </button>`;
+              })}
+            </div>
+            ${activeTheme === 'custom' ? html`<div class="hint">Custom — your colours don't match a preset. Pick one to reset the palette.</div>` : nothing}
+          </div>
+
+          <div class="dp-group">
+            <div class="dp-title">Default tile style
+              ${c.tile_style
+                ? html`<button class="color-reset" @click=${() => { this._set('tile_style', undefined); this._set('power_monitor_variant', undefined); }}>↺ reset</button>`
+                : html`<span class="dp-hint-inline">adaptive</span>`}
+            </div>
+            ${this._renderTileStylePicker(
+              c.tile_style, c.power_monitor_variant ?? 'big-number', undefined,
+              (v) => this._set('tile_style', v),
+              (v) => this._set('power_monitor_variant', v),
+            )}
+          </div>
+
+          <div class="dp-group">
+            <div class="dp-title">Default tile layout</div>
+            <div class="field">
+              <div class="field-lbl">Columns — <span style="color:#f4601e">${c.columns ?? 3}</span></div>
+              <input type="range" min="1" max="6" step="1" .value=${String(c.columns ?? 3)}
+                @input=${(e: Event) => this._set('columns', parseInt((e.target as HTMLInputElement).value, 10))}/>
+            </div>
+            <div class="field">
+              <div class="field-lbl">Tile size</div>
+              <div class="pill-grp">
+                ${(['sm','md','lg'] as const).map((v, i) => html`
+                  <span class="pill ${(c.tile_size ?? 'md') === v ? 'on' : ''}" @click=${() => this._set('tile_size', v)}>${['Small','Medium','Large'][i]}</span>`)}
+              </div>
+            </div>
+            <button class="sec-toolbar-btn" style="align-self:flex-start"
+              @click=${() => { this._tab = 'layout'; this._defaultsOpen = false; }}>More tile settings →</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
   protected render(): TemplateResult {
     if (!this._config) return html``;
     const c = this._config;
@@ -2517,12 +2599,16 @@ export class HADeviceDashboardEditor extends LitElement {
             </span>
             <span class="adv-lbl">Advanced</span>
           </label>
+          <button class="sec-toolbar-btn defaults-btn ${this._defaultsOpen ? 'active' : ''}"
+            title="Set the card's default look — view, theme, tile style & layout"
+            @click=${() => { this._defaultsOpen = !this._defaultsOpen; }}>◆ Defaults</button>
+          <span class="sec-toolbar-spacer"></span>
           ${showSectionToggle ? html`
-            <span class="sec-toolbar-spacer"></span>
             <button class="sec-toolbar-btn" title="Expand all sections" @click=${() => setAllSections(true)}>▾ Expand all</button>
             <button class="sec-toolbar-btn" title="Collapse all sections" @click=${() => setAllSections(false)}>▸ Collapse all</button>
           ` : nothing}
         </div>
+        ${this._defaultsOpen ? this._renderDefaultsPanel() : nothing}
         <div class="tab-body">
           ${this._tab==='devices' ? this._renderDevicesTab()
            :this._tab==='views'   ? this._renderViewsTab()
@@ -2565,6 +2651,22 @@ export class HADeviceDashboardEditor extends LitElement {
     .adv-toggle { display:inline-flex; align-items:center; gap:7px; cursor:pointer; user-select:none; }
     .adv-lbl { font-size:11px; font-weight:600; letter-spacing:.02em; color:var(--t2); }
     .adv-toggle:hover .adv-lbl { color:var(--text); }
+    .defaults-btn.active { background:var(--accentbg); color:var(--accent); border-color:var(--accentbdr); }
+    /* Defaults quick-setup panel */
+    .defaults-panel { padding:12px 16px; background:var(--s1); border-bottom:1px solid var(--border); flex-shrink:0; max-height:52vh; overflow-y:auto; }
+    .dp-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; }
+    .dp-group { display:flex; flex-direction:column; gap:8px; background:var(--s2); border:1px solid var(--border); border-radius:8px; padding:10px; }
+    .dp-title { font-size:11px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; color:var(--t2); display:flex; align-items:center; gap:8px; }
+    .dp-hint-inline { font-size:10px; font-weight:400; text-transform:none; letter-spacing:0; color:var(--t3); }
+    .theme-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+    .theme-swatch { display:flex; flex-direction:column; align-items:center; gap:4px; padding:5px 3px; border:1px solid var(--border2); border-radius:6px; background:transparent; cursor:pointer; transition:all .15s; }
+    .theme-swatch:hover { border-color:var(--accent); }
+    .theme-swatch.on { border-color:var(--accent); background:var(--accentbg); }
+    .ts-preview { position:relative; width:100%; height:30px; border-radius:4px; overflow:hidden; display:block; border:1px solid rgba(0,0,0,.3); }
+    .ts-tile { position:absolute; left:5px; top:6px; width:22px; height:18px; border-radius:3px; }
+    .ts-accent { position:absolute; right:5px; top:9px; width:12px; height:12px; border-radius:50%; }
+    .ts-name { font-size:9px; font-weight:600; color:var(--t2); text-align:center; line-height:1.1; }
+    .theme-swatch.on .ts-name { color:var(--text); }
     .sec-toolbar-btn { font-size:10px; padding:4px 9px; border-radius:4px; border:1px solid var(--border2); background:transparent; color:var(--t2); cursor:pointer; transition:all .15s; }
     .sec-toolbar-btn:hover { background:var(--s3); color:var(--text); border-color:var(--accent); }
     .tab-body { padding:16px; background:var(--bg); overflow-y:auto; flex:1; min-height:0; }
