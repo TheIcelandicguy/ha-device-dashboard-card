@@ -168,8 +168,7 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _expandedViewId: string | null = null;
   @state() private _openSections: Record<string, boolean> = {
     rooms: true,
-    grid: true, tileorder: true,
-    header: true, colors: true, tiles: true, typography: true,
+    header: true, tiles: true, card: false, colors: false, typography: false,
     graphtype: true, graphcolors: false, graphranges: false,
     electrical: true, environmental: true, deviceinfo: false, alerts: false,
   };
@@ -1700,12 +1699,12 @@ export class HADeviceDashboardEditor extends LitElement {
   //  TAB: LAYOUT
   // ══════════════════════════════════════════════════════════════
 
-  private _renderLayoutTab(): TemplateResult {
+  /** Columns stepper — lives inside the consolidated Tiles section. */
+  private _gridBody(): TemplateResult {
     const c = this._config;
-
-    const gridBody = html`
+    return html`
       <div class="field">
-        <div class="field-lbl">Columns <span class="field-note">overridden per-room in Style tab</span></div>
+        <div class="field-lbl">Columns <span class="field-note">overridden per-room / per-view</span></div>
         <div class="step-row">
           <button class="step-btn" @click=${()=>this._set('columns',Math.max(1,(c.columns??1)-1))}>−</button>
           <span class="step-val">${c.columns ?? 1}</span>
@@ -1715,7 +1714,10 @@ export class HADeviceDashboardEditor extends LitElement {
             @input=${(e:Event)=>this._set('columns',parseInt((e.target as HTMLInputElement).value,10))}/>
         </div>
       </div>`;
+  }
 
+  /** Tile block order drag list + live preview — inside the Tiles section. */
+  private _tileOrderBody(): TemplateResult {
     // Tile order drag list
     const accent        = this._config.style?.accent_color ?? '#f4601e';
     const visibleBlocks = this._dragOrder.filter(id => !this._hiddenBlocks.has(id));
@@ -1738,7 +1740,7 @@ export class HADeviceDashboardEditor extends LitElement {
       }
     };
 
-    const tileOrderBody = html`
+    return html`
       <div class="tile-preview-live">
         ${visibleBlocks.length
           ? visibleBlocks.map(blockPreview)
@@ -1783,11 +1785,6 @@ export class HADeviceDashboardEditor extends LitElement {
             </div>`;
         })}
       </div>`;
-
-    return html`
-      ${this._sec('grid','⊟','rgba(45,212,191,0.1)','#2dd4bf','Grid', nothing, gridBody)}
-      ${this._sec('tileorder','↕','rgba(244,96,30,0.12)','#f4601e','Tile Block Order',
-        html`<span class="tag-new">Drag</span>`, tileOrderBody)}`;
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -1933,19 +1930,18 @@ export class HADeviceDashboardEditor extends LitElement {
           ${sty[key] ? html`<button class="color-reset" @click=${()=>{const s={...sty};delete s[key];this._set('style',s)}}>↺</button>` : nothing}
         </div>`;
     };
-    const colorBody = html`
-      <div class="subgroup-lbl">Global</div>
-      ${colorRow('Dashboard BG',       'card_bg',           '#1c1c1e')}
-      ${colorRow('Accent / brand',     'accent_color',      '#f4601e')}
-      ${colorRow('Room header label',  'area_header_color', '#f4601e')}
-
-      <div class="subgroup-lbl">Tiles</div>
-      ${colorRow('Tile background',    'tile_bg',           '#1c1c1e')}
-      ${colorRow('Tile border',        'tile_border',       '#2a2a30')}
+    // Tile colours live inside the Tiles section; brand/text/status in Colours.
+    const tileColorRows = html`
+      ${colorRow('Tile background',    'tile_bg',           'rgba(255,255,255,0.04)')}
+      ${colorRow('Tile border',        'tile_border',       'rgba(255,255,255,0.07)')}
       ${colorRow('Tile hover BG',      'tile_hover_bg',     'rgba(255,255,255,0.07)')}
       ${colorRow('Tile hover shadow',  'tile_hover_shadow', 'rgba(0,0,0,0.30)')}
       ${colorRow('Sensor chip BG',     'tile_sensor_bg',    'rgba(255,255,255,0.04)')}
-      ${colorRow('Expanded panel BG',  'tile_exp_bg',       'rgba(255,255,255,0.06)')}
+      ${colorRow('Expanded panel BG',  'tile_exp_bg',       'rgba(255,255,255,0.06)')}`;
+    const colorsBody = html`
+      <div class="subgroup-lbl">Brand</div>
+      ${colorRow('Accent / brand',     'accent_color',      '#f4601e')}
+      ${colorRow('Room header label',  'area_header_color', '#f4601e')}
 
       <div class="subgroup-lbl">Text &amp; status</div>
       ${colorRow('Text primary',       'text_primary',      '#e5e7eb')}
@@ -1988,6 +1984,7 @@ export class HADeviceDashboardEditor extends LitElement {
     const cardTranspPct  = c.card_opacity  ?? 100;
     const tileTranspPct  = c.tile_opacity  ?? 100;
     const tilesBody = html`
+      ${this._gridBody()}
       <div class="field">
         <div class="field-lbl">Tile size</div>
         <div class="pill-grp">
@@ -2020,60 +2017,8 @@ export class HADeviceDashboardEditor extends LitElement {
               ${v[0].toUpperCase()+v.slice(1)}</span>`)}
         </div>
       </div>
+      <div class="tiles-divider">Tile background image</div>
       <div class="field">
-        <div class="field-lbl">Card corner radius — <span style="color:#f4601e">${sty.card_radius ?? 12}px</span>${this._resetBtn(sty.card_radius !== undefined, () => this._clearStyle('card_radius'))}</div>
-        <input type="range" min="0" max="32" step="2" .value=${String(sty.card_radius ?? 12)}
-          @input=${(e:Event)=>{ const v=parseInt((e.target as HTMLInputElement).value); this._set('style',{...sty,card_radius:v===12?undefined:v}); }}/>
-      </div>
-
-      <div class="tiles-divider">Transparency</div>
-      <div class="field">
-        <div class="field-lbl">Card — <span style="color:#f4601e">${100 - cardTranspPct}%</span>${this._resetBtn(c.card_opacity !== undefined, () => this._clearCfg('card_opacity'))}</div>
-        <input type="range" min="0" max="100" .value=${String(100 - cardTranspPct)}
-          @input=${(e:Event)=>this._set('card_opacity', 100 - parseInt((e.target as HTMLInputElement).value,10))}/>
-      </div>
-      <div class="field">
-        <div class="field-lbl">Tiles — <span style="color:#f4601e">${100 - tileTranspPct}%</span>${this._resetBtn(c.tile_opacity !== undefined, () => this._clearCfg('tile_opacity'))}</div>
-        <input type="range" min="0" max="100" .value=${String(100 - tileTranspPct)}
-          @input=${(e:Event)=>this._set('tile_opacity', 100 - parseInt((e.target as HTMLInputElement).value,10))}/>
-      </div>
-
-      <div class="tiles-divider">Backgrounds</div>
-      <div class="field">
-        <div class="field-lbl">Card background image</div>
-        <div class="bg-img-row">
-          <input type="file" accept="image/*" hidden data-upload="card-bg"
-            @change=${(e:Event) => this._handleCardBgUpload(e)}/>
-          <button class="upload-btn" @click=${() => {
-            (this.renderRoot.querySelector('input[data-upload="card-bg"]') as HTMLInputElement|null)?.click();
-          }}>↑ Local</button>
-          ${c.card_bg_image ? this._renderBgThumb(c.card_bg_image) : nothing}
-          ${c.card_bg_image?.startsWith('data:')
-            ? html`<span class="bg-embedded-note">Embedded · ${this._estimateImageSize(c.card_bg_image)}</span>`
-            : html`<input type="text" class="inline-text" placeholder="/local/image.png or https://…"
-                .value=${c.card_bg_image ?? ''}
-                @change=${(e:Event) => {
-                  const v = (e.target as HTMLInputElement).value.trim();
-                  if (v) this._set('card_bg_image', v); else this._set('card_bg_image', undefined);
-                }}/>`}
-          ${c.card_bg_image ? html`<button class="color-reset" @click=${() => {
-            const updated = { ...this._config };
-            delete (updated as any).card_bg_image;
-            delete (updated as any).card_bg_image_size;
-            this._emitNow(updated as HADeviceDashboardConfig);
-          }}>↺</button>` : nothing}
-        </div>
-        ${c.card_bg_image ? html`
-          <div class="field-lbl" style="margin-top:6px">Image fit</div>
-          <div class="pill-grp">
-            ${(['cover','contain','stretch'] as const).map(v => html`
-              <span class="pill ${(c.card_bg_image_size ?? 'cover') === v ? 'on' : ''}"
-                @click=${()=>this._set('card_bg_image_size',v)}>${v[0].toUpperCase()+v.slice(1)}</span>`)}
-          </div>
-        ` : nothing}
-      </div>
-      <div class="field">
-        <div class="field-lbl">Tile background image</div>
         <div class="bg-img-row">
           <input type="file" accept="image/*" hidden data-upload="tile-bg"
             @change=${(e:Event) => this._handleTileBgUpload(e)}/>
@@ -2104,8 +2049,65 @@ export class HADeviceDashboardEditor extends LitElement {
                 @click=${()=>this._set('style',{...sty,tile_bg_image_size:v})}>${v[0].toUpperCase()+v.slice(1)}</span>`)}
           </div>
         ` : nothing}
-      </div>`)}
+      </div>
+      <div class="tiles-divider">Tile colours</div>
+      ${tileColorRows}
+      `)}
+      <div class="tiles-divider">Block order</div>
+      ${this._tileOrderBody()}
     `;
+
+    const cardBody = html`
+      ${colorRow('Dashboard background', 'card_bg', '#1c1c1e')}
+      <div class="field">
+        <div class="field-lbl">Card corner radius — <span style="color:#f4601e">${sty.card_radius ?? 12}px</span>${this._resetBtn(sty.card_radius !== undefined, () => this._clearStyle('card_radius'))}</div>
+        <input type="range" min="0" max="32" step="2" .value=${String(sty.card_radius ?? 12)}
+          @input=${(e:Event)=>{ const v=parseInt((e.target as HTMLInputElement).value); this._set('style',{...sty,card_radius:v===12?undefined:v}); }}/>
+      </div>
+      <div class="tiles-divider">Transparency</div>
+      <div class="field">
+        <div class="field-lbl">Card — <span style="color:#f4601e">${100 - cardTranspPct}%</span>${this._resetBtn(c.card_opacity !== undefined, () => this._clearCfg('card_opacity'))}</div>
+        <input type="range" min="0" max="100" .value=${String(100 - cardTranspPct)}
+          @input=${(e:Event)=>this._set('card_opacity', 100 - parseInt((e.target as HTMLInputElement).value,10))}/>
+      </div>
+      <div class="field">
+        <div class="field-lbl">Tiles — <span style="color:#f4601e">${100 - tileTranspPct}%</span>${this._resetBtn(c.tile_opacity !== undefined, () => this._clearCfg('tile_opacity'))}</div>
+        <input type="range" min="0" max="100" .value=${String(100 - tileTranspPct)}
+          @input=${(e:Event)=>this._set('tile_opacity', 100 - parseInt((e.target as HTMLInputElement).value,10))}/>
+      </div>
+      <div class="tiles-divider">Card background image</div>
+      <div class="field">
+        <div class="bg-img-row">
+          <input type="file" accept="image/*" hidden data-upload="card-bg"
+            @change=${(e:Event) => this._handleCardBgUpload(e)}/>
+          <button class="upload-btn" @click=${() => {
+            (this.renderRoot.querySelector('input[data-upload="card-bg"]') as HTMLInputElement|null)?.click();
+          }}>↑ Local</button>
+          ${c.card_bg_image ? this._renderBgThumb(c.card_bg_image) : nothing}
+          ${c.card_bg_image?.startsWith('data:')
+            ? html`<span class="bg-embedded-note">Embedded · ${this._estimateImageSize(c.card_bg_image)}</span>`
+            : html`<input type="text" class="inline-text" placeholder="/local/image.png or https://…"
+                .value=${c.card_bg_image ?? ''}
+                @change=${(e:Event) => {
+                  const v = (e.target as HTMLInputElement).value.trim();
+                  if (v) this._set('card_bg_image', v); else this._set('card_bg_image', undefined);
+                }}/>`}
+          ${c.card_bg_image ? html`<button class="color-reset" @click=${() => {
+            const updated = { ...this._config };
+            delete (updated as any).card_bg_image;
+            delete (updated as any).card_bg_image_size;
+            this._emitNow(updated as HADeviceDashboardConfig);
+          }}>↺</button>` : nothing}
+        </div>
+        ${c.card_bg_image ? html`
+          <div class="field-lbl" style="margin-top:6px">Image fit</div>
+          <div class="pill-grp">
+            ${(['cover','contain','stretch'] as const).map(v => html`
+              <span class="pill ${(c.card_bg_image_size ?? 'cover') === v ? 'on' : ''}"
+                @click=${()=>this._set('card_bg_image_size',v)}>${v[0].toUpperCase()+v.slice(1)}</span>`)}
+          </div>
+        ` : nothing}
+      </div>`;
 
     const allAreas = this._getAreas();
 
@@ -2201,8 +2203,9 @@ export class HADeviceDashboardEditor extends LitElement {
       `)}
       ${previewPreview}
       ${this._sec('header','◈','rgba(99,102,241,0.1)','#818cf8','Header', nothing, headerBody)}
-      ${this._adv(this._sec('colors','◐','rgba(244,96,30,0.12)','#f4601e','Colors', nothing, colorBody))}
       ${this._sec('tiles','⊡','rgba(45,212,191,0.1)','#2dd4bf','Tiles', nothing, tilesBody)}
+      ${this._adv(this._sec('card','▢','rgba(129,140,248,0.1)','#818cf8','Card', nothing, cardBody))}
+      ${this._adv(this._sec('colors','◐','rgba(244,96,30,0.12)','#f4601e','Colours', nothing, colorsBody))}
       ${this._adv(this._sec('typography','T','rgba(251,191,36,0.1)','#fbbf24','Typography', nothing, typogBody))}`;
   }
 
@@ -2561,11 +2564,11 @@ export class HADeviceDashboardEditor extends LitElement {
     ];
     // Section ids that only exist / matter in advanced mode — dropped from the
     // expand/collapse-all set (and their sections aren't rendered) when off.
-    const ADV_SECTIONS = new Set(['colors','typography','graphcolors','graphranges','deviceinfo','alerts']);
+    const ADV_SECTIONS = new Set(['card','colors','typography','graphcolors','graphranges','deviceinfo','alerts']);
     const allTabSectionKeys: Record<TabId, string[]> = {
       devices: ['rooms'],
       views:   [],
-      layout:  ['grid','tileorder','header','colors','tiles','typography'],
+      layout:  ['header','tiles','card','colors','typography'],
       graphs:  ['graphtype','graphcolors','graphranges','electrical','environmental','deviceinfo','alerts'],
       yaml:    [],
     };
@@ -2612,7 +2615,7 @@ export class HADeviceDashboardEditor extends LitElement {
         <div class="tab-body">
           ${this._tab==='devices' ? this._renderDevicesTab()
            :this._tab==='views'   ? this._renderViewsTab()
-           :this._tab==='layout'  ? html`${this._renderLayoutTab()}${this._renderStyleTab()}`
+           :this._tab==='layout'  ? this._renderStyleTab()
            :this._tab==='graphs'  ? html`${this._renderGraphsTab()}${this._renderSensorsTab()}`
            :                        this._renderYamlTab()}
         </div>
