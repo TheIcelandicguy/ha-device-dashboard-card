@@ -1,6 +1,7 @@
 import { LitElement, html, svg, unsafeCSS, TemplateResult, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { styleMap } from 'lit/directives/style-map.js';
+import { repeat } from 'lit/directives/repeat.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, HADevice, HAEntity, TileBlockId, DeviceProfileResult, EntityAnimationType, TileStyle, PowerMonitorVariant, SensorRange, HassAttrs, ViewConfig } from './types';
 import { BUNDLED_FONT_CSS } from './fonts';
@@ -909,7 +910,11 @@ export class HADeviceDashboard extends LitElement {
   }
 
   private _fetchQueue: string[] = [];
-  private _fetchQueueRunning = false;
+  private _fetchInFlight = 0;
+  /** Fetch several history series at once. A graph-heavy view (e.g. a
+   *  dedicated Graphs view with 100+ sparklines) would otherwise trickle in
+   *  one request at a time and take tens of seconds to fully populate. */
+  private readonly _maxConcurrentFetch = 6;
 
   /** Compound key for graph data cache: entityId::hours */
   private _gk(entityId: string, hours: number): string { return `${entityId}::${hours}`; }
@@ -929,14 +934,14 @@ export class HADeviceDashboard extends LitElement {
   }
 
   private _drainFetchQueue() {
-    if (this._fetchQueueRunning || this._fetchQueue.length === 0) return;
-    this._fetchQueueRunning = true;
-    const next = this._fetchQueue.shift()!;
-    Promise.resolve().then(async () => {
-      await this._fetchGraphData(next);
-      this._fetchQueueRunning = false;
-      this._drainFetchQueue();
-    });
+    while (this._fetchInFlight < this._maxConcurrentFetch && this._fetchQueue.length > 0) {
+      const next = this._fetchQueue.shift()!;
+      this._fetchInFlight++;
+      void this._fetchGraphData(next).finally(() => {
+        this._fetchInFlight--;
+        this._drainFetchQueue();
+      });
+    }
   }
 
   private _retryGraphData(entityId: string, hours?: number) {
@@ -1070,11 +1075,16 @@ export class HADeviceDashboard extends LitElement {
 
     const fmtTime = (ts: number) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    const rows = entities.map(({ entityId, label, unit, dc }) => {
+    // Key each row by entityId so Lit tracks row identity across renders as
+    // history arrives (loading → data).
+    const rowData = entities.map((e) => {
+      const points = this._graphData.get(this._gk(e.entityId, graphHours));
+      this._requestGraphData(e.entityId, graphHours);  // no-op if already fetched/fetching
+      return { e, points };
+    });
+    const rows = repeat(rowData, (r) => r.e.entityId, ({ e, points }) => {
+      const { entityId, label, unit, dc } = e;
       const lineColor = sensorColors[dc] ?? globalColor ?? GRAPH_SENSOR_DEFS.find(s => s.key === dc)?.defaultColor ?? '#f4601e';
-      const gk = this._gk(entityId, graphHours);
-      const points = this._graphData.get(gk);
-      this._requestGraphData(entityId, graphHours);  // no-op if already fetched/fetching
 
       if (!points) {
         return html`
@@ -1110,7 +1120,13 @@ export class HADeviceDashboard extends LitElement {
       const lastVal = vals[vals.length - 1];
       const disp = lastVal % 1 === 0 ? `${lastVal}` : lastVal.toFixed(1);
 
-      const maxIdx = vals.indexOf(max), minIdx = vals.indexOf(min);
+      // Peak/min dots mark the actual data extremes — NOT the configured
+      // y-axis range (srng.min/max), which usually isn't a literal data value,
+      // so vals.indexOf(range bound) would be -1 and points[-1] would throw.
+      const dataMax = Math.max(...vals), dataMin = Math.min(...vals);
+      let maxIdx = vals.indexOf(dataMax), minIdx = vals.indexOf(dataMin);
+      if (maxIdx < 0) maxIdx = 0;
+      if (minIdx < 0) minIdx = 0;
       const maxCx = ptX(points[maxIdx]).toFixed(1), maxCy = ptY(points[maxIdx]).toFixed(1);
       const minCx = ptX(points[minIdx]).toFixed(1), minCy = ptY(points[minIdx]).toFixed(1);
       const tStart = fmtTime(points[0].t);
@@ -2091,7 +2107,7 @@ export class HADeviceDashboard extends LitElement {
           @pointerup=${(e: PointerEvent) => this._onTilePointerUp(device, e)}
           @pointercancel=${() => this._onTilePointerCancel()}
           @pointermove=${(e: PointerEvent) => this._onTilePointerMove(e)}>
-          ${blockOrder.map(b => renderBlockTile(blockCtx, b))}
+          ${repeat(blockOrder, (b) => b, (b) => renderBlockTile(blockCtx, b))}
         </div>`;
     }
 
@@ -2174,7 +2190,7 @@ export class HADeviceDashboard extends LitElement {
           </div>
         </div>
         <div class="device-grid fav-grid" style="--cols:${cols}">
-          ${favDevices.map(d => html`
+          ${repeat(favDevices, (d) => d.device_id, (d) => html`
             <div class="fav-tile-wrap">
               ${d.area ? html`<span class="tile-room-badge">${d.area}</span>` : nothing}
               ${this._renderTile(d, tileStyle)}
@@ -2284,7 +2300,6 @@ export class HADeviceDashboard extends LitElement {
 
     // Flat grid — no expanded panel
     const areaTileStyle: TileStyle | undefined = areaStyle?.tile_style;
-    const gridItems = devices.map(d => this._renderTile(d, areaTileStyle));
     const areaChips = this._getAreaChips(devices, label);
 
     return html`
@@ -2311,7 +2326,7 @@ export class HADeviceDashboard extends LitElement {
         </div>
         ${isClosed ? nothing : html`
           <div class="device-grid" style="--cols:${cols}">
-            ${gridItems}
+            ${repeat(devices, (d) => d.device_id, (d) => this._renderTile(d, areaTileStyle))}
           </div>
         `}
       </div>
@@ -2430,9 +2445,9 @@ export class HADeviceDashboard extends LitElement {
         <div class="dash-body">
           ${showFavourites ? this._renderFavoritesSection(devices) : nothing}
           ${showRooms
-            ? [...grouped.entries()].map(([area, areaDevices]) => this._renderAreaSection(area, areaDevices))
+            ? repeat([...grouped.entries()], ([area]) => area, ([area, areaDevices]) => this._renderAreaSection(area, areaDevices))
             : html`<div class="device-grid" style="--cols:${activeView?.columns ?? this._config.columns ?? 3}">
-                ${viewDevices.map(d => this._renderTile(d))}
+                ${repeat(viewDevices, (d) => d.device_id, (d) => this._renderTile(d))}
               </div>`}
         </div>
       </ha-card>
