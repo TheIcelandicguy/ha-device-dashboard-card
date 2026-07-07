@@ -117,6 +117,27 @@ const TILE_BLOCKS: Array<{ id: TileBlockId; label: string; sub: string }> = [
   { id: 'badges',          label: 'Type & gen badges',  sub: 'Dimmer · G3 · Relay labels' },
 ];
 
+/** Tile-layout style options — shared by the per-device and per-room style
+ *  panels (identical set; the two panels differ only in config scope). */
+const TILE_STYLE_OPTIONS: Array<{ v: TileStyle; label: string; icon: string; desc: string }> = [
+  { v: 'default',         label: 'Default',   icon: '⊟', desc: 'Adaptive blocks' },
+  { v: 'power-monitor',   label: 'Power',     icon: '⚡', desc: 'Watts + sensors' },
+  { v: 'light-control',   label: 'Light',     icon: '💡', desc: 'Wheel + sliders' },
+  { v: 'climate-control', label: 'Climate',   icon: '🌡', desc: 'Thermostat dial' },
+  { v: 'cover-control',   label: 'Cover',     icon: '▤',  desc: 'Blind + buttons' },
+  { v: 'sensor-card',     label: 'Sensor',    icon: '◎',  desc: 'Big value + trend' },
+  { v: 'scene-button',    label: 'Scene',     icon: '▶',  desc: 'Tappable icon' },
+];
+
+/** Power-monitor sub-variants — shown when the tile style is power-monitor. */
+const PM_VARIANT_OPTIONS: Array<{ v: PowerMonitorVariant; label: string; icon: string }> = [
+  { v: 'big-number', label: 'Number',  icon: '▲' },
+  { v: 'gauge',      label: 'Gauge',   icon: '◉' },
+  { v: 'graph',      label: 'Graph',   icon: '∿' },
+  { v: 'compact',    label: 'Compact', icon: '⊟' },
+  { v: 'table',      label: 'Table',   icon: '≡' },
+];
+
 /** Config keys that belong to style/layout — copied by "Copy style", excluded: device/room keys */
 const STYLE_KEYS: ReadonlyArray<string> = [
   'style', 'tile_size', 'tile_opacity', 'card_opacity',
@@ -980,6 +1001,40 @@ export class HADeviceDashboardEditor extends LitElement {
     this._set('device_styles', Object.keys(allStyles).length ? allStyles : undefined);
   }
 
+  /** Shared tile-style grid + power-monitor variant pills for the per-device and
+   *  per-room style panels. Same options everywhere; callers wire the config scope
+   *  via the onStyle/onVariant setters. `recommended` (device profile) only drives
+   *  whether the variant row shows before an explicit style is picked. */
+  private _renderTileStylePicker(
+    current: TileStyle | undefined,
+    variant: PowerMonitorVariant,
+    recommended: TileStyle | undefined,
+    onStyle: (v: TileStyle | undefined) => void,
+    onVariant: (v: PowerMonitorVariant | undefined) => void,
+  ): TemplateResult {
+    const cur = current ?? 'default';
+    const showVariant = cur === 'power-monitor' || (!current && recommended === 'power-monitor');
+    return html`
+      <div class="ts-style-grid" style="grid-template-columns:repeat(4,minmax(0,1fr))">
+        ${TILE_STYLE_OPTIONS.map(opt => html`
+          <button class="ts-style-btn ${cur === opt.v ? 'on' : ''}"
+            @click=${() => onStyle(opt.v === 'default' ? undefined : opt.v)}>
+            <span class="ts-style-icon">${opt.icon}</span>
+            <span class="ts-style-label">${opt.label}</span>
+            <span class="ts-style-desc">${opt.desc}</span>
+          </button>`)}
+      </div>
+      ${showVariant ? html`
+        <div class="field-lbl" style="margin-top:8px">Power monitor variant</div>
+        <div class="pill-grp">
+          ${PM_VARIANT_OPTIONS.map(opt => html`
+            <span class="pill ${variant === opt.v ? 'on' : ''}"
+              @click=${() => onVariant(opt.v === 'big-number' ? undefined : opt.v)}>
+              ${opt.icon} ${opt.label}
+            </span>`)}
+        </div>` : nothing}`;
+  }
+
   private _renderDeviceStylePanel(deviceId: string): TemplateResult {
     const devStyle: DeviceStyle = this._config.device_styles?.[deviceId] ?? {};
     const globalLayout: TileBlockId[] = this._config.tile_layout ?? TILE_BLOCKS.map(b => b.id);
@@ -1027,24 +1082,6 @@ export class HADeviceDashboardEditor extends LitElement {
     const curDevStyle: TileStyle | undefined = devStyle.tile_style;
     const curVariant: PowerMonitorVariant = devStyle.power_monitor_variant ?? 'big-number';
 
-    const STYLE_OPTIONS: Array<{ v: TileStyle; label: string; icon: string; desc: string }> = [
-      { v: 'default',         label: 'Default',   icon: '⊟', desc: 'Adaptive blocks' },
-      { v: 'power-monitor',   label: 'Power',     icon: '⚡', desc: 'Watts + sensors' },
-      { v: 'light-control',   label: 'Light',     icon: '💡', desc: 'Wheel + sliders' },
-      { v: 'climate-control', label: 'Climate',   icon: '🌡', desc: 'Thermostat dial' },
-      { v: 'cover-control',   label: 'Cover',     icon: '▤',  desc: 'Blind + buttons' },
-      { v: 'sensor-card',     label: 'Sensor',    icon: '◎',  desc: 'Big value + trend' },
-      { v: 'scene-button',    label: 'Scene',     icon: '▶',  desc: 'Tappable icon' },
-    ];
-
-    const VARIANT_OPTIONS: Array<{ v: PowerMonitorVariant; label: string; icon: string }> = [
-      { v: 'big-number', label: 'Number',  icon: '▲' },
-      { v: 'gauge',      label: 'Gauge',   icon: '◉' },
-      { v: 'graph',      label: 'Graph',   icon: '∿' },
-      { v: 'compact',    label: 'Compact', icon: '⊟' },
-      { v: 'table',      label: 'Table',   icon: '≡' },
-    ];
-
     const stylePickerHtml = html`
       <div class="field" style="margin-bottom:4px">
         <div class="field-lbl" style="display:flex;align-items:center;gap:6px">
@@ -1052,24 +1089,11 @@ export class HADeviceDashboardEditor extends LitElement {
           ${recommended && !curDevStyle ? html`<span class="dev-style-hint">Recommended: ${recommended}</span>` : nothing}
           ${curDevStyle ? html`<button class="color-reset" @click=${() => this._setDeviceStyle(deviceId, { tile_style: undefined })}>↺ reset</button>` : nothing}
         </div>
-        <div class="ts-style-grid" style="grid-template-columns:repeat(4,minmax(0,1fr))">
-          ${STYLE_OPTIONS.map(opt => html`
-            <button class="ts-style-btn ${(curDevStyle ?? 'default') === opt.v ? 'on' : ''}"
-              @click=${() => this._setDeviceStyle(deviceId, { tile_style: opt.v === 'default' ? undefined : opt.v as TileStyle })}>
-              <span class="ts-style-icon">${opt.icon}</span>
-              <span class="ts-style-label">${opt.label}</span>
-              <span class="ts-style-desc">${opt.desc}</span>
-            </button>`)}
-        </div>
-        ${(curDevStyle === 'power-monitor' || (!curDevStyle && recommended === 'power-monitor')) ? html`
-          <div class="field-lbl" style="margin-top:8px">Power monitor variant</div>
-          <div class="pill-grp">
-            ${VARIANT_OPTIONS.map(opt => html`
-              <span class="pill ${curVariant === opt.v ? 'on' : ''}"
-                @click=${() => this._setDeviceStyle(deviceId, { power_monitor_variant: opt.v === 'big-number' ? undefined : opt.v })}>
-                ${opt.icon} ${opt.label}
-              </span>`)}
-          </div>` : nothing}
+        ${this._renderTileStylePicker(
+          curDevStyle, curVariant, recommended,
+          (v) => this._setDeviceStyle(deviceId, { tile_style: v }),
+          (v) => this._setDeviceStyle(deviceId, { power_monitor_variant: v }),
+        )}
       </div>`;
 
     const switchEnts = dev ? dev.entities.filter(e => e.domain === 'switch' || e.domain === 'light') : [];
@@ -1239,40 +1263,11 @@ export class HADeviceDashboardEditor extends LitElement {
         ${slRow('Tile gap', 'tileGap', 4, 24, 2, 10, 'px')}
 
         ${sectionLbl('Tile style')}
-        <div class="ts-style-grid">
-          ${([
-            { v: 'default',         label: 'Default',   icon: '⊟', desc: 'Adaptive' },
-            { v: 'power-monitor',   label: 'Power',     icon: '⚡', desc: 'Watts' },
-            { v: 'light-control',   label: 'Light',     icon: '💡', desc: 'Wheel' },
-            { v: 'climate-control', label: 'Climate',   icon: '🌡', desc: 'Dial' },
-            { v: 'cover-control',   label: 'Cover',     icon: '▤',  desc: 'Blind' },
-            { v: 'sensor-card',     label: 'Sensor',    icon: '◎',  desc: 'Value' },
-            { v: 'scene-button',    label: 'Scene',     icon: '▶',  desc: 'Button' },
-          ] as const).map(opt => {
-            const cur = st.tile_style ?? 'default';
-            return html`
-              <button class="ts-style-btn ${cur === opt.v ? 'on' : ''}"
-                @click=${() => this._setAreaStyle(name, 'tile_style', opt.v === 'default' ? undefined : opt.v)}>
-                <span class="ts-style-icon">${opt.icon}</span>
-                <span class="ts-style-label">${opt.label}</span>
-                <span class="ts-style-desc">${opt.desc}</span>
-              </button>`;
-          })}
-        </div>
-        ${st.tile_style === 'power-monitor' ? html`
-          <div class="pill-grp" style="margin-top:6px">
-            ${([
-              { v: 'big-number', label: '▲ Number' },
-              { v: 'gauge',      label: '◉ Gauge'  },
-              { v: 'graph',      label: '∿ Graph'  },
-              { v: 'compact',    label: '⊟ Compact' },
-              { v: 'table',      label: '≡ Table'  },
-            ] as const).map(opt => html`
-              <span class="pill ${(st.power_monitor_variant ?? 'big-number') === opt.v ? 'on' : ''}"
-                @click=${() => this._setAreaStyle(name, 'power_monitor_variant', opt.v === 'big-number' ? undefined : opt.v)}>
-                ${opt.label}
-              </span>`)}
-          </div>` : nothing}
+        ${this._renderTileStylePicker(
+          st.tile_style, st.power_monitor_variant ?? 'big-number', undefined,
+          (v) => this._setAreaStyle(name, 'tile_style', v),
+          (v) => this._setAreaStyle(name, 'power_monitor_variant', v),
+        )}
 
         ${sectionLbl('Tile appearance')}
         ${colorRow('Accent colour', 'accentColor', '#f4601e')}
