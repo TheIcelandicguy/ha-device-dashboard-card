@@ -314,35 +314,45 @@ export function getEntitiesByDomain(entities: HAEntity[], domain: string): HAEnt
 
 // ─── Format functions ──────────────────────────────────────────────────────────
 
+/** Placeholder shown when a value is missing / non-numeric. */
+export const NA = '—';
+
 export function formatPower(w: number): string {
+  if (!Number.isFinite(w)) return NA;
   if (w >= 1000) return `${(w / 1000).toFixed(2)} kW`;
   return `${w.toFixed(1)} W`;
 }
 
 export function formatEnergy(kwh: number): string {
+  if (!Number.isFinite(kwh)) return NA;
   return `${kwh.toFixed(3)} kWh`;
 }
 
 export function formatVoltage(v: number): string {
+  if (!Number.isFinite(v)) return NA;
   return `${v.toFixed(1)} V`;
 }
 
 export function formatCurrent(a: number): string {
+  if (!Number.isFinite(a)) return NA;
   return `${a.toFixed(3)} A`;
 }
 
 export function formatTemp(c: number): string {
+  if (!Number.isFinite(c)) return NA;
   return `${c.toFixed(1)} °C`;
 }
 
 export function formatUptime(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
+  if (!Number.isFinite(seconds) || seconds < 0) return NA;
+  if (seconds < 60) return `${Math.floor(seconds)}s`;
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
   return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`;
 }
 
 export function rssiToQuality(rssi: number): string {
+  if (!Number.isFinite(rssi)) return NA;
   if (rssi >= -50) return 'Excellent';
   if (rssi >= -60) return 'Good';
   if (rssi >= -70) return 'Fair';
@@ -350,31 +360,38 @@ export function rssiToQuality(rssi: number): string {
 }
 
 export function formatApparentPower(va: number): string {
+  if (!Number.isFinite(va)) return NA;
   return `${va.toFixed(1)} VA`;
 }
 
 export function formatReactivePower(var_: number): string {
+  if (!Number.isFinite(var_)) return NA;
   return `${var_.toFixed(1)} VAr`;
 }
 
 export function formatFrequency(hz: number): string {
+  if (!Number.isFinite(hz)) return NA;
   return `${hz.toFixed(2)} Hz`;
 }
 
 export function formatHumidity(pct: number): string {
+  if (!Number.isFinite(pct)) return NA;
   return `${pct.toFixed(1)} %`;
 }
 
 export function formatIlluminance(lx: number): string {
+  if (!Number.isFinite(lx)) return NA;
   if (lx >= 10000) return `${(lx / 1000).toFixed(1)} klx`;
   return `${Math.round(lx)} lx`;
 }
 
 export function formatPpm(ppm: number): string {
+  if (!Number.isFinite(ppm)) return NA;
   return `${Math.round(ppm)} ppm`;
 }
 
 export function formatPercent(v: number): string {
+  if (!Number.isFinite(v)) return NA;
   return `${Math.round(v)} %`;
 }
 

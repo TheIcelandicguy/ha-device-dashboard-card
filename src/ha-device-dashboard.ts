@@ -1282,8 +1282,9 @@ export class HADeviceDashboard extends LitElement {
     const { minTemp, maxTemp, targetTemp, currentTemp, step, entityId } = trv;
     const cx = 80, cy = 70, r = 54;
     const display = this._trvDragTemp ?? targetTemp ?? minTemp;
-    const displayRatio = Math.max(0, Math.min(1, (display - minTemp) / (maxTemp - minTemp)));
-    const toAngle = (v: number) => 210 + ((v - minTemp) / (maxTemp - minTemp)) * 300;
+    const tSpan = (maxTemp - minTemp) || 1;  // guard against a TRV reporting min === max
+    const displayRatio = Math.max(0, Math.min(1, (display - minTemp) / tSpan));
+    const toAngle = (v: number) => 210 + ((v - minTemp) / tSpan) * 300;
     const toXY = (deg: number, radius: number): [number, number] => [
       cx + radius * Math.cos((deg - 90) * Math.PI / 180),
       cy + radius * Math.sin((deg - 90) * Math.PI / 180),
@@ -1346,6 +1347,7 @@ export class HADeviceDashboard extends LitElement {
 
   private _trvTempFromEvent(e: PointerEvent, svgEl: SVGSVGElement, min: number, max: number, step: number): number | null {
     const rect = svgEl.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;  // hidden/zero-size element
     const cx = 80, cy = 70;
     const x = (e.clientX - rect.left) * (160 / rect.width);
     const y = (e.clientY - rect.top)  * (132 / rect.height);
@@ -1354,11 +1356,13 @@ export class HADeviceDashboard extends LitElement {
     const arcDeg = (deg - 210 + 360) % 360;
     if (arcDeg > 300) return null; // in the gap at the bottom
     const raw = min + (arcDeg / 300) * (max - min);
-    return Math.max(min, Math.min(max, Math.round(raw / step) * step));
+    const s = step || 0.5;  // guard against a device reporting step 0
+    return Math.max(min, Math.min(max, Math.round(raw / s) * s));
   }
 
   private _valvePosFromEvent(e: PointerEvent, svg: SVGSVGElement): number | null {
     const rect = svg.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;  // hidden/zero-size element
     const cx = 80, cy = 68;
     const x = (e.clientX - rect.left) * (160 / rect.width);
     const y = (e.clientY - rect.top)  * (128 / rect.height);
