@@ -2810,10 +2810,10 @@ export class HADeviceDashboard extends LitElement {
     // height so the full dashboard doesn't crowd out the config form. The user
     // scrolls the preview box; on desktop (side-by-side) it's unaffected.
     css`
-      @media (max-width: 600px) {
+      @media (max-width: 870px) {
         :host([data-edit-preview]) {
           display: block;
-          max-height: 45vh;
+          max-height: 38vh;
           overflow-y: auto;
           -webkit-overflow-scrolling: touch;
           border-radius: var(--sc-card-radius, 12px);
