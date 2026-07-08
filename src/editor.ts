@@ -427,8 +427,10 @@ export class HADeviceDashboardEditor extends LitElement {
   private _set(key: string, value: unknown) {
     if (!this._config) return;
     const updated: Record<string, unknown> = { ...this._config, [key]: value };
-    // 'areas: []' is a valid sentinel meaning "no rooms selected" — never delete it
-    if (value === '' || value === undefined || (Array.isArray(value) && value.length === 0 && key !== 'areas')) {
+    // '[]' is a valid "none" sentinel for these keys (rooms shown / sensor chips)
+    // — never delete it, so "Deselect all" persists as an explicit empty set.
+    const keepEmptyArray = key === 'areas' || key === 'sensors';
+    if (value === '' || value === undefined || (Array.isArray(value) && value.length === 0 && !keepEmptyArray)) {
       delete updated[key];
     }
     this._emitConfig(updated as HADeviceDashboardConfig);
@@ -608,6 +610,17 @@ export class HADeviceDashboardEditor extends LitElement {
   /** Compact sensor-chip whitelist picker with inherit semantics.
    *  selected = undefined → inheriting (shows the inherited set greyed);
    *  onChange(undefined) clears the override; empty selections normalize to undefined. */
+  /** Compact "All · None" control for a multi-select group. */
+  private _selAllNone(onAll: () => void, onNone: () => void): TemplateResult {
+    return html`
+      <span class="sel-allnone">
+        <button type="button" class="sel-mini" title="Select all"
+          @click=${(e: Event) => { e.stopPropagation(); onAll(); }}>All</button>
+        <button type="button" class="sel-mini" title="Deselect all"
+          @click=${(e: Event) => { e.stopPropagation(); onNone(); }}>None</button>
+      </span>`;
+  }
+
   private _chipPicker(
     selected: string[] | undefined,
     inheritedSel: string[] | undefined,
@@ -630,6 +643,7 @@ export class HADeviceDashboardEditor extends LitElement {
       <div class="chip-picker">
         <div class="chip-picker-hdr">
           <span class="chip-picker-state">${isOverride ? 'Custom selection' : `Inheriting from ${inheritedFrom}`}</span>
+          ${this._selAllNone(() => onChange([...allKeys]), () => onChange([]))}
           ${isOverride
             ? html`<button class="color-reset" @click=${() => onChange(undefined)}>↺ Inherit</button>`
             : html`<button class="color-reset" @click=${() => onChange([...effective])}>Customize</button>`}
@@ -786,6 +800,10 @@ export class HADeviceDashboardEditor extends LitElement {
               <span class="pill ${(c.sort_by ?? 'name') === v ? 'on' : ''}"
                 @click=${()=>this._set('sort_by',v)}>${v[0].toUpperCase()+v.slice(1)}</span>`)}
           </div>
+        </div>
+        <div class="toolbar-group">
+          <span class="toolbar-lbl">Rooms</span>
+          ${this._selAllNone(() => this._set('areas', undefined), () => this._set('areas', []))}
         </div>
         <div class="tog-row" style="border:none;padding:4px 0 0">
           <div class="tog-lbl">Show offline devices</div>
@@ -1629,7 +1647,10 @@ export class HADeviceDashboardEditor extends LitElement {
             <div class="subgroup-lbl" style="margin-top:10px">Filter (empty = all devices)</div>
 
             <div class="field">
-              <div class="field-lbl">Profiles</div>
+              <div class="field-lbl">Profiles
+                ${this._selAllNone(
+                  () => this._updateViewFilter(v.id, { profiles: [...profiles] }),
+                  () => this._updateViewFilter(v.id, { profiles: [] }))}</div>
               <div class="pill-grp">
                 ${profiles.map(p => html`
                   <span class="pill ${(filter.profiles ?? []).includes(p) ? 'on' : ''}"
@@ -1639,7 +1660,10 @@ export class HADeviceDashboardEditor extends LitElement {
 
             ${this._adv(html`
             <div class="field">
-              <div class="field-lbl">Entity domains</div>
+              <div class="field-lbl">Entity domains
+                ${this._selAllNone(
+                  () => this._updateViewFilter(v.id, { domains: [...domains] }),
+                  () => this._updateViewFilter(v.id, { domains: [] }))}</div>
               <div class="pill-grp">
                 ${domains.map(d => html`
                   <span class="pill ${(filter.domains ?? []).includes(d) ? 'on' : ''}"
@@ -1649,7 +1673,10 @@ export class HADeviceDashboardEditor extends LitElement {
 
             ${areas.length ? html`
               <div class="field">
-                <div class="field-lbl">Areas</div>
+                <div class="field-lbl">Areas
+                  ${this._selAllNone(
+                    () => this._updateViewFilter(v.id, { areas: areas.map(a => a.name) }),
+                    () => this._updateViewFilter(v.id, { areas: [] }))}</div>
                 <div class="pill-grp">
                   ${areas.map(a => html`
                     <span class="pill ${(filter.areas ?? []).includes(a.name) ? 'on' : ''}"
@@ -2351,7 +2378,10 @@ export class HADeviceDashboardEditor extends LitElement {
           return colorRow(key, meta?.label ?? key, getColor(key));
         })}` : nothing}
       <div class="field" style="margin-top:10px">
-        <div class="field-lbl">Which sensors to graph</div>
+        <div class="field-lbl">Which sensors to graph
+          ${this._selAllNone(
+            () => this._set('graph_sensors', GRAPH_SENSOR_DEFS.map(s => s.key)),
+            () => this._set('graph_sensors', []))}</div>
         <div class="pill-grp">
           ${GRAPH_SENSOR_DEFS.map(s => {
             const on = selectedGraphs.some(k => normalizeGraphKey(k) === s.key);
@@ -2840,6 +2870,9 @@ export class HADeviceDashboardEditor extends LitElement {
     .color-key { font-size:12px; color:var(--t2); flex:1; min-width:0; }
     .color-val { font-family:monospace; font-size:10px; color:var(--t3); min-width:60px; text-align:right; }
     .color-reset { font-size:11px; color:var(--t3); background:none; border:none; cursor:pointer; padding:2px 4px; border-radius:3px; transition:color .15s; }
+    .sel-allnone { display:inline-flex; gap:4px; margin-left:6px; vertical-align:middle; }
+    .sel-mini { font:inherit; font-size:10px; font-weight:600; letter-spacing:.02em; cursor:pointer; padding:2px 8px; border-radius:6px; color:var(--t2); background:var(--s2); border:1px solid var(--border); transition:all .15s; }
+    .sel-mini:hover { color:var(--t1); border-color:var(--t3); }
     .color-reset:hover { color:var(--accent); }
     .field-reset { font-size:10px; color:var(--t3); background:none; border:none; cursor:pointer; padding:0 4px; margin-left:4px; border-radius:3px; transition:color .15s; vertical-align:middle; }
     .field-reset:hover { color:var(--accent); }

@@ -864,22 +864,25 @@ export class HADeviceDashboard extends LitElement {
 
   /** Chip visibility cascade: device override → area override → global filter. */
   private _sensorSelection(device: HADevice): string[] | undefined {
+    // `[]` is an explicit "no chips" (Deselect-all) and stops the cascade;
+    // `undefined` means "inherit from the next scope".
     const devSel = this._config.device_styles?.[device.device_id]?.sensors;
-    if (devSel?.length) return devSel;
+    if (devSel !== undefined) return devSel;
     const areaSel = device.area ? this._config.area_styles?.[device.area]?.sensors : undefined;
-    if (areaSel?.length) return areaSel;
+    if (areaSel !== undefined) return areaSel;
     return this._config.sensors;
   }
 
   private _getSensors(device: HADevice, ignoreSelection = false): SensorChip[] {
-    // A viewer chip override is authoritative: an empty list means "no chips",
-    // unlike the config whitelist where empty/undefined means "show all".
+    // Selection semantics: undefined = "show all" (no restriction); an empty
+    // array = "no chips" (explicit Deselect-all); a list = whitelist. Applies to
+    // both the viewer override and the config whitelist.
     // ignoreSelection=true returns every candidate chip (for the Customize panel).
     const override = this._tileChipOverride.get(device.device_id);
     const sel = override ?? this._sensorSelection(device);
     const allowed = ignoreSelection
       ? null
-      : (override !== undefined ? new Set(override) : (sel?.length ? new Set(sel) : null));
+      : (sel === undefined ? null : new Set(sel));
     const show = (k: string) => !allowed || allowed.has(k);
     const result: SensorChip[] = [];
     const seen = new Set<string>();
