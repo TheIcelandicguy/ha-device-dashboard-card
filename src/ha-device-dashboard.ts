@@ -647,6 +647,20 @@ export class HADeviceDashboard extends LitElement {
       map.get(key)!.push(d);
     }
 
+    // Name-based groups: a device whose name starts with a configured prefix
+    // ALSO appears under a section of that name (in addition to its area group).
+    // Same object reference in two groups — no reassignment, purely additive.
+    for (const g of this._config.name_groups ?? []) {
+      const gl = g.toLowerCase();
+      const arr = map.get(g) ?? [];
+      for (const d of devices) {
+        const nl = d.name.toLowerCase();
+        const boundary = nl.length === gl.length || /[\s/\-]/.test(nl[gl.length] ?? '');
+        if (nl.startsWith(gl) && boundary && !arr.includes(d)) arr.push(d);
+      }
+      if (arr.length) map.set(g, arr);
+    }
+
     const sortBy = this._config.sort_by ?? 'name';
     // Precompute the sort key once per device (Schwartzian transform) so the
     // comparator doesn't rescan the device's entities on every comparison.

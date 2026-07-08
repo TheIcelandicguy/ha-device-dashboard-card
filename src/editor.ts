@@ -793,6 +793,15 @@ export class HADeviceDashboardEditor extends LitElement {
             @change=${(e:Event)=>this._set('show_offline',(e.target as HTMLInputElement).checked)}>
             <span class="sw-t"></span><span class="sw-b"></span></label>
         </div>
+        <div class="tog-row" style="border:none;padding:6px 0 0;align-items:center">
+          <div class="tog-lbl" title="Devices whose name starts with one of these ALSO appear under a section of that name, in addition to their room. Comma-separated.">Name-based groups</div>
+          <input type="text" class="inline-text" style="max-width:190px" placeholder="e.g. Gólfhiti"
+            .value=${(c.name_groups ?? []).join(', ')}
+            @change=${(e:Event)=>{
+              const list=(e.target as HTMLInputElement).value.split(',').map(s=>s.trim()).filter(Boolean);
+              this._set('name_groups', list.length ? list : undefined);
+            }}>
+        </div>
       </div>
       ${(c.favorites?.length) ? (() => {
         const FAV_KEY = '★ Favourites';

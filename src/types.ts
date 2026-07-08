@@ -312,6 +312,10 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   // ── Device discovery ──────────────────────────────────────────
   /** Area filter. undefined = all; [] = none; ['Eldhús'] = specific */
   areas?: string[];
+  /** Extra groups built from device-name prefixes. A device whose name starts
+   *  with one of these ALSO appears under a section of that name, in addition to
+   *  its HA-area group. e.g. ['Gólfhiti'] for underfloor-heating valves. */
+  name_groups?: string[];
   /** Device IDs to hide */
   hidden_devices?: string[];
   /** Device IDs pinned to the Favourites section at the top of the card */
