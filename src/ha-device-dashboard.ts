@@ -71,6 +71,7 @@ export class HADeviceDashboard extends LitElement {
   @state() private _tileBlockOverride = new Map<string, TileBlockId[]>();
   @state() private _tileChipOverride = new Map<string, string[]>();
   @state() private _areaHeaderOverride = new Map<string, string[]>();
+  @state() private _tileShowGraphsOverride = new Map<string, boolean>();
   /** Which area's header-customise popover is open. */
   @state() private _areaCustomizeOpen: string | null = null;
 
@@ -358,6 +359,16 @@ export class HADeviceDashboard extends LitElement {
     load('tileBlocks', this._tileBlockOverride as Map<string, string[]>);
     load('tileChips', this._tileChipOverride);
     load('areaHdrChips', this._areaHeaderOverride);
+    // Boolean override (tile show_graphs) — stored as '0'/'1'.
+    try {
+      const pfx = this._custPrefix('tileShowGraphs');
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k || !k.startsWith(pfx)) continue;
+        const raw = localStorage.getItem(k);
+        if (raw === '0' || raw === '1') this._tileShowGraphsOverride.set(k.slice(pfx.length), raw === '1');
+      }
+    } catch { /* localStorage unavailable */ }
   }
 
   /** Is the dashboard currently in Lovelace edit mode? Walks up through shadow
@@ -413,6 +424,17 @@ export class HADeviceDashboard extends LitElement {
     this._emitConfigIfEditing(this._patchAreaStyle(area, { header_chips: chips ?? undefined }));
   }
 
+  private _setTileShowGraphs(deviceId: string, val: boolean | null): void {
+    const next = new Map(this._tileShowGraphsOverride);
+    if (val === null) next.delete(deviceId); else next.set(deviceId, val);
+    this._tileShowGraphsOverride = next;
+    const key = this._custPrefix('tileShowGraphs') + deviceId;
+    try {
+      if (val === null) localStorage.removeItem(key); else localStorage.setItem(key, val ? '1' : '0');
+    } catch { /* ignore */ }
+    this._emitConfigIfEditing(this._patchDeviceStyle(deviceId, { show_graphs: val ?? undefined }));
+  }
+
   private _patchDeviceStyle(deviceId: string, patch: Partial<DeviceStyle>): HADeviceDashboardConfig {
     const styles: Record<string, DeviceStyle> = { ...(this._config.device_styles ?? {}) };
     const cur: DeviceStyle = { ...(styles[deviceId] ?? {}) };
@@ -441,7 +463,8 @@ export class HADeviceDashboard extends LitElement {
     // Blocks — universe = the profile's canonical blocks + anything currently shown.
     const canonical = PROFILE_DEFAULT_BLOCKS[profile.type] ?? PROFILE_DEFAULT_BLOCKS.generic;
     const effective = this._getBlockOrder(device, profile);
-    const blockUniverse: TileBlockId[] = [...canonical, ...effective.filter(b => !canonical.includes(b))];
+    // 'graph' is governed by the dedicated Show-graphs toggle, not a block toggle.
+    const blockUniverse: TileBlockId[] = [...canonical, ...effective.filter(b => !canonical.includes(b))].filter(b => b !== 'graph');
     const visibleBlocks = new Set(effective);
     const blocks = blockUniverse.map(b => ({ id: b as string, label: BLOCK_LABELS[b] ?? b, visible: visibleBlocks.has(b) }));
 
@@ -459,10 +482,13 @@ export class HADeviceDashboard extends LitElement {
     }
 
     const customized = this._tileBlockOverride.has(id) || this._tileChipOverride.has(id)
-      || !!this._config.device_styles?.[id]?.tile_layout || !!this._config.device_styles?.[id]?.sensors;
+      || this._tileShowGraphsOverride.has(id)
+      || !!this._config.device_styles?.[id]?.tile_layout || !!this._config.device_styles?.[id]?.sensors
+      || this._config.device_styles?.[id]?.show_graphs !== undefined;
 
     return {
       blocks, chips, customized,
+      graphs: this._showGraphs(device),
       setBlock: (bid: string, vis: boolean) => {
         const wanted = new Set(this._getBlockOrder(device, profile));
         if (vis) wanted.add(bid as TileBlockId); else wanted.delete(bid as TileBlockId);
@@ -474,7 +500,8 @@ export class HADeviceDashboard extends LitElement {
         if (vis) wanted.add(key); else wanted.delete(key);
         this._setTileChips(id, allKeys.filter(k => wanted.has(k)));
       },
-      reset: () => { this._setTileBlocks(id, null); this._setTileChips(id, null); },
+      setGraphs: (vis: boolean) => this._setTileShowGraphs(id, vis),
+      reset: () => { this._setTileBlocks(id, null); this._setTileChips(id, null); this._setTileShowGraphs(id, null); },
     };
   }
 
@@ -1045,7 +1072,20 @@ export class HADeviceDashboard extends LitElement {
 
   // ── Sparkline system ──────────────────────────────────────────────────────
 
+  /** Whether tile sparkline graphs are shown for this device — the single gate
+   *  every graph path flows through. device → area → global → default (on). */
+  private _showGraphs(device: HADevice): boolean {
+    const ov = this._tileShowGraphsOverride.get(device.device_id);
+    if (ov !== undefined) return ov;
+    const dev = this._config.device_styles?.[device.device_id]?.show_graphs;
+    if (dev !== undefined) return dev;
+    const area = device.area ? this._config.area_styles?.[device.area]?.show_graphs : undefined;
+    if (area !== undefined) return area;
+    return this._config.show_graphs ?? true;
+  }
+
   private _getGraphEntities(device: HADevice): GraphEntity[] {
+    if (!this._showGraphs(device)) return [];
     // Normalize to device_class keys so legacy 'co2'/'rssi' configs still match.
     const dcList = (this._config.graph_sensors ?? []).map(normalizeGraphKey);
     if (!dcList.length) return [];

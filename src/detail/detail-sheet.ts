@@ -50,6 +50,11 @@ function renderSheetCustomize(ctx: TileCtx): TemplateResult {
       <summary class="ds-cz-summary">⚙ Customise tile${cz.customized ? html`<span class="ds-cz-dot" title="This tile has custom visibility"></span>` : nothing}</summary>
       <div class="ds-cz-body">
         <div class="ds-cz-hint">Choose what appears on this tile on the dashboard.</div>
+        <label class="ds-cz-row ds-cz-graphs">
+          <input type="checkbox" .checked=${cz.graphs}
+            @change=${(e: Event) => cz.setGraphs((e.target as HTMLInputElement).checked)}>
+          <span>Sparkline graphs</span>
+        </label>
         <div class="ds-cz-group-lbl">Sections</div>
         <div class="ds-cz-list">
           ${cz.blocks.map(b => html`

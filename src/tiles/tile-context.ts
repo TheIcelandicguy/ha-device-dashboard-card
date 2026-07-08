@@ -89,10 +89,13 @@ export type DeviceAlert = 'overtemp' | 'overpower';
 export interface TileCustomize {
   blocks: Array<{ id: string; label: string; visible: boolean }>;
   chips: Array<{ key: string; label: string; visible: boolean }>;
-  /** True when this tile has any block/chip override (viewer or config). */
+  /** Whether sparkline graphs show on this tile (the dedicated Show-graphs gate). */
+  graphs: boolean;
+  /** True when this tile has any block/chip/graph override (viewer or config). */
   customized: boolean;
   setBlock: (id: string, visible: boolean) => void;
   setChip: (key: string, visible: boolean) => void;
+  setGraphs: (visible: boolean) => void;
   reset: () => void;
 }
 

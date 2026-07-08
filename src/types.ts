@@ -135,6 +135,8 @@ export interface AreaStyle {
    *  humidity/co2/illuminance). Independent of `sensors` (which drives the tiles).
    *  undefined = inherit; an explicit (possibly empty) list is authoritative. */
   header_chips?: string[];
+  /** Per-area override for tile sparkline graphs. undefined = inherit global. */
+  show_graphs?: boolean;
 }
 
 /**
@@ -253,6 +255,8 @@ export interface DeviceStyle {
   entity_animations?: Record<string, { on?: EntityAnimationType; off?: EntityAnimationType; speed?: number }>;
   /** Sensor chip keys for this device. undefined = inherit area/global `sensors`. */
   sensors?: string[];
+  /** Per-device override for tile sparkline graphs. undefined = inherit area/global. */
+  show_graphs?: boolean;
 }
 
 /** Per-view filter — all fields AND-ed; within a list values OR-ed. */
@@ -329,6 +333,10 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   /** Global default power-monitor variant, used when tile_style resolves to
    *  power-monitor and no closer scope sets one. */
   power_monitor_variant?: PowerMonitorVariant;
+  /** Master switch for tile sparkline graphs (the graph_sensors-driven graph
+   *  section). undefined = on. Overridable per-area and per-device. `graph_sensors`
+   *  stays the "which sensors to plot" palette; this is "whether to show them". */
+  show_graphs?: boolean;
   /** Ordered list of tile blocks. Omit a block to hide it. */
   tile_layout?: TileBlockId[];
   tile_opacity?: number;               // 0-100, default 100 — tile background only

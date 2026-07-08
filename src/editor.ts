@@ -590,7 +590,7 @@ export class HADeviceDashboardEditor extends LitElement {
   }
 
   // ── Area style helpers ──────────────────────────────────────────────────────
-  private _setAreaStyle(n: string, key: keyof AreaStyle, value: string|number|string[]|undefined) {
+  private _setAreaStyle(n: string, key: keyof AreaStyle, value: string|number|boolean|string[]|undefined) {
     const cur: AreaStyle = { ...(this._config.area_styles?.[n] ?? {}) };
     if (value === undefined || value === '') delete cur[key];
     else (cur as any)[key] = value;
@@ -1009,6 +1009,7 @@ export class HADeviceDashboardEditor extends LitElement {
     tile_icon_speed: number | undefined;
     entity_animations: Record<string, { on?: string; off?: string; speed?: number }> | undefined;
     sensors: string[] | undefined;
+    show_graphs: boolean | undefined;
   }>) {
     const current = this._config.device_styles?.[deviceId] ?? {};
     const next: Record<string, unknown> = { ...current, ...patch };
@@ -1021,6 +1022,7 @@ export class HADeviceDashboardEditor extends LitElement {
     if (next['tile_icon_speed'] === undefined) delete next['tile_icon_speed'];
     if (next['entity_animations'] === undefined) delete next['entity_animations'];
     if (next['sensors'] === undefined) delete next['sensors'];
+    if (next['show_graphs'] === undefined) delete next['show_graphs'];
     const allStyles = { ...(this._config.device_styles ?? {}), [deviceId]: next };
     if (!Object.keys(next).length) delete allStyles[deviceId];
     this._set('device_styles', Object.keys(allStyles).length ? allStyles : undefined);
@@ -1167,9 +1169,15 @@ export class HADeviceDashboardEditor extends LitElement {
             <option value="5"    ?selected=${(devStyle.tile_icon_speed ?? 1) === 5}>5× Frantic</option>
           </select>
         </div>`)}
+        <div class="field-lbl" style="margin-bottom:4px">Show graphs</div>
+        <div class="pill-grp" style="margin-bottom:8px">
+          ${([['Inherit', undefined], ['On', true], ['Off', false]] as Array<[string, boolean | undefined]>).map(([lbl, val]) => html`
+            <span class="pill ${devStyle.show_graphs === val ? 'on' : ''}"
+              @click=${() => this._setDeviceStyle(deviceId, { show_graphs: val })}>${lbl}</span>`)}
+        </div>
         <div class="field-lbl" style="margin-bottom:4px">Visible blocks</div>
         <div class="block-toggles">
-          ${TILE_BLOCKS.map(b => {
+          ${TILE_BLOCKS.filter(b => b.id !== 'graph').map(b => {
             const on = devLayout === null ? globalLayout.includes(b.id) : devLayout.includes(b.id);
             return html`<span class="block-tog ${on ? 'on' : ''}" @click=${() => toggleBlock(b.id)}>
               ${on ? '👁' : '○'} ${b.label}
@@ -1287,15 +1295,17 @@ export class HADeviceDashboardEditor extends LitElement {
         ${slRow('Columns', 'columns', 1, 6, 1, 3, '')}
         ${slRow('Tile gap', 'tileGap', 4, 24, 2, 10, 'px')}
 
-        ${sectionLbl('Tile style')}
-        ${this._renderTileStylePicker(
-          st.tile_style, st.power_monitor_variant ?? 'big-number', undefined,
-          (v) => this._setAreaStyle(name, 'tile_style', v),
-          (v) => this._setAreaStyle(name, 'power_monitor_variant', v),
-        )}
+        ${sectionLbl('Graphs')}
+        <div class="field">
+          <div class="field-lbl">Show graphs</div>
+          <div class="pill-grp">
+            ${([['Inherit', undefined], ['On', true], ['Off', false]] as Array<[string, boolean | undefined]>).map(([lbl, val]) => html`
+              <span class="pill ${st.show_graphs === val ? 'on' : ''}"
+                @click=${() => this._setAreaStyle(name, 'show_graphs', val)}>${lbl}</span>`)}
+          </div>
+        </div>
 
         ${sectionLbl('Tile appearance')}
-        ${colorRow('Accent colour', 'accentColor', '#f4601e')}
         ${colorRow('Tile background', 'tileBgColor', '#1c1c1e')}
         ${this._adv(html`
         ${colorRow('Tile border', 'tileBorderColor', 'rgba(255,255,255,0.07)')}
@@ -2245,6 +2255,13 @@ export class HADeviceDashboardEditor extends LitElement {
     const getColor = (key: string) => sensorColors[key] ?? GRAPH_SENSOR_DEFS.find(s=>s.key===key)?.defaultColor ?? '#f4601e';
 
     const gtBody = html`
+      <div class="tog-row" style="border:none;padding:0 0 6px">
+        <div class="tog-lbl">Show graphs on tiles
+          <span class="field-note">master switch — “Which sensors” below is the palette</span></div>
+        <label class="sw"><input type="checkbox" .checked=${c.show_graphs !== false}
+          @change=${(e:Event)=>this._set('show_graphs', (e.target as HTMLInputElement).checked ? undefined : false)}>
+          <span class="sw-t"></span><span class="sw-b"></span></label>
+      </div>
       <div class="field">
         <div class="field-lbl">Type</div>
         <div class="pill-grp">
