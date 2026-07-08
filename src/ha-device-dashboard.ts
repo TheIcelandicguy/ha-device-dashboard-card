@@ -22,7 +22,7 @@ import { renderBlockTile } from './tiles/block-tile';
 import { renderDetailSheet } from './detail/detail-sheet';
 import {
   getAllDevices, getDeviceProfile, migrateConfig,
-  getIntegrationLabel, isPrivateIp, PROFILE_DEFAULT_BLOCKS, BLOCK_LABELS, GRAPH_DC_LABELS, GRAPH_SENSOR_DEFS,
+  getIntegrationLabel, isPrivateIp, PROFILE_DEFAULT_BLOCKS, PROFILE_DEFAULT_SENSORS, BLOCK_LABELS, GRAPH_DC_LABELS, GRAPH_SENSOR_DEFS,
   HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, downsamplePoints, normalizeGraphKey,
   formatPower, formatEnergy, formatVoltage, formatCurrent, formatTemp,
   formatUptime, formatApparentPower, formatReactivePower,
@@ -870,7 +870,10 @@ export class HADeviceDashboard extends LitElement {
     if (devSel !== undefined) return devSel;
     const areaSel = device.area ? this._config.area_styles?.[device.area]?.sensors : undefined;
     if (areaSel !== undefined) return areaSel;
-    return this._config.sensors;
+    if (this._config.sensors !== undefined) return this._config.sensors;
+    // Lowest priority: curated per-profile default chips. Undefined here (e.g.
+    // 'generic') means "show all", preserving the previous behaviour.
+    return PROFILE_DEFAULT_SENSORS[this._profile(device).type];
   }
 
   private _getSensors(device: HADevice, ignoreSelection = false): SensorChip[] {

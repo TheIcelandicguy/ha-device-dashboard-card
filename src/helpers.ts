@@ -167,6 +167,60 @@ export const PROFILE_DEFAULT_BLOCKS: Record<DeviceProfile, TileBlockId[]> = {
   generic:      ['name_row', 'sensors', 'virtual_controls', 'badges'],
 };
 
+/**
+ * Shelly model → profile registry. HA gives us the model string (unambiguous),
+ * so this fixes the cases entity-signature detection gets wrong (1PM/2PM read as
+ * "plug", i4-with-relay, sensor-only devices). First match wins; order matters
+ * (specific before generic). Only applied to Shelly devices, and only to refine
+ * the "weak" entity-signature cluster — strong signals (cover/climate/valve/
+ * light/wall_display) always win, since they reflect the device's actual config.
+ */
+export const SHELLY_MODELS: Array<{ match: RegExp; profile: DeviceProfile }> = [
+  { match: /wall\s*display/i,                              profile: 'wall_display' },
+  { match: /\btrv\b/i,                                     profile: 'climate' },
+  { match: /smoke|flood|motion|door.?\/?\s?window|\bh\s?&\s?t\b/i, profile: 'sensor' },
+  { match: /button/i,                                      profile: 'input' },
+  { match: /\bi[34]\b/i,                                   profile: 'input' },
+  { match: /valve/i,                                       profile: 'valve' },
+  { match: /rgbw/i,                                        profile: 'rgb' },
+  { match: /dimmer/i,                                      profile: 'dimmer' },
+  { match: /plug/i,                                        profile: 'plug' },
+  { match: /\b3?em\b/i,                                    profile: 'energy' },
+  { match: /\buni\b/i,                                     profile: 'uni' },
+  { match: /\b[12]pm\b|\bpro\b|\bshelly\s*(plus\s*)?[12](\.5|l)?\b|\b[12]l\b/i, profile: 'relay' },
+];
+
+/** Match a Shelly model string to a profile, or undefined if unknown. */
+export function matchShellyModel(model: string | undefined): DeviceProfile | undefined {
+  if (!model) return undefined;
+  for (const m of SHELLY_MODELS) if (m.match.test(model)) return m.profile;
+  return undefined;
+}
+
+/**
+ * Curated default sensor chips per profile — the lowest-priority layer under the
+ * user's device/area/global `sensors`. With no override, a tile shows only these
+ * (if present) instead of every detected chip, so relays show power/energy, a
+ * smoke sensor shows smoke+battery, etc. Diagnostics (rssi/ip/fw/uptime/cloud)
+ * are hidden by default. A profile absent here = "show all" (no opinion).
+ */
+export const PROFILE_DEFAULT_SENSORS: Partial<Record<DeviceProfile, string[]>> = {
+  relay:        ['power', 'energy', 'voltage', 'current', 'temperature', 'overtemp', 'overpower'],
+  plug:         ['power', 'energy', 'voltage', 'current', 'overtemp', 'overpower'],
+  energy:       ['power', 'energy', 'voltage', 'current', 'apparent_power', 'power_factor', 'frequency'],
+  dimmer:       ['power', 'energy', 'temperature', 'overtemp'],
+  rgb:          ['power', 'energy'],
+  cover:        ['power', 'energy', 'temperature'],
+  climate:      ['temperature', 'humidity', 'battery'],
+  wall_display: ['temperature', 'humidity', 'illuminance'],
+  valve:        ['temperature'],
+  sensor:       ['temperature', 'humidity', 'illuminance', 'co2', 'gas', 'battery',
+                 'motion', 'door', 'flood', 'smoke', 'vibration'],
+  input:        ['battery'],
+  uni:          ['temperature', 'battery'],
+  // 'generic' omitted → show all
+};
+
 /** Human labels for tile blocks — used by the detail-dialog Customize panel. */
 export const BLOCK_LABELS: Record<TileBlockId, string> = {
   name_row:         'Name & toggle',
@@ -260,6 +314,17 @@ export function getDeviceProfile(device: HADevice): DeviceProfileResult {
     if (hasPower) type = 'energy';
     else if (hasInputBS && !hasEnvSensor && !hasAlertBS) type = 'input';
     else type = 'sensor';
+  }
+
+  // ── Model refinement (Shelly) ────────────────────────────────────────────────
+  // The model string is unambiguous, so use it to reclassify the "weak"
+  // entity-signature cluster (fixes 1PM/2PM read as plug, i4 as sensor, etc.).
+  // Strong entity signals (cover/climate/valve/dimmer/rgb/wall_display) reflect
+  // the device's actual configuration and are left untouched.
+  const WEAK_TYPES = new Set<DeviceProfile>(['relay', 'plug', 'energy', 'sensor', 'input', 'uni', 'generic']);
+  if (device.isShelly && WEAK_TYPES.has(type)) {
+    const modelType = matchShellyModel(device.model);
+    if (modelType) type = modelType;
   }
 
   // ── Generation (Shelly only) ─────────────────────────────────────────────────
