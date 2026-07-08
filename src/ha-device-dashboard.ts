@@ -1,4 +1,4 @@
-import { LitElement, html, svg, unsafeCSS, TemplateResult, nothing } from 'lit';
+import { LitElement, html, svg, css, unsafeCSS, TemplateResult, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { styleMap } from 'lit/directives/style-map.js';
 import { repeat } from 'lit/directives/repeat.js';
@@ -195,6 +195,25 @@ export class HADeviceDashboard extends LitElement {
     super.connectedCallback();
     this._loadActiveView();
     this._loadCustomizations();
+  }
+
+  firstUpdated(): void {
+    // When rendered inside HA's edit-dialog live preview, mark the host so the
+    // stylesheet can cap our height on mobile — the full dashboard would
+    // otherwise dominate the stacked (form-over-preview) edit dialog.
+    try {
+      let node: Node | null = this;
+      const seen = new Set<Node>();
+      for (let i = 0; node && !seen.has(node) && i < 60; i++) {
+        seen.add(node);
+        const ln = node instanceof Element ? node.localName : '';
+        if (ln === 'hui-card-preview' || ln === 'hui-dialog-edit-card') {
+          this.setAttribute('data-edit-preview', '');
+          break;
+        }
+        node = node.parentNode ?? (node.getRootNode() as ShadowRoot).host ?? null;
+      }
+    } catch { /* ignore */ }
   }
 
   disconnectedCallback() {
@@ -2787,6 +2806,20 @@ export class HADeviceDashboard extends LitElement {
     mainCss,
     tilesCss,
     detailCss,
+    // In HA's edit-dialog live preview on a narrow (mobile) viewport, cap our
+    // height so the full dashboard doesn't crowd out the config form. The user
+    // scrolls the preview box; on desktop (side-by-side) it's unaffected.
+    css`
+      @media (max-width: 600px) {
+        :host([data-edit-preview]) {
+          display: block;
+          max-height: 45vh;
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
+          border-radius: var(--sc-card-radius, 12px);
+        }
+      }
+    `,
   ];
 }
 
