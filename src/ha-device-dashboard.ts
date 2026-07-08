@@ -74,6 +74,9 @@ export class HADeviceDashboard extends LitElement {
   @state() private _tileShowGraphsOverride = new Map<string, boolean>();
   /** Which area's header-customise popover is open. */
   @state() private _areaCustomizeOpen: string | null = null;
+  /** Set once when this card is HA's edit-dialog live preview (data-edit-preview
+   *  on the host), so we can cap its height on mobile — see static styles. */
+  private _editPreviewChecked = false;
 
   // Tap-gesture tracking (not @state — no re-render needed)
   private _lpStart: { x: number; y: number } | null = null;
@@ -197,23 +200,29 @@ export class HADeviceDashboard extends LitElement {
     this._loadCustomizations();
   }
 
-  firstUpdated(): void {
-    // When rendered inside HA's edit-dialog live preview, mark the host so the
-    // stylesheet can cap our height on mobile — the full dashboard would
-    // otherwise dominate the stacked (form-over-preview) edit dialog.
+  protected willUpdate(): void {
+    // Detect HA's edit-dialog live PREVIEW PANE once (ancestors are stable) and
+    // flag the host with data-edit-preview. HA's mobile edit dialog stacks the
+    // config form over this pane, and the pane sizes to our content (height:
+    // max-content) — so we cap our height there (see static styles) to keep the
+    // preview from dominating, instead of pushing the whole (tall) dashboard.
+    if (this._editPreviewChecked || !this._config) return;
+    this._editPreviewChecked = true;
+    let inPrev = false;
     try {
       let node: Node | null = this;
       const seen = new Set<Node>();
       for (let i = 0; node && !seen.has(node) && i < 60; i++) {
         seen.add(node);
-        const ln = node instanceof Element ? node.localName : '';
-        if (ln === 'hui-card-preview' || ln === 'hui-dialog-edit-card') {
-          this.setAttribute('data-edit-preview', '');
-          break;
+        const el = node instanceof Element ? node : null;
+        const ln = el?.localName ?? '';
+        if (ln === 'hui-card-preview' || /element-preview/.test(String(el?.className || ''))) {
+          inPrev = true; break;
         }
         node = node.parentNode ?? (node.getRootNode() as ShadowRoot).host ?? null;
       }
     } catch { /* ignore */ }
+    this.toggleAttribute('data-edit-preview', inPrev);
   }
 
   disconnectedCallback() {
@@ -2726,7 +2735,7 @@ export class HADeviceDashboard extends LitElement {
       ? renderDetailSheet(this._buildTileCtx(detailDev, this._profile(detailDev), this._tileAccent(detailDev, detailDev.area ?? '')))
       : nothing;
 
-    return html`
+    const dashboard = html`
       <ha-card class=${(this._config.effects ?? false) ? '' : 'no-fx'} style=${styleMap(cardInlineStyles)} @click=${() => { if (this._cloudDetailOpen) this._cloudDetailOpen = null; }}>
         ${detailSheet}
         <div class="dash-header">
@@ -2781,6 +2790,8 @@ export class HADeviceDashboard extends LitElement {
         </div>
       </ha-card>
     `;
+
+    return dashboard;
   }
 
   /** Horizontal tab bar — rendered only when the card has ≥2 views. */
@@ -2806,17 +2817,18 @@ export class HADeviceDashboard extends LitElement {
     mainCss,
     tilesCss,
     detailCss,
-    // In HA's edit-dialog live preview on a narrow (mobile) viewport, cap our
-    // height so the full dashboard doesn't crowd out the config form. The user
-    // scrolls the preview box; on desktop (side-by-side) it's unaffected.
+    // In HA's edit dialog, its preview pane sizes to our content (height:
+    // max-content). On mobile the dialog stacks the form over the preview, so cap
+    // our height there and scroll internally — the live preview stays a bounded
+    // strip under the form instead of pushing the full-height dashboard. Desktop
+    // (side-by-side) is untouched.
     css`
       @media (max-width: 870px) {
         :host([data-edit-preview]) {
           display: block;
-          max-height: 38vh;
+          max-height: 35vh;
           overflow-y: auto;
           -webkit-overflow-scrolling: touch;
-          border-radius: var(--sc-card-radius, 12px);
         }
       }
     `,
