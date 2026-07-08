@@ -241,6 +241,8 @@ export type EntityAnimationType =
 export interface DeviceStyle {
   color?: string;             // accent colour override
   tile_layout?: TileBlockId[]; // per-device block order/visibility
+  /** Override the auto-detected device profile (categorisation). undefined = auto. */
+  profile?: DeviceProfile;
   /** Per-device tile style — overrides area tile_style */
   tile_style?: TileStyle;
   /** Sub-variant for power-monitor style */
@@ -334,6 +336,10 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   /** Global default tile style — lowest-priority in the cascade
    *  (device → area → view → this). Omit = 'default' (adaptive blocks). */
   tile_style?: TileStyle;
+  /** When true, tiles with no explicit style fall to a per-profile default style
+   *  (relay→power-monitor, dimmer→light-control, sensor→sensor-card, …) instead
+   *  of the adaptive 'default'. Off by default. */
+  smart_tile_styles?: boolean;
   /** Global default power-monitor variant, used when tile_style resolves to
    *  power-monitor and no closer scope sets one. */
   power_monitor_variant?: PowerMonitorVariant;

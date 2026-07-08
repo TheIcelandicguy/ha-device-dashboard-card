@@ -3,7 +3,7 @@ import { repeat } from 'lit/directives/repeat.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset } from './types';
-import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, normalizeGraphKey, migrateConfig } from './helpers';
+import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, applyThemePalette, detectTheme, type ThemePalette } from './themes';
 import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons';
 
@@ -1029,6 +1029,7 @@ export class HADeviceDashboardEditor extends LitElement {
   private _setDeviceStyle(deviceId: string, patch: Partial<{
     color: string | undefined;
     tile_layout: TileBlockId[] | undefined;
+    profile: DeviceProfile | undefined;
     tile_style: TileStyle | undefined;
     power_monitor_variant: PowerMonitorVariant | undefined;
     tile_icon: string | undefined;
@@ -1042,6 +1043,7 @@ export class HADeviceDashboardEditor extends LitElement {
     const next: Record<string, unknown> = { ...current, ...patch };
     if (next['color'] === undefined) delete next['color'];
     if (next['tile_layout'] === undefined) delete next['tile_layout'];
+    if (next['profile'] === undefined) delete next['profile'];
     if (next['tile_style'] === undefined) delete next['tile_style'];
     if (next['power_monitor_variant'] === undefined) delete next['power_monitor_variant'];
     if (next['tile_icon'] === undefined) delete next['tile_icon'];
@@ -1154,6 +1156,21 @@ export class HADeviceDashboardEditor extends LitElement {
 
     return html`
       <div class="dev-style-panel">
+        <div class="field" style="margin-bottom:6px">
+          <div class="field-lbl" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            Type
+            ${dev?.model ? html`<span class="dev-style-hint">${dev.model}</span>` : nothing}
+            ${devStyle.profile ? html`<button class="color-reset"
+              @click=${() => this._setDeviceStyle(deviceId, { profile: undefined })}>↺ auto</button>` : nothing}
+          </div>
+          <select class="inline-text" style="width:100%"
+            @change=${(e: Event) => { const v = (e.target as HTMLSelectElement).value;
+              this._setDeviceStyle(deviceId, { profile: v ? (v as DeviceProfile) : undefined }); }}>
+            <option value="" ?selected=${!devStyle.profile}>Auto${profile ? ` — detected: ${PROFILE_LABELS[profile.type] || profile.type || 'generic'}` : ''}</option>
+            ${(['relay','plug','dimmer','rgb','climate','cover','valve','energy','sensor','input','uni','wall_display','generic'] as DeviceProfile[]).map(p => html`
+              <option value=${p} ?selected=${devStyle.profile === p}>${PROFILE_LABELS[p] || p}</option>`)}
+          </select>
+        </div>
         ${stylePickerHtml}
         <div class="color-row">
           <span class="color-key">Accent colour</span>
@@ -2640,6 +2657,16 @@ export class HADeviceDashboardEditor extends LitElement {
               (v) => this._set('tile_style', v),
               (v) => this._set('power_monitor_variant', v),
             )}
+          </div>
+
+          <div class="dp-group">
+            <div class="dp-title" style="display:flex;align-items:center;justify-content:space-between">
+              <span>Smart tile styles</span>
+              <label class="sw"><input type="checkbox" .checked=${c.smart_tile_styles === true}
+                @change=${(e:Event)=>this._set('smart_tile_styles',(e.target as HTMLInputElement).checked || undefined)}>
+                <span class="sw-t"></span><span class="sw-b"></span></label>
+            </div>
+            <div class="dp-hint-inline">Auto-pick a layout per device type where you haven't set one — relay→power monitor, light→colour wheel, sensor→card.</div>
           </div>
 
           <div class="dp-group">

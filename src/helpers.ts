@@ -1,7 +1,7 @@
 import { HomeAssistant } from 'custom-card-helpers';
 import {
   HADevice, HAEntity, DeviceProfileResult, DeviceProfile, DeviceGen,
-  TileBlockId,
+  TileBlockId, TileStyle,
 } from './types';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -131,7 +131,7 @@ export function getAreaName(hass: HomeAssistant, areaId?: string): string | unde
 // ─── Profile engine ────────────────────────────────────────────────────────────
 
 /** Label shown on tile badge for each profile type */
-const PROFILE_LABELS: Record<DeviceProfile, string> = {
+export const PROFILE_LABELS: Record<DeviceProfile, string> = {
   relay:        'Relay',
   plug:         'Plug',
   dimmer:       'Dimmer',
@@ -145,6 +145,24 @@ const PROFILE_LABELS: Record<DeviceProfile, string> = {
   uni:          'UNI',
   wall_display: 'Display',
   generic:      '',
+};
+
+/**
+ * Per-profile default tile *style*, used only when `smart_tile_styles` is on and
+ * no closer scope sets a style. Profiles absent here fall to 'default'.
+ */
+export const PROFILE_DEFAULT_TILE_STYLE: Partial<Record<DeviceProfile, TileStyle>> = {
+  relay:        'power-monitor',
+  plug:         'power-monitor',
+  energy:       'power-monitor',
+  dimmer:       'light-control',
+  rgb:          'light-control',
+  climate:      'climate-control',
+  wall_display: 'climate-control',
+  cover:        'cover-control',
+  sensor:       'sensor-card',
+  input:        'scene-button',
+  // valve, uni, generic → 'default'
 };
 
 /**

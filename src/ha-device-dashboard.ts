@@ -22,7 +22,7 @@ import { renderBlockTile } from './tiles/block-tile';
 import { renderDetailSheet } from './detail/detail-sheet';
 import {
   getAllDevices, getDeviceProfile, migrateConfig,
-  getIntegrationLabel, isPrivateIp, PROFILE_DEFAULT_BLOCKS, PROFILE_DEFAULT_SENSORS, BLOCK_LABELS, GRAPH_DC_LABELS, GRAPH_SENSOR_DEFS,
+  getIntegrationLabel, isPrivateIp, PROFILE_DEFAULT_BLOCKS, PROFILE_DEFAULT_SENSORS, PROFILE_DEFAULT_TILE_STYLE, PROFILE_LABELS, BLOCK_LABELS, GRAPH_DC_LABELS, GRAPH_SENSOR_DEFS,
   HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, downsamplePoints, normalizeGraphKey,
   formatPower, formatEnergy, formatVoltage, formatCurrent, formatTemp,
   formatUptime, formatApparentPower, formatReactivePower,
@@ -293,7 +293,13 @@ export class HADeviceDashboard extends LitElement {
    *  for every tile on every render. Cache is cleared with the device list. */
   private _profile(device: HADevice): DeviceProfileResult {
     let p = this._profileCache.get(device.device_id);
-    if (!p) { p = getDeviceProfile(device); this._profileCache.set(device.device_id, p); }
+    if (!p) {
+      p = getDeviceProfile(device);
+      // Per-device profile override (editor "Type" dropdown) wins over detection.
+      const override = this._config.device_styles?.[device.device_id]?.profile;
+      if (override && override !== p.type) p = { ...p, type: override, label: PROFILE_LABELS[override] };
+      this._profileCache.set(device.device_id, p);
+    }
     return p;
   }
 
@@ -2369,8 +2375,10 @@ export class HADeviceDashboard extends LitElement {
     }
 
     // Priority: device tile_style → area tile_style → active view → global default
+    // → per-profile default (only when smart_tile_styles is enabled).
     const devStyle = this._config.device_styles?.[device.device_id];
-    const rawStyle = devStyle?.tile_style ?? areaTileStyle ?? activeView?.tile_style ?? this._config.tile_style;
+    const rawStyle = devStyle?.tile_style ?? areaTileStyle ?? activeView?.tile_style ?? this._config.tile_style
+      ?? (this._config.smart_tile_styles ? PROFILE_DEFAULT_TILE_STYLE[profile.type] : undefined);
 
     // Resolve variant — device → area → view → global default → legacy alias
     const areaVariant = this._config.area_styles?.[device.area ?? '']?.power_monitor_variant;
