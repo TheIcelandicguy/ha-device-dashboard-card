@@ -172,6 +172,7 @@ export class HADeviceDashboardEditor extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
   @state() private _config!: HADeviceDashboardConfig;
   @state() private _tab: string = 'devices';   // matches an EDITOR_LAYOUT tab id
+  @state() private _styleScope: 'device' | 'profile' = 'device';  // Device styling tab: this device vs all of type
   /** Editor-only preference (persisted in localStorage, never written to config):
    *  when false, power-user controls are hidden to keep the common path simple. */
   @state() private _advanced = false;
@@ -1071,6 +1072,27 @@ export class HADeviceDashboardEditor extends LitElement {
     this._set('device_styles', Object.keys(allStyles).length ? allStyles : undefined);
   }
 
+  /** Per-device-TYPE style writer ("All relays") — mirrors _setDeviceStyle but on
+   *  profile_styles[type]. A subset of DeviceStyle (no per-entity animations). */
+  private _setProfileStyle(profileType: DeviceProfile, patch: Partial<{
+    color: string | undefined;
+    tile_layout: TileBlockId[] | undefined;
+    tile_style: TileStyle | undefined;
+    power_monitor_variant: PowerMonitorVariant | undefined;
+    sensors: string[] | undefined;
+    show_graphs: boolean | undefined;
+    elements: Record<string, boolean> | undefined;
+  }>) {
+    const current = this._config.profile_styles?.[profileType] ?? {};
+    const next: Record<string, unknown> = { ...current, ...patch };
+    for (const k of ['color', 'tile_layout', 'tile_style', 'power_monitor_variant', 'sensors', 'show_graphs', 'elements']) {
+      if (next[k] === undefined) delete next[k];
+    }
+    const all: Record<string, unknown> = { ...(this._config.profile_styles ?? {}), [profileType]: next };
+    if (!Object.keys(next).length) delete all[profileType];
+    this._set('profile_styles', Object.keys(all).length ? all : undefined);
+  }
+
   /** Shared tile-style grid + power-monitor variant pills for the per-device and
    *  per-room style panels. Same options everywhere; callers wire the config scope
    *  via the onStyle/onVariant setters. `recommended` (device profile) only drives
@@ -1114,6 +1136,43 @@ export class HADeviceDashboardEditor extends LitElement {
     const areas = [...byArea.keys()].sort((a, b) => a.localeCompare(b));
     const sel = this._selectedDeviceId;
     const selDev = sel ? devices.find(d => d.device_id === sel) : null;
+    const profile = selDev ? getDeviceProfile(selDev) : null;
+    const scope = this._styleScope;
+    const typeCount = profile ? devices.filter(d => getDeviceProfile(d).type === profile.type).length : 0;
+    const profLabel = profile ? (PROFILE_LABELS[profile.type] || profile.type) : '';
+
+    const deviceScopeBody = (): TemplateResult => {
+      const ds = this._config.device_styles?.[sel!] ?? {};
+      const style = (ds.tile_style ?? (this._config.smart_tile_styles ? PROFILE_DEFAULT_TILE_STYLE[profile!.type] : undefined) ?? 'default') as TileStyle;
+      return html`
+        ${this._renderDeviceStylePanel(sel!)}
+        ${this._renderStyleElementToggles(style, ds.elements ?? {}, e => this._setDeviceStyle(sel!, { elements: e }))}`;
+    };
+    const profileScopeBody = (): TemplateResult => {
+      const ps = this._config.profile_styles?.[profile!.type] ?? {};
+      const style = (ps.tile_style ?? PROFILE_DEFAULT_TILE_STYLE[profile!.type] ?? 'default') as TileStyle;
+      return html`
+        <div class="hint" style="margin:2px 2px 10px">Applies to all ${typeCount} ${profLabel} device${typeCount !== 1 ? 's' : ''}. A per-device setting still overrides.</div>
+        <div class="dev-style-panel">
+          <div class="field" style="margin-bottom:4px">
+            <div class="field-lbl">Tile layout style</div>
+            ${this._renderTileStylePicker(
+              ps.tile_style, ps.power_monitor_variant ?? 'big-number', PROFILE_DEFAULT_TILE_STYLE[profile!.type],
+              v => this._setProfileStyle(profile!.type, { tile_style: v }),
+              v => this._setProfileStyle(profile!.type, { power_monitor_variant: v }))}
+          </div>
+          <div class="tog-row" style="border:none;padding:6px 0 0">
+            <div class="tog-lbl">Sparkline graphs</div>
+            <div class="pill-grp">
+              ${([['inherit', undefined], ['on', true], ['off', false]] as const).map(([lbl, val]) => html`
+                <span class="pill ${(ps.show_graphs ?? 'x') === (val ?? 'x') ? 'on' : ''}"
+                  @click=${() => this._setProfileStyle(profile!.type, { show_graphs: val })}>${lbl}</span>`)}
+            </div>
+          </div>
+          ${this._renderStyleElementToggles(style, ps.elements ?? {}, e => this._setProfileStyle(profile!.type, { elements: e }))}
+        </div>`;
+    };
+
     return html`
       <div class="dev-styling-tab">
         <div class="field" style="margin-bottom:8px">
@@ -1126,30 +1185,30 @@ export class HADeviceDashboardEditor extends LitElement {
             </optgroup>`)}
           </select>
         </div>
-        ${selDev ? html`
-          ${this._renderDeviceStylePanel(sel!)}
-          ${this._renderStyleElementToggles(sel!)}
-        ` : html`<div class="hint" style="margin:12px 2px">Pick a device above to style it. Changes apply to this device.</div>`}
+        ${selDev && profile ? html`
+          <div class="pill-grp" style="margin-bottom:10px">
+            <span class="pill ${scope === 'device' ? 'on' : ''}" @click=${() => { this._styleScope = 'device'; }}>This device</span>
+            <span class="pill ${scope === 'profile' ? 'on' : ''}" @click=${() => { this._styleScope = 'profile'; }}>All ${profLabel}${typeCount !== 1 ? 's' : ''} (${typeCount})</span>
+          </div>
+          ${scope === 'device' ? deviceScopeBody() : profileScopeBody()}
+        ` : html`<div class="hint" style="margin:12px 2px">Pick a device above to style it.</div>`}
       </div>`;
   }
 
-  /** Per-style element visibility toggles for the selected device (writes
-   *  device_styles[id].elements). Only shown for alt styles that expose elements. */
-  private _renderStyleElementToggles(deviceId: string): TemplateResult {
-    const dev = this._allDevices().find(d => d.device_id === deviceId);
-    if (!dev) return html``;
-    const devStyle: DeviceStyle = this._config.device_styles?.[deviceId] ?? {};
-    const profile = getDeviceProfile(dev);
-    const style: TileStyle = devStyle.tile_style
-      ?? (this._config.smart_tile_styles ? PROFILE_DEFAULT_TILE_STYLE[profile.type] : undefined)
-      ?? 'default';
+  /** Per-style element visibility toggles. `cur` is the current elements map for
+   *  the active scope; `apply` persists the next map (device or profile). Only
+   *  shown for alt styles that expose elements ('default' uses blocks). */
+  private _renderStyleElementToggles(
+    style: TileStyle,
+    cur: Record<string, boolean>,
+    apply: (elements: Record<string, boolean> | undefined) => void,
+  ): TemplateResult {
     const els = STYLE_ELEMENTS[style];
-    if (!els) return html``;   // 'default' style is built from blocks (edited above)
-    const cur = devStyle.elements ?? {};
+    if (!els) return html``;
     const setEl = (id: string, visible: boolean) => {
       const next = { ...cur };
       if (visible) delete next[id]; else next[id] = false;
-      this._setDeviceStyle(deviceId, { elements: Object.keys(next).length ? next : undefined });
+      apply(Object.keys(next).length ? next : undefined);
     };
     return html`
       <div class="field" style="margin-top:10px">
