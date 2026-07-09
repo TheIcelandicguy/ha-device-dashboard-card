@@ -1,0 +1,612 @@
+<title>Shelly Dashboard Card — Defaults & Editor Reference</title>
+<style>
+  :root{
+    --ground:#16130f; --panel:#1e1a17; --raised:#241f1b; --raised2:#33291f;
+    --line:rgba(255,244,232,0.09); --line-strong:rgba(255,244,232,0.16);
+    --tx:#ece5dc; --tx2:#b3a596; --tx3:#7e7265;
+    --accent:#c98a63; --hot:#f4601e;
+    --g-global:#6ea8fe; --g-view:#a78bfa; --g-area:#2dd4bf; --g-device:#dba25c; --g-local:#8a8072;
+    --ok:#93b384; --warn:#dba25c; --bad:#d47f62;
+    --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace;
+    --ui:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --sb:280px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--ground);color:var(--tx);font-family:var(--ui);
+    font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{color:var(--hot)}
+  h1,h2,h3{text-wrap:balance;margin:0}
+  .wrap{display:grid;grid-template-columns:var(--sb) 1fr;max-width:1500px;margin:0 auto;min-height:100vh}
+
+  /* ── Sidebar ── */
+  aside{position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;
+    background:var(--panel);border-right:1px solid var(--line);padding:26px 18px 40px}
+  .brand{display:flex;align-items:baseline;gap:9px;margin-bottom:4px}
+  .brand .orb{width:11px;height:11px;border-radius:50%;background:var(--hot);
+    box-shadow:0 0 12px var(--hot);flex:none;translate:0 -1px}
+  .brand b{font-size:16px;font-weight:650;letter-spacing:-.01em}
+  .brand-sub{color:var(--tx3);font-size:11.5px;font-family:var(--mono);margin:0 0 22px 20px;letter-spacing:.02em}
+  nav a{display:block;color:var(--tx2);font-size:13.5px;padding:6px 10px;border-radius:7px;
+    border-left:2px solid transparent;transition:background .12s,color .12s}
+  nav a:hover{background:var(--raised);color:var(--tx)}
+  nav a.active{color:var(--tx);border-left-color:var(--hot);background:var(--raised)}
+  nav .grp{color:var(--tx3);font-size:10.5px;text-transform:uppercase;letter-spacing:.14em;
+    font-weight:600;margin:22px 10px 7px}
+  nav .grp:first-of-type{margin-top:6px}
+  nav a .ct{float:right;color:var(--tx3);font-family:var(--mono);font-size:11px;font-variant-numeric:tabular-nums}
+
+  /* ── Main ── */
+  main{padding:0 46px 120px;min-width:0}
+  header.top{padding:44px 0 26px;border-bottom:1px solid var(--line);margin-bottom:8px}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--accent);margin-bottom:14px}
+  h1{font-size:38px;font-weight:680;letter-spacing:-.022em;line-height:1.05}
+  header.top p{color:var(--tx2);max-width:64ch;margin:16px 0 0;font-size:15.5px}
+
+  /* cascade strip */
+  .cascade{display:flex;align-items:stretch;gap:0;flex-wrap:wrap;margin:26px 0 4px;
+    border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel)}
+  .cascade .step{flex:1 1 0;min-width:118px;padding:13px 15px;border-right:1px solid var(--line);position:relative}
+  .cascade .step:last-child{border-right:none}
+  .cascade .n{font-family:var(--mono);font-size:10.5px;color:var(--tx3)}
+  .cascade .s{font-weight:620;font-size:14px;margin-top:3px;display:flex;align-items:center;gap:7px}
+  .cascade .s .dot{width:8px;height:8px;border-radius:50%;flex:none}
+  .cascade .d{color:var(--tx3);font-size:11.5px;margin-top:3px;font-family:var(--mono)}
+  .cascade .arrow{color:var(--tx3);align-self:center;padding:0 2px}
+
+  /* toolbar */
+  .toolbar{position:sticky;top:0;z-index:20;background:linear-gradient(var(--ground) 72%,transparent);
+    padding:20px 0 14px;margin-bottom:4px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+  .search{flex:1 1 320px;position:relative;min-width:240px}
+  .search input{width:100%;background:var(--panel);border:1px solid var(--line-strong);color:var(--tx);
+    font-family:var(--ui);font-size:14px;padding:10px 14px 10px 38px;border-radius:9px;outline:none}
+  .search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(201,138,99,.15)}
+  .search svg{position:absolute;left:12px;top:11px;width:16px;height:16px;stroke:var(--tx3)}
+  .legend{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+  .filterhint{color:var(--tx3);font-size:12px;font-family:var(--mono)}
+
+  /* scope pills */
+  .scope{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;
+    padding:3px 9px 3px 8px;border-radius:20px;white-space:nowrap;cursor:default;
+    border:1px solid transparent;font-family:var(--mono)}
+  .scope .dot{width:7px;height:7px;border-radius:50%;flex:none}
+  .scope[data-s="global"]{color:var(--g-global);background:rgba(110,168,254,.10);border-color:rgba(110,168,254,.25)}
+  .scope[data-s="global"] .dot{background:var(--g-global)}
+  .scope[data-s="view"]{color:var(--g-view);background:rgba(167,139,250,.10);border-color:rgba(167,139,250,.25)}
+  .scope[data-s="view"] .dot{background:var(--g-view)}
+  .scope[data-s="area"]{color:var(--g-area);background:rgba(45,212,191,.10);border-color:rgba(45,212,191,.25)}
+  .scope[data-s="area"] .dot{background:var(--g-area)}
+  .scope[data-s="device"]{color:var(--g-device);background:rgba(219,162,92,.12);border-color:rgba(219,162,92,.28)}
+  .scope[data-s="device"] .dot{background:var(--g-device)}
+  .scope[data-s="local"]{color:var(--g-local);background:rgba(138,128,114,.12);border-color:rgba(138,128,114,.28)}
+  .scope[data-s="local"] .dot{background:var(--g-local)}
+  button.legpill{cursor:pointer;font-family:var(--ui)}
+  button.legpill.off{opacity:.32}
+
+  /* sections */
+  section{padding-top:38px;scroll-margin-top:74px}
+  .sec-h{display:flex;align-items:center;gap:13px;margin-bottom:6px}
+  .sec-h .icon{width:30px;height:30px;border-radius:8px;background:var(--raised);border:1px solid var(--line);
+    display:grid;place-items:center;font-size:15px;flex:none;color:var(--accent)}
+  h2{font-size:23px;font-weight:660;letter-spacing:-.015em}
+  .sec-note{color:var(--tx2);font-size:14px;margin:2px 0 18px;max-width:76ch}
+  .subsec{color:var(--accent);font-family:var(--mono);font-size:12px;letter-spacing:.05em;
+    text-transform:uppercase;margin:24px 0 9px;font-weight:600;display:flex;align-items:center;gap:9px}
+  .subsec::after{content:"";height:1px;flex:1;background:var(--line)}
+
+  /* tables */
+  .tbl-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:11px;background:var(--panel)}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:640px}
+  thead th{position:sticky;top:0;background:var(--raised);text-align:left;font-weight:600;
+    color:var(--tx2);font-size:11px;text-transform:uppercase;letter-spacing:.07em;
+    padding:10px 14px;border-bottom:1px solid var(--line-strong);white-space:nowrap;z-index:1}
+  tbody td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:var(--raised)}
+  .c-ctrl{font-weight:600;color:var(--tx);white-space:nowrap}
+  .c-fn{color:var(--tx2);min-width:220px}
+  .key{font-family:var(--mono);font-size:12px;color:var(--accent);background:rgba(201,138,99,.09);
+    padding:1.5px 6px;border-radius:5px;white-space:nowrap;border:1px solid rgba(201,138,99,.16)}
+  .key.none{color:var(--tx3);background:transparent;border-color:transparent;padding-left:0}
+  .c-def{font-family:var(--mono);font-size:12px;color:var(--tx2);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .adv{display:inline-block;font-size:10px;font-weight:700;font-family:var(--mono);color:var(--warn);
+    border:1px solid rgba(219,162,92,.4);border-radius:4px;padding:1px 5px;letter-spacing:.04em}
+  .badge-cnt{font-family:var(--mono);font-size:11px;color:var(--tx3);font-weight:500;
+    border:1px solid var(--line);border-radius:20px;padding:2px 9px;font-variant-numeric:tabular-nums}
+  .noresult{color:var(--tx3);font-family:var(--mono);font-size:13px;padding:20px 4px;display:none}
+
+  /* profile + theme cards */
+  .prof-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:15px 16px}
+  .card .ph{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}
+  .card .pn{font-weight:660;font-size:15px}
+  .card .badge-lbl{font-family:var(--mono);font-size:11px;color:var(--ground);background:var(--accent);
+    padding:2px 8px;border-radius:5px;font-weight:600}
+  .card .row{display:flex;gap:8px;font-size:12.5px;margin-top:6px}
+  .card .row .k{color:var(--tx3);flex:none;width:74px;font-family:var(--mono);font-size:11px;padding-top:1px}
+  .chips{display:flex;flex-wrap:wrap;gap:4px}
+  .chip{font-size:11px;font-family:var(--mono);color:var(--tx2);background:var(--raised);
+    border:1px solid var(--line);border-radius:5px;padding:1.5px 6px}
+  .style-tag{font-family:var(--mono);font-size:11.5px;color:var(--g-device)}
+
+  .theme-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+  .theme{border:1px solid var(--line);border-radius:11px;overflow:hidden;background:var(--panel)}
+  .theme .sw{height:60px;display:flex}
+  .theme .sw i{flex:1}
+  .theme .tb{padding:11px 14px}
+  .theme .tn{font-weight:640;font-size:14.5px;display:flex;align-items:center;gap:7px}
+  .theme .star{color:var(--hot);font-size:12px}
+  .theme .tv{color:var(--tx3);font-size:12px;margin-top:3px;font-family:var(--mono)}
+  .theme .tv b{color:var(--tx2);font-weight:500}
+
+  .kv{display:grid;grid-template-columns:auto 1fr auto;gap:0;border:1px solid var(--line);
+    border-radius:11px;overflow:hidden;background:var(--panel)}
+  .kv .r{display:contents}
+  .kv .r>div{padding:10px 15px;border-bottom:1px solid var(--line)}
+  .kv .r:last-child>div{border-bottom:none}
+  .kv .kk{font-weight:600;white-space:nowrap}
+  .kv .vv{color:var(--tx2)}
+  .kv .src{color:var(--tx3);font-family:var(--mono);font-size:11.5px;text-align:right;white-space:nowrap}
+  .kv .r:hover>div{background:var(--raised)}
+
+  .foot{margin-top:60px;padding-top:22px;border-top:1px solid var(--line);color:var(--tx3);
+    font-size:12.5px;font-family:var(--mono)}
+
+  @media(max-width:960px){
+    .wrap{grid-template-columns:1fr}
+    aside{display:none}
+    main{padding:0 20px 80px}
+    h1{font-size:29px}
+  }
+</style>
+
+<div class="wrap">
+  <aside>
+    <div class="brand"><span class="orb"></span><b>Shelly Card</b></div>
+    <div class="brand-sub">defaults · editor map</div>
+    <nav id="nav"></nav>
+  </aside>
+
+  <main>
+    <header class="top">
+      <div class="eyebrow">custom:ha-device-dashboard</div>
+      <h1>Defaults &amp; Editor Reference</h1>
+      <p>Every setting the card ships with, and every control in its editor — what each one does,
+         the config key it writes, and the scope it applies at. This is the map we'll build the
+         drag-and-drop organizer on top of.</p>
+
+      <div class="cascade" id="cascade"></div>
+      <div class="filterhint" style="margin-top:8px">Resolution order — the first scope that sets a value wins; unset falls through to the per-profile default.</div>
+    </header>
+
+    <div class="toolbar">
+      <div class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="q" type="text" placeholder="Filter controls, config keys, defaults…  (e.g. tile_style, columns, graph)" autocomplete="off">
+      </div>
+      <div class="legend" id="legend"></div>
+    </div>
+
+    <div id="content"></div>
+
+    <div class="foot" id="foot"></div>
+  </main>
+</div>
+
+<script>
+/* ────────────────────────────────────────────────────────────────────────
+   DATA MODEL — the whole reference is data. This is the schema the future
+   drag-and-drop organizer will read/write.
+   ──────────────────────────────────────────────────────────────────────── */
+
+const SCOPES = {
+  global: {label:'Global',        desc:'card-wide default'},
+  view:   {label:'View',          desc:'per-view override'},
+  area:   {label:'Room',          desc:'per-area override'},
+  device: {label:'Device',        desc:'per-device override'},
+  local:  {label:'Viewer-local',  desc:'browser / editor state, not saved to YAML'},
+};
+
+const CASCADE = [
+  {n:'1', s:'Device',  scope:'device', d:'device_styles[id]'},
+  {n:'2', s:'Room',    scope:'area',   d:'area_styles[name]'},
+  {n:'3', s:'View',    scope:'view',   d:'views[i]'},
+  {n:'4', s:'Global',  scope:'global', d:'top-level config'},
+  {n:'5', s:'Profile', scope:'local',  d:'built-in default'},
+];
+
+/* First-run defaults — getStubConfig() writes only {type}; everything below is a runtime fallback */
+const FIRSTRUN = [
+  ['Theme','Warm Dusk — muted terracotta on warm charcoal','DEFAULT_THEME'],
+  ['Title','"Shelly"','title ?? \'Shelly\''],
+  ['Grouping','Auto — one collapsible section per HA area','_groupByArea'],
+  ['Columns','3','columns ?? 3'],
+  ['Tile size','Medium (md)','tile_size ?? \'md\''],
+  ['Sort order','By name (A→Z)','sort_by ?? \'name\''],
+  ['Tile style','Adaptive — per-profile block layout','rawStyle → \'default\''],
+  ['Smart tile styles','Off','smart_tile_styles unset'],
+  ['Header chips','Online · Offline · Power · Alerts','DEFAULT_HEADER_CHIPS'],
+  ['Graphs (sparklines)','On','show_graphs ?? true'],
+  ['Offline devices','Shown','hidden only if show_offline === false'],
+  ['Header orbs / effects','Off','effects ?? false'],
+  ['Buttons','Pill · filled · medium','\'pill\' / \'fill\' / \'md\''],
+  ['Name groups','None','name_groups unset'],
+  ['Views','Single implicit "All devices"','—'],
+];
+
+/* 13 device profiles */
+const PROFILES = [
+  ['relay','Relay','power-monitor','power, energy, voltage, current, temperature, overtemp, overpower'],
+  ['plug','Plug','power-monitor','power, energy, voltage, current, overtemp, overpower'],
+  ['energy','Energy','power-monitor','power, energy, voltage, current, apparent_power, power_factor, frequency'],
+  ['dimmer','Dimmer','light-control','power, energy, temperature, overtemp'],
+  ['rgb','RGB','light-control','power, energy'],
+  ['climate','TRV','climate-control','temperature, humidity, battery'],
+  ['wall_display','Display','climate-control','temperature, humidity, illuminance'],
+  ['cover','Roller','cover-control','power, energy, temperature'],
+  ['valve','Valve','default','temperature'],
+  ['sensor','Sensor','sensor-card','temperature, humidity, illuminance, co2, gas, battery, motion, door, flood, smoke, vibration'],
+  ['input','Input','scene-button','battery'],
+  ['uni','UNI','default','temperature, battery'],
+  ['generic','—','default','(show all — no opinion)'],
+];
+
+/* 7 themes — [key, label, accent, bg, header1, header2, blurb, isDefault] */
+const THEMES = [
+  ['warm_dusk','Warm Dusk','#c98a63','#1e1a17','#241f1b','#33291f','Subtle & warm',true],
+  ['dark_industrial','Dark Industrial','#f4601e','#1c1c1e','#1a1a2e','#0f3460','Shelly orange, industrial',false],
+  ['teal_terminal','Teal Terminal','#2dd4bf','#0b0f0e','#042f2e','#0b6157','Terminal vibe',false],
+  ['brutalist','Brutalist','#facc15','#000000','#000000','#171717','High-contrast flat',false],
+  ['frosted_light','Frosted Light','#0071e3','#f2f2f7','#e8eef7','#cfe0f5','Light theme',false],
+  ['nordic_warm','Nordic Warm','#d08770','#2e3440','#3b4252','#434c5e','Nord, warm aurora',false],
+  ['midnight_purple','Midnight Purple','#a78bfa','#0f0a1e','#1e1b4b','#4c1d95','Deep violet',false],
+];
+
+/* Editor tabs. Each control: [name, function, key, scope, default, advanced] */
+const TABS = [
+  {id:'devices', icon:'⌂', label:'Rooms & devices',
+   note:'Auto-lists your HA areas as collapsible sections. Toolbar sets card-wide sort/visibility; the ✎ panels drill into per-room and per-device overrides.',
+   groups:[
+    {name:'Rooms toolbar', rows:[
+      ['Sort','Device sort order for the whole card (Name / Power / Online)','sort_by','global','\'name\'',0],
+      ['Rooms — All','Show all rooms (clears the include-list)','areas → undefined','global','all shown',0],
+      ['Rooms — None','Hide all rooms (explicit empty list)','areas → []','global','all shown',0],
+      ['Show offline devices','Show or hide offline devices','show_offline','global','true',0],
+      ['Name-based groups','Comma-separated name prefixes; matches also appear under a synthetic section','name_groups','global','none',0],
+    ]},
+    {name:'Room row + device row', rows:[
+      ['Room include','Include / exclude this room (toggling all → undefined)','areas','global','all on',0],
+      ['Device visibility','Show / hide an individual device','hidden_devices','global','not hidden',0],
+      ['★ Favourite','Add / remove device from the Favourites section','favorites','global','not fav',0],
+      ['Room reset ↺','Clear this room\'s style block','area_styles[name] → del','area','—',0],
+      ['Device reset ↺','Clear this device\'s style block','device_styles[id] → del','device','—',0],
+      ['Edit ✎ / expand ▼','Open a style panel or device list (editor UI state)','none','local','collapsed',0],
+    ]},
+    {name:'Per-device style panel', rows:[
+      ['Type','Override auto-detected device profile','device_styles[id].profile','device','Auto',0],
+      ['Tile layout style','Pick tile render style (Default clears override)','device_styles[id].tile_style','device','\'default\'',0],
+      ['Power-monitor variant','Sub-variant when style = power-monitor','device_styles[id].power_monitor_variant','device','\'big-number\'',0],
+      ['Accent colour','Per-device accent colour','device_styles[id].color','device','#f4601e',0],
+      ['Tile icon ON','Animated icon shown while entity is ON','device_styles[id].tile_icon','device','none',1],
+      ['Tile icon OFF','Animated icon shown while entity is OFF','device_styles[id].tile_icon_off','device','falls back to ON',1],
+      ['Tile icon speed','Animation speed multiplier','device_styles[id].tile_icon_speed','device','1',1],
+      ['Show graphs','Per-device sparkline override (Inherit / On / Off)','device_styles[id].show_graphs','device','Inherit',0],
+      ['Visible blocks','Show / hide each tile block','device_styles[id].tile_layout','device','inherits global',0],
+      ['Sensor chips','Whitelist of sensor chips for this device','device_styles[id].sensors','device','inherit',0],
+      ['Entity animations','Per-entity ON/OFF icon + speed','device_styles[id].entity_animations[eid]','device','none / 1',1],
+      ['Hidden entities','Remove entities from the detail sheet list','hidden_entities','global','not hidden',1],
+      ['Clear device style','Delete the entire device-style block','device_styles[id] → del','device','—',0],
+    ]},
+    {name:'Per-room style panel', rows:[
+      ['Columns','Tile columns in this room','area_styles[name].columns','area','3',0],
+      ['Tile gap','Gap between tiles','area_styles[name].tileGap','area','10px',0],
+      ['Show graphs','Per-room sparkline override','area_styles[name].show_graphs','area','Inherit',0],
+      ['Tile background','Tile background colour','area_styles[name].tileBgColor','area','#1c1c1e',0],
+      ['Tile border','Tile border colour','area_styles[name].tileBorderColor','area','rgba(255,255,255,.07)',1],
+      ['Tile corner radius','Tile corner radius','area_styles[name].tileBorderRadius','area','12px',1],
+      ['Tile opacity','Tile opacity','area_styles[name].tileOpacity','area','100%',1],
+      ['Room block border','Border width of the room block','area_styles[name].borderWidth','area','1px',1],
+      ['Room block radius','Corner radius of the room block','area_styles[name].borderRadius','area','10px',1],
+      ['Header gradient start','Room header gradient start','area_styles[name].headerBgColor','area','#1a1a2e',1],
+      ['Header gradient end','Room header gradient end','area_styles[name].headerBgColor2','area','#0f3460',1],
+      ['Header text','Room header text colour','area_styles[name].textColor','area','#f4601e',1],
+      ['Header font size','Room header font size','area_styles[name].fontSize','area','12px',1],
+      ['Sensor chips','Whitelist of sensor chips for this room','area_styles[name].sensors','area','inherit',0],
+      ['Button shape / variant / size','ON/OFF button style for this room','area_styles[name].button*','area','pill / fill / md',1],
+    ]},
+   ]},
+
+  {id:'views', icon:'☰', label:'Views',
+   note:'Views are filtered tabs over the same devices. Each stores at views[i]. Filters are ANDed; empty means "all". Layout overrides fall through to the global defaults.',
+   groups:[
+    {name:'Views toolbar', rows:[
+      ['+ Add view','Append a new view (view_N / View N)','views[] append','global','—',0],
+      ['Default view','Which view loads first (view 0 → undefined)','default_view','global','first view',0],
+    ]},
+    {name:'Per-view card', rows:[
+      ['▲ / ▼ Move','Reorder this view','views[] reorder','view','—',0],
+      ['🗑 Delete','Remove the view (clears default_view if it pointed here)','views[] remove','view','—',0],
+      ['ID','View id — URL / localStorage key','views[i].id','view','view_N',1],
+      ['Name (tab label)','Tab label text','views[i].name','view','View N',0],
+      ['Icon (mdi:*)','View tab icon','views[i].icon','view','none',0],
+      ['Show Favourites section','Enable the Favourites section on this view','views[i].show_favourites','view','off',0],
+      ['Group by room','Group devices by room (off → false)','views[i].show_rooms','view','on',0],
+    ]},
+    {name:'Per-view filters', rows:[
+      ['Profiles (+ All / None)','Allow-list of device profiles','views[i].filter.profiles','view','all',0],
+      ['Entity domains (+ All / None)','Allow-list of entity domains','views[i].filter.domains','view','all',1],
+      ['Areas (+ All / None)','Allow-list of room names','views[i].filter.areas','area','all',0],
+      ['Include specific devices','Whitelist individual devices','views[i].filter.devices','device','all',0],
+      ['Exclude devices','Blacklist individual devices','views[i].filter.exclude_devices','device','none',0],
+      ['Entity-ID regex','Regex matched against entity_ids (validated live)','views[i].filter.entity_id_pattern','view','none',1],
+    ]},
+    {name:'Per-view layout overrides', rows:[
+      ['Tile style','Override tile render style (Default → inherit)','views[i].tile_style','view','inherit',1],
+      ['Power-monitor variant','Sub-variant when style = power-monitor','views[i].power_monitor_variant','view','big-number',1],
+      ['Columns (+ ↺)','Override grid columns for this view','views[i].columns','view','inherit → 3',1],
+      ['Tile size','Override tile size (inherit clears)','views[i].tile_size','view','inherit',1],
+    ]},
+   ]},
+
+  {id:'layout', icon:'⊡', label:'Layout & Style',
+   note:'Card-wide look. Nearly everything writes into the global style object. Header & Tiles are basic; Card, Colours & Typography are advanced-only.',
+   groups:[
+    {name:'Header', rows:[
+      ['Card title','Header title text','title','global','none',0],
+      ['Header icon / emoji','Icon before the title','style.header_icon','global','none',0],
+      ['Show title','Show / hide the title','header_show_title','global','shown',0],
+      ['Show stats','Show / hide the online·power stats row','header_show_stats','global','shown',0],
+      ['Header chips (+ ↺)','Which stat chips appear','header_chips','global','online·offline·power·alerts',0],
+      ['Show cloud chips','Extra cloud status row','header_show_cloud','global','off',0],
+      ['Title size','Header title font size','style.header_title_size','global','1.1em',1],
+      ['Header height','Header vertical padding','style.header_padding','global','16px',1],
+      ['Corner radius','Header corner radius','style.header_radius','global','0px',1],
+      ['Bottom border + colour','Header bottom border width & colour','style.header_border_width / _color','global','0px / #4ade80',1],
+      ['Show glow orbs','Header glow orbs','header_show_orbs','global','off',1],
+      ['Ambient effects','Pulse / glow / blur effects','effects','global','off',1],
+      ['Background gradient','Header gradient start & end','style.header_bg / _bg2','global','#1a1a2e / #0f3460',1],
+      ['Text colour','Header text colour','style.header_text_color','global','#ffffff',1],
+      ['Orb / glow colour','Header orb colour','style.header_orb_color','global','#3b82f6',1],
+      ['Stat chip colours','Online / power / offline chip colours','style.header_stat_*','global','#4ade80 / #fb923c / #9ca3af',1],
+      ['Background opacity','Header background opacity','header_opacity','global','100%',1],
+    ]},
+    {name:'Tiles', rows:[
+      ['Columns','Grid column count (1–6)','columns','global','3',0],
+      ['Tile size','Small / Medium / Large','tile_size','global','md',0],
+      ['Tile gap','Gap between tiles','style.tile_gap','global','10px',0],
+      ['Tile radius','Tile corner radius','style.tile_radius','global','12px',0],
+      ['Block order','Drag-reorder / hide the tile content blocks','tile_layout','global','all visible',0],
+      ['Tile border width','Tile border width','style.tile_border_width','global','1px',1],
+      ['Tile shadow','None / Soft / Medium / Strong','style.tile_box_shadow','global','none',1],
+      ['Tile background image + fit','Upload/URL image + Cover/Contain/Stretch','style.tile_bg_image / _size','global','none / cover',1],
+      ['Tile colours','Background, border, hover, sensor-chip & expanded-panel colours','style.tile_bg / _border / _hover_* …','global','warm-dusk set',1],
+    ]},
+    {name:'Card', rows:[
+      ['Dashboard background','Overall card background colour','style.card_bg','global','#1e1a17',1],
+      ['Card corner radius','Card corner radius','style.card_radius','global','12px',1],
+      ['Card transparency','Card transparency (inverse of opacity)','card_opacity','global','100%',1],
+      ['Tiles transparency','Global tile transparency','tile_opacity','global','100%',1],
+      ['Card background image + fit','Upload/URL image + fit','card_bg_image / _size','global','none / cover',1],
+    ]},
+    {name:'Colours', rows:[
+      ['Accent / brand','Accent colour','style.accent_color','global','#c98a63',1],
+      ['Room header label','Area header label colour','style.area_header_color','global','#c98a63',1],
+      ['Text primary / secondary / muted','The three text tiers','style.text_primary / _secondary / _muted','global','#ece5dc / #b3a596 / #7e7265',1],
+      ['Status colours','Online dot / offline dot / power reading','style.online_color / offline_color / power_color','global','#93b384 / #d47f62 / #dba25c',1],
+    ]},
+    {name:'Typography', rows:[
+      ['Font family','System / Bundled / Display font','style.font_family','global','inherit',1],
+      ['Text scale','Global text size scale (0.8–1.3×)','style.text_size_scale','global','1×',1],
+    ]},
+   ]},
+
+  {id:'graphs', icon:'∿', label:'Graphs & Sensors',
+   note:'All global defaults — override per room/device elsewhere. Sensor chips write to one sensors array (empty = all shown). The ∿ button on a chip also adds it to the graph palette.',
+   groups:[
+    {name:'Graph type', rows:[
+      ['Show graphs on tiles','Master sparkline switch','show_graphs','global','on',0],
+      ['Type','Line / Area / Bar','graph_style.type','global','line',0],
+      ['History window','History look-back (1–168h)','graph_hours','global','24h',0],
+      ['Line thickness','Sparkline stroke width','graph_style.line_width','global','1.5px',1],
+      ['Fill area under line','Area fill beneath the line','graph_style.fill','global','on',1],
+      ['Graph height','Sparkline pixel height','graph_style.height','global','32px',1],
+      ['Show time axis labels','X-axis time labels','graph_style.time_labels','global','on',1],
+      ['Show peak / min dots','Peak & min marker dots','graph_style.show_dots','global','on',1],
+      ['Tick grid lines','Background tick grid','graph_style.tick_lines','global','on',1],
+    ]},
+    {name:'Graph colours', rows:[
+      ['Gauge ring colours','Per-sensor gauge colour (power/voltage/current/temp)','graph_sensor_colors[key]','global','#f4601e / #a78bfa / #fbbf24 / #4fc3f7',1],
+      ['Sparkline colours','Per-sensor sparkline colour (graphed sensors)','graph_sensor_colors[key]','global','per-sensor default',1],
+      ['Which sensors to graph','The graph palette (+ All / None)','graph_sensors','global','[] none',1],
+    ]},
+    {name:'Graph ranges', rows:[
+      ['Sensor Min / Max','Fixed y-axis scale per sensor (empty = auto)','graph_style.sensor_ranges[key]','global','auto',1],
+    ]},
+    {name:'Sensor chips — Electrical', rows:[
+      ['Select all / Deselect all','Toggle all electrical chips','sensors','global','all shown',0],
+      ['Power · Voltage · Current · Energy · Frequency · App. / React. Power · Power Factor','Toggle each electrical chip on tiles','sensors','global','all shown',0],
+    ]},
+    {name:'Sensor chips — Environmental', rows:[
+      ['Select all / Deselect all','Toggle all environmental chips','sensors','global','all shown',0],
+      ['Temperature · Humidity · Illuminance · CO₂ · Gas','Toggle each environmental chip','sensors','global','all shown',0],
+    ]},
+    {name:'Sensor chips — Device info', rows:[
+      ['Select all / Deselect all','Toggle all device-info chips','sensors','global','all shown',1],
+      ['Cloud · Wi-Fi RSSI · Uptime · IP · SSID · Battery · Firmware · MAC','Toggle each info chip','sensors','global','all shown',1],
+    ]},
+    {name:'Sensor chips — Alerts', rows:[
+      ['Select all / Deselect all','Toggle all alert chips','sensors','global','all shown',1],
+      ['Overtemp · Overpower · Motion · Door/Window · Flood · Smoke','Toggle each alert chip','sensors','global','all shown',1],
+    ]},
+   ]},
+
+  {id:'yaml', icon:'</>', label:'YAML',
+   note:'Read-only. Serialises the whole config to YAML with a Copy button — no editable textarea, so it never writes config.',
+   groups:[
+    {name:'YAML tab', rows:[
+      ['Copy','Copy the full generated config to the clipboard','reads whole config','local','—',0],
+      ['YAML output','Live read-only view of the entire config','whole config (display)','global','—',0],
+    ]},
+   ]},
+
+  {id:'defaults', icon:'◆', label:'Defaults panel',
+   note:'An overlay (◆ Defaults button) for the card\'s first-run look. All global. Theme presets write palette colours into style — there is no theme key; the active theme is derived from the colours.',
+   groups:[
+    {name:'Defaults panel', rows:[
+      ['Default view','Which view loads first','default_view','global','first view',0],
+      ['Colour theme','Apply one of 7 preset palettes over style','style.* (palette keys)','global','warm_dusk',0],
+      ['Saved theme ★','Restore your saved custom palette','style.* + localStorage','global','none',0],
+      ['Default tile style (+ ↺)','Global default tile layout style','tile_style','global','adaptive',0],
+      ['Power-monitor variant','Sub-variant for the default tile style','power_monitor_variant','global','big-number',0],
+      ['Smart tile styles','Auto-pick a layout per device type where none is set','smart_tile_styles','global','off',0],
+      ['Default columns','Default grid columns','columns','global','3',0],
+      ['Default tile size','Default tile size','tile_size','global','md',0],
+      ['More tile settings →','Jump to the Layout tab','none','local','—',0],
+    ]},
+    {name:'Section toolbar', rows:[
+      ['Advanced toggle','Reveal advanced controls across tabs (localStorage, per card)','none (localStorage)','local','off',0],
+      ['◆ Defaults button','Open / close the Defaults overlay','none','local','closed',0],
+    ]},
+   ]},
+];
+
+/* ────────────────────────────────────────────────────────────────────────
+   RENDER
+   ──────────────────────────────────────────────────────────────────────── */
+const el = (t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
+const scopePill = s => `<span class="scope" data-s="${s}" title="${SCOPES[s].desc}"><span class="dot"></span>${SCOPES[s].label}</span>`;
+const content = document.getElementById('content');
+
+/* cascade strip */
+const casc = document.getElementById('cascade');
+CASCADE.forEach((c,i)=>{
+  if(i) casc.appendChild(el('span','arrow','→'));
+  const st = el('div','step');
+  const col = getComputedStyle(document.documentElement).getPropertyValue('--g-'+c.scope);
+  st.innerHTML = `<div class="n">${c.n}</div><div class="s"><span class="dot" style="background:${col}"></span>${c.s}</div><div class="d">${c.d}</div>`;
+  casc.appendChild(st);
+});
+
+/* legend (clickable scope filters) */
+const legend = document.getElementById('legend');
+const activeScopes = new Set(Object.keys(SCOPES));
+Object.keys(SCOPES).forEach(s=>{
+  const b = el('button','legpill scope', `<span class="dot"></span>${SCOPES[s].label}`);
+  b.setAttribute('data-s',s); b.title=SCOPES[s].desc;
+  b.onclick=()=>{ b.classList.toggle('off'); if(activeScopes.has(s))activeScopes.delete(s);else activeScopes.add(s); applyFilter(); };
+  legend.appendChild(b);
+});
+
+/* nav */
+const nav = document.getElementById('nav');
+function navGroup(t){ nav.appendChild(el('div','grp',t)); }
+function navLink(id,label,count){
+  const a = el('a',null,`${label}${count!=null?`<span class="ct">${count}</span>`:''}`);
+  a.href='#'+id; a.dataset.target=id; nav.appendChild(a);
+}
+
+/* ── Reference sections ── */
+navGroup('Reference');
+
+// First-run
+let s = el('section'); s.id='firstrun';
+s.appendChild(el('div','sec-h','<span class="icon">◱</span><h2>First-run defaults</h2>'));
+s.appendChild(el('p','sec-note','A brand-new card writes only <span class="key">{ type: \'custom:ha-device-dashboard\' }</span> — everything here comes from a runtime fallback, so the card is fully usable with zero config.'));
+let kv = el('div','kv');
+FIRSTRUN.forEach(([k,v,src])=>{
+  const r=el('div','r'); r.innerHTML=`<div class="kk">${k}</div><div class="vv">${v}</div><div class="src">${src}</div>`; kv.appendChild(r);
+});
+s.appendChild(kv); content.appendChild(s); navLink('firstrun','First-run defaults');
+
+// Profiles
+s = el('section'); s.id='profiles';
+s.appendChild(el('div','sec-h','<span class="icon">◆</span><h2>Device profiles</h2>'));
+s.appendChild(el('p','sec-note','Every device is auto-classified into one of 13 profiles (by its entities, refined by Shelly model). The profile drives the badge, default sensor chips, block layout, and — when Smart tile styles is on — the tile style. Diagnostics (rssi, IP, firmware, uptime, cloud) are hidden by default on all profiles.'));
+let pg = el('div','prof-grid');
+PROFILES.forEach(([key,lbl,style,chips])=>{
+  const c=el('div','card');
+  const chipHtml = chips.split(', ').map(x=>`<span class="chip">${x}</span>`).join('');
+  c.innerHTML = `<div class="ph"><span class="pn">${key}</span>${lbl!=='—'?`<span class="badge-lbl">${lbl}</span>`:'<span class="chip">no badge</span>'}</div>
+    <div class="row"><span class="k">smart style</span><span class="style-tag">${style}</span></div>
+    <div class="row"><span class="k">chips</span><span class="chips">${chipHtml}</span></div>`;
+  pg.appendChild(c);
+});
+s.appendChild(pg); content.appendChild(s); navLink('profiles','Device profiles','13');
+
+// Themes
+s = el('section'); s.id='themes';
+s.appendChild(el('div','sec-h','<span class="icon">☾</span><h2>Themes</h2>'));
+s.appendChild(el('p','sec-note','Seven preset palettes. Applying one writes only colour keys into <span class="key">style</span> — there is no theme field; the active theme is derived from the colours. <b style="color:var(--tx2)">Warm Dusk</b> is the ship default (it matches the runtime CSS fallbacks).'));
+let tg = el('div','theme-grid');
+THEMES.forEach(([key,lbl,accent,bg,h1,h2,blurb,def])=>{
+  const t=el('div','theme');
+  t.innerHTML = `<div class="sw"><i style="background:${bg}"></i><i style="background:${h1}"></i><i style="background:${h2}"></i><i style="background:${accent}"></i></div>
+    <div class="tb"><div class="tn">${lbl}${def?'<span class="star">★ default</span>':''}</div>
+    <div class="tv">accent <b>${accent}</b> · ${blurb}</div></div>`;
+  tg.appendChild(t);
+});
+s.appendChild(tg); content.appendChild(s); navLink('themes','Themes','7');
+
+/* ── Editor sections ── */
+navGroup('Editor tabs');
+let grandTotal=0;
+TABS.forEach(tab=>{
+  const sec = el('section'); sec.id='tab-'+tab.id; sec.dataset.tab=tab.id;
+  let n=0; tab.groups.forEach(g=>n+=g.rows.length); grandTotal+=n;
+  sec.appendChild(el('div','sec-h',`<span class="icon">${tab.icon}</span><h2>${tab.label}</h2><span class="badge-cnt">${n} controls</span>`));
+  sec.appendChild(el('p','sec-note',tab.note));
+  tab.groups.forEach(g=>{
+    sec.appendChild(el('div','subsec',g.name));
+    const wrap = el('div','tbl-scroll');
+    let rows = g.rows.map(([ctrl,fn,key,scope,def,adv])=>{
+      const keyCls = (key==='none'||key.includes('display')||key.includes('reads'))?'key none':'key';
+      return `<tr data-scope="${scope}" data-text="${(ctrl+' '+fn+' '+key+' '+def).toLowerCase()}">
+        <td class="c-ctrl">${ctrl}${adv?' <span class="adv">ADV</span>':''}</td>
+        <td class="c-fn">${fn}</td>
+        <td><span class="${keyCls}">${key}</span></td>
+        <td>${scopePill(scope)}</td>
+        <td class="c-def">${def}</td></tr>`;
+    }).join('');
+    wrap.innerHTML = `<table><thead><tr><th>Control</th><th>Function</th><th>Config key</th><th>Scope</th><th>Default</th></tr></thead><tbody>${rows}</tbody></table>`;
+    sec.appendChild(wrap);
+  });
+  sec.appendChild(el('div','noresult','No controls match your filter in this tab.'));
+  content.appendChild(sec);
+  navLink('tab-'+tab.id, tab.label, n);
+});
+
+document.getElementById('foot').innerHTML =
+  `${grandTotal} editor controls across ${TABS.length} tabs · 13 profiles · 7 themes &nbsp;·&nbsp; generated from src/editor.ts, helpers.ts, themes.ts · branch smart-profiles`;
+
+/* ── Filter (search + scope toggles) ── */
+const q = document.getElementById('q');
+function applyFilter(){
+  const term = q.value.trim().toLowerCase();
+  document.querySelectorAll('#content section[data-tab]').forEach(sec=>{
+    let shown=0;
+    sec.querySelectorAll('tbody tr').forEach(tr=>{
+      const okScope = activeScopes.has(tr.dataset.scope);
+      const okText = !term || tr.dataset.text.includes(term);
+      const vis = okScope && okText; tr.style.display = vis?'':'none'; if(vis)shown++;
+    });
+    sec.querySelectorAll('.tbl-scroll').forEach(w=>{
+      const any=[...w.querySelectorAll('tbody tr')].some(tr=>tr.style.display!=='none');
+      w.style.display=any?'':'none';
+      const sub=w.previousElementSibling;
+      if(sub&&sub.classList.contains('subsec')) sub.style.display=any?'':'none';
+    });
+    sec.querySelector('.noresult').style.display = shown?'none':'block';
+  });
+}
+q.addEventListener('input',applyFilter);
+
+/* ── Scrollspy ── */
+const links=[...document.querySelectorAll('nav a')];
+const map=new Map(links.map(a=>[a.dataset.target,a]));
+const obs=new IntersectionObserver(es=>{
+  es.forEach(e=>{ if(e.isIntersecting){ links.forEach(l=>l.classList.remove('active')); const a=map.get(e.target.id); if(a)a.classList.add('active'); } });
+},{rootMargin:'-45% 0px -50% 0px'});
+document.querySelectorAll('#content section').forEach(sec=>obs.observe(sec));
+</script>

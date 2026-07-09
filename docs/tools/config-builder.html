@@ -1,0 +1,456 @@
+<title>Shelly Card — Default Config Builder</title>
+<style>
+  :root{
+    --ground:#16130f; --panel:#1e1a17; --raised:#241f1b; --raised2:#33291f;
+    --line:rgba(255,244,232,0.09); --line-strong:rgba(255,244,232,0.16);
+    --tx:#ece5dc; --tx2:#b3a596; --tx3:#7e7265;
+    --accent:#c98a63; --hot:#f4601e;
+    --ok:#93b384; --warn:#dba25c;
+    --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace;
+    --ui:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--tx);font-family:var(--ui);font-size:14.5px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  h1,h2,h3{margin:0;text-wrap:balance}
+  .app{display:grid;grid-template-columns:1fr 460px;max-width:1440px;margin:0 auto;min-height:100vh}
+
+  /* left — controls */
+  .controls{padding:34px 34px 90px;min-width:0;border-right:1px solid var(--line)}
+  .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:11px}
+  h1{font-size:27px;font-weight:680;letter-spacing:-.02em}
+  .lede{color:var(--tx2);max-width:60ch;margin:12px 0 4px;font-size:14px}
+
+  .grp{margin-top:30px}
+  .grp>.gh{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+  .grp>.gh .gn{font-size:12px;font-family:var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--accent);font-weight:600}
+  .grp>.gh .gl{height:1px;flex:1;background:var(--line)}
+
+  .row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px solid var(--line)}
+  .row:last-child{border-bottom:none}
+  .row .lbl{font-weight:560}
+  .row .lbl small{display:block;color:var(--tx3);font-weight:400;font-size:12px;margin-top:1px;font-family:var(--mono)}
+  .row .ctl{flex:none;display:flex;align-items:center;gap:7px}
+
+  input[type=text]{background:var(--raised);border:1px solid var(--line-strong);color:var(--tx);font-family:var(--ui);
+    font-size:13.5px;padding:7px 11px;border-radius:8px;outline:none;min-width:170px}
+  input[type=text]:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(201,138,99,.15)}
+
+  /* segmented */
+  .seg{display:inline-flex;background:var(--raised);border:1px solid var(--line);border-radius:9px;padding:2px}
+  .seg button{background:none;border:none;color:var(--tx2);font-family:var(--ui);font-size:13px;font-weight:560;
+    padding:5px 11px;border-radius:7px;cursor:pointer;white-space:nowrap}
+  .seg button.on{background:var(--accent);color:#1a1410}
+  .seg button:not(.on):hover{color:var(--tx)}
+
+  /* switch */
+  .sw{position:relative;width:40px;height:23px;flex:none;cursor:pointer}
+  .sw input{opacity:0;width:0;height:0;position:absolute}
+  .sw .tk{position:absolute;inset:0;background:var(--raised2);border:1px solid var(--line-strong);border-radius:20px;transition:.16s}
+  .sw .kn{position:absolute;top:3px;left:3px;width:15px;height:15px;border-radius:50%;background:var(--tx3);transition:.16s}
+  .sw input:checked+.tk{background:rgba(201,138,99,.30);border-color:var(--accent)}
+  .sw input:checked+.tk+.kn,.sw input:checked~.kn{transform:translateX(17px);background:var(--accent)}
+
+  .slider{display:flex;align-items:center;gap:11px}
+  .slider input[type=range]{accent-color:var(--accent);width:150px}
+  .slider .val{font-family:var(--mono);font-size:13px;color:var(--accent);width:38px;text-align:right;font-variant-numeric:tabular-nums}
+
+  /* theme grid */
+  .themes{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:9px}
+  .th{border:1.5px solid var(--line);border-radius:10px;overflow:hidden;cursor:pointer;background:var(--panel);transition:border-color .12s}
+  .th:hover{border-color:var(--line-strong)}
+  .th.on{border-color:var(--accent);box-shadow:0 0 0 2px rgba(201,138,99,.2)}
+  .th .sw2{height:34px;display:flex}
+  .th .sw2 i{flex:1}
+  .th .nm{padding:6px 9px;font-size:12px;font-weight:580;display:flex;align-items:center;gap:5px}
+  .th .nm .st{color:var(--hot);font-size:10px}
+
+  /* chips (sensors) */
+  .chiprow{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+  .chip{font-size:12px;font-family:var(--mono);color:var(--tx2);background:var(--raised);border:1px solid var(--line);
+    border-radius:6px;padding:4px 9px;cursor:pointer;user-select:none;transition:.12s}
+  .chip.on{color:#1a1410;background:var(--accent);border-color:var(--accent)}
+  .chip:not(.on){opacity:.5}
+  .chip:hover{opacity:1}
+  .grouplabel{font-size:11px;color:var(--tx3);font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;margin:12px 0 3px;display:flex;gap:8px;align-items:center}
+  .mini{font-size:11px;color:var(--accent);cursor:pointer;font-family:var(--ui);text-transform:none;letter-spacing:0}
+  .mini:hover{color:var(--hot)}
+
+  /* header chips DnD */
+  .dnd-lbl{font-size:12px;color:var(--tx3);font-family:var(--mono);margin:2px 0 7px}
+  .dndlist{display:flex;flex-wrap:wrap;gap:7px;min-height:42px;padding:8px;border:1px dashed var(--line-strong);border-radius:10px;background:var(--raised)}
+  .dndlist.empty::before{content:"drag chips here";color:var(--tx3);font-size:12px;font-family:var(--mono);align-self:center}
+  .dchip{display:inline-flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--line-strong);
+    border-radius:8px;padding:6px 8px 6px 10px;cursor:grab;font-size:13px;font-weight:560;user-select:none}
+  .dchip.drag{opacity:.4}
+  .dchip .gr{color:var(--tx3);font-family:var(--mono);letter-spacing:-2px}
+  .dchip .x{cursor:pointer;color:var(--tx3);width:16px;height:16px;display:grid;place-items:center;border-radius:4px;font-size:13px}
+  .dchip .x:hover{background:var(--raised2);color:var(--hot)}
+  .pool{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+  .pchip{font-size:12.5px;background:var(--raised);border:1px solid var(--line);border-radius:7px;padding:5px 9px;cursor:pointer;color:var(--tx2)}
+  .pchip:hover{border-color:var(--accent);color:var(--tx)}
+  .pchip::before{content:"+ ";color:var(--accent)}
+
+  /* right — preview + yaml */
+  .out{position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;background:var(--panel);padding:26px 26px 60px;display:flex;flex-direction:column;gap:20px}
+  .out h3{font-size:12px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--tx3);font-weight:600;margin-bottom:11px;display:flex;justify-content:space-between;align-items:center}
+  .badge-cnt{color:var(--accent);font-weight:600}
+
+  /* mock preview */
+  .mock{border-radius:12px;overflow:hidden;border:1px solid var(--line);background:var(--mp-card,#1e1a17)}
+  .mock .mh{padding:12px 14px;background:linear-gradient(120deg,var(--mp-h1,#241f1b),var(--mp-h2,#33291f));display:flex;flex-direction:column;gap:8px}
+  .mock .mtitle{font-weight:680;font-size:15px;color:var(--mp-htext,#f3ece3);display:flex;align-items:center;gap:7px}
+  .mock .mstats{display:flex;flex-wrap:wrap;gap:6px}
+  .mock .mstat{font-size:11px;font-family:var(--mono);padding:2px 8px;border-radius:20px;background:rgba(255,255,255,.06);color:var(--mp-htext,#f3ece3);display:flex;gap:5px;align-items:center}
+  .mock .mstat .d{width:6px;height:6px;border-radius:50%}
+  .mock .mgrid{display:grid;gap:var(--mp-gap,7px);padding:12px}
+  .mock .mtile{background:var(--mp-tile,rgba(255,244,232,.04));border:1px solid var(--mp-tb,rgba(255,244,232,.08));
+    border-radius:var(--mp-tr,10px);padding:9px 10px;min-height:56px}
+  .mock .mtn{font-size:11.5px;font-weight:580;color:var(--mp-text,#ece5dc);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mock .mtc{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+  .mock .mtc span{font-size:9.5px;font-family:var(--mono);color:var(--mp-text2,#b3a596);background:var(--mp-sbg,rgba(255,244,232,.045));border-radius:4px;padding:1px 5px}
+
+  pre{margin:0;background:var(--ground);border:1px solid var(--line);border-radius:10px;padding:14px 15px;
+    font-family:var(--mono);font-size:12.5px;line-height:1.65;color:var(--tx);overflow-x:auto;white-space:pre;tab-size:2}
+  .yk{color:var(--accent)} .yv{color:#93b384} .yn{color:#dba25c} .yb{color:#a78bfa} .yc{color:var(--tx3)}
+  .btns{display:flex;gap:9px}
+  .btn{flex:1;background:var(--accent);color:#1a1410;border:none;font-family:var(--ui);font-weight:640;font-size:13.5px;
+    padding:10px;border-radius:9px;cursor:pointer}
+  .btn.sec{background:var(--raised);color:var(--tx);border:1px solid var(--line-strong)}
+  .btn:hover{filter:brightness(1.06)}
+  .note{color:var(--tx3);font-size:11.5px;font-family:var(--mono);line-height:1.6}
+
+  .importbox{margin-top:18px;border:1px solid var(--line);border-radius:11px;background:var(--panel);overflow:hidden}
+  .importbox .ih{display:flex;align-items:center;gap:9px;padding:11px 14px;cursor:pointer;font-weight:560;font-size:13.5px;user-select:none}
+  .importbox .ih .tgl{color:var(--accent);transition:transform .15s;font-size:12px}
+  .importbox.open .ih .tgl{transform:rotate(90deg)}
+  .importbox .ih small{color:var(--tx3);font-weight:400;font-family:var(--mono);font-size:11.5px}
+  .importbox .ibody{padding:0 14px 14px;display:none;flex-direction:column;gap:10px}
+  .importbox.open .ibody{display:flex}
+  .importbox textarea{width:100%;min-height:120px;resize:vertical;background:var(--ground);border:1px solid var(--line-strong);
+    color:var(--tx);font-family:var(--mono);font-size:12.5px;line-height:1.5;padding:11px;border-radius:9px;outline:none}
+  .importbox textarea:focus{border-color:var(--accent)}
+  .importbox .irow{display:flex;align-items:center;gap:12px}
+  .importbox .irow .btn{flex:none;padding:8px 16px}
+  .impmsg{font-size:12px;font-family:var(--mono);line-height:1.5}
+  .impmsg.ok{color:var(--ok)} .impmsg.warn{color:var(--warn)} .impmsg.err{color:var(--hot)}
+
+  @media(max-width:1040px){ .app{grid-template-columns:1fr} .controls{border-right:none} .out{position:static;height:auto}}
+</style>
+
+<div class="app">
+  <div class="controls">
+    <div class="eyebrow">custom:ha-device-dashboard · default config builder</div>
+    <h1>Build your first-run defaults</h1>
+    <p class="lede">Set what the card ships with. The YAML on the right stays minimal — it only writes keys that differ from the built-in defaults, exactly like the editor does. Paste it as your card config.</p>
+
+    <div class="importbox" id="importbox">
+      <div class="ih" id="imph"><span class="tgl">▸</span>Import existing card YAML <small>— edit a config you already have</small></div>
+      <div class="ibody">
+        <textarea id="imp" placeholder="type: custom:ha-device-dashboard&#10;columns: 4&#10;theme keys under style: …&#10;&#10;Paste your current card config here."></textarea>
+        <div class="irow"><button class="btn" id="impgo">Load into builder</button><span class="impmsg" id="impmsg"></span></div>
+      </div>
+    </div>
+
+    <div id="panel"></div>
+  </div>
+
+  <div class="out">
+    <div>
+      <h3>Live preview</h3>
+      <div class="mock" id="mock"></div>
+    </div>
+    <div>
+      <h3>Card YAML <span class="badge-cnt" id="kcount"></span></h3>
+      <pre id="yaml"></pre>
+    </div>
+    <div class="btns">
+      <button class="btn" id="copy">Copy YAML</button>
+      <button class="btn sec" id="dl">Download</button>
+      <button class="btn sec" id="reset">Reset</button>
+    </div>
+    <div class="note" id="note"></div>
+  </div>
+</div>
+
+<script>
+/* ── data (subset of docs/card-reference.json — kept in sync) ── */
+const DEFAULTS = { theme:'warm_dusk', title:'Shelly', columns:3, tile_size:'md', sort_by:'name',
+  tile_style:null, power_monitor_variant:'big-number', smart_tile_styles:false, show_offline:true,
+  show_graphs:true, graph_hours:24, effects:false, header_show_title:true, header_show_stats:true,
+  header_show_cloud:false, header_show_orbs:false, header_chips:['online','offline','power','alerts'],
+  sensors:null, name_groups:null };
+
+const THEMES = [
+  ['warm_dusk','Warm Dusk',true,{accent_color:'#c98a63',card_bg:'#1e1a17',tile_bg:'rgba(255,244,232,0.035)',tile_border:'rgba(255,244,232,0.08)',tile_hover_bg:'rgba(255,244,232,0.06)',tile_hover_shadow:'rgba(0,0,0,0.35)',tile_sensor_bg:'rgba(255,244,232,0.045)',tile_exp_bg:'rgba(255,244,232,0.05)',text_primary:'#ece5dc',text_secondary:'#b3a596',text_muted:'#7e7265',header_bg:'#241f1b',header_bg2:'#33291f',header_text_color:'#f3ece3',header_orb_color:'#c98a63',online_color:'#93b384',offline_color:'#d47f62',power_color:'#dba25c',area_header_color:'#c98a63'}],
+  ['dark_industrial','Dark Industrial',false,{accent_color:'#f4601e',card_bg:'#1c1c1e',tile_bg:'rgba(255,255,255,0.04)',tile_border:'rgba(255,255,255,0.07)',tile_hover_bg:'rgba(255,255,255,0.07)',tile_hover_shadow:'rgba(0,0,0,0.30)',tile_sensor_bg:'rgba(255,255,255,0.04)',tile_exp_bg:'rgba(255,255,255,0.06)',text_primary:'#e5e7eb',text_secondary:'#9ca3af',text_muted:'#6b7280',header_bg:'#1a1a2e',header_bg2:'#0f3460',header_text_color:'#ffffff',header_orb_color:'#3b82f6',online_color:'#4ade80',offline_color:'#ef4444',power_color:'#fb923c',area_header_color:'#f4601e'}],
+  ['teal_terminal','Teal Terminal',false,{accent_color:'#2dd4bf',card_bg:'#0b0f0e',tile_bg:'#0f1917',tile_border:'#1e2b28',tile_hover_bg:'rgba(45,212,191,0.08)',tile_hover_shadow:'rgba(0,0,0,0.40)',tile_sensor_bg:'rgba(45,212,191,0.05)',tile_exp_bg:'rgba(45,212,191,0.07)',text_primary:'#d1fae5',text_secondary:'#6ee7b7',text_muted:'#4b5563',header_bg:'#042f2e',header_bg2:'#0b6157',header_text_color:'#ccfbf1',header_orb_color:'#2dd4bf',online_color:'#34d399',offline_color:'#f87171',power_color:'#fbbf24',area_header_color:'#2dd4bf'}],
+  ['brutalist','Brutalist',false,{accent_color:'#facc15',card_bg:'#000000',tile_bg:'#0a0a0a',tile_border:'#ffffff',tile_hover_bg:'rgba(255,255,255,0.12)',tile_hover_shadow:'rgba(250,204,21,0.25)',tile_sensor_bg:'rgba(255,255,255,0.06)',tile_exp_bg:'rgba(255,255,255,0.09)',text_primary:'#ffffff',text_secondary:'#d4d4d4',text_muted:'#a3a3a3',header_bg:'#000000',header_bg2:'#171717',header_text_color:'#facc15',header_orb_color:'#facc15',online_color:'#22c55e',offline_color:'#ef4444',power_color:'#facc15',area_header_color:'#ffffff'}],
+  ['frosted_light','Frosted Light',false,{accent_color:'#0071e3',card_bg:'#f2f2f7',tile_bg:'#ffffff',tile_border:'#d1d1d6',tile_hover_bg:'rgba(0,0,0,0.04)',tile_hover_shadow:'rgba(0,0,0,0.12)',tile_sensor_bg:'rgba(0,0,0,0.04)',tile_exp_bg:'rgba(0,0,0,0.05)',text_primary:'#1c1c1e',text_secondary:'#48484a',text_muted:'#8e8e93',header_bg:'#e8eef7',header_bg2:'#cfe0f5',header_text_color:'#1c1c1e',header_orb_color:'#0071e3',online_color:'#34c759',offline_color:'#ff3b30',power_color:'#ff9500',area_header_color:'#0071e3'}],
+  ['nordic_warm','Nordic Warm',false,{accent_color:'#d08770',card_bg:'#2e3440',tile_bg:'#3b4252',tile_border:'#434c5e',tile_hover_bg:'rgba(236,239,244,0.06)',tile_hover_shadow:'rgba(0,0,0,0.30)',tile_sensor_bg:'rgba(236,239,244,0.04)',tile_exp_bg:'rgba(236,239,244,0.06)',text_primary:'#eceff4',text_secondary:'#d8dee9',text_muted:'#9aa4b8',header_bg:'#3b4252',header_bg2:'#434c5e',header_text_color:'#eceff4',header_orb_color:'#ebcb8b',online_color:'#a3be8c',offline_color:'#bf616a',power_color:'#d08770',area_header_color:'#d08770'}],
+  ['midnight_purple','Midnight Purple',false,{accent_color:'#a78bfa',card_bg:'#0f0a1e',tile_bg:'#1a1030',tile_border:'#2e1f4d',tile_hover_bg:'rgba(167,139,250,0.10)',tile_hover_shadow:'rgba(0,0,0,0.45)',tile_sensor_bg:'rgba(167,139,250,0.06)',tile_exp_bg:'rgba(167,139,250,0.08)',text_primary:'#ede9fe',text_secondary:'#c4b5fd',text_muted:'#7c6ba8',header_bg:'#1e1b4b',header_bg2:'#4c1d95',header_text_color:'#ede9fe',header_orb_color:'#a78bfa',online_color:'#4ade80',offline_color:'#fb7185',power_color:'#c084fc',area_header_color:'#a78bfa'}],
+];
+const THEME_MAP = Object.fromEntries(THEMES.map(t=>[t[0],t[3]]));
+
+const HEADER_CHIPS = [['online','Online'],['offline','Offline'],['power','Power'],['energy','Energy'],
+  ['temperature','Temperature'],['humidity','Humidity'],['illuminance','Light'],['rssi','Wi-Fi'],['alerts','Alerts'],['updates','Updates']];
+const HC_LABEL = Object.fromEntries(HEADER_CHIPS);
+
+const SENSOR_GROUPS = {
+  Electrical: [['power','Power'],['voltage','Voltage'],['current','Current'],['energy','Energy'],['frequency','Frequency'],['apparent_power','App. Power'],['reactive_power','React. Power'],['power_factor','Power Factor']],
+  Environmental: [['temperature','Temperature'],['humidity','Humidity'],['illuminance','Illuminance'],['co2','CO₂'],['gas','Gas']],
+  'Device info': [['cloud','Cloud'],['rssi','RSSI'],['uptime','Uptime'],['ip','IP'],['ssid','SSID'],['battery','Battery'],['fw_version','Firmware'],['mac','MAC']],
+  Alerts: [['overtemp','Overtemp'],['overpower','Overpower'],['motion','Motion'],['door','Door'],['flood','Flood'],['smoke','Smoke']],
+};
+const ALL_SENSORS = Object.values(SENSOR_GROUPS).flat().map(x=>x[0]);
+const TILE_STYLES = [['','Adaptive'],['power-monitor','Power'],['light-control','Light'],['climate-control','Climate'],['cover-control','Cover'],['sensor-card','Sensor'],['scene-button','Scene']];
+const PM_VARIANTS = ['big-number','gauge','graph','compact','table'];
+
+/* ── state ── */
+let S;
+function fresh(){ return { theme:'warm_dusk', title:'', columns:3, tile_size:'md', sort_by:'name',
+  tile_style:'', power_monitor_variant:'big-number', smart_tile_styles:false, show_offline:true, show_graphs:true,
+  graph_hours:24, effects:false, header_show_title:true, header_show_stats:true, header_show_cloud:false,
+  header_show_orbs:false, header_chips:['online','offline','power','alerts'], sensors:[...ALL_SENSORS], name_groups:'' }; }
+S = fresh();
+
+const panel = document.getElementById('panel');
+const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
+
+/* control builders */
+function group(name){ const g=el('div','grp'); g.appendChild(el('div','gh',`<span class="gn">${name}</span><span class="gl"></span>`)); panel.appendChild(g); return g; }
+function rowEl(g,lbl,sub,ctl){ const r=el('div','row'); r.innerHTML=`<div class="lbl">${lbl}${sub?`<small>${sub}</small>`:''}</div>`; const c=el('div','ctl'); c.appendChild(ctl); r.appendChild(c); g.appendChild(r); return r; }
+function seg(opts,val,on){ const s=el('div','seg'); opts.forEach(([v,l])=>{const b=el('button',v===val?'on':'',l);b.onclick=()=>{on(v);};s.appendChild(b);}); return s; }
+function toggle(val,on){ const w=el('label','sw'); w.innerHTML=`<input type="checkbox" ${val?'checked':''}><span class="tk"></span><span class="kn"></span>`; w.querySelector('input').onchange=e=>on(e.target.checked); return w; }
+function slider(min,max,step,val,unit,on){ const w=el('div','slider'); w.innerHTML=`<input type="range" min="${min}" max="${max}" step="${step}" value="${val}"><span class="val">${val}${unit}</span>`; const i=w.querySelector('input'),v=w.querySelector('.val'); i.oninput=e=>{v.textContent=e.target.value+unit;on(+e.target.value);}; return w; }
+
+function render(){
+  panel.innerHTML='';
+
+  // LOOK
+  let g=group('Look');
+  const tg=el('div','themes');
+  THEMES.forEach(([k,l,def,pal])=>{
+    const t=el('div','th'+(S.theme===k?' on':'')); t.dataset.k=k;
+    t.innerHTML=`<div class="sw2"><i style="background:${pal.card_bg}"></i><i style="background:${pal.header_bg}"></i><i style="background:${pal.header_bg2}"></i><i style="background:${pal.accent_color}"></i></div><div class="nm">${l}${def?'<span class="st">★</span>':''}</div>`;
+    t.onclick=()=>{S.theme=k;render();sync();};
+    tg.appendChild(t);
+  });
+  g.appendChild(tg);
+  const ti=el('input'); ti.type='text'; ti.placeholder='Shelly'; ti.value=S.title; ti.oninput=e=>{S.title=e.target.value;sync();};
+  rowEl(g,'Card title','default: "Shelly"',ti);
+
+  // LAYOUT
+  g=group('Layout');
+  rowEl(g,'Columns','grid width',slider(1,6,1,S.columns,'',v=>{S.columns=v;sync();}));
+  rowEl(g,'Tile size','',seg([['sm','Small'],['md','Medium'],['lg','Large']],S.tile_size,v=>{S.tile_size=v;render();sync();}));
+  rowEl(g,'Default tile style','',seg(TILE_STYLES.map(([v,l])=>[v,l]),S.tile_style,v=>{S.tile_style=v;render();sync();}));
+  if(S.tile_style==='power-monitor')
+    rowEl(g,'Power-monitor variant','',seg(PM_VARIANTS.map(v=>[v,v]),S.power_monitor_variant,v=>{S.power_monitor_variant=v;sync();}));
+  rowEl(g,'Smart tile styles','auto-pick layout per device type',toggle(S.smart_tile_styles,v=>{S.smart_tile_styles=v;sync();}));
+
+  // HEADER
+  g=group('Header');
+  rowEl(g,'Show title','',toggle(S.header_show_title,v=>{S.header_show_title=v;render();sync();}));
+  rowEl(g,'Show stats row','',toggle(S.header_show_stats,v=>{S.header_show_stats=v;render();sync();}));
+  rowEl(g,'Cloud status row','',toggle(S.header_show_cloud,v=>{S.header_show_cloud=v;sync();}));
+  rowEl(g,'Glow orbs','',toggle(S.header_show_orbs,v=>{S.header_show_orbs=v;sync();}));
+  rowEl(g,'Ambient effects','pulse / glow / blur',toggle(S.effects,v=>{S.effects=v;sync();}));
+  // header chips DnD
+  const dwrap=el('div'); dwrap.style.marginTop='6px';
+  dwrap.innerHTML='<div class="dnd-lbl">Header chips — drag to reorder, × to remove</div>';
+  const list=el('div','dndlist'+(S.header_chips.length?'':' empty')); list.id='dndlist';
+  S.header_chips.forEach((k,idx)=>{
+    const c=el('div','dchip'); c.draggable=true; c.dataset.i=idx;
+    c.innerHTML=`<span class="gr">⠿</span>${HC_LABEL[k]||k}<span class="x" title="remove">×</span>`;
+    c.querySelector('.x').onclick=()=>{S.header_chips.splice(idx,1);render();sync();};
+    c.addEventListener('dragstart',e=>{drag=idx;c.classList.add('drag');e.dataTransfer.effectAllowed='move';});
+    c.addEventListener('dragend',()=>{c.classList.remove('drag');});
+    c.addEventListener('dragover',e=>{e.preventDefault();});
+    c.addEventListener('drop',e=>{e.preventDefault();if(drag==null||drag===idx)return;const m=S.header_chips.splice(drag,1)[0];S.header_chips.splice(idx,0,m);drag=null;render();sync();});
+    list.appendChild(c);
+  });
+  dwrap.appendChild(list);
+  const pool=el('div','pool');
+  HEADER_CHIPS.filter(([k])=>!S.header_chips.includes(k)).forEach(([k,l])=>{
+    const p=el('div','pchip',l); p.onclick=()=>{S.header_chips.push(k);render();sync();}; pool.appendChild(p);
+  });
+  dwrap.appendChild(pool);
+  g.appendChild(dwrap);
+
+  // BEHAVIOUR
+  g=group('Behaviour');
+  rowEl(g,'Sort devices by','',seg([['name','Name'],['power','Power'],['online','Online']],S.sort_by,v=>{S.sort_by=v;sync();}));
+  rowEl(g,'Show offline devices','',toggle(S.show_offline,v=>{S.show_offline=v;sync();}));
+  rowEl(g,'Sparkline graphs','',toggle(S.show_graphs,v=>{S.show_graphs=v;render();sync();}));
+  if(S.show_graphs) rowEl(g,'History window','hours of look-back',slider(1,168,1,S.graph_hours,'h',v=>{S.graph_hours=v;sync();}));
+  const ng=el('input'); ng.type='text'; ng.placeholder='e.g. Gólfhiti, Garden'; ng.value=S.name_groups; ng.oninput=e=>{S.name_groups=e.target.value;sync();};
+  rowEl(g,'Name-based groups','comma-separated name prefixes',ng);
+
+  // SENSOR CHIPS
+  g=group('Default sensor chips');
+  const info=el('div','note','Which sensor chips tiles show by default. All on = the card decides per profile; deselect to force a global set. Per-room / per-device overrides still win.');
+  info.style.marginBottom='4px'; g.appendChild(info);
+  Object.entries(SENSOR_GROUPS).forEach(([gn,list])=>{
+    const gl=el('div','grouplabel'); const allOn=list.every(([k])=>S.sensors.includes(k));
+    gl.innerHTML=`${gn} <span class="mini">${allOn?'clear':'all'}</span>`;
+    gl.querySelector('.mini').onclick=()=>{ if(allOn){S.sensors=S.sensors.filter(k=>!list.some(([lk])=>lk===k));} else {list.forEach(([k])=>{if(!S.sensors.includes(k))S.sensors.push(k);});} render();sync(); };
+    g.appendChild(gl);
+    const cr=el('div','chiprow');
+    list.forEach(([k,l])=>{ const on=S.sensors.includes(k); const c=el('div','chip'+(on?' on':''),l);
+      c.onclick=()=>{ if(on)S.sensors=S.sensors.filter(x=>x!==k); else S.sensors.push(k); render();sync(); }; cr.appendChild(c); });
+    g.appendChild(cr);
+  });
+}
+let drag=null;
+
+/* ── config emission (minimal — only non-defaults) ── */
+function buildConfig(){
+  const c={ type:'custom:ha-device-dashboard' };
+  if(S.title.trim() && S.title.trim()!=='Shelly') c.title=S.title.trim();
+  if(S.columns!==3) c.columns=S.columns;
+  if(S.tile_size!=='md') c.tile_size=S.tile_size;
+  if(S.tile_style){ c.tile_style=S.tile_style; if(S.tile_style==='power-monitor' && S.power_monitor_variant!=='big-number') c.power_monitor_variant=S.power_monitor_variant; }
+  if(S.smart_tile_styles) c.smart_tile_styles=true;
+  if(S.sort_by!=='name') c.sort_by=S.sort_by;
+  if(S.show_offline===false) c.show_offline=false;
+  if(S.show_graphs===false) c.show_graphs=false;
+  else if(S.graph_hours!==24) c.graph_hours=S.graph_hours;
+  if(S.effects) c.effects=true;
+  if(S.header_show_title===false) c.header_show_title=false;
+  if(S.header_show_stats===false) c.header_show_stats=false;
+  if(S.header_show_cloud) c.header_show_cloud=true;
+  if(S.header_show_orbs) c.header_show_orbs=true;
+  const hcDef=DEFAULTS.header_chips;
+  if(S.header_chips.length!==hcDef.length || S.header_chips.some((k,i)=>k!==hcDef[i])) c.header_chips=[...S.header_chips];
+  if(S.sensors.length!==ALL_SENSORS.length) c.sensors=[...S.sensors];
+  const ng=S.name_groups.split(',').map(s=>s.trim()).filter(Boolean);
+  if(ng.length) c.name_groups=ng;
+  if(S.theme!=='warm_dusk') c.style={...THEME_MAP[S.theme]};
+  return c;
+}
+
+/* ── YAML ── */
+function scalar(v){ if(typeof v==='boolean'||typeof v==='number')return String(v);
+  const s=String(v); if(/^[A-Za-z0-9_][\w .\/-]*$/.test(s)&&!/^(true|false|null|yes|no|on|off|~)$/i.test(s))return s;
+  return '"'+s.replace(/"/g,'\\"')+'"'; }
+function yaml(obj,ind){ ind=ind||0; const pad='  '.repeat(ind); let out='';
+  for(const [k,v] of Object.entries(obj)){
+    if(Array.isArray(v)){ if(!v.length){out+=`${pad}${k}: []\n`;continue;} out+=`${pad}${k}:\n`; v.forEach(x=>out+=`${pad}  - ${scalar(x)}\n`); }
+    else if(v&&typeof v==='object'){ out+=`${pad}${k}:\n`+yaml(v,ind+1); }
+    else out+=`${pad}${k}: ${scalar(v)}\n`;
+  } return out; }
+function hl(y){ return y.split('\n').map(line=>{
+  const m=line.match(/^(\s*)(- )?([\w]+):(.*)$/);
+  if(m){ const val=m[4].trim(); let vc='yv';
+    if(/^(true|false)$/.test(val))vc='yb'; else if(/^-?\d+(\.\d+)?$/.test(val))vc='yn'; else if(val==='')vc='yv';
+    return `${m[1]}${m[2]||''}<span class="yk">${m[3]}</span>:${m[4]?` <span class="${vc}">${m[4].trim().replace(/</g,'&lt;')}</span>`:''}`; }
+  const li=line.match(/^(\s*)- (.+)$/); if(li)return `${li[1]}- <span class="yv">${li[2].replace(/</g,'&lt;')}</span>`;
+  return line.replace(/</g,'&lt;'); }).join('\n'); }
+
+/* ── mock preview ── */
+function renderMock(){
+  const pal=THEME_MAP[S.theme], m=document.getElementById('mock');
+  m.style.cssText=`--mp-card:${pal.card_bg};--mp-h1:${pal.header_bg};--mp-h2:${pal.header_bg2};--mp-htext:${pal.header_text_color};--mp-tile:${pal.tile_bg};--mp-tb:${pal.tile_border};--mp-text:${pal.text_primary};--mp-text2:${pal.text_secondary};--mp-sbg:${pal.tile_sensor_bg};--mp-gap:${Math.max(4,Math.round(14-S.columns))}px;--mp-tr:10px`;
+  const statMap={online:['Online',pal.online_color,'12'],offline:['Offline',pal.offline_color,'1'],power:['Power',pal.power_color,'840 W'],energy:['Energy',pal.power_color,'6.2'],temperature:['Temp',pal.accent_color,'21°'],humidity:['Hum',pal.accent_color,'44%'],illuminance:['Light',pal.accent_color,'120'],rssi:['Wi-Fi',pal.accent_color,'−58'],alerts:['Alerts',pal.offline_color,'0'],updates:['Updates',pal.accent_color,'2']};
+  let head='';
+  if(S.header_show_title||S.header_show_stats){
+    head='<div class="mh">';
+    if(S.header_show_title) head+=`<div class="mtitle">${S.header_show_orbs?'<span style="width:9px;height:9px;border-radius:50%;background:'+pal.header_orb_color+';box-shadow:0 0 8px '+pal.header_orb_color+'"></span>':''}${(S.title.trim()||'Shelly')}</div>`;
+    if(S.header_show_stats){ head+='<div class="mstats">'; (S.header_chips.length?S.header_chips:['online']).forEach(k=>{const s=statMap[k]||[k,pal.accent_color,'–'];head+=`<span class="mstat"><span class="d" style="background:${s[1]}"></span>${s[0]} ${s[2]}</span>`;}); head+='</div>'; }
+    head+='</div>';
+  }
+  const tiles=[['Kitchen 2PM',['power','energy']],['Bedroom TRV',['temperature','humidity']],['Hall Motion',['motion','battery']],['Desk Plug',['power','voltage']],['Garage 1PM',['power','temperature']],['Attic H&T',['temperature','humidity']]];
+  const chipFor=names=>names.filter(k=>S.sensors.includes(k)).slice(0,3);
+  let grid=`<div class="mgrid" style="grid-template-columns:repeat(${S.columns},1fr)">`;
+  const n=Math.min(S.columns*2,6);
+  for(let i=0;i<n;i++){ const [nm,ch]=tiles[i%tiles.length]; const cs=chipFor(ch);
+    grid+=`<div class="mtile"><div class="mtn">${nm}</div>${cs.length?`<div class="mtc">${cs.map(x=>`<span>${x}</span>`).join('')}</div>`:''}</div>`; }
+  grid+='</div>';
+  m.innerHTML=head+grid;
+}
+
+/* ── sync ── */
+function sync(){
+  const cfg=buildConfig();
+  const y=yaml(cfg);
+  document.getElementById('yaml').innerHTML=hl(y);
+  const keys=Object.keys(cfg).length-1;
+  document.getElementById('kcount').textContent=keys?`${keys} override${keys>1?'s':''}`:'defaults only';
+  document.getElementById('note').textContent=keys?`${keys} key${keys>1?'s':''} differ from the built-in defaults. Everything else is inherited.`:'Matches the built-in defaults exactly — a bare card renders identically.';
+  renderMock();
+  window._cfgYaml=y;
+}
+
+document.getElementById('copy').onclick=()=>{navigator.clipboard.writeText('type: custom:ha-device-dashboard\n'+window._cfgYaml.split('\n').slice(1).join('\n')).then(()=>{const b=document.getElementById('copy');b.textContent='Copied ✓';setTimeout(()=>b.textContent='Copy YAML',1400);});};
+document.getElementById('dl').onclick=()=>{const blob=new Blob([window._cfgYaml],{type:'text/yaml'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='shelly-card.yaml';a.click();};
+document.getElementById('reset').onclick=()=>{S=fresh();render();sync();};
+
+/* ── import existing YAML ── */
+const MANAGED=['type','title','columns','tile_size','tile_style','power_monitor_variant','smart_tile_styles','sort_by','show_offline','show_graphs','graph_hours','effects','header_show_title','header_show_stats','header_show_cloud','header_show_orbs','header_chips','sensors','name_groups','style'];
+function parseScalar(s){ if(s==='')return '';
+  if((s[0]==='"'&&s.slice(-1)==='"')||(s[0]==="'"&&s.slice(-1)==="'"))return s.slice(1,-1);
+  if(s==='true')return true; if(s==='false')return false;
+  if(/^-?\d+$/.test(s))return parseInt(s,10); if(/^-?\d*\.\d+$/.test(s))return parseFloat(s); return s; }
+function parseYaml(text){
+  const out={}, lines=text.replace(/\t/g,'  ').split('\n'); let i=0;
+  while(i<lines.length){
+    const raw=lines[i], line=raw.trim();
+    if(!line||line.startsWith('#')){i++;continue;}
+    if(raw.match(/^ */)[0].length>0){i++;continue;}
+    const m=line.match(/^([\w]+):\s*(.*)$/); if(!m){i++;continue;}
+    const key=m[1], rest=m[2];
+    if(rest!==''){ out[key]=parseScalar(rest); i++; continue; }
+    let j=i+1; const kids=[];
+    while(j<lines.length){ const r=lines[j]; if(!r.trim()||r.trim().startsWith('#')){j++;continue;} if(r.match(/^ */)[0].length===0)break; kids.push(r.trim()); j++; }
+    if(kids.length&&kids[0].startsWith('- ')) out[key]=kids.filter(c=>c.startsWith('- ')).map(c=>parseScalar(c.slice(2).trim()));
+    else if(kids.length){ const o={}; kids.forEach(c=>{const mm=c.match(/^([\w]+):\s*(.*)$/);if(mm)o[mm[1]]=parseScalar(mm[2]);}); out[key]=o; }
+    else out[key]=null;
+    i=j;
+  }
+  return out;
+}
+function matchTheme(style){ for(const [k,,,pal] of THEMES){ if(style.accent_color===pal.accent_color) return k; } return null; }
+const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
+function applyConfig(c){
+  S=fresh();
+  if(typeof c.title==='string') S.title=c.title;
+  if(typeof c.columns==='number') S.columns=clamp(c.columns,1,6);
+  if(c.tile_size) S.tile_size=c.tile_size;
+  if(c.tile_style) S.tile_style=c.tile_style;
+  if(c.power_monitor_variant) S.power_monitor_variant=c.power_monitor_variant;
+  S.smart_tile_styles=c.smart_tile_styles===true;
+  if(c.sort_by) S.sort_by=c.sort_by;
+  S.show_offline=c.show_offline!==false;
+  S.show_graphs=c.show_graphs!==false;
+  if(typeof c.graph_hours==='number') S.graph_hours=clamp(c.graph_hours,1,168);
+  S.effects=c.effects===true;
+  S.header_show_title=c.header_show_title!==false;
+  S.header_show_stats=c.header_show_stats!==false;
+  S.header_show_cloud=c.header_show_cloud===true;
+  S.header_show_orbs=c.header_show_orbs===true;
+  if(Array.isArray(c.header_chips)) S.header_chips=c.header_chips.filter(k=>HC_LABEL[k]);
+  if(Array.isArray(c.sensors)) S.sensors=c.sensors.filter(k=>ALL_SENSORS.includes(k));
+  if(Array.isArray(c.name_groups)) S.name_groups=c.name_groups.join(', ');
+  else if(typeof c.name_groups==='string') S.name_groups=c.name_groups;
+  if(c.style&&typeof c.style==='object'){ const t=matchTheme(c.style); if(t) S.theme=t; }
+  render(); sync();
+  return Object.keys(c).filter(k=>!MANAGED.includes(k));
+}
+const imph=document.getElementById('imph'), ibox=document.getElementById('importbox');
+imph.onclick=()=>ibox.classList.toggle('open');
+document.getElementById('impgo').onclick=()=>{
+  const msg=document.getElementById('impmsg'), txt=document.getElementById('imp').value.trim();
+  if(!txt){ msg.className='impmsg err'; msg.textContent='Paste some YAML first.'; return; }
+  let cfg; try{ cfg=parseYaml(txt); }catch(e){ msg.className='impmsg err'; msg.textContent='Could not parse that YAML.'; return; }
+  if(cfg.type && String(cfg.type).indexOf('ha-device-dashboard')<0){ msg.className='impmsg warn'; msg.textContent='That doesn\'t look like an ha-device-dashboard card — loading anyway.'; }
+  const dropped=applyConfig(cfg);
+  const unknownTheme = cfg.style && typeof cfg.style==='object' && !matchTheme(cfg.style);
+  let parts=['Loaded ✓'];
+  if(dropped.length) parts.push(`${dropped.length} unmanaged key${dropped.length>1?'s':''} dropped: ${dropped.join(', ')}`);
+  if(unknownTheme) parts.push('custom colours didn\'t match a preset — kept Warm Dusk (re-pick a theme to overwrite)');
+  msg.className='impmsg '+((dropped.length||unknownTheme)?'warn':'ok');
+  msg.textContent=parts.join(' · ');
+};
+
+render(); sync();
+</script>

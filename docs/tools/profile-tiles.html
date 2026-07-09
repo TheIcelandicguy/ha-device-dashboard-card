@@ -1,0 +1,346 @@
+<title>Shelly Card — Per-Profile Tile Designer</title>
+<style>
+  :root{
+    --ground:#16130f; --panel:#1e1a17; --raised:#241f1b; --raised2:#33291f;
+    --line:rgba(255,244,232,0.09); --line-strong:rgba(255,244,232,0.16);
+    --tx:#ece5dc; --tx2:#b3a596; --tx3:#7e7265;
+    --accent:#c98a63; --hot:#f4601e; --ok:#93b384; --warn:#dba25c;
+    --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace;
+    --ui:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--tx);font-family:var(--ui);font-size:14.5px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  h1,h2,h3{margin:0;text-wrap:balance}
+  .app{display:grid;grid-template-columns:212px 1fr 430px;max-width:1560px;margin:0 auto;min-height:100vh}
+
+  /* profile rail */
+  .rail{background:var(--panel);border-right:1px solid var(--line);padding:22px 12px 60px;position:sticky;top:0;height:100vh;overflow-y:auto}
+  .rail .eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin:2px 8px 16px}
+  .prow{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:9px;cursor:pointer;border-left:2px solid transparent;margin-bottom:1px}
+  .prow:hover{background:var(--raised)}
+  .prow.on{background:var(--raised);border-left-color:var(--hot)}
+  .prow .pk{font-family:var(--mono);font-size:13px;font-weight:560}
+  .prow .pb{font-size:10px;font-family:var(--mono);color:#1a1410;background:var(--accent);padding:1px 6px;border-radius:4px;margin-left:auto}
+  .prow .mod{width:6px;height:6px;border-radius:50%;background:var(--hot);flex:none;opacity:0}
+  .prow.dirty .mod{opacity:1}
+
+  /* editor */
+  .editor{padding:28px 30px 90px;min-width:0}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+  h1{font-size:24px;font-weight:680;letter-spacing:-.02em;margin:9px 0 3px;display:flex;align-items:center;gap:11px}
+  h1 .badge{font-size:12px;font-family:var(--mono);color:#1a1410;background:var(--accent);padding:2px 9px;border-radius:6px;font-weight:600}
+  .sub{color:var(--tx2);font-size:13.5px;margin-bottom:22px}
+
+  .block-h{display:flex;align-items:center;gap:10px;margin:26px 0 12px}
+  .block-h .t{font-size:12px;font-family:var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--accent);font-weight:600}
+  .block-h .l{height:1px;flex:1;background:var(--line)}
+  .block-h .hint{font-size:11.5px;color:var(--tx3);font-family:var(--mono)}
+
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .zone{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:12px}
+  .zone .zt{font-size:11px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin-bottom:9px;display:flex;justify-content:space-between}
+  .stack{display:flex;flex-direction:column;gap:6px;min-height:46px}
+  .stack.drop-on{outline:1.5px dashed var(--accent);outline-offset:3px;border-radius:8px}
+  .brow{display:flex;align-items:center;gap:9px;background:var(--raised);border:1px solid var(--line-strong);border-radius:8px;
+    padding:8px 10px;cursor:grab;font-size:13.5px;font-weight:540}
+  .brow.drag{opacity:.35}
+  .brow .gr{color:var(--tx3);letter-spacing:-2px;font-family:var(--mono)}
+  .brow .bl{flex:1}
+  .brow .bid{font-family:var(--mono);font-size:11px;color:var(--tx3)}
+  .brow .x{cursor:pointer;color:var(--tx3);width:18px;height:18px;display:grid;place-items:center;border-radius:5px}
+  .brow .x:hover{background:var(--raised2);color:var(--hot)}
+  .avail{display:flex;flex-direction:column;gap:6px}
+  .arow{display:flex;align-items:center;gap:9px;background:transparent;border:1px dashed var(--line-strong);border-radius:8px;
+    padding:7px 10px;cursor:pointer;font-size:13px;color:var(--tx2)}
+  .arow:hover{border-color:var(--accent);color:var(--tx)}
+  .arow .plus{color:var(--accent);font-weight:700}
+  .avail .empty{color:var(--tx3);font-size:12px;font-family:var(--mono);padding:6px 2px}
+
+  /* smart style + sensor mode */
+  .seg{display:inline-flex;background:var(--raised);border:1px solid var(--line);border-radius:9px;padding:2px;flex-wrap:wrap}
+  .seg button{background:none;border:none;color:var(--tx2);font-family:var(--ui);font-size:12.5px;font-weight:550;padding:5px 10px;border-radius:7px;cursor:pointer}
+  .seg button.on{background:var(--accent);color:#1a1410}
+  .seg button:not(.on):hover{color:var(--tx)}
+  .field{display:flex;align-items:center;justify-content:space-between;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px 14px;margin-top:2px}
+  .field .fl{font-weight:560}
+  .field .fl small{display:block;color:var(--tx3);font-size:11.5px;font-weight:400;font-family:var(--mono);margin-top:1px}
+
+  .grouplabel{font-size:11px;color:var(--tx3);font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;margin:12px 0 4px;display:flex;gap:8px;align-items:center}
+  .mini{color:var(--accent);cursor:pointer;font-family:var(--ui);text-transform:none;letter-spacing:0;font-size:11px}
+  .mini:hover{color:var(--hot)}
+  .chiprow{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{font-size:12px;font-family:var(--mono);color:var(--tx2);background:var(--raised);border:1px solid var(--line);border-radius:6px;padding:4px 9px;cursor:pointer;user-select:none;transition:.1s}
+  .chip.on{color:#1a1410;background:var(--accent);border-color:var(--accent)}
+  .chip:not(.on){opacity:.5}.chip:hover{opacity:1}
+  .disabled{opacity:.4;pointer-events:none}
+
+  /* preview */
+  .prev-wrap{position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;background:var(--panel);border-left:1px solid var(--line);padding:24px 22px 60px;display:flex;flex-direction:column;gap:18px}
+  .prev-wrap h3{font-size:11.5px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--tx3);font-weight:600;display:flex;justify-content:space-between;align-items:center}
+  .tile{background:rgba(255,244,232,.04);border:1px solid rgba(255,244,232,.09);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:9px}
+  .b-name{display:flex;align-items:center;justify-content:space-between}
+  .b-name .nm{font-weight:620;font-size:14px}
+  .b-name .tg{width:34px;height:19px;border-radius:20px;background:var(--accent);position:relative}
+  .b-name .tg::after{content:"";position:absolute;top:2px;right:2px;width:15px;height:15px;border-radius:50%;background:#1a1410}
+  .b-sensors{display:flex;flex-wrap:wrap;gap:5px}
+  .b-sensors span{font-size:10.5px;font-family:var(--mono);color:var(--tx2);background:rgba(255,244,232,.05);border-radius:5px;padding:2px 7px}
+  .b-graph{height:30px}
+  .b-dimmer{height:8px;border-radius:5px;background:linear-gradient(90deg,var(--accent) 60%,var(--raised2) 60%)}
+  .b-ctrl{display:flex;gap:6px}
+  .b-ctrl i{flex:1;height:26px;border-radius:7px;background:var(--raised2);border:1px solid var(--line);display:grid;place-items:center;font-size:12px;color:var(--tx2);font-style:normal}
+  .b-chan{display:flex;flex-direction:column;gap:5px}
+  .b-chan i{display:flex;justify-content:space-between;font-size:11px;color:var(--tx2);font-style:normal;padding:4px 8px;background:var(--raised);border-radius:6px}
+  .b-power{height:6px;border-radius:4px;background:var(--raised2);overflow:hidden}
+  .b-power::after{content:"";display:block;width:45%;height:100%;background:var(--power,#dba25c)}
+  .b-virtual{height:24px;border-radius:7px;background:var(--raised);border:1px solid var(--line);display:flex;align-items:center;padding:0 8px;font-size:11px;color:var(--tx3);font-family:var(--mono)}
+  .b-badges{display:flex;gap:5px}
+  .b-badges span{font-size:9.5px;font-family:var(--mono);padding:1px 6px;border-radius:4px;background:var(--raised2);color:var(--tx2)}
+  .prev-empty{color:var(--tx3);font-family:var(--mono);font-size:12px;text-align:center;padding:20px}
+
+  pre{margin:0;background:var(--ground);border:1px solid var(--line);border-radius:10px;padding:13px 14px;font-family:var(--mono);font-size:11.5px;line-height:1.6;color:var(--tx);overflow-x:auto;white-space:pre;max-height:340px}
+  .kw{color:#a78bfa}.str{color:#93b384}.cm{color:var(--tx3)}.pk2{color:var(--accent)}
+  .btns{display:flex;gap:8px}
+  .btn{flex:1;background:var(--accent);color:#1a1410;border:none;font-family:var(--ui);font-weight:640;font-size:13px;padding:9px;border-radius:9px;cursor:pointer}
+  .btn.sec{background:var(--raised);color:var(--tx);border:1px solid var(--line-strong)}
+  .btn:hover{filter:brightness(1.06)}
+  .note{color:var(--tx3);font-size:11px;font-family:var(--mono);line-height:1.6}
+  .tabsw{display:flex;gap:4px;background:var(--raised);border:1px solid var(--line);border-radius:8px;padding:2px}
+  .tabsw button{flex:1;background:none;border:none;color:var(--tx2);font-family:var(--mono);font-size:11.5px;padding:5px;border-radius:6px;cursor:pointer}
+  .tabsw button.on{background:var(--accent);color:#1a1410}
+
+  @media(max-width:1180px){ .app{grid-template-columns:1fr} .rail,.prev-wrap{position:static;height:auto;border:none;border-bottom:1px solid var(--line)} .rail{display:flex;flex-wrap:wrap;gap:4px} .rail .eyebrow{width:100%} .two{grid-template-columns:1fr}}
+</style>
+
+<div class="app">
+  <div class="rail">
+    <div class="eyebrow">Profiles</div>
+    <div id="rail"></div>
+  </div>
+
+  <div class="editor" id="editor"></div>
+
+  <div class="prev-wrap">
+    <div>
+      <h3>Tile preview</h3>
+      <div id="preview"></div>
+    </div>
+    <div>
+      <h3>Export <span class="tabsw"><button id="tab-ts" class="on">helpers.ts</button><button id="tab-json">JSON</button></span></h3>
+      <pre id="export"></pre>
+    </div>
+    <div class="btns">
+      <button class="btn" id="copy">Copy</button>
+      <button class="btn sec" id="reset">Reset all</button>
+    </div>
+    <div class="note" id="note"></div>
+  </div>
+</div>
+
+<script>
+/* ── data (subset of docs/card-reference.json — kept in sync) ── */
+const BLOCKS = [
+  ['name_row','Name & toggle'],['sensors','Sensor chips'],['graph','Graph'],['dimmer','Brightness / colour'],
+  ['cover_controls','Cover controls'],['trv_control','Temperature control'],['valve_controls','Valve controls'],
+  ['input_channels','Input channels'],['relay_channels','Relay channels'],['power_bar','Power bar'],
+  ['virtual_controls','Virtual controls'],['badges','Type & gen badges'],
+];
+const BLABEL = Object.fromEntries(BLOCKS);
+
+const PROFILES = [
+  ['relay','Relay','power-monitor',['power','energy','voltage','current','temperature','overtemp','overpower']],
+  ['plug','Plug','power-monitor',['power','energy','voltage','current','overtemp','overpower']],
+  ['energy','Energy','power-monitor',['power','energy','voltage','current','apparent_power','power_factor','frequency']],
+  ['dimmer','Dimmer','light-control',['power','energy','temperature','overtemp']],
+  ['rgb','RGB','light-control',['power','energy']],
+  ['climate','TRV','climate-control',['temperature','humidity','battery']],
+  ['wall_display','Display','climate-control',['temperature','humidity','illuminance']],
+  ['cover','Roller','cover-control',['power','energy','temperature']],
+  ['valve','Valve','default',['temperature']],
+  ['sensor','Sensor','sensor-card',['temperature','humidity','illuminance','co2','gas','battery','motion','door','flood','smoke','vibration']],
+  ['input','Input','scene-button',['battery']],
+  ['uni','UNI','default',['temperature','battery']],
+  ['generic','—','default',[]],
+];
+const BLOCK_ORDER = {
+  relay:['name_row','relay_channels','sensors','graph','power_bar','virtual_controls','badges'],
+  plug:['name_row','sensors','graph','power_bar','virtual_controls','badges'],
+  energy:['name_row','sensors','graph','virtual_controls','badges'],
+  dimmer:['name_row','dimmer','sensors','graph','virtual_controls','badges'],
+  rgb:['name_row','dimmer','sensors','graph','virtual_controls','badges'],
+  climate:['name_row','sensors','trv_control','virtual_controls','badges'],
+  wall_display:['name_row','sensors','trv_control','virtual_controls','badges'],
+  cover:['name_row','cover_controls','sensors','virtual_controls','badges'],
+  valve:['name_row','sensors','valve_controls','virtual_controls','badges'],
+  sensor:['name_row','sensors','graph','virtual_controls','badges'],
+  input:['name_row','sensors','input_channels','virtual_controls','badges'],
+  uni:['name_row','input_channels','sensors','virtual_controls','badges'],
+  generic:['name_row','sensors','virtual_controls','badges'],
+};
+const TILE_STYLES = [['default','Default (blocks)'],['power-monitor','Power monitor'],['light-control','Light control'],['climate-control','Climate control'],['cover-control','Cover control'],['sensor-card','Sensor card'],['scene-button','Scene button']];
+const SENSOR_GROUPS = {
+  Electrical:[['power','Power'],['voltage','Voltage'],['current','Current'],['energy','Energy'],['frequency','Frequency'],['apparent_power','App. Power'],['reactive_power','React. Power'],['power_factor','Power Factor']],
+  Environmental:[['temperature','Temp'],['humidity','Humidity'],['illuminance','Illum'],['co2','CO₂'],['gas','Gas']],
+  'Device info':[['cloud','Cloud'],['rssi','RSSI'],['uptime','Uptime'],['ip','IP'],['ssid','SSID'],['battery','Battery'],['fw_version','Firmware'],['mac','MAC']],
+  Alerts:[['overtemp','Overtemp'],['overpower','Overpower'],['motion','Motion'],['door','Door'],['flood','Flood'],['smoke','Smoke'],['vibration','Vibration']],
+};
+
+/* ── state ── */
+const SHIPPED = {};
+PROFILES.forEach(([k,l,ss,ch])=>{ SHIPPED[k]={ blocks:[...BLOCK_ORDER[k]], smart:ss, mode:(k==='generic'?'all':'curated'), sensors:[...ch] }; });
+const clone = o=>JSON.parse(JSON.stringify(o));
+let ST = clone(SHIPPED);
+let active='relay', drag=null;
+
+const $=id=>document.getElementById(id);
+const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
+const eq=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+const dirty=k=>!eq(ST[k],SHIPPED[k]);
+
+/* ── rail ── */
+function renderRail(){
+  const r=$('rail'); r.innerHTML='';
+  PROFILES.forEach(([k,l])=>{
+    const row=el('div','prow'+(k===active?' on':'')+(dirty(k)?' dirty':''));
+    row.innerHTML=`<span class="mod"></span><span class="pk">${k}</span>${l!=='—'?`<span class="pb">${l}</span>`:''}`;
+    row.onclick=()=>{active=k;renderAll();};
+    r.appendChild(row);
+  });
+}
+
+/* ── editor ── */
+function renderEditor(){
+  const s=ST[active], meta=PROFILES.find(p=>p[0]===active);
+  const ed=$('editor'); ed.innerHTML='';
+  ed.appendChild(el('div','eyebrow','Editing profile'));
+  ed.appendChild(el('h1',null,`<span style="font-family:var(--mono)">${active}</span>${meta[1]!=='—'?`<span class="badge">${meta[1]}</span>`:''}${dirty(active)?'<span style="font-size:11px;color:var(--hot);font-family:var(--mono)">● modified</span>':''}`));
+  ed.appendChild(el('div','sub','Arrange the tile blocks and choose the default sensor chips this device type shows when no style override is set.'));
+
+  /* smart style */
+  ed.appendChild(el('div','block-h','<span class="t">Smart tile style</span><span class="l"></span><span class="hint">used when Smart tile styles is ON</span>'));
+  const f=el('div','field'); f.innerHTML='<div class="fl">Style<small>PROFILE_DEFAULT_TILE_STYLE</small></div>';
+  const sg=el('div','seg'); TILE_STYLES.forEach(([v,l])=>{const b=el('button',v===s.smart?'on':'',l);b.onclick=()=>{s.smart=v;renderAll();};sg.appendChild(b);}); f.appendChild(sg);
+  ed.appendChild(f);
+
+  /* blocks */
+  ed.appendChild(el('div','block-h','<span class="t">Tile blocks</span><span class="l"></span><span class="hint">drag to reorder · top → bottom</span>'));
+  const two=el('div','two');
+  // in-tile
+  const z1=el('div','zone'); z1.innerHTML=`<div class="zt"><span>In the tile</span><span>${s.blocks.length}</span></div>`;
+  const stack=el('div','stack'); stack.id='stack';
+  s.blocks.forEach((id,i)=>{
+    const row=el('div','brow'); row.draggable=true; row.dataset.i=i;
+    row.innerHTML=`<span class="gr">⠿</span><span class="bl">${BLABEL[id]}</span><span class="bid">${id}</span><span class="x" title="remove">×</span>`;
+    row.querySelector('.x').onclick=()=>{s.blocks.splice(i,1);renderAll();};
+    row.addEventListener('dragstart',e=>{drag=i;row.classList.add('drag');e.dataTransfer.effectAllowed='move';});
+    row.addEventListener('dragend',()=>{row.classList.remove('drag');stack.classList.remove('drop-on');});
+    row.addEventListener('dragover',e=>{e.preventDefault();});
+    row.addEventListener('drop',e=>{e.preventDefault();if(drag==null||drag===i)return;const m=s.blocks.splice(drag,1)[0];s.blocks.splice(i,0,m);drag=null;renderAll();});
+    stack.appendChild(row);
+  });
+  stack.addEventListener('dragover',e=>{e.preventDefault();stack.classList.add('drop-on');});
+  stack.addEventListener('dragleave',()=>stack.classList.remove('drop-on'));
+  z1.appendChild(stack); two.appendChild(z1);
+  // available
+  const z2=el('div','zone'); z2.innerHTML='<div class="zt"><span>Available</span></div>';
+  const av=el('div','avail');
+  const avail=BLOCKS.filter(([id])=>!s.blocks.includes(id));
+  if(!avail.length) av.appendChild(el('div','empty','all blocks in use'));
+  avail.forEach(([id,l])=>{ const a=el('div','arow',`<span class="plus">+</span><span class="bl">${l}</span><span class="bid" style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--tx3)">${id}</span>`); a.onclick=()=>{s.blocks.push(id);renderAll();}; av.appendChild(a); });
+  z2.appendChild(av); two.appendChild(z2);
+  ed.appendChild(two);
+
+  /* sensors */
+  ed.appendChild(el('div','block-h',`<span class="t">Default sensor chips</span><span class="l"></span><span class="hint">PROFILE_DEFAULT_SENSORS</span>`));
+  const modeF=el('div','field'); modeF.innerHTML='<div class="fl">Chip source<small>curated = only these · show all = no opinion</small></div>';
+  const mseg=el('div','seg'); [['curated','Curated set'],['all','Show all']].forEach(([v,l])=>{const b=el('button',v===s.mode?'on':'',l);b.onclick=()=>{s.mode=v;renderAll();};mseg.appendChild(b);}); modeF.appendChild(mseg);
+  ed.appendChild(modeF);
+  const sensWrap=el('div', s.mode==='all'?'disabled':''); sensWrap.style.marginTop='6px';
+  Object.entries(SENSOR_GROUPS).forEach(([gn,list])=>{
+    const allOn=list.every(([k])=>s.sensors.includes(k));
+    const gl=el('div','grouplabel'); gl.innerHTML=`${gn} <span class="mini">${allOn?'clear':'all'}</span>`;
+    gl.querySelector('.mini').onclick=()=>{ if(allOn)s.sensors=s.sensors.filter(k=>!list.some(([lk])=>lk===k)); else list.forEach(([k])=>{if(!s.sensors.includes(k))s.sensors.push(k);}); renderAll(); };
+    sensWrap.appendChild(gl);
+    const cr=el('div','chiprow');
+    list.forEach(([k,l])=>{ const on=s.sensors.includes(k); const c=el('div','chip'+(on?' on':''),l);
+      c.onclick=()=>{ if(on)s.sensors=s.sensors.filter(x=>x!==k); else s.sensors.push(k); renderAll(); }; cr.appendChild(c); });
+    sensWrap.appendChild(cr);
+  });
+  ed.appendChild(sensWrap);
+}
+
+/* ── tile preview ── */
+function renderBlock(id,s){
+  switch(id){
+    case 'name_row': return `<div class="b-name"><span class="nm">Living Room</span><span class="tg"></span></div>`;
+    case 'sensors': { const chips=(s.mode==='all'?['power','energy','…']:s.sensors.slice(0,5)); return chips.length?`<div class="b-sensors">${chips.map(c=>`<span>${c}</span>`).join('')}</div>`:''; }
+    case 'graph': return `<div class="b-graph"><svg viewBox="0 0 120 30" width="100%" height="30" preserveAspectRatio="none"><polyline points="0,22 15,18 30,24 45,10 60,15 75,6 90,14 105,8 120,12" fill="none" stroke="var(--accent)" stroke-width="1.6"/></svg></div>`;
+    case 'dimmer': return `<div class="b-dimmer"></div>`;
+    case 'cover_controls': return `<div class="b-ctrl"><i>▲</i><i>■</i><i>▼</i></div>`;
+    case 'trv_control': return `<div class="b-ctrl"><i>−</i><i>21.0°</i><i>+</i></div>`;
+    case 'valve_controls': return `<div class="b-ctrl"><i>Open</i><i>Close</i></div>`;
+    case 'input_channels': return `<div class="b-chan"><i>Input 1 <span>▲</span></i><i>Input 2 <span>—</span></i></div>`;
+    case 'relay_channels': return `<div class="b-chan"><i>Ch 1 <span>ON</span></i><i>Ch 2 <span>OFF</span></i></div>`;
+    case 'power_bar': return `<div class="b-power" style="--power:${'#dba25c'}"></div>`;
+    case 'virtual_controls': return `<div class="b-virtual">select · number …</div>`;
+    case 'badges': { const meta=PROFILES.find(p=>p[0]===active); return `<div class="b-badges">${meta[1]!=='—'?`<span>${meta[1]}</span>`:''}<span>Gen 3</span></div>`; }
+  }
+  return '';
+}
+function renderPreview(){
+  const s=ST[active], p=$('preview');
+  if(s.smart!=='default'){
+    p.innerHTML=`<div class="prev-empty">Smart style <b style="color:var(--accent)">${s.smart}</b><br>renders a dedicated layout —<br>blocks below apply only to the<br><b>Default (blocks)</b> style.</div>`;
+    return;
+  }
+  if(!s.blocks.length){ p.innerHTML='<div class="prev-empty">No blocks — tile is empty</div>'; return; }
+  p.innerHTML=`<div class="tile">${s.blocks.map(id=>renderBlock(id,s)).filter(Boolean).join('')}</div>`;
+}
+
+/* ── export ── */
+let exportMode='ts';
+function tsArr(a){ return '['+a.map(x=>`'${x}'`).join(', ')+']'; }
+function genTS(){
+  let out='';
+  out+=`<span class="cm">// Paste into src/helpers.ts — the card's built-in per-profile defaults.</span>\n\n`;
+  out+=`<span class="kw">export const</span> <span class="pk2">PROFILE_DEFAULT_BLOCKS</span>: Record&lt;DeviceProfile, TileBlockId[]&gt; = {\n`;
+  PROFILES.forEach(([k])=>{ out+=`  ${k.padEnd(13)}: <span class="str">${tsArr(ST[k].blocks).replace(/</g,'&lt;')}</span>,\n`; });
+  out+=`};\n\n`;
+  out+=`<span class="kw">export const</span> <span class="pk2">PROFILE_DEFAULT_SENSORS</span>: Partial&lt;Record&lt;DeviceProfile, string[]&gt;&gt; = {\n`;
+  PROFILES.forEach(([k])=>{ if(ST[k].mode==='all'){ out+=`  <span class="cm">// ${k} omitted → show all</span>\n`; return; } out+=`  ${k.padEnd(13)}: <span class="str">${tsArr(ST[k].sensors)}</span>,\n`; });
+  out+=`};\n\n`;
+  out+=`<span class="kw">export const</span> <span class="pk2">PROFILE_DEFAULT_TILE_STYLE</span>: Partial&lt;Record&lt;DeviceProfile, TileStyle&gt;&gt; = {\n`;
+  PROFILES.forEach(([k])=>{ if(ST[k].smart==='default'){ out+=`  <span class="cm">// ${k} → default</span>\n`; return; } out+=`  ${k.padEnd(13)}: <span class="str">'${ST[k].smart}'</span>,\n`; });
+  out+=`};\n`;
+  return out;
+}
+function plainTS(){
+  let out='// Paste into src/helpers.ts — the card\'s built-in per-profile defaults.\n\n';
+  out+='export const PROFILE_DEFAULT_BLOCKS: Record<DeviceProfile, TileBlockId[]> = {\n';
+  PROFILES.forEach(([k])=>{ out+=`  ${k.padEnd(13)}: ${tsArr(ST[k].blocks)},\n`; }); out+='};\n\n';
+  out+='export const PROFILE_DEFAULT_SENSORS: Partial<Record<DeviceProfile, string[]>> = {\n';
+  PROFILES.forEach(([k])=>{ if(ST[k].mode==='all'){out+=`  // ${k} omitted → show all\n`;return;} out+=`  ${k.padEnd(13)}: ${tsArr(ST[k].sensors)},\n`; }); out+='};\n\n';
+  out+='export const PROFILE_DEFAULT_TILE_STYLE: Partial<Record<DeviceProfile, TileStyle>> = {\n';
+  PROFILES.forEach(([k])=>{ if(ST[k].smart==='default'){out+=`  // ${k} → default\n`;return;} out+=`  ${k.padEnd(13)}: '${ST[k].smart}',\n`; }); out+='};\n';
+  return out;
+}
+function genJSON(){
+  const o={}; PROFILES.forEach(([k])=>{ o[k]={blocks:ST[k].blocks,smartStyle:ST[k].smart,sensors:ST[k].mode==='all'?'all':ST[k].sensors}; });
+  return JSON.stringify(o,null,2);
+}
+function renderExport(){
+  const pre=$('export');
+  if(exportMode==='ts'){ pre.innerHTML=genTS(); window._copy=plainTS(); }
+  else { pre.textContent=genJSON(); window._copy=genJSON(); }
+  const nd=PROFILES.filter(([k])=>dirty(k)).length;
+  $('note').textContent = nd? `${nd} profile${nd>1?'s':''} changed from shipped defaults.` : 'Matches the shipped defaults exactly.';
+}
+
+function renderAll(){ renderRail(); renderEditor(); renderPreview(); renderExport(); }
+
+$('tab-ts').onclick=()=>{exportMode='ts';$('tab-ts').classList.add('on');$('tab-json').classList.remove('on');renderExport();};
+$('tab-json').onclick=()=>{exportMode='json';$('tab-json').classList.add('on');$('tab-ts').classList.remove('on');renderExport();};
+$('copy').onclick=()=>{navigator.clipboard.writeText(window._copy).then(()=>{const b=$('copy');b.textContent='Copied ✓';setTimeout(()=>b.textContent='Copy',1400);});};
+$('reset').onclick=()=>{ST=clone(SHIPPED);renderAll();};
+
+renderAll();
+</script>

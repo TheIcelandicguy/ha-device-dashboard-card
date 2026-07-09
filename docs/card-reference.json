@@ -1,0 +1,398 @@
+{
+  "$comment": "Single source of truth for the Shelly dashboard card's defaults + editor map. Generated from src/editor.ts, src/helpers.ts, src/themes.ts. Consumed by docs tools (reference page, config builder, and the drag-and-drop organizers). Keep in sync when the card's config surface changes.",
+  "meta": {
+    "cardType": "custom:ha-device-dashboard",
+    "generatedFrom": ["src/editor.ts", "src/helpers.ts", "src/themes.ts"],
+    "branch": "smart-profiles"
+  },
+
+  "scopes": {
+    "global": { "label": "Global",       "desc": "card-wide default (top-level config key)" },
+    "view":   { "label": "View",         "desc": "per-view override (views[i])" },
+    "area":   { "label": "Room",         "desc": "per-area override (area_styles[name])" },
+    "device": { "label": "Device",       "desc": "per-device override (device_styles[id])" },
+    "local":  { "label": "Viewer-local", "desc": "browser / editor state, not saved to YAML" }
+  },
+
+  "cascade": [
+    { "order": 1, "scope": "device", "path": "device_styles[id]" },
+    { "order": 2, "scope": "area",   "path": "area_styles[name]" },
+    { "order": 3, "scope": "view",   "path": "views[i]" },
+    { "order": 4, "scope": "global", "path": "top-level config" },
+    { "order": 5, "scope": "local",  "path": "built-in profile default" }
+  ],
+
+  "defaults": {
+    "$comment": "The actual runtime default VALUES. getStubConfig() writes only {type}; a config builder should emit a key ONLY when it differs from the value here (mirrors _set deleting keys equal to default).",
+    "theme": "warm_dusk",
+    "title": "Shelly",
+    "columns": 3,
+    "tile_size": "md",
+    "sort_by": "name",
+    "tile_style": null,
+    "power_monitor_variant": "big-number",
+    "smart_tile_styles": false,
+    "show_offline": true,
+    "show_graphs": true,
+    "graph_hours": 24,
+    "effects": false,
+    "header_show_title": true,
+    "header_show_stats": true,
+    "header_show_cloud": false,
+    "header_show_orbs": false,
+    "header_chips": ["online", "offline", "power", "alerts"],
+    "sensors": null,
+    "name_groups": null
+  },
+
+  "firstRun": [
+    { "setting": "Theme",                "value": "Warm Dusk — muted terracotta on warm charcoal", "source": "DEFAULT_THEME" },
+    { "setting": "Title",                "value": "\"Shelly\"",                                     "source": "title ?? 'Shelly'" },
+    { "setting": "Grouping",             "value": "Auto — one collapsible section per HA area",     "source": "_groupByArea" },
+    { "setting": "Columns",              "value": "3",                                              "source": "columns ?? 3" },
+    { "setting": "Tile size",            "value": "Medium (md)",                                    "source": "tile_size ?? 'md'" },
+    { "setting": "Sort order",           "value": "By name (A→Z)",                                  "source": "sort_by ?? 'name'" },
+    { "setting": "Tile style",           "value": "Adaptive — per-profile block layout",            "source": "rawStyle → 'default'" },
+    { "setting": "Smart tile styles",    "value": "Off",                                            "source": "smart_tile_styles unset" },
+    { "setting": "Header chips",         "value": "Online · Offline · Power · Alerts",              "source": "DEFAULT_HEADER_CHIPS" },
+    { "setting": "Graphs (sparklines)",  "value": "On",                                             "source": "show_graphs ?? true" },
+    { "setting": "Offline devices",      "value": "Shown",                                          "source": "hidden only if show_offline === false" },
+    { "setting": "Header orbs / effects","value": "Off",                                            "source": "effects ?? false" },
+    { "setting": "Buttons",              "value": "Pill · filled · medium",                         "source": "'pill' / 'fill' / 'md'" },
+    { "setting": "Name groups",          "value": "None",                                           "source": "name_groups unset" },
+    { "setting": "Views",                "value": "Single implicit \"All devices\"",                "source": "—" }
+  ],
+
+  "profiles": [
+    { "key": "relay",        "label": "Relay",   "smartStyle": "power-monitor",   "chips": ["power","energy","voltage","current","temperature","overtemp","overpower"] },
+    { "key": "plug",         "label": "Plug",    "smartStyle": "power-monitor",   "chips": ["power","energy","voltage","current","overtemp","overpower"] },
+    { "key": "energy",       "label": "Energy",  "smartStyle": "power-monitor",   "chips": ["power","energy","voltage","current","apparent_power","power_factor","frequency"] },
+    { "key": "dimmer",       "label": "Dimmer",  "smartStyle": "light-control",   "chips": ["power","energy","temperature","overtemp"] },
+    { "key": "rgb",          "label": "RGB",     "smartStyle": "light-control",   "chips": ["power","energy"] },
+    { "key": "climate",      "label": "TRV",     "smartStyle": "climate-control", "chips": ["temperature","humidity","battery"] },
+    { "key": "wall_display", "label": "Display", "smartStyle": "climate-control", "chips": ["temperature","humidity","illuminance"] },
+    { "key": "cover",        "label": "Roller",  "smartStyle": "cover-control",   "chips": ["power","energy","temperature"] },
+    { "key": "valve",        "label": "Valve",   "smartStyle": "default",         "chips": ["temperature"] },
+    { "key": "sensor",       "label": "Sensor",  "smartStyle": "sensor-card",     "chips": ["temperature","humidity","illuminance","co2","gas","battery","motion","door","flood","smoke","vibration"] },
+    { "key": "input",        "label": "Input",   "smartStyle": "scene-button",    "chips": ["battery"] },
+    { "key": "uni",          "label": "UNI",     "smartStyle": "default",         "chips": ["temperature","battery"] },
+    { "key": "generic",      "label": "",        "smartStyle": "default",         "chips": [] }
+  ],
+
+  "tileBlocks": [
+    { "id": "name_row",         "label": "Name & toggle" },
+    { "id": "sensors",          "label": "Sensor chips" },
+    { "id": "graph",            "label": "Graph" },
+    { "id": "dimmer",           "label": "Brightness / colour" },
+    { "id": "cover_controls",   "label": "Cover controls" },
+    { "id": "trv_control",      "label": "Temperature control" },
+    { "id": "valve_controls",   "label": "Valve controls" },
+    { "id": "input_channels",   "label": "Input channels" },
+    { "id": "relay_channels",   "label": "Relay channels" },
+    { "id": "power_bar",        "label": "Power bar" },
+    { "id": "virtual_controls", "label": "Virtual controls" },
+    { "id": "badges",           "label": "Type & gen badges" }
+  ],
+
+  "profileBlockOrder": {
+    "relay":        ["name_row","relay_channels","sensors","graph","power_bar","virtual_controls","badges"],
+    "plug":         ["name_row","sensors","graph","power_bar","virtual_controls","badges"],
+    "dimmer":       ["name_row","dimmer","sensors","graph","virtual_controls","badges"],
+    "rgb":          ["name_row","dimmer","sensors","graph","virtual_controls","badges"],
+    "climate":      ["name_row","sensors","trv_control","virtual_controls","badges"],
+    "cover":        ["name_row","cover_controls","sensors","virtual_controls","badges"],
+    "valve":        ["name_row","sensors","valve_controls","virtual_controls","badges"],
+    "energy":       ["name_row","sensors","graph","virtual_controls","badges"],
+    "sensor":       ["name_row","sensors","graph","virtual_controls","badges"],
+    "input":        ["name_row","sensors","input_channels","virtual_controls","badges"],
+    "uni":          ["name_row","input_channels","sensors","virtual_controls","badges"],
+    "wall_display": ["name_row","sensors","trv_control","virtual_controls","badges"],
+    "generic":      ["name_row","sensors","virtual_controls","badges"]
+  },
+
+  "tileStyles": [
+    { "key": "default",         "label": "Default (adaptive blocks)" },
+    { "key": "power-monitor",   "label": "Power monitor" },
+    { "key": "light-control",   "label": "Light control" },
+    { "key": "climate-control", "label": "Climate control" },
+    { "key": "cover-control",   "label": "Cover control" },
+    { "key": "sensor-card",     "label": "Sensor card" },
+    { "key": "scene-button",    "label": "Scene button" }
+  ],
+  "powerMonitorVariants": ["big-number", "gauge", "graph", "compact", "table"],
+
+  "headerChips": [
+    { "key": "online",      "label": "Online",      "agg": "count" },
+    { "key": "offline",     "label": "Offline",     "agg": "count" },
+    { "key": "power",       "label": "Power",       "agg": "sum" },
+    { "key": "energy",      "label": "Energy",      "agg": "sum" },
+    { "key": "temperature", "label": "Temperature", "agg": "avg" },
+    { "key": "humidity",    "label": "Humidity",    "agg": "avg" },
+    { "key": "illuminance", "label": "Light",       "agg": "avg" },
+    { "key": "rssi",        "label": "Wi-Fi",       "agg": "avg" },
+    { "key": "alerts",      "label": "Alerts",      "agg": "count" },
+    { "key": "updates",     "label": "Updates",     "agg": "count" }
+  ],
+
+  "sensorGroups": {
+    "electrical": [
+      { "key": "power",          "label": "Power" },
+      { "key": "voltage",        "label": "Voltage" },
+      { "key": "current",        "label": "Current" },
+      { "key": "energy",         "label": "Energy (kWh)" },
+      { "key": "frequency",      "label": "Frequency" },
+      { "key": "apparent_power", "label": "App. Power" },
+      { "key": "reactive_power", "label": "React. Power" },
+      { "key": "power_factor",   "label": "Power Factor" }
+    ],
+    "environmental": [
+      { "key": "temperature", "label": "Temperature" },
+      { "key": "humidity",    "label": "Humidity" },
+      { "key": "illuminance", "label": "Illuminance" },
+      { "key": "co2",         "label": "CO₂" },
+      { "key": "gas",         "label": "Gas" }
+    ],
+    "deviceinfo": [
+      { "key": "cloud",      "label": "Cloud status" },
+      { "key": "rssi",       "label": "Wi-Fi RSSI" },
+      { "key": "uptime",     "label": "Uptime" },
+      { "key": "ip",         "label": "IP Address" },
+      { "key": "ssid",       "label": "SSID" },
+      { "key": "battery",    "label": "Battery" },
+      { "key": "fw_version", "label": "Firmware" },
+      { "key": "mac",        "label": "MAC Address" }
+    ],
+    "alerts": [
+      { "key": "overtemp",  "label": "Overtemp" },
+      { "key": "overpower", "label": "Overpower" },
+      { "key": "motion",    "label": "Motion" },
+      { "key": "door",      "label": "Door / Window" },
+      { "key": "flood",     "label": "Flood" },
+      { "key": "smoke",     "label": "Smoke" }
+    ]
+  },
+
+  "themes": [
+    { "key": "warm_dusk", "label": "Warm Dusk", "blurb": "Subtle & warm", "default": true,
+      "palette": { "accent_color": "#c98a63", "card_bg": "#1e1a17", "tile_bg": "rgba(255,244,232,0.035)", "tile_border": "rgba(255,244,232,0.08)", "tile_hover_bg": "rgba(255,244,232,0.06)", "tile_hover_shadow": "rgba(0,0,0,0.35)", "tile_sensor_bg": "rgba(255,244,232,0.045)", "tile_exp_bg": "rgba(255,244,232,0.05)", "text_primary": "#ece5dc", "text_secondary": "#b3a596", "text_muted": "#7e7265", "header_bg": "#241f1b", "header_bg2": "#33291f", "header_text_color": "#f3ece3", "header_orb_color": "#c98a63", "online_color": "#93b384", "offline_color": "#d47f62", "power_color": "#dba25c", "area_header_color": "#c98a63" } },
+    { "key": "dark_industrial", "label": "Dark Industrial", "blurb": "Shelly orange, industrial", "default": false,
+      "palette": { "accent_color": "#f4601e", "card_bg": "#1c1c1e", "tile_bg": "rgba(255,255,255,0.04)", "tile_border": "rgba(255,255,255,0.07)", "tile_hover_bg": "rgba(255,255,255,0.07)", "tile_hover_shadow": "rgba(0,0,0,0.30)", "tile_sensor_bg": "rgba(255,255,255,0.04)", "tile_exp_bg": "rgba(255,255,255,0.06)", "text_primary": "#e5e7eb", "text_secondary": "#9ca3af", "text_muted": "#6b7280", "header_bg": "#1a1a2e", "header_bg2": "#0f3460", "header_text_color": "#ffffff", "header_orb_color": "#3b82f6", "online_color": "#4ade80", "offline_color": "#ef4444", "power_color": "#fb923c", "area_header_color": "#f4601e" } },
+    { "key": "teal_terminal", "label": "Teal Terminal", "blurb": "Terminal vibe", "default": false,
+      "palette": { "accent_color": "#2dd4bf", "card_bg": "#0b0f0e", "tile_bg": "#0f1917", "tile_border": "#1e2b28", "tile_hover_bg": "rgba(45,212,191,0.08)", "tile_hover_shadow": "rgba(0,0,0,0.40)", "tile_sensor_bg": "rgba(45,212,191,0.05)", "tile_exp_bg": "rgba(45,212,191,0.07)", "text_primary": "#d1fae5", "text_secondary": "#6ee7b7", "text_muted": "#4b5563", "header_bg": "#042f2e", "header_bg2": "#0b6157", "header_text_color": "#ccfbf1", "header_orb_color": "#2dd4bf", "online_color": "#34d399", "offline_color": "#f87171", "power_color": "#fbbf24", "area_header_color": "#2dd4bf" } },
+    { "key": "brutalist", "label": "Brutalist", "blurb": "High-contrast flat", "default": false,
+      "palette": { "accent_color": "#facc15", "card_bg": "#000000", "tile_bg": "#0a0a0a", "tile_border": "#ffffff", "tile_hover_bg": "rgba(255,255,255,0.12)", "tile_hover_shadow": "rgba(250,204,21,0.25)", "tile_sensor_bg": "rgba(255,255,255,0.06)", "tile_exp_bg": "rgba(255,255,255,0.09)", "text_primary": "#ffffff", "text_secondary": "#d4d4d4", "text_muted": "#a3a3a3", "header_bg": "#000000", "header_bg2": "#171717", "header_text_color": "#facc15", "header_orb_color": "#facc15", "online_color": "#22c55e", "offline_color": "#ef4444", "power_color": "#facc15", "area_header_color": "#ffffff" } },
+    { "key": "frosted_light", "label": "Frosted Light", "blurb": "Light theme", "default": false,
+      "palette": { "accent_color": "#0071e3", "card_bg": "#f2f2f7", "tile_bg": "#ffffff", "tile_border": "#d1d1d6", "tile_hover_bg": "rgba(0,0,0,0.04)", "tile_hover_shadow": "rgba(0,0,0,0.12)", "tile_sensor_bg": "rgba(0,0,0,0.04)", "tile_exp_bg": "rgba(0,0,0,0.05)", "text_primary": "#1c1c1e", "text_secondary": "#48484a", "text_muted": "#8e8e93", "header_bg": "#e8eef7", "header_bg2": "#cfe0f5", "header_text_color": "#1c1c1e", "header_orb_color": "#0071e3", "online_color": "#34c759", "offline_color": "#ff3b30", "power_color": "#ff9500", "area_header_color": "#0071e3" } },
+    { "key": "nordic_warm", "label": "Nordic Warm", "blurb": "Nord, warm aurora", "default": false,
+      "palette": { "accent_color": "#d08770", "card_bg": "#2e3440", "tile_bg": "#3b4252", "tile_border": "#434c5e", "tile_hover_bg": "rgba(236,239,244,0.06)", "tile_hover_shadow": "rgba(0,0,0,0.30)", "tile_sensor_bg": "rgba(236,239,244,0.04)", "tile_exp_bg": "rgba(236,239,244,0.06)", "text_primary": "#eceff4", "text_secondary": "#d8dee9", "text_muted": "#9aa4b8", "header_bg": "#3b4252", "header_bg2": "#434c5e", "header_text_color": "#eceff4", "header_orb_color": "#ebcb8b", "online_color": "#a3be8c", "offline_color": "#bf616a", "power_color": "#d08770", "area_header_color": "#d08770" } },
+    { "key": "midnight_purple", "label": "Midnight Purple", "blurb": "Deep violet", "default": false,
+      "palette": { "accent_color": "#a78bfa", "card_bg": "#0f0a1e", "tile_bg": "#1a1030", "tile_border": "#2e1f4d", "tile_hover_bg": "rgba(167,139,250,0.10)", "tile_hover_shadow": "rgba(0,0,0,0.45)", "tile_sensor_bg": "rgba(167,139,250,0.06)", "tile_exp_bg": "rgba(167,139,250,0.08)", "text_primary": "#ede9fe", "text_secondary": "#c4b5fd", "text_muted": "#7c6ba8", "header_bg": "#1e1b4b", "header_bg2": "#4c1d95", "header_text_color": "#ede9fe", "header_orb_color": "#a78bfa", "online_color": "#4ade80", "offline_color": "#fb7185", "power_color": "#c084fc", "area_header_color": "#a78bfa" } }
+  ],
+
+  "editorTabs": [
+    { "id": "devices", "icon": "⌂", "label": "Rooms & devices",
+      "note": "Auto-lists your HA areas as collapsible sections. Toolbar sets card-wide sort/visibility; the ✎ panels drill into per-room and per-device overrides.",
+      "groups": [
+        { "name": "Rooms toolbar", "controls": [
+          { "control": "Sort", "fn": "Device sort order for the whole card (Name / Power / Online)", "key": "sort_by", "scope": "global", "default": "'name'", "advanced": false },
+          { "control": "Rooms — All", "fn": "Show all rooms (clears the include-list)", "key": "areas → undefined", "scope": "global", "default": "all shown", "advanced": false },
+          { "control": "Rooms — None", "fn": "Hide all rooms (explicit empty list)", "key": "areas → []", "scope": "global", "default": "all shown", "advanced": false },
+          { "control": "Show offline devices", "fn": "Show or hide offline devices", "key": "show_offline", "scope": "global", "default": "true", "advanced": false },
+          { "control": "Name-based groups", "fn": "Comma-separated name prefixes; matches also appear under a synthetic section", "key": "name_groups", "scope": "global", "default": "none", "advanced": false }
+        ]},
+        { "name": "Room row + device row", "controls": [
+          { "control": "Room include", "fn": "Include / exclude this room (toggling all → undefined)", "key": "areas", "scope": "global", "default": "all on", "advanced": false },
+          { "control": "Device visibility", "fn": "Show / hide an individual device", "key": "hidden_devices", "scope": "global", "default": "not hidden", "advanced": false },
+          { "control": "★ Favourite", "fn": "Add / remove device from the Favourites section", "key": "favorites", "scope": "global", "default": "not fav", "advanced": false },
+          { "control": "Room reset ↺", "fn": "Clear this room's style block", "key": "area_styles[name] → del", "scope": "area", "default": "—", "advanced": false },
+          { "control": "Device reset ↺", "fn": "Clear this device's style block", "key": "device_styles[id] → del", "scope": "device", "default": "—", "advanced": false },
+          { "control": "Edit ✎ / expand ▼", "fn": "Open a style panel or device list (editor UI state)", "key": "none", "scope": "local", "default": "collapsed", "advanced": false }
+        ]},
+        { "name": "Per-device style panel", "controls": [
+          { "control": "Type", "fn": "Override auto-detected device profile", "key": "device_styles[id].profile", "scope": "device", "default": "Auto", "advanced": false },
+          { "control": "Tile layout style", "fn": "Pick tile render style (Default clears override)", "key": "device_styles[id].tile_style", "scope": "device", "default": "'default'", "advanced": false },
+          { "control": "Power-monitor variant", "fn": "Sub-variant when style = power-monitor", "key": "device_styles[id].power_monitor_variant", "scope": "device", "default": "'big-number'", "advanced": false },
+          { "control": "Accent colour", "fn": "Per-device accent colour", "key": "device_styles[id].color", "scope": "device", "default": "#f4601e", "advanced": false },
+          { "control": "Tile icon ON", "fn": "Animated icon shown while entity is ON", "key": "device_styles[id].tile_icon", "scope": "device", "default": "none", "advanced": true },
+          { "control": "Tile icon OFF", "fn": "Animated icon shown while entity is OFF", "key": "device_styles[id].tile_icon_off", "scope": "device", "default": "falls back to ON", "advanced": true },
+          { "control": "Tile icon speed", "fn": "Animation speed multiplier", "key": "device_styles[id].tile_icon_speed", "scope": "device", "default": "1", "advanced": true },
+          { "control": "Show graphs", "fn": "Per-device sparkline override (Inherit / On / Off)", "key": "device_styles[id].show_graphs", "scope": "device", "default": "Inherit", "advanced": false },
+          { "control": "Visible blocks", "fn": "Show / hide each tile block", "key": "device_styles[id].tile_layout", "scope": "device", "default": "inherits global", "advanced": false },
+          { "control": "Sensor chips", "fn": "Whitelist of sensor chips for this device", "key": "device_styles[id].sensors", "scope": "device", "default": "inherit", "advanced": false },
+          { "control": "Entity animations", "fn": "Per-entity ON/OFF icon + speed", "key": "device_styles[id].entity_animations[eid]", "scope": "device", "default": "none / 1", "advanced": true },
+          { "control": "Hidden entities", "fn": "Remove entities from the detail sheet list", "key": "hidden_entities", "scope": "global", "default": "not hidden", "advanced": true },
+          { "control": "Clear device style", "fn": "Delete the entire device-style block", "key": "device_styles[id] → del", "scope": "device", "default": "—", "advanced": false }
+        ]},
+        { "name": "Per-room style panel", "controls": [
+          { "control": "Columns", "fn": "Tile columns in this room", "key": "area_styles[name].columns", "scope": "area", "default": "3", "advanced": false },
+          { "control": "Tile gap", "fn": "Gap between tiles", "key": "area_styles[name].tileGap", "scope": "area", "default": "10px", "advanced": false },
+          { "control": "Show graphs", "fn": "Per-room sparkline override", "key": "area_styles[name].show_graphs", "scope": "area", "default": "Inherit", "advanced": false },
+          { "control": "Tile background", "fn": "Tile background colour", "key": "area_styles[name].tileBgColor", "scope": "area", "default": "#1c1c1e", "advanced": false },
+          { "control": "Tile border", "fn": "Tile border colour", "key": "area_styles[name].tileBorderColor", "scope": "area", "default": "rgba(255,255,255,.07)", "advanced": true },
+          { "control": "Tile corner radius", "fn": "Tile corner radius", "key": "area_styles[name].tileBorderRadius", "scope": "area", "default": "12px", "advanced": true },
+          { "control": "Tile opacity", "fn": "Tile opacity", "key": "area_styles[name].tileOpacity", "scope": "area", "default": "100%", "advanced": true },
+          { "control": "Room block border", "fn": "Border width of the room block", "key": "area_styles[name].borderWidth", "scope": "area", "default": "1px", "advanced": true },
+          { "control": "Room block radius", "fn": "Corner radius of the room block", "key": "area_styles[name].borderRadius", "scope": "area", "default": "10px", "advanced": true },
+          { "control": "Header gradient start", "fn": "Room header gradient start", "key": "area_styles[name].headerBgColor", "scope": "area", "default": "#1a1a2e", "advanced": true },
+          { "control": "Header gradient end", "fn": "Room header gradient end", "key": "area_styles[name].headerBgColor2", "scope": "area", "default": "#0f3460", "advanced": true },
+          { "control": "Header text", "fn": "Room header text colour", "key": "area_styles[name].textColor", "scope": "area", "default": "#f4601e", "advanced": true },
+          { "control": "Header font size", "fn": "Room header font size", "key": "area_styles[name].fontSize", "scope": "area", "default": "12px", "advanced": true },
+          { "control": "Sensor chips", "fn": "Whitelist of sensor chips for this room", "key": "area_styles[name].sensors", "scope": "area", "default": "inherit", "advanced": false },
+          { "control": "Button shape / variant / size", "fn": "ON/OFF button style for this room", "key": "area_styles[name].button*", "scope": "area", "default": "pill / fill / md", "advanced": true }
+        ]}
+      ]},
+
+    { "id": "views", "icon": "☰", "label": "Views",
+      "note": "Views are filtered tabs over the same devices. Each stores at views[i]. Filters are ANDed; empty means all. Layout overrides fall through to the global defaults.",
+      "groups": [
+        { "name": "Views toolbar", "controls": [
+          { "control": "+ Add view", "fn": "Append a new view (view_N / View N)", "key": "views[] append", "scope": "global", "default": "—", "advanced": false },
+          { "control": "Default view", "fn": "Which view loads first (view 0 → undefined)", "key": "default_view", "scope": "global", "default": "first view", "advanced": false }
+        ]},
+        { "name": "Per-view card", "controls": [
+          { "control": "▲ / ▼ Move", "fn": "Reorder this view", "key": "views[] reorder", "scope": "view", "default": "—", "advanced": false },
+          { "control": "🗑 Delete", "fn": "Remove the view (clears default_view if it pointed here)", "key": "views[] remove", "scope": "view", "default": "—", "advanced": false },
+          { "control": "ID", "fn": "View id — URL / localStorage key", "key": "views[i].id", "scope": "view", "default": "view_N", "advanced": true },
+          { "control": "Name (tab label)", "fn": "Tab label text", "key": "views[i].name", "scope": "view", "default": "View N", "advanced": false },
+          { "control": "Icon (mdi:*)", "fn": "View tab icon", "key": "views[i].icon", "scope": "view", "default": "none", "advanced": false },
+          { "control": "Show Favourites section", "fn": "Enable the Favourites section on this view", "key": "views[i].show_favourites", "scope": "view", "default": "off", "advanced": false },
+          { "control": "Group by room", "fn": "Group devices by room (off → false)", "key": "views[i].show_rooms", "scope": "view", "default": "on", "advanced": false }
+        ]},
+        { "name": "Per-view filters", "controls": [
+          { "control": "Profiles (+ All / None)", "fn": "Allow-list of device profiles", "key": "views[i].filter.profiles", "scope": "view", "default": "all", "advanced": false },
+          { "control": "Entity domains (+ All / None)", "fn": "Allow-list of entity domains", "key": "views[i].filter.domains", "scope": "view", "default": "all", "advanced": true },
+          { "control": "Areas (+ All / None)", "fn": "Allow-list of room names", "key": "views[i].filter.areas", "scope": "area", "default": "all", "advanced": false },
+          { "control": "Include specific devices", "fn": "Whitelist individual devices", "key": "views[i].filter.devices", "scope": "device", "default": "all", "advanced": false },
+          { "control": "Exclude devices", "fn": "Blacklist individual devices", "key": "views[i].filter.exclude_devices", "scope": "device", "default": "none", "advanced": false },
+          { "control": "Entity-ID regex", "fn": "Regex matched against entity_ids (validated live)", "key": "views[i].filter.entity_id_pattern", "scope": "view", "default": "none", "advanced": true }
+        ]},
+        { "name": "Per-view layout overrides", "controls": [
+          { "control": "Tile style", "fn": "Override tile render style (Default → inherit)", "key": "views[i].tile_style", "scope": "view", "default": "inherit", "advanced": true },
+          { "control": "Power-monitor variant", "fn": "Sub-variant when style = power-monitor", "key": "views[i].power_monitor_variant", "scope": "view", "default": "big-number", "advanced": true },
+          { "control": "Columns (+ ↺)", "fn": "Override grid columns for this view", "key": "views[i].columns", "scope": "view", "default": "inherit → 3", "advanced": true },
+          { "control": "Tile size", "fn": "Override tile size (inherit clears)", "key": "views[i].tile_size", "scope": "view", "default": "inherit", "advanced": true }
+        ]}
+      ]},
+
+    { "id": "layout", "icon": "⊡", "label": "Layout & Style",
+      "note": "Card-wide look. Nearly everything writes into the global style object. Header & Tiles are basic; Card, Colours & Typography are advanced-only.",
+      "groups": [
+        { "name": "Header", "controls": [
+          { "control": "Card title", "fn": "Header title text", "key": "title", "scope": "global", "default": "none", "advanced": false },
+          { "control": "Header icon / emoji", "fn": "Icon before the title", "key": "style.header_icon", "scope": "global", "default": "none", "advanced": false },
+          { "control": "Show title", "fn": "Show / hide the title", "key": "header_show_title", "scope": "global", "default": "shown", "advanced": false },
+          { "control": "Show stats", "fn": "Show / hide the online·power stats row", "key": "header_show_stats", "scope": "global", "default": "shown", "advanced": false },
+          { "control": "Header chips (+ ↺)", "fn": "Which stat chips appear", "key": "header_chips", "scope": "global", "default": "online·offline·power·alerts", "advanced": false },
+          { "control": "Show cloud chips", "fn": "Extra cloud status row", "key": "header_show_cloud", "scope": "global", "default": "off", "advanced": false },
+          { "control": "Title size", "fn": "Header title font size", "key": "style.header_title_size", "scope": "global", "default": "1.1em", "advanced": true },
+          { "control": "Header height", "fn": "Header vertical padding", "key": "style.header_padding", "scope": "global", "default": "16px", "advanced": true },
+          { "control": "Corner radius", "fn": "Header corner radius", "key": "style.header_radius", "scope": "global", "default": "0px", "advanced": true },
+          { "control": "Bottom border + colour", "fn": "Header bottom border width & colour", "key": "style.header_border_width / _color", "scope": "global", "default": "0px / #4ade80", "advanced": true },
+          { "control": "Show glow orbs", "fn": "Header glow orbs", "key": "header_show_orbs", "scope": "global", "default": "off", "advanced": true },
+          { "control": "Ambient effects", "fn": "Pulse / glow / blur effects", "key": "effects", "scope": "global", "default": "off", "advanced": true },
+          { "control": "Background gradient", "fn": "Header gradient start & end", "key": "style.header_bg / _bg2", "scope": "global", "default": "#1a1a2e / #0f3460", "advanced": true },
+          { "control": "Text colour", "fn": "Header text colour", "key": "style.header_text_color", "scope": "global", "default": "#ffffff", "advanced": true },
+          { "control": "Orb / glow colour", "fn": "Header orb colour", "key": "style.header_orb_color", "scope": "global", "default": "#3b82f6", "advanced": true },
+          { "control": "Stat chip colours", "fn": "Online / power / offline chip colours", "key": "style.header_stat_*", "scope": "global", "default": "#4ade80 / #fb923c / #9ca3af", "advanced": true },
+          { "control": "Background opacity", "fn": "Header background opacity", "key": "header_opacity", "scope": "global", "default": "100%", "advanced": true }
+        ]},
+        { "name": "Tiles", "controls": [
+          { "control": "Columns", "fn": "Grid column count (1–6)", "key": "columns", "scope": "global", "default": "3", "advanced": false },
+          { "control": "Tile size", "fn": "Small / Medium / Large", "key": "tile_size", "scope": "global", "default": "md", "advanced": false },
+          { "control": "Tile gap", "fn": "Gap between tiles", "key": "style.tile_gap", "scope": "global", "default": "10px", "advanced": false },
+          { "control": "Tile radius", "fn": "Tile corner radius", "key": "style.tile_radius", "scope": "global", "default": "12px", "advanced": false },
+          { "control": "Block order", "fn": "Drag-reorder / hide the tile content blocks", "key": "tile_layout", "scope": "global", "default": "all visible", "advanced": false },
+          { "control": "Tile border width", "fn": "Tile border width", "key": "style.tile_border_width", "scope": "global", "default": "1px", "advanced": true },
+          { "control": "Tile shadow", "fn": "None / Soft / Medium / Strong", "key": "style.tile_box_shadow", "scope": "global", "default": "none", "advanced": true },
+          { "control": "Tile background image + fit", "fn": "Upload/URL image + Cover/Contain/Stretch", "key": "style.tile_bg_image / _size", "scope": "global", "default": "none / cover", "advanced": true },
+          { "control": "Tile colours", "fn": "Background, border, hover, sensor-chip & expanded-panel colours", "key": "style.tile_bg / _border / _hover_* …", "scope": "global", "default": "warm-dusk set", "advanced": true }
+        ]},
+        { "name": "Card", "controls": [
+          { "control": "Dashboard background", "fn": "Overall card background colour", "key": "style.card_bg", "scope": "global", "default": "#1e1a17", "advanced": true },
+          { "control": "Card corner radius", "fn": "Card corner radius", "key": "style.card_radius", "scope": "global", "default": "12px", "advanced": true },
+          { "control": "Card transparency", "fn": "Card transparency (inverse of opacity)", "key": "card_opacity", "scope": "global", "default": "100%", "advanced": true },
+          { "control": "Tiles transparency", "fn": "Global tile transparency", "key": "tile_opacity", "scope": "global", "default": "100%", "advanced": true },
+          { "control": "Card background image + fit", "fn": "Upload/URL image + fit", "key": "card_bg_image / _size", "scope": "global", "default": "none / cover", "advanced": true }
+        ]},
+        { "name": "Colours", "controls": [
+          { "control": "Accent / brand", "fn": "Accent colour", "key": "style.accent_color", "scope": "global", "default": "#c98a63", "advanced": true },
+          { "control": "Room header label", "fn": "Area header label colour", "key": "style.area_header_color", "scope": "global", "default": "#c98a63", "advanced": true },
+          { "control": "Text primary / secondary / muted", "fn": "The three text tiers", "key": "style.text_primary / _secondary / _muted", "scope": "global", "default": "#ece5dc / #b3a596 / #7e7265", "advanced": true },
+          { "control": "Status colours", "fn": "Online dot / offline dot / power reading", "key": "style.online_color / offline_color / power_color", "scope": "global", "default": "#93b384 / #d47f62 / #dba25c", "advanced": true }
+        ]},
+        { "name": "Typography", "controls": [
+          { "control": "Font family", "fn": "System / Bundled / Display font", "key": "style.font_family", "scope": "global", "default": "inherit", "advanced": true },
+          { "control": "Text scale", "fn": "Global text size scale (0.8–1.3×)", "key": "style.text_size_scale", "scope": "global", "default": "1×", "advanced": true }
+        ]}
+      ]},
+
+    { "id": "graphs", "icon": "∿", "label": "Graphs & Sensors",
+      "note": "All global defaults — override per room/device elsewhere. Sensor chips write to one sensors array (empty = all shown). The ∿ button on a chip also adds it to the graph palette.",
+      "groups": [
+        { "name": "Graph type", "controls": [
+          { "control": "Show graphs on tiles", "fn": "Master sparkline switch", "key": "show_graphs", "scope": "global", "default": "on", "advanced": false },
+          { "control": "Type", "fn": "Line / Area / Bar", "key": "graph_style.type", "scope": "global", "default": "line", "advanced": false },
+          { "control": "History window", "fn": "History look-back (1–168h)", "key": "graph_hours", "scope": "global", "default": "24h", "advanced": false },
+          { "control": "Line thickness", "fn": "Sparkline stroke width", "key": "graph_style.line_width", "scope": "global", "default": "1.5px", "advanced": true },
+          { "control": "Fill area under line", "fn": "Area fill beneath the line", "key": "graph_style.fill", "scope": "global", "default": "on", "advanced": true },
+          { "control": "Graph height", "fn": "Sparkline pixel height", "key": "graph_style.height", "scope": "global", "default": "32px", "advanced": true },
+          { "control": "Show time axis labels", "fn": "X-axis time labels", "key": "graph_style.time_labels", "scope": "global", "default": "on", "advanced": true },
+          { "control": "Show peak / min dots", "fn": "Peak & min marker dots", "key": "graph_style.show_dots", "scope": "global", "default": "on", "advanced": true },
+          { "control": "Tick grid lines", "fn": "Background tick grid", "key": "graph_style.tick_lines", "scope": "global", "default": "on", "advanced": true }
+        ]},
+        { "name": "Graph colours", "controls": [
+          { "control": "Gauge ring colours", "fn": "Per-sensor gauge colour (power/voltage/current/temp)", "key": "graph_sensor_colors[key]", "scope": "global", "default": "#f4601e / #a78bfa / #fbbf24 / #4fc3f7", "advanced": true },
+          { "control": "Sparkline colours", "fn": "Per-sensor sparkline colour (graphed sensors)", "key": "graph_sensor_colors[key]", "scope": "global", "default": "per-sensor default", "advanced": true },
+          { "control": "Which sensors to graph", "fn": "The graph palette (+ All / None)", "key": "graph_sensors", "scope": "global", "default": "[] none", "advanced": true }
+        ]},
+        { "name": "Graph ranges", "controls": [
+          { "control": "Sensor Min / Max", "fn": "Fixed y-axis scale per sensor (empty = auto)", "key": "graph_style.sensor_ranges[key]", "scope": "global", "default": "auto", "advanced": true }
+        ]},
+        { "name": "Sensor chips — Electrical", "controls": [
+          { "control": "Select all / Deselect all", "fn": "Toggle all electrical chips", "key": "sensors", "scope": "global", "default": "all shown", "advanced": false },
+          { "control": "Power · Voltage · Current · Energy · Frequency · App./React. Power · Power Factor", "fn": "Toggle each electrical chip on tiles", "key": "sensors", "scope": "global", "default": "all shown", "advanced": false }
+        ]},
+        { "name": "Sensor chips — Environmental", "controls": [
+          { "control": "Select all / Deselect all", "fn": "Toggle all environmental chips", "key": "sensors", "scope": "global", "default": "all shown", "advanced": false },
+          { "control": "Temperature · Humidity · Illuminance · CO₂ · Gas", "fn": "Toggle each environmental chip", "key": "sensors", "scope": "global", "default": "all shown", "advanced": false }
+        ]},
+        { "name": "Sensor chips — Device info", "controls": [
+          { "control": "Select all / Deselect all", "fn": "Toggle all device-info chips", "key": "sensors", "scope": "global", "default": "all shown", "advanced": true },
+          { "control": "Cloud · Wi-Fi RSSI · Uptime · IP · SSID · Battery · Firmware · MAC", "fn": "Toggle each info chip", "key": "sensors", "scope": "global", "default": "all shown", "advanced": true }
+        ]},
+        { "name": "Sensor chips — Alerts", "controls": [
+          { "control": "Select all / Deselect all", "fn": "Toggle all alert chips", "key": "sensors", "scope": "global", "default": "all shown", "advanced": true },
+          { "control": "Overtemp · Overpower · Motion · Door/Window · Flood · Smoke", "fn": "Toggle each alert chip", "key": "sensors", "scope": "global", "default": "all shown", "advanced": true }
+        ]}
+      ]},
+
+    { "id": "yaml", "icon": "</>", "label": "YAML",
+      "note": "Read-only. Serialises the whole config to YAML with a Copy button — no editable textarea, so it never writes config.",
+      "groups": [
+        { "name": "YAML tab", "controls": [
+          { "control": "Copy", "fn": "Copy the full generated config to the clipboard", "key": "reads whole config", "scope": "local", "default": "—", "advanced": false },
+          { "control": "YAML output", "fn": "Live read-only view of the entire config", "key": "whole config (display)", "scope": "global", "default": "—", "advanced": false }
+        ]}
+      ]},
+
+    { "id": "defaults", "icon": "◆", "label": "Defaults panel",
+      "note": "An overlay (◆ Defaults button) for the card's first-run look. All global. Theme presets write palette colours into style — there is no theme key; the active theme is derived from the colours.",
+      "groups": [
+        { "name": "Defaults panel", "controls": [
+          { "control": "Default view", "fn": "Which view loads first", "key": "default_view", "scope": "global", "default": "first view", "advanced": false },
+          { "control": "Colour theme", "fn": "Apply one of 7 preset palettes over style", "key": "style.* (palette keys)", "scope": "global", "default": "warm_dusk", "advanced": false },
+          { "control": "Saved theme ★", "fn": "Restore your saved custom palette", "key": "style.* + localStorage", "scope": "global", "default": "none", "advanced": false },
+          { "control": "Default tile style (+ ↺)", "fn": "Global default tile layout style", "key": "tile_style", "scope": "global", "default": "adaptive", "advanced": false },
+          { "control": "Power-monitor variant", "fn": "Sub-variant for the default tile style", "key": "power_monitor_variant", "scope": "global", "default": "big-number", "advanced": false },
+          { "control": "Smart tile styles", "fn": "Auto-pick a layout per device type where none is set", "key": "smart_tile_styles", "scope": "global", "default": "off", "advanced": false },
+          { "control": "Default columns", "fn": "Default grid columns", "key": "columns", "scope": "global", "default": "3", "advanced": false },
+          { "control": "Default tile size", "fn": "Default tile size", "key": "tile_size", "scope": "global", "default": "md", "advanced": false },
+          { "control": "More tile settings →", "fn": "Jump to the Layout tab", "key": "none", "scope": "local", "default": "—", "advanced": false }
+        ]},
+        { "name": "Section toolbar", "controls": [
+          { "control": "Advanced toggle", "fn": "Reveal advanced controls across tabs (localStorage, per card)", "key": "none (localStorage)", "scope": "local", "default": "off", "advanced": false },
+          { "control": "◆ Defaults button", "fn": "Open / close the Defaults overlay", "key": "none", "scope": "local", "default": "closed", "advanced": false }
+        ]}
+      ]}
+  ]
+}
