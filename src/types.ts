@@ -436,6 +436,10 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   area_styles?: Record<string, AreaStyle>;
   /** Per-device overrides, keyed by device_id */
   device_styles?: Record<string, DeviceStyle>;
+  /** Per-device-TYPE overrides, keyed by profile (relay/dimmer/climate/…). Applies
+   *  to every device of that type — "all relays". Sits one rung below device_styles
+   *  in the cascade (device → type → area → style preset → global → profile default). */
+  profile_styles?: Partial<Record<DeviceProfile, DeviceStyle>>;
   /** Per-tile-style presets: default chips / blocks / variant / element visibility
    *  for every tile rendered in a given style. Overridable per device/area. */
   style_presets?: Partial<Record<TileStyle, StylePreset>>;
