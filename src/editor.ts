@@ -2300,11 +2300,13 @@ export class HADeviceDashboardEditor extends LitElement {
         </div>` : nothing}
       `)}
       ${previewPreview}
-      ${this._sec('header','◈','rgba(99,102,241,0.1)','#818cf8','Header', nothing, headerBody)}
-      ${this._sec('tiles','⊡','rgba(45,212,191,0.1)','#2dd4bf','Tiles', nothing, tilesBody)}
-      ${this._adv(this._sec('card','▢','rgba(129,140,248,0.1)','#818cf8','Card', nothing, cardBody))}
-      ${this._adv(this._sec('colors','◐','rgba(244,96,30,0.12)','#f4601e','Colours', nothing, colorsBody))}
-      ${this._adv(this._sec('typography','T','rgba(251,191,36,0.1)','#fbbf24','Typography', nothing, typogBody))}`;
+      ${this._renderTabSections('layout', {
+        header:     { icon: '◈', bg: 'rgba(99,102,241,0.1)',  fg: '#818cf8', label: 'Header',     badge: nothing, body: headerBody },
+        tiles:      { icon: '⊡', bg: 'rgba(45,212,191,0.1)',  fg: '#2dd4bf', label: 'Tiles',      badge: nothing, body: tilesBody },
+        card:       { icon: '▢', bg: 'rgba(129,140,248,0.1)', fg: '#818cf8', label: 'Card',       badge: nothing, body: cardBody },
+        colors:     { icon: '◐', bg: 'rgba(244,96,30,0.12)',  fg: '#f4601e', label: 'Colours',    badge: nothing, body: colorsBody },
+        typography: { icon: 'T', bg: 'rgba(251,191,36,0.1)',  fg: '#fbbf24', label: 'Typography', badge: nothing, body: typogBody },
+      })}`;
   }
 
 
@@ -2544,27 +2546,39 @@ export class HADeviceDashboardEditor extends LitElement {
     return out;
   }
 
-  /** Graphs & Sensors tab — renders its sections from EDITOR_LAYOUT via the
-   *  per-section registry, so order + advanced-gating + labels are data-driven. */
-  private _renderGraphsSensorsTab(): TemplateResult {
-    const reg = { ...this._graphSectionDescriptors(), ...this._sensorSectionDescriptors() };
-    const tab = EDITOR_LAYOUT.find(t => t.id === 'graphs');
+  /** Render a tab's sections from EDITOR_LAYOUT via a per-section registry, so
+   *  order + advanced-gating + labels are data-driven. `prefix` may inject content
+   *  before a section (given the set of ids already rendered) — used for one-off
+   *  hints that should sit above the first section of a kind. */
+  private _renderTabSections(
+    tabId: string,
+    reg: Record<string, SectionDesc>,
+    prefix?: (id: string, shown: Set<string>) => TemplateResult | typeof nothing,
+  ): TemplateResult {
+    const tab = EDITOR_LAYOUT.find(t => t.id === tabId);
     if (!tab) return html``;
-    const SENSOR_IDS = new Set(['electrical','environmental','deviceinfo','alerts']);
-    let hintShown = false;
+    const shown = new Set<string>();
     return html`${tab.sections.map(s => {
       const d = reg[s.id];
       if (!d) return nothing;
-      // The "global default — override per room/device" hint sits once, above the
-      // first sensor-chip group wherever it lands in the layout.
-      let pre: TemplateResult | typeof nothing = nothing;
-      if (SENSOR_IDS.has(s.id) && !hintShown) {
-        hintShown = true;
-        pre = html`<div class="hint" style="margin:4px 2px 8px">Global default — override per room (Layout & Style → room) or per device (Rooms & devices).</div>`;
-      }
+      const pre = prefix ? prefix(s.id, shown) : nothing;
+      shown.add(s.id);
       const rendered = html`${pre}${this._sec(s.id, d.icon, d.bg, d.fg, s.label ?? d.label, d.badge, d.body)}`;
       return s.advanced ? this._adv(rendered) : rendered;
     })}`;
+  }
+
+  /** Graphs & Sensors tab — sections from EDITOR_LAYOUT; the sensor-chip hint
+   *  renders once above the first sensor group wherever it lands. */
+  private _renderGraphsSensorsTab(): TemplateResult {
+    const reg = { ...this._graphSectionDescriptors(), ...this._sensorSectionDescriptors() };
+    const SENSOR_IDS = new Set(['electrical','environmental','deviceinfo','alerts']);
+    return this._renderTabSections('graphs', reg, (id, shown) => {
+      const priorSensor = [...shown].some(x => SENSOR_IDS.has(x));
+      return (SENSOR_IDS.has(id) && !priorSensor)
+        ? html`<div class="hint" style="margin:4px 2px 8px">Global default — override per room (Layout & Style → room) or per device (Rooms & devices).</div>`
+        : nothing;
+    });
   }
 
   // ══════════════════════════════════════════════════════════════
