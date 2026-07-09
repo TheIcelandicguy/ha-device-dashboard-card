@@ -3859,7 +3859,7 @@ function e(e,t,i,s){var r,a=arguments.length,o=a<3?t:null===s?s=Object.getOwnPro
               </div>
               <button class="drag-eye" @click=${()=>{const t=new Set(this._hiddenBlocks);t.has(e)?t.delete(e):t.add(e),this._hiddenBlocks=t;const i=this._dragOrder.filter(e=>!t.has(e));this._set("tile_layout",i)}} style="opacity:${i?.35:1}">👁</button>
             </div>`})}
-      </div>`}_renderStyleTab(){const e=this._config,t=e.style??{},i=(e,i)=>this._set("style",{...t,[e]:i}),s=e=>{const i={...t};delete i[e],this._set("style",i)},r=(e,r,a)=>{const o=t[r]??a;return G`
+      </div>`}_layoutSectionDescriptors(){const e=this._config,t=e.style??{},i=(e,i)=>this._set("style",{...t,[e]:i}),s=e=>{const i={...t};delete i[e],this._set("style",i)},r=(e,r,a)=>{const o=t[r]??a;return G`
         <div class="color-row">
           <div class="color-preview-swatch" style="background:${o}"></div>
           <span class="color-key">${e}</span>
@@ -4106,42 +4106,42 @@ function e(e,t,i,s){var r,a=arguments.length,o=a<3?t:null===s?s=Object.getOwnPro
                 @click=${()=>this._set("card_bg_image_size",t)}>${t[0].toUpperCase()+t.slice(1)}</span>`)}
           </div>
         `:V}
-      </div>`;this._getAreas();const v=t.accent_color??"#f4601e",f=t.card_bg??"#1c1c1e",b=t.tile_bg??"#1c1c1e",m=t.tile_border??"#2a2a30",x=t.tile_hover_bg??"rgba(255,255,255,0.07)",y=t.tile_sensor_bg??"rgba(255,255,255,0.04)",w=t.text_primary??"#e5e7eb",k=t.text_secondary??"#9ca3af",A=t.text_muted??"#6b7280",C=t.online_color??"#4ade80",S=t.offline_color??"#ef4444";t.power_color;const _=t.header_bg??"#1a1a2e",z=t.header_bg2??"#0f3460",O=t.header_text_color??"#ffffff",I=t.header_orb_color??"#3b82f6",M=t.header_title_size??1.1,T=t.header_padding??16,B=t.header_border_width??0,E=t.header_border_color??"#4ade80",R=t.header_stat_online??"#4ade80",D=t.header_stat_power??"#fb923c",F=t.font_family?`'${t.font_family}', sans-serif`:"inherit",P=t.text_size_scale??1,L=t.tile_radius??12,N=t.tile_border_width??1,j=t.header_radius??0,H=B>0?`${B}px solid ${E}`:"none",U=G`
-      <div class="style-preview" style="font-family:${F};background:${f}">
+      </div>`;return{header:{icon:"◈",bg:"rgba(99,102,241,0.1)",fg:"#818cf8",label:"Header",badge:V,body:a},tiles:{icon:"⊡",bg:"rgba(45,212,191,0.1)",fg:"#2dd4bf",label:"Tiles",badge:V,body:g},card:{icon:"▢",bg:"rgba(129,140,248,0.1)",fg:"#818cf8",label:"Card",badge:V,body:u},colors:{icon:"◐",bg:"rgba(244,96,30,0.12)",fg:"#f4601e",label:"Colours",badge:V,body:l},typography:{icon:"T",bg:"rgba(251,191,36,0.1)",fg:"#fbbf24",label:"Typography",badge:V,body:d}}}_renderStyleTab(){const e=this._config,t=e.style??{},i=t.accent_color??"#f4601e",s=t.card_bg??"#1c1c1e",r=t.tile_bg??"#1c1c1e",a=t.tile_border??"#2a2a30",o=t.tile_hover_bg??"rgba(255,255,255,0.07)",n=t.tile_sensor_bg??"rgba(255,255,255,0.04)",l=t.text_primary??"#e5e7eb",c=t.text_secondary??"#9ca3af",d=t.text_muted??"#6b7280",p=t.online_color??"#4ade80",h=t.offline_color??"#ef4444";t.power_color;const g=t.header_bg??"#1a1a2e",u=t.header_bg2??"#0f3460",v=t.header_text_color??"#ffffff",f=t.header_orb_color??"#3b82f6",b=t.header_title_size??1.1,m=t.header_padding??16,x=t.header_border_width??0,y=t.header_border_color??"#4ade80",w=t.header_stat_online??"#4ade80",k=t.header_stat_power??"#fb923c",A=t.font_family?`'${t.font_family}', sans-serif`:"inherit",C=t.text_size_scale??1,S=t.tile_radius??12,_=t.tile_border_width??1,z=t.header_radius??0,O=x>0?`${x}px solid ${y}`:"none",I=G`
+      <div class="style-preview" style="font-family:${A};background:${s}">
         <div class="sp-header"
-          style="background:linear-gradient(135deg,${_},${z});color:${O};border-radius:${j}px;padding:${Math.round(.55*T)}px 12px;border-bottom:${H};position:relative;overflow:hidden">
-          <span class="sp-h-orb" style="background:radial-gradient(circle,${I} 0%,transparent 70%)"></span>
-          <span class="sp-h-title" style="font-size:${(M*P).toFixed(2)}em;position:relative;z-index:1">${t.header_icon??"⚡"} ${e.title??"Shelly"}</span>
-          <span class="sp-h-stat" style="color:${R};position:relative;z-index:1">● 12 on</span>
-          <span class="sp-h-stat" style="color:${D};position:relative;z-index:1">42 W</span>
+          style="background:linear-gradient(135deg,${g},${u});color:${v};border-radius:${z}px;padding:${Math.round(.55*m)}px 12px;border-bottom:${O};position:relative;overflow:hidden">
+          <span class="sp-h-orb" style="background:radial-gradient(circle,${f} 0%,transparent 70%)"></span>
+          <span class="sp-h-title" style="font-size:${(b*C).toFixed(2)}em;position:relative;z-index:1">${t.header_icon??"⚡"} ${e.title??"Shelly"}</span>
+          <span class="sp-h-stat" style="color:${w};position:relative;z-index:1">● 12 on</span>
+          <span class="sp-h-stat" style="color:${k};position:relative;z-index:1">42 W</span>
         </div>
         <div class="sp-tile"
-          style="background:${b};border:${N}px solid ${m};border-radius:${L}px">
-          <div class="sp-row" style="color:${w};font-size:${(13*P).toFixed(0)}px">
-            <span class="sp-dot" style="background:${C}"></span>
+          style="background:${r};border:${_}px solid ${a};border-radius:${S}px">
+          <div class="sp-row" style="color:${l};font-size:${(13*C).toFixed(0)}px">
+            <span class="sp-dot" style="background:${p}"></span>
             Lampi
-            <span class="sp-tog" style="background:${v}">ON</span>
+            <span class="sp-tog" style="background:${i}">ON</span>
           </div>
-          <div class="sp-row sp-chips" style="color:${k};font-size:${(10*P).toFixed(0)}px">
-            <span class="sp-chip" style="background:${y}">4.1 W</span>
-            <span class="sp-chip" style="background:${y}">235 V</span>
-            <span class="sp-chip" style="background:${y}">44.6 °C</span>
+          <div class="sp-row sp-chips" style="color:${c};font-size:${(10*C).toFixed(0)}px">
+            <span class="sp-chip" style="background:${n}">4.1 W</span>
+            <span class="sp-chip" style="background:${n}">235 V</span>
+            <span class="sp-chip" style="background:${n}">44.6 °C</span>
           </div>
           <svg viewBox="0 0 200 22" preserveAspectRatio="none" style="width:100%;height:22px;display:block">
             <polygon points="0,18 25,14 50,16 75,9 100,11 125,5 150,7 175,3 200,1 200,22 0,22"
-              fill="${v}" fill-opacity="0.15"/>
+              fill="${i}" fill-opacity="0.15"/>
             <polyline points="0,18 25,14 50,16 75,9 100,11 125,5 150,7 175,3 200,1"
-              fill="none" stroke="${v}" stroke-width="1.5" stroke-linecap="round"/>
+              fill="none" stroke="${i}" stroke-width="1.5" stroke-linecap="round"/>
           </svg>
         </div>
         <div class="sp-tile"
-          style="background:${x};border:${N}px solid ${m};border-radius:${L}px">
-          <div class="sp-row" style="color:${w};font-size:${(13*P).toFixed(0)}px">
-            <span class="sp-dot" style="background:${S}"></span>
-            <span style="color:${A}">Offline tile (hover state)</span>
+          style="background:${o};border:${_}px solid ${a};border-radius:${S}px">
+          <div class="sp-row" style="color:${l};font-size:${(13*C).toFixed(0)}px">
+            <span class="sp-dot" style="background:${h}"></span>
+            <span style="color:${d}">Offline tile (hover state)</span>
           </div>
         </div>
-        <div class="sp-hint" style="color:${A}">Live preview — reflects current colour, typography, and tile settings</div>
+        <div class="sp-hint" style="color:${d}">Live preview — reflects current colour, typography, and tile settings</div>
       </div>`;return G`
       ${this._adv(G`
       <div class="style-toolbar">
@@ -4165,8 +4165,8 @@ function e(e,t,i,s){var r,a=arguments.length,o=a<3?t:null===s?s=Object.getOwnPro
           <button class="btn-copy" @click=${()=>this._applyPastedStyle()}>Apply</button>
         </div>`:V}
       `)}
-      ${U}
-      ${this._renderTabSections("layout",{header:{icon:"◈",bg:"rgba(99,102,241,0.1)",fg:"#818cf8",label:"Header",badge:V,body:a},tiles:{icon:"⊡",bg:"rgba(45,212,191,0.1)",fg:"#2dd4bf",label:"Tiles",badge:V,body:g},card:{icon:"▢",bg:"rgba(129,140,248,0.1)",fg:"#818cf8",label:"Card",badge:V,body:u},colors:{icon:"◐",bg:"rgba(244,96,30,0.12)",fg:"#f4601e",label:"Colours",badge:V,body:l},typography:{icon:"T",bg:"rgba(251,191,36,0.1)",fg:"#fbbf24",label:"Typography",badge:V,body:d}})}`}_graphSectionDescriptors(){const e=this._config,t=e.graph_style??{},i=t.type??"line",s=e.graph_sensor_colors??{},r=G`
+      ${I}
+      ${this._renderTabSections("layout",this._globalSectionDescriptors())}`}_globalSectionDescriptors(){return{...this._layoutSectionDescriptors(),...this._graphSectionDescriptors(),...this._sensorSectionDescriptors()}}_renderCustomTab(e){const t=new Set(["electrical","environmental","deviceinfo","alerts"]);return this._renderTabSections(e,this._globalSectionDescriptors(),(e,i)=>{const s=[...i].some(e=>t.has(e));return t.has(e)&&!s?G`<div class="hint" style="margin:4px 2px 8px">Global default — override per room (Layout & Style → room) or per device (Rooms & devices).</div>`:V})}_graphSectionDescriptors(){const e=this._config,t=e.graph_style??{},i=t.type??"line",s=e.graph_sensor_colors??{},r=G`
       <div class="tog-row" style="border:none;padding:0 0 6px">
         <div class="tog-lbl">Show graphs on tiles
           <span class="field-note">master switch — “Which sensors” below is the palette</span></div>
@@ -4267,7 +4267,7 @@ function e(e,t,i,s){var r,a=arguments.length,o=a<3?t:null===s?s=Object.getOwnPro
                     title="${n?"Remove from graphs":"Add to graphs"}"
                     @click=${e=>{e.stopPropagation();const t=n?o.filter(e=>Ct(e)!==r):[...o,r];this._set("graph_sensors",t)}}>∿</button>`:V}
                 </div>`})}
-          </div>`,c=s.group.toLowerCase().replace(" ","");i[c]={icon:s.icon,bg:s.iconBg,fg:s.iconColor,label:s.group,badge:n,body:l}}),i}_renderTabSections(e,t,i){const s=Zt.find(t=>t.id===e);if(!s)return G``;const r=new Set;return G`${s.sections.map(e=>{const s=t[e.id];if(!s)return V;const a=i?i(e.id,r):V;r.add(e.id);const o=G`${a}${this._sec(e.id,s.icon,s.bg,s.fg,e.label??s.label,s.badge,s.body)}`;return e.advanced?this._adv(o):o})}`}_renderGraphsSensorsTab(){const e={...this._graphSectionDescriptors(),...this._sensorSectionDescriptors()},t=new Set(["electrical","environmental","deviceinfo","alerts"]);return this._renderTabSections("graphs",e,(e,i)=>{const s=[...i].some(e=>t.has(e));return t.has(e)&&!s?G`<div class="hint" style="margin:4px 2px 8px">Global default — override per room (Layout & Style → room) or per device (Rooms & devices).</div>`:V})}_renderYamlTab(){const e=this._config,t=(e,i=0)=>{const s="  ".repeat(i);return Object.entries(e).map(([e,r])=>null==r?"":"object"!=typeof r||Array.isArray(r)?Array.isArray(r)?`${s}${e}:\n${r.map(e=>"object"==typeof e?`${s}  -\n${t(e,i+2)}`:`${s}  - ${e}`).join("\n")}`:`${s}${e}: ${r}`:`${s}${e}:\n${t(r,i+1)}`).filter(Boolean).join("\n")},i=t(e);return G`
+          </div>`,c=s.group.toLowerCase().replace(" ","");i[c]={icon:s.icon,bg:s.iconBg,fg:s.iconColor,label:s.group,badge:n,body:l}}),i}_renderTabSections(e,t,i){const s=Zt.find(t=>t.id===e);if(!s)return G``;const r=new Set;return G`${s.sections.map(e=>{const s=t[e.id];if(!s)return V;const a=i?i(e.id,r):V;r.add(e.id);const o=G`${a}${this._sec(e.id,s.icon,s.bg,s.fg,e.label??s.label,s.badge,s.body)}`;return e.advanced?this._adv(o):o})}`}_renderGraphsSensorsTab(){const e=this._globalSectionDescriptors(),t=new Set(["electrical","environmental","deviceinfo","alerts"]);return this._renderTabSections("graphs",e,(e,i)=>{const s=[...i].some(e=>t.has(e));return t.has(e)&&!s?G`<div class="hint" style="margin:4px 2px 8px">Global default — override per room (Layout & Style → room) or per device (Rooms & devices).</div>`:V})}_renderYamlTab(){const e=this._config,t=(e,i=0)=>{const s="  ".repeat(i);return Object.entries(e).map(([e,r])=>null==r?"":"object"!=typeof r||Array.isArray(r)?Array.isArray(r)?`${s}${e}:\n${r.map(e=>"object"==typeof e?`${s}  -\n${t(e,i+2)}`:`${s}  - ${e}`).join("\n")}`:`${s}${e}: ${r}`:`${s}${e}:\n${t(r,i+1)}`).filter(Boolean).join("\n")},i=t(e);return G`
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
         <div style="font-size:11px;color:#50505c;font-family:monospace">Generated config</div>
         <button class="btn-copy" @click=${async()=>{await navigator.clipboard.writeText(i).catch(e=>{console.warn("[editor] clipboard write failed",e)})}}>Copy</button>
@@ -4353,7 +4353,7 @@ function e(e,t,i,s){var r,a=arguments.length,o=a<3?t:null===s?s=Object.getOwnPro
               @click=${()=>{this._tab="layout",this._defaultsOpen=!1}}>More tile settings →</button>
           </div>
         </div>
-      </div>`}render(){if(!this._config)return G``;this._config;const e=Zt.map(e=>({id:e.id,label:e.label,icon:e.icon})),t=new Set(Zt.flatMap(e=>e.sections.filter(e=>e.advanced).map(e=>e.id))),i=e=>Zt.find(t=>t.id===e)?.sections.map(e=>e.id)??[],s={devices:["rooms"],views:[],layout:i("layout"),graphs:i("graphs"),yaml:[]},r=Object.fromEntries(Object.entries(s).map(([e,i])=>[e,this._advanced?i:i.filter(e=>!t.has(e))])),a=e=>{const t=r[this._tab];if(!t.length)return;const i={...this._openSections};for(const s of t)i[s]=e;this._openSections=i},o=r[this._tab].length>1;return G`
+      </div>`}render(){if(!this._config)return G``;this._config;const e=Zt.map(e=>({id:e.id,label:e.label,icon:e.icon})),t=new Set(Zt.flatMap(e=>e.sections.filter(e=>e.advanced).map(e=>e.id))),i={};Zt.forEach(e=>{i[e.id]=e.sections.map(e=>e.id)}),i.devices=["rooms"],i.views=[],i.yaml=[];const s=Object.fromEntries(Object.entries(i).map(([e,i])=>[e,this._advanced?i:i.filter(e=>!t.has(e))])),r=s[this._tab]??[],a=e=>{if(!r.length)return;const t={...this._openSections};for(const i of r)t[i]=e;this._openSections=t},o=r.length>1;return G`
       <div class="shell">
         <div class="tab-nav">
           ${e.map(e=>G`
@@ -4381,7 +4381,7 @@ function e(e,t,i,s){var r,a=arguments.length,o=a<3?t:null===s?s=Object.getOwnPro
         </div>
         ${this._defaultsOpen?this._renderDefaultsPanel():V}
         <div class="tab-body">
-          ${"devices"===this._tab?this._renderDevicesTab():"views"===this._tab?this._renderViewsTab():"layout"===this._tab?this._renderStyleTab():"graphs"===this._tab?this._renderGraphsSensorsTab():this._renderYamlTab()}
+          ${(()=>(({devices:()=>this._renderDevicesTab(),views:()=>this._renderViewsTab(),layout:()=>this._renderStyleTab(),graphs:()=>this._renderGraphsSensorsTab(),yaml:()=>this._renderYamlTab()}[this._tab]??(()=>this._renderCustomTab(this._tab)))()))()}
         </div>
         ${this._renderIconGridPopover()}
       </div>`}};ei.styles=[Ze,n`

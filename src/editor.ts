@@ -1889,7 +1889,9 @@ export class HADeviceDashboardEditor extends LitElement {
   //  TAB: STYLE
   // ══════════════════════════════════════════════════════════════
 
-  private _renderStyleTab(): TemplateResult {
+  /** Layout & Style section bodies, keyed by id — consumed by _renderStyleTab and
+   *  by _renderCustomTab (so these sections can be moved into other/custom tabs). */
+  private _layoutSectionDescriptors(): Record<string, SectionDesc> {
     const c = this._config;
     const sty: StyleCfg = c.style ?? {};
 
@@ -2207,7 +2209,20 @@ export class HADeviceDashboardEditor extends LitElement {
         ` : nothing}
       </div>`;
 
-    const allAreas = this._getAreas();
+    return {
+      header:     { icon: '◈', bg: 'rgba(99,102,241,0.1)',  fg: '#818cf8', label: 'Header',     badge: nothing, body: headerBody },
+      tiles:      { icon: '⊡', bg: 'rgba(45,212,191,0.1)',  fg: '#2dd4bf', label: 'Tiles',      badge: nothing, body: tilesBody },
+      card:       { icon: '▢', bg: 'rgba(129,140,248,0.1)', fg: '#818cf8', label: 'Card',       badge: nothing, body: cardBody },
+      colors:     { icon: '◐', bg: 'rgba(244,96,30,0.12)',  fg: '#f4601e', label: 'Colours',    badge: nothing, body: colorsBody },
+      typography: { icon: 'T', bg: 'rgba(251,191,36,0.1)',  fg: '#fbbf24', label: 'Typography', badge: nothing, body: typogBody },
+    };
+  }
+
+  /** Layout & Style tab — copy/paste chrome + live preview, then its sections
+   *  (from EDITOR_LAYOUT via the shared loop). */
+  private _renderStyleTab(): TemplateResult {
+    const c = this._config;
+    const sty: StyleCfg = c.style ?? {};
 
     // Live preview — reads current style tokens so changes appear immediately.
     const previewAccent   = sty.accent_color     ?? '#f4601e';
@@ -2300,13 +2315,28 @@ export class HADeviceDashboardEditor extends LitElement {
         </div>` : nothing}
       `)}
       ${previewPreview}
-      ${this._renderTabSections('layout', {
-        header:     { icon: '◈', bg: 'rgba(99,102,241,0.1)',  fg: '#818cf8', label: 'Header',     badge: nothing, body: headerBody },
-        tiles:      { icon: '⊡', bg: 'rgba(45,212,191,0.1)',  fg: '#2dd4bf', label: 'Tiles',      badge: nothing, body: tilesBody },
-        card:       { icon: '▢', bg: 'rgba(129,140,248,0.1)', fg: '#818cf8', label: 'Card',       badge: nothing, body: cardBody },
-        colors:     { icon: '◐', bg: 'rgba(244,96,30,0.12)',  fg: '#f4601e', label: 'Colours',    badge: nothing, body: colorsBody },
-        typography: { icon: 'T', bg: 'rgba(251,191,36,0.1)',  fg: '#fbbf24', label: 'Typography', badge: nothing, body: typogBody },
-      })}`;
+      ${this._renderTabSections('layout', this._globalSectionDescriptors())}`;
+  }
+
+  /** Every movable global section, keyed by id — used to render custom tabs. */
+  private _globalSectionDescriptors(): Record<string, SectionDesc> {
+    return {
+      ...this._layoutSectionDescriptors(),
+      ...this._graphSectionDescriptors(),
+      ...this._sensorSectionDescriptors(),
+    };
+  }
+
+  /** Body for a tab that has no bespoke renderer — renders whatever global
+   *  sections EDITOR_LAYOUT assigned to it, so custom tabs work end-to-end. */
+  private _renderCustomTab(tabId: string): TemplateResult {
+    const SENSOR_IDS = new Set(['electrical','environmental','deviceinfo','alerts']);
+    return this._renderTabSections(tabId, this._globalSectionDescriptors(), (id, shown) => {
+      const priorSensor = [...shown].some(x => SENSOR_IDS.has(x));
+      return (SENSOR_IDS.has(id) && !priorSensor)
+        ? html`<div class="hint" style="margin:4px 2px 8px">Global default — override per room (Layout & Style → room) or per device (Rooms & devices).</div>`
+        : nothing;
+    });
   }
 
 
@@ -2571,7 +2601,7 @@ export class HADeviceDashboardEditor extends LitElement {
   /** Graphs & Sensors tab — sections from EDITOR_LAYOUT; the sensor-chip hint
    *  renders once above the first sensor group wherever it lands. */
   private _renderGraphsSensorsTab(): TemplateResult {
-    const reg = { ...this._graphSectionDescriptors(), ...this._sensorSectionDescriptors() };
+    const reg = this._globalSectionDescriptors();
     const SENSOR_IDS = new Set(['electrical','environmental','deviceinfo','alerts']);
     return this._renderTabSections('graphs', reg, (id, shown) => {
       const priorSensor = [...shown].some(x => SENSOR_IDS.has(x));
@@ -2750,30 +2780,27 @@ export class HADeviceDashboardEditor extends LitElement {
     const ADV_SECTIONS = new Set<string>(
       EDITOR_LAYOUT.flatMap(t => t.sections.filter(s => s.advanced).map(s => s.id)),
     );
-    // Collapsible-section keys per tab. Layout & Graphs render their sections from
-    // EDITOR_LAYOUT, so their keys come from the spec; the other tabs still use
-    // bespoke methods with their own section keys.
-    const specKeys = (id: string) => EDITOR_LAYOUT.find(t => t.id === id)?.sections.map(s => s.id) ?? [];
-    const allTabSectionKeys: Record<TabId, string[]> = {
-      devices: ['rooms'],
-      views:   [],
-      layout:  specKeys('layout'),
-      graphs:  specKeys('graphs'),
-      yaml:    [],
-    };
-    const tabSectionKeys: Record<TabId, string[]> = Object.fromEntries(
-      (Object.entries(allTabSectionKeys) as Array<[TabId,string[]]>).map(
-        ([t, keys]) => [t, this._advanced ? keys : keys.filter(k => !ADV_SECTIONS.has(k))]
-      )
-    ) as Record<TabId, string[]>;
+    // Collapsible-section keys per tab, derived from EDITOR_LAYOUT (so custom tabs
+    // are covered). Bespoke tabs render their own bodies, so override with their
+    // real section keys.
+    const allTabSectionKeys: Record<string, string[]> = {};
+    EDITOR_LAYOUT.forEach(t => { allTabSectionKeys[t.id] = t.sections.map(s => s.id); });
+    allTabSectionKeys['devices'] = ['rooms'];
+    allTabSectionKeys['views']   = [];
+    allTabSectionKeys['yaml']    = [];
+    const tabSectionKeys: Record<string, string[]> = Object.fromEntries(
+      Object.entries(allTabSectionKeys).map(
+        ([t, keys]) => [t, this._advanced ? keys : keys.filter(k => !ADV_SECTIONS.has(k))],
+      ),
+    );
+    const curKeys = tabSectionKeys[this._tab] ?? [];
     const setAllSections = (open: boolean) => {
-      const keys = tabSectionKeys[this._tab];
-      if (!keys.length) return;
+      if (!curKeys.length) return;
       const next = { ...this._openSections };
-      for (const k of keys) next[k] = open;
+      for (const k of curKeys) next[k] = open;
       this._openSections = next;
     };
-    const showSectionToggle = tabSectionKeys[this._tab].length > 1;
+    const showSectionToggle = curKeys.length > 1;
     return html`
       <div class="shell">
         <div class="tab-nav">
@@ -2802,11 +2829,18 @@ export class HADeviceDashboardEditor extends LitElement {
         </div>
         ${this._defaultsOpen ? this._renderDefaultsPanel() : nothing}
         <div class="tab-body">
-          ${this._tab==='devices' ? this._renderDevicesTab()
-           :this._tab==='views'   ? this._renderViewsTab()
-           :this._tab==='layout'  ? this._renderStyleTab()
-           :this._tab==='graphs'  ? this._renderGraphsSensorsTab()
-           :                        this._renderYamlTab()}
+          ${(() => {
+            // Tab bodies resolve by id; unknown ids (custom tabs from the designer)
+            // render their assigned global sections.
+            const bodyFor: Record<string, () => TemplateResult> = {
+              devices: () => this._renderDevicesTab(),
+              views:   () => this._renderViewsTab(),
+              layout:  () => this._renderStyleTab(),
+              graphs:  () => this._renderGraphsSensorsTab(),
+              yaml:    () => this._renderYamlTab(),
+            };
+            return (bodyFor[this._tab] ?? (() => this._renderCustomTab(this._tab)))();
+          })()}
         </div>
         ${this._renderIconGridPopover()}
       </div>`;
