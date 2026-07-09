@@ -41,8 +41,13 @@ export const EDITOR_LAYOUT: EditorTab[] = [
     { id: 'views-toolbar', label: 'Views toolbar' },
     { id: 'view-card',     label: 'Per-view card + filters' },
   ] },
-  { id: 'layout', label: 'Layout & Style', icon: '⊡', sections: [
-    { id: 'header',     label: 'Header' },
+  // ── Redesign Phase 2: split the old "Layout & Style" tab by *what* is styled —
+  //    the header on its own, the card/tiles/theme look together. Both render via
+  //    _renderCustomTab from the global section registry (no bespoke body needed).
+  { id: 'header-styling', label: 'Header', icon: '◈', sections: [
+    { id: 'header', label: 'Header' },
+  ] },
+  { id: 'card-theme', label: 'Card & Theme', icon: '🎨', sections: [
     { id: 'tiles',      label: 'Tiles' },
     { id: 'card',       label: 'Card',       advanced: true },
     { id: 'colors',     label: 'Colours',    advanced: true },

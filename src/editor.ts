@@ -171,7 +171,7 @@ const STYLE_KEYS: ReadonlyArray<string> = [
 export class HADeviceDashboardEditor extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
   @state() private _config!: HADeviceDashboardConfig;
-  @state() private _tab: 'devices'|'views'|'layout'|'graphs'|'yaml' = 'devices';
+  @state() private _tab: string = 'devices';   // matches an EDITOR_LAYOUT tab id
   /** Editor-only preference (persisted in localStorage, never written to config):
    *  when false, power-user controls are hidden to keep the common path simple. */
   @state() private _advanced = false;
@@ -2762,7 +2762,7 @@ export class HADeviceDashboardEditor extends LitElement {
               </div>
             </div>
             <button class="sec-toolbar-btn" style="align-self:flex-start"
-              @click=${() => { this._tab = 'layout'; this._defaultsOpen = false; }}>More tile settings →</button>
+              @click=${() => { this._tab = 'card-theme'; this._defaultsOpen = false; }}>More tile settings →</button>
           </div>
         </div>
       </div>`;
