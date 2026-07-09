@@ -137,6 +137,9 @@ export interface AreaStyle {
   header_chips?: string[];
   /** Per-area override for tile sparkline graphs. undefined = inherit global. */
   show_graphs?: boolean;
+  /** Per-element visibility override for tiles in this area. Element id → visible.
+   *  Omitted ids inherit style preset → default (visible). */
+  elements?: Record<string, boolean>;
 }
 
 /**
@@ -259,6 +262,22 @@ export interface DeviceStyle {
   sensors?: string[];
   /** Per-device override for tile sparkline graphs. undefined = inherit area/global. */
   show_graphs?: boolean;
+  /** Per-element visibility override for this device's tile style. Element id →
+   *  visible. Omitted ids inherit area → style preset → default (visible). */
+  elements?: Record<string, boolean>;
+}
+
+/** A per-tile-style default preset. Applies to every tile rendered in that style,
+ *  below device/area overrides and above the per-profile built-in defaults. */
+export interface StylePreset {
+  /** Default power-monitor variant for power-monitor style. */
+  variant?: PowerMonitorVariant;
+  /** Default sensor chips for tiles of this style. undefined = inherit global. */
+  sensors?: string[];
+  /** Default block order/visibility for the 'default' (block) style. */
+  tile_layout?: TileBlockId[];
+  /** Per-element visibility for this style. Element id → visible (omit = visible). */
+  elements?: Record<string, boolean>;
 }
 
 /** Per-view filter — all fields AND-ed; within a list values OR-ed. */
@@ -417,6 +436,9 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   area_styles?: Record<string, AreaStyle>;
   /** Per-device overrides, keyed by device_id */
   device_styles?: Record<string, DeviceStyle>;
+  /** Per-tile-style presets: default chips / blocks / variant / element visibility
+   *  for every tile rendered in a given style. Overridable per device/area. */
+  style_presets?: Partial<Record<TileStyle, StylePreset>>;
 
   // ── Graphs ────────────────────────────────────────────────────
   /** device_class keys to graph. Empty = no graphs. */

@@ -108,6 +108,10 @@ export interface TileCtx {
   online: boolean;
   isOn: boolean;
 
+  /** Per-element visibility for this tile's style (Style Presets). Returns true
+   *  unless a device/area/style-preset override hides the element. */
+  showEl: (id: string) => boolean;
+
   // Device helpers
   getPrimarySwitch: (d: HADevice) => PrimarySwitch | null;
   getTrv: (d: HADevice) => TrvInfo | null;

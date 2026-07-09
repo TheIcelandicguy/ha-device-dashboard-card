@@ -41,22 +41,22 @@ function renderPMBigNumber(ctx: TileCtx): TemplateResult {
       <div class="ts-hero-bar" style="background:${isOn ? accent : 'var(--sc-tile-border)'}"></div>
       <div class="ts-hero-top">
         ${renderNameDot(device, online, 'ts-hero-name')}
-        ${sw ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
+        ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
       </div>
       <div class="ts-hero-num" style="color:${isOn ? accent : 'var(--sc-text-muted)'}">${s.power != null ? s.power.toFixed(s.power < 10 ? 1 : 0) : '—'}</div>
       <div class="ts-hero-unit">watts · ${isOn ? 'active' : 'idle'}</div>
-      <div class="ts-hero-spark"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:${H}px;display:block">${sparkSvg}</svg></div>
+      ${ctx.showEl('graph') ? html`<div class="ts-hero-spark"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:${H}px;display:block">${sparkSvg}</svg></div>` : nothing}
       <div class="ts-hero-foot">
-        <div class="ts-chips">
+        ${ctx.showEl('secondary') ? html`<div class="ts-chips">
           ${s.voltage != null ? html`<span class="ts-chip">${s.voltage.toFixed(1)} V</span>` : nothing}
           ${s.current != null ? html`<span class="ts-chip">${s.current.toFixed(2)} A</span>` : nothing}
           ${s.energy  != null ? html`<span class="ts-chip">${s.energy.toFixed(2)} kWh</span>` : nothing}
           ${s.temp    != null ? html`<span class="ts-chip">${s.temp.toFixed(1)} °C</span>` : nothing}
           ${s.rssi    != null ? html`<span class="ts-chip">${s.rssi} dBm</span>` : nothing}
-        </div>
-        <span class="ts-uptime">${s.uptime ? formatUptime(s.uptime) : ''}</span>
+        </div>` : nothing}
+        ${ctx.showEl('uptime') ? html`<span class="ts-uptime">${s.uptime ? formatUptime(s.uptime) : ''}</span>` : nothing}
       </div>
-      ${ctx.renderTileLowerBody(device, profile)}
+      ${ctx.showEl('lower_body') ? ctx.renderTileLowerBody(device, profile) : nothing}
     </div>`;
 }
 
@@ -101,7 +101,7 @@ function renderPMGauge(ctx: TileCtx): TemplateResult {
     <div class="ts-ring" style="--ts-accent:${accent};align-items:center">
       <div class="ts-ring-top" style="width:100%">
         ${renderNameDot(device, online, 'ts-ring-name')}
-        ${sw ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
+        ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
       </div>
       <svg viewBox="0 0 ${CX * 2} ${svgH}" style="width:100%;max-width:360px;height:auto;overflow:visible;display:block">
         ${rings.map((ring, i) => {
@@ -117,7 +117,7 @@ function renderPMGauge(ctx: TileCtx): TemplateResult {
             <text x="${vx}" y="${vy}" font-size="8" fill="${ring.color}" text-anchor="${anchor}" dominant-baseline="hanging" font-family="monospace" font-weight="700" opacity="${isOn ? 0.95 : 0.5}">${fmtVal(ring.val, ring.label)} ${ring.label}</text>`;
         })}
       </svg>
-      ${ctx.renderTileLowerBody(device, profile)}
+      ${ctx.showEl('lower_body') ? ctx.renderTileLowerBody(device, profile) : nothing}
     </div>`;
 }
 
@@ -153,23 +153,23 @@ function renderPMGraph(ctx: TileCtx): TemplateResult {
     <div class="ts-spark" style="--ts-accent:${accent}">
       <div class="ts-spark-top">
         ${renderNameDot(device, online, 'ts-spark-name')}
-        ${sw ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
+        ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
       </div>
-      <div class="ts-spark-graph"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:${H}px;display:block;overflow:visible">${sparkBody}</svg></div>
+      ${ctx.showEl('graph') ? html`<div class="ts-spark-graph"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:${H}px;display:block;overflow:visible">${sparkBody}</svg></div>` : nothing}
       <div class="ts-spark-bottom">
         <div>
           <div class="ts-spark-big" style="color:${isOn ? accent : 'var(--sc-text-muted)'}">${s.power != null ? s.power.toFixed(s.power < 10 ? 1 : 0) : '—'}</div>
           <div class="ts-spark-sub">${isOn ? 'W · now' : 'W · idle'}</div>
         </div>
-        <div class="ts-spark-meta">
+        ${ctx.showEl('secondary') ? html`<div class="ts-spark-meta">
           ${s.voltage != null ? html`<div class="ts-spark-mrow">${s.voltage.toFixed(1)} <b>V</b></div>` : nothing}
           ${s.current != null ? html`<div class="ts-spark-mrow">${s.current.toFixed(2)} <b>A</b></div>` : nothing}
           ${s.energy  != null ? html`<div class="ts-spark-mrow">${s.energy.toFixed(2)} <b>kWh</b></div>` : nothing}
           ${s.temp    != null ? html`<div class="ts-spark-mrow">${s.temp.toFixed(1)} <b>°C</b></div>` : nothing}
           ${s.rssi    != null ? html`<div class="ts-spark-mrow">${s.rssi} <b>dBm</b></div>` : nothing}
-        </div>
+        </div>` : nothing}
       </div>
-      ${ctx.renderTileLowerBody(device, profile, { skipPowerGraph: true })}
+      ${ctx.showEl('lower_body') ? ctx.renderTileLowerBody(device, profile, { skipPowerGraph: true }) : nothing}
     </div>`;
 }
 
@@ -186,21 +186,21 @@ function renderPMCompact(ctx: TileCtx): TemplateResult {
           <div class="ts-hbar-num" style="color:${isOn ? accent : 'var(--sc-text-muted)'}">${s.power != null ? s.power.toFixed(s.power < 10 ? 1 : 0) : '—'}</div>
           <div class="ts-hbar-unit">watts</div>
         </div>
-        <div class="ts-hbar-side">
+        ${ctx.showEl('secondary') ? html`<div class="ts-hbar-side">
           ${s.voltage != null ? html`<div class="ts-hbar-sstat"><div class="ts-hbar-sk">V</div><div class="ts-hbar-sv">${s.voltage.toFixed(0)}</div></div>` : nothing}
           ${s.current != null ? html`<div class="ts-hbar-sstat"><div class="ts-hbar-sk">A</div><div class="ts-hbar-sv">${s.current.toFixed(2)}</div></div>` : nothing}
           ${s.temp    != null ? html`<div class="ts-hbar-sstat"><div class="ts-hbar-sk">°C</div><div class="ts-hbar-sv">${s.temp.toFixed(1)}</div></div>` : nothing}
           ${s.rssi    != null ? html`<div class="ts-hbar-sstat"><div class="ts-hbar-sk">dBm</div><div class="ts-hbar-sv">${s.rssi}</div></div>` : nothing}
-        </div>
+        </div>` : nothing}
       </div>
       <div class="ts-hbar-footer">
         <div style="display:flex;gap:6px;align-items:center">
           ${s.energy != null ? html`<span class="ts-hbar-badge">${s.energy.toFixed(2)} kWh</span>` : nothing}
-          ${s.uptime != null ? html`<span class="ts-hbar-badge">${formatUptime(s.uptime)}</span>` : nothing}
+          ${s.uptime != null && ctx.showEl('uptime') ? html`<span class="ts-hbar-badge">${formatUptime(s.uptime)}</span>` : nothing}
         </div>
-        ${sw ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
+        ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
       </div>
-      ${ctx.renderTileLowerBody(device, profile)}
+      ${ctx.showEl('lower_body') ? ctx.renderTileLowerBody(device, profile) : nothing}
     </div>`;
 }
 
@@ -235,18 +235,19 @@ function renderPMTable(ctx: TileCtx): TemplateResult {
     <div class="ts-list" style="--ts-accent:${accent}">
       <div class="ts-list-header">
         ${renderNameDot(device, online, 'ts-list-name')}
-        ${sw ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
+        ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
       </div>
       ${s.power   != null ? row('Power',   formatPower(s.power),         true) : nothing}
-      ${s.voltage != null ? row('Voltage', `${s.voltage.toFixed(1)} V`)       : nothing}
-      ${s.current != null ? row('Current', `${s.current.toFixed(3)} A`)       : nothing}
-      ${s.energy  != null ? row('Energy',  formatEnergy(s.energy))            : nothing}
-      ${s.temp    != null ? row('Temp',    `${s.temp.toFixed(1)} °C`)         : nothing}
-      ${s.rssi    != null ? row('WiFi',    `${s.rssi} dBm`)                   : nothing}
-      ${s.uptime  != null ? row('Uptime',  formatUptime(s.uptime))            : nothing}
-      <div class="ts-list-spark">
+      ${ctx.showEl('secondary') ? html`
+        ${s.voltage != null ? row('Voltage', `${s.voltage.toFixed(1)} V`)       : nothing}
+        ${s.current != null ? row('Current', `${s.current.toFixed(3)} A`)       : nothing}
+        ${s.energy  != null ? row('Energy',  formatEnergy(s.energy))            : nothing}
+        ${s.temp    != null ? row('Temp',    `${s.temp.toFixed(1)} °C`)         : nothing}
+        ${s.rssi    != null ? row('WiFi',    `${s.rssi} dBm`)                   : nothing}` : nothing}
+      ${s.uptime  != null && ctx.showEl('uptime') ? row('Uptime',  formatUptime(s.uptime)) : nothing}
+      ${ctx.showEl('graph') ? html`<div class="ts-list-spark">
         <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:${H}px;display:block">${sparkBody}</svg>
-      </div>
-      ${ctx.renderTileLowerBody(device, profile, { skipGraphs: true })}
+      </div>` : nothing}
+      ${ctx.showEl('lower_body') ? ctx.renderTileLowerBody(device, profile, { skipGraphs: true }) : nothing}
     </div>`;
 }

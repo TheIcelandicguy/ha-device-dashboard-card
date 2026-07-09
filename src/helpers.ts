@@ -166,6 +166,56 @@ export const PROFILE_DEFAULT_TILE_STYLE: Partial<Record<DeviceProfile, TileStyle
 };
 
 /**
+ * Toggleable elements per tile style — the shared vocabulary for the Style
+ * Presets system. Renderers guard each element with `ctx.showEl(id)`; the editor
+ * / offline designer reads this to build the toggle grid. Ids must match the
+ * literal strings the renderers pass to `showEl`. ('default' style toggles its
+ * content via blocks / `tile_layout`, so it's not listed here.)
+ */
+export const STYLE_ELEMENTS: Partial<Record<TileStyle, Array<{ id: string; label: string }>>> = {
+  'power-monitor': [
+    { id: 'toggle',     label: 'On/off button' },
+    { id: 'graph',      label: 'Sparkline graph' },
+    { id: 'secondary',  label: 'Secondary readings (V/A/kWh)' },
+    { id: 'uptime',     label: 'Uptime badge' },
+    { id: 'lower_body', label: 'Lower body (blocks)' },
+  ],
+  'light-control': [
+    { id: 'color_wheel', label: 'Colour wheel' },
+    { id: 'brightness',  label: 'Brightness slider' },
+    { id: 'color_temp',  label: 'Colour temperature' },
+    { id: 'white',       label: 'White channel' },
+    { id: 'effects',     label: 'Effects' },
+    { id: 'power',       label: 'Power reading' },
+  ],
+  'climate-control': [
+    { id: 'heating_badge',  label: 'Heating badge' },
+    { id: 'dial',           label: 'Temperature dial' },
+    { id: 'adjust_buttons', label: '+/− buttons' },
+    { id: 'stats',          label: 'Stats row' },
+    { id: 'presets',        label: 'Preset buttons' },
+  ],
+  'cover-control': [
+    { id: 'position_pct',    label: 'Position %' },
+    { id: 'shutter_graphic', label: 'Shutter graphic' },
+    { id: 'moving_label',    label: 'Moving label' },
+    { id: 'buttons',         label: 'Open / stop / close' },
+  ],
+  'sensor-card': [
+    { id: 'primary_value', label: 'Primary value' },
+    { id: 'trend',         label: 'Trend arrow' },
+    { id: 'graph',         label: 'Sparkline graph' },
+    { id: 'secondary',     label: 'Secondary chips' },
+  ],
+  'scene-button': [
+    { id: 'icon',       label: 'Icon' },
+    { id: 'name',       label: 'Name' },
+    { id: 'timestamp',  label: 'Last-triggered time' },
+    { id: 'input_rows', label: 'Input channel rows' },
+  ],
+};
+
+/**
  * Default tile block order for each device profile.
  * Users can override this per-card, per-area, or per-device.
  */

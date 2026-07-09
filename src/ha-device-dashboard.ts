@@ -876,6 +876,9 @@ export class HADeviceDashboard extends LitElement {
     if (devSel !== undefined) return devSel;
     const areaSel = device.area ? this._config.area_styles?.[device.area]?.sensors : undefined;
     if (areaSel !== undefined) return areaSel;
+    // Per-tile-style preset — more specific than the global list.
+    const presetSel = this._config.style_presets?.[this._effectiveStyle(device)]?.sensors;
+    if (presetSel !== undefined) return presetSel;
     if (this._config.sensors !== undefined) return this._config.sensors;
     // Lowest priority: curated per-profile default chips. Undefined here (e.g.
     // 'generic') means "show all", preserving the previous behaviour.
@@ -2264,6 +2267,18 @@ export class HADeviceDashboard extends LitElement {
     return { style: raw ?? 'default', variant: 'big-number' };
   }
 
+  /** The tile style a device will actually render in — device → area → view →
+   *  global → smart/profile default. Drives the style-preset chips/element cascades. */
+  private _effectiveStyle(device: HADevice): TileStyle {
+    const profile = this._profile(device);
+    const devStyle = this._config.device_styles?.[device.device_id];
+    const areaStyle = device.area ? this._config.area_styles?.[device.area] : undefined;
+    const activeView = this._getActiveView();
+    const raw = devStyle?.tile_style ?? areaStyle?.tile_style ?? activeView?.tile_style ?? this._config.tile_style
+      ?? (this._config.smart_tile_styles ? PROFILE_DEFAULT_TILE_STYLE[profile.type] : undefined);
+    return this._resolveStyle(raw, profile).style;
+  }
+
   private _handleScenePress(device: HADevice): void {
     const buttonEnts = device.entities.filter(e => e.domain === 'button');
     for (const e of buttonEnts) {
@@ -2304,7 +2319,15 @@ export class HADeviceDashboard extends LitElement {
     const online = this._isOnline(device);
     const sw = getPrimarySwitch(device);
     const isOn = sw?.isOn ?? false;
+    // Per-element visibility for this tile's style: device → area → style preset →
+    // visible. Renderers call showEl(id); an unset id defaults to shown.
+    const _effStyle = this._effectiveStyle(device);
+    const _devEl  = this._config.device_styles?.[device.device_id]?.elements;
+    const _areaEl = device.area ? this._config.area_styles?.[device.area]?.elements : undefined;
+    const _presetEl = this._config.style_presets?.[_effStyle]?.elements;
+    const showEl = (id: string): boolean => _devEl?.[id] ?? _areaEl?.[id] ?? _presetEl?.[id] ?? true;
     return {
+      showEl,
       hass: this.hass,
       config: this._config,
       device,
@@ -2388,6 +2411,7 @@ export class HADeviceDashboard extends LitElement {
       ?? areaVariant
       ?? activeView?.power_monitor_variant
       ?? this._config.power_monitor_variant
+      ?? this._config.style_presets?.['power-monitor']?.variant
       ?? legacyVariant;
 
     if (style === 'default' || !style) {
@@ -2395,6 +2419,7 @@ export class HADeviceDashboard extends LitElement {
       const _defaultBlocks: TileBlockId[] = ['name_row', 'sensors', 'graph', 'dimmer', 'cover_controls', 'trv_control', 'valve_controls', 'input_channels', 'relay_channels', 'power_bar', 'badges'];
       const blockOrder: TileBlockId[] =
         devStyle?.tile_layout ?? this._config.tile_layout ??
+        this._config.style_presets?.['default']?.tile_layout ??
         PROFILE_DEFAULT_BLOCKS[profile.type] ?? _defaultBlocks;
       const areaAccent = this._tileAccent(device, device.area ?? '');
       const blockCtx = this._buildTileCtx(device, profile, areaAccent);
