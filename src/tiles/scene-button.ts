@@ -23,7 +23,7 @@ export function renderSceneButtonTile(ctx: TileCtx): TemplateResult {
         <div class="ts-scene-top">
           ${renderNameDot(device, online)}
         </div>
-        <div class="tile-inputs">
+        ${ctx.showEl('input_rows') ? html`<div class="tile-inputs">
           ${inputs.map(ch => html`
             <div class="input-row ${ch.isButton ? 'btn-mode' : ch.isOn ? 'active' : ''}">
               <span class="${ch.isButton ? 'input-btn-dot' : 'input-row-dot'}"></span>
@@ -31,16 +31,16 @@ export function renderSceneButtonTile(ctx: TileCtx): TemplateResult {
               <span class="input-row-event">${ch.lastEvent ? ch.lastEvent.replace(/_/g, ' ') : '—'}</span>
               <span class="input-row-time">${ctx.timeAgo(ch.lastChanged)}</span>
             </div>`)}
-        </div>
+        </div>` : nothing}
       </div>`;
   }
 
   return html`
     <div class="ts-scene ts-scene-centered" style="--ts-accent:${accent}"
       @click=${(e: Event) => { e.stopPropagation(); ctx.handleScenePress(device); }}>
-      <div class="ts-scene-icon-wrap">${cmdIcon}</div>
-      <div class="ts-scene-name">${device.name}</div>
-      ${timeAgoStr ? html`<div class="ts-scene-time">${timeAgoStr}</div>` : nothing}
+      ${ctx.showEl('icon') ? html`<div class="ts-scene-icon-wrap">${cmdIcon}</div>` : nothing}
+      ${ctx.showEl('name') ? html`<div class="ts-scene-name">${device.name}</div>` : nothing}
+      ${timeAgoStr && ctx.showEl('timestamp') ? html`<div class="ts-scene-time">${timeAgoStr}</div>` : nothing}
       <div class="ts-scene-ripple"></div>
     </div>`;
 }

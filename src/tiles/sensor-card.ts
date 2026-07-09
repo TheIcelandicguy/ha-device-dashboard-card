@@ -54,18 +54,18 @@ export function renderSensorCardTile(ctx: TileCtx): TemplateResult {
           ${renderNameDot(device, online)}
           <span class="ts-sensor-dc">${dc}</span>
         </div>
-        <div class="ts-sensor-main">
+        ${ctx.showEl('primary_value') ? html`<div class="ts-sensor-main">
           <span class="ts-sensor-val" style="color:${accent}">${isNaN(val) ? st?.state : val % 1 === 0 ? val : val.toFixed(1)}</span>
           <span class="ts-sensor-unit">${unit}</span>
-        </div>
-        ${pts.length >= 2 ? html`
+        </div>` : nothing}
+        ${ctx.showEl('trend') && pts.length >= 2 ? html`
           <div class="ts-sensor-trend ${trend > 0 ? 'up' : trend < 0 ? 'down' : ''}">
             ${trend > 0 ? '↑' : trend < 0 ? '↓' : '→'} ${Math.abs(trend) < 0.05 ? 'stable' : Math.abs(trend).toFixed(1) + ' ' + unit + '/hr'}
           </div>` : nothing}
-        <div class="ts-sensor-spark">
+        ${ctx.showEl('graph') ? html`<div class="ts-sensor-spark">
           ${ctx.renderSparklinesFiltered(device, ctx.getGraphEntities(device).filter(e => e.entityId === primaryEnt!.entity_id))}
-        </div>
-        ${secEnts.length ? html`<div class="ts-chips" style="margin-top:6px">
+        </div>` : nothing}
+        ${ctx.showEl('secondary') && secEnts.length ? html`<div class="ts-chips" style="margin-top:6px">
           ${secEnts.map(e => {
             const ss = hass.states[e.entity_id];
             const v = parseFloat(ss?.state ?? '');
@@ -91,10 +91,10 @@ export function renderSensorCardTile(ctx: TileCtx): TemplateResult {
         ${renderNameDot(device, online)}
         <span class="ts-sensor-dc">${dc}</span>
       </div>
-      <div class="ts-sensor-binary-state" style="color:${stateColor}">
+      ${ctx.showEl('primary_value') ? html`<div class="ts-sensor-binary-state" style="color:${stateColor}">
         <span class="ts-sensor-binary-dot" style="background:${stateColor}"></span>
         ${label}
-      </div>
+      </div>` : nothing}
       ${lastChanged ? html`<div style="font-size:.7em;color:var(--sc-text-muted);margin-top:4px">${lastChanged}</div>` : nothing}
     </div>`;
 }

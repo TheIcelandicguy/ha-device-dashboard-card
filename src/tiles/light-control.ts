@@ -97,7 +97,7 @@ export function renderLightControlTile(ctx: TileCtx): TemplateResult {
         <div class="ts-light-name"><span class="dot ${online ? 'online' : 'offline'}"></span>${device.name}</div>
         <button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>
       </div>
-      ${hasColor ? html`
+      ${hasColor && ctx.showEl('color_wheel') ? html`
         <div class="ts-light-wheel-wrap">
           <svg width="${WHEEL_SIZE}" height="${WHEEL_SIZE}" viewBox="0 0 ${WHEEL_SIZE} ${WHEEL_SIZE}"
             class="ts-light-wheel" @click=${onWheelClick} style="cursor:crosshair">
@@ -114,7 +114,7 @@ export function renderLightControlTile(ctx: TileCtx): TemplateResult {
             ${dotR ? svg`<circle cx="${dotR.x.toFixed(1)}" cy="${dotR.y.toFixed(1)}" r="7" fill="${hexColor}" stroke="white" stroke-width="2" filter="drop-shadow(0 0 4px rgba(0,0,0,0.6))"/>` : nothing}
           </svg>
         </div>` : nothing}
-      <div class="ts-light-row">
+      ${ctx.showEl('brightness') ? html`<div class="ts-light-row">
         <span class="ts-light-lbl">Brightness</span>
         <div style="display:flex;align-items:center;gap:6px;flex:1">
           <input type="range" class="dim-slider ts-light-slider" min="1" max="100"
@@ -124,8 +124,8 @@ export function renderLightControlTile(ctx: TileCtx): TemplateResult {
             @change=${(e: Event) => ctx.setBrightness(sw.entityId, parseInt((e.target as HTMLInputElement).value, 10))}/>
           <span class="ts-light-pct">${bPct}%</span>
         </div>
-      </div>
-      ${supportsColorTemp ? html`
+      </div>` : nothing}
+      ${supportsColorTemp && ctx.showEl('color_temp') ? html`
         <div class="ts-light-row">
           <span class="ts-light-lbl">Temp</span>
           <div style="display:flex;align-items:center;gap:6px;flex:1">
@@ -135,7 +135,7 @@ export function renderLightControlTile(ctx: TileCtx): TemplateResult {
             <span class="ts-light-pct">${Math.round(1000000 / colorTempCur)}K</span>
           </div>
         </div>` : nothing}
-      ${isRgbw ? html`
+      ${isRgbw && ctx.showEl('white') ? html`
         <div class="ts-light-row">
           <span class="ts-light-lbl">White</span>
           <div style="display:flex;align-items:center;gap:6px;flex:1">
@@ -145,12 +145,12 @@ export function renderLightControlTile(ctx: TileCtx): TemplateResult {
             <span class="ts-light-pct">${whiteVal}</span>
           </div>
         </div>` : nothing}
-      ${effectList.length > 1 ? html`
+      ${effectList.length > 1 && ctx.showEl('effects') ? html`
         <div class="tile-effects">
           ${effectList.filter(fx => fx !== 'Off').map(fx => html`
             <button class="effect-btn ${currentEffect === fx ? 'active' : ''}"
               @click=${() => hass.callService('light', 'turn_on', { entity_id: sw.entityId, effect: currentEffect === fx ? 'Off' : fx })}>${fx}</button>`)}
         </div>` : nothing}
-      ${s.power != null ? html`<div style="font-size:.72em;color:var(--sc-text-muted);margin-top:6px">${formatPower(s.power)}</div>` : nothing}
+      ${s.power != null && ctx.showEl('power') ? html`<div style="font-size:.72em;color:var(--sc-text-muted);margin-top:6px">${formatPower(s.power)}</div>` : nothing}
     </div>`;
 }
