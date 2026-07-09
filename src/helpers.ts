@@ -39,7 +39,9 @@ export function getAllDevices(
     if (!DEVICE_DOMAINS.has(domain)) continue;
 
     const platform: string = (regEntry.platform ?? '').toLowerCase();
-    if (platform !== 'shelly') continue;
+    // Shelly integration, plus BTHome — Shelly BLU sensors (H&T, motion, door…)
+    // report through HA's BTHome integration, not the Shelly one.
+    if (platform !== 'shelly' && platform !== 'bthome') continue;
 
     const deviceId: string = regEntry.device_id;
 
@@ -51,6 +53,8 @@ export function getAllDevices(
       const ipMatch = configUrl.match(/https?:\/\/((?:\d{1,3}\.){3}\d{1,3})/);
       const mfr: string = (devInfo.manufacturer ?? '').toLowerCase();
       const isShelly = mfr.includes('shelly') || platform === 'shelly';
+      // BTHome devices from other vendors (Tuya, generic BLE) aren't ours — skip.
+      if (platform === 'bthome' && !isShelly) continue;
 
       const areaId = devInfo.area_id ?? regEntry.area_id;
       const area = areaId ? (areaRegistry[areaId]?.name as string | undefined) : undefined;
@@ -335,7 +339,11 @@ export function getDeviceProfile(device: HADevice): DeviceProfileResult {
     type = hasColorMode ? 'rgb' : 'dimmer';
   } else if (
     device.entities.some(e => e.domain === 'event' && (e.attributes as any)?.device_class === 'button') &&
-    !device.entities.some(e => e.domain === 'switch' && /_(switch|relay)_\d/.test(e.entity_id))
+    !device.entities.some(e => e.domain === 'switch' && /_(switch|relay)_\d/.test(e.entity_id)) &&
+    // A device with environmental sensors (e.g. Shelly BLU H&T — which also exposes
+    // a button) is a sensor, not an input remote.
+    !device.entities.some(e => e.domain === 'sensor' &&
+      ['humidity', 'carbon_dioxide', 'illuminance', 'pressure', 'moisture'].includes((e.attributes as any)?.device_class ?? ''))
   ) {
     type = 'input';
   } else if (domains.has('switch')) {
