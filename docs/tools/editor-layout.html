@@ -1,0 +1,308 @@
+<title>Shelly Card — Editor Layout Designer</title>
+<style>
+  :root{
+    --ground:#16130f; --panel:#1e1a17; --raised:#241f1b; --raised2:#33291f;
+    --line:rgba(255,244,232,0.09); --line-strong:rgba(255,244,232,0.16);
+    --tx:#ece5dc; --tx2:#b3a596; --tx3:#7e7265;
+    --accent:#c98a63; --hot:#f4601e; --ok:#93b384; --warn:#dba25c;
+    --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace;
+    --ui:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--tx);font-family:var(--ui);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  h1,h2,h3{margin:0;text-wrap:balance}
+  .app{display:grid;grid-template-columns:1fr 396px;min-height:100vh}
+
+  .main{padding:26px 26px 70px;min-width:0;display:flex;flex-direction:column}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+  h1{font-size:23px;font-weight:680;letter-spacing:-.02em;margin:8px 0 3px}
+  .lede{color:var(--tx2);font-size:13.5px;max-width:70ch}
+  .toolbar{display:flex;gap:9px;align-items:center;margin:18px 0 14px;flex-wrap:wrap}
+  .tbtn{background:var(--raised);border:1px solid var(--line-strong);color:var(--tx);font-family:var(--ui);font-size:13px;font-weight:550;padding:7px 12px;border-radius:8px;cursor:pointer}
+  .tbtn:hover{border-color:var(--accent)}
+  .tbtn.accent{background:var(--accent);color:#1a1410;border-color:var(--accent)}
+  .spacer{flex:1}
+  .simlbl{font-size:12px;font-family:var(--mono);color:var(--tx3)}
+
+  .board{display:flex;gap:14px;overflow-x:auto;padding-bottom:14px;align-items:flex-start;flex:1}
+  .col{flex:0 0 232px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px;display:flex;flex-direction:column;gap:9px;min-height:120px}
+  .col.pinned{border-style:dashed;opacity:.92}
+  .col.dropok{border-color:var(--accent);box-shadow:0 0 0 2px rgba(201,138,99,.18)}
+  .colh{display:flex;align-items:center;gap:7px;padding:2px 2px 8px;border-bottom:1px solid var(--line)}
+  .colh .ic{width:24px;height:24px;border-radius:7px;background:var(--raised);border:1px solid var(--line);display:grid;place-items:center;font-size:13px;flex:none}
+  .colh .nm{font-weight:640;font-size:13.5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .colh input{font-family:var(--ui);font-size:13.5px;font-weight:640;background:var(--ground);border:1px solid var(--accent);color:var(--tx);border-radius:6px;padding:2px 6px;width:100%}
+  .colh .arw{cursor:pointer;color:var(--tx3);font-size:12px;padding:2px 3px;border-radius:4px}
+  .colh .arw:hover{color:var(--tx);background:var(--raised)}
+  .colh .pin{color:var(--tx3);font-size:12px}
+  .colh .del{cursor:pointer;color:var(--tx3);font-size:14px}
+  .colh .del:hover{color:var(--hot)}
+  .cnt{font-family:var(--mono);font-size:10.5px;color:var(--tx3);padding:2px 2px}
+
+  .card{background:var(--raised);border:1px solid var(--line-strong);border-radius:9px;padding:8px 9px;display:flex;flex-direction:column;gap:6px}
+  .card.mov{cursor:grab}
+  .card.drag{opacity:.35}
+  .card.fixed{background:transparent;border-style:dashed;opacity:.72;cursor:default}
+  .card .top{display:flex;align-items:center;gap:7px}
+  .card .gr{color:var(--tx3);letter-spacing:-2px;font-family:var(--mono);font-size:13px}
+  .card .lock{color:var(--tx3);font-size:11px}
+  .card .lbl{flex:1;font-weight:560;font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .card .lbl input{width:100%;font-family:var(--ui);font-size:13px;background:var(--ground);border:1px solid var(--accent);color:var(--tx);border-radius:5px;padding:1px 5px}
+  .card .cc{font-family:var(--mono);font-size:10px;color:var(--tx3);flex:none}
+  .card .row2{display:flex;gap:6px;align-items:center}
+  .pill{font-size:10.5px;font-family:var(--mono);border:1px solid var(--line-strong);border-radius:5px;padding:2px 7px;cursor:pointer;color:var(--tx3);user-select:none}
+  .pill.on{color:#1a1410;background:var(--warn);border-color:var(--warn)}
+  .pill.col2.on{background:var(--accent);border-color:var(--accent)}
+  .pill:hover{color:var(--tx)}
+  .pill.on:hover{color:#1a1410}
+  .ren{margin-left:auto;color:var(--tx3);cursor:pointer;font-size:12px}
+  .ren:hover{color:var(--accent)}
+
+  /* right */
+  .side{position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;background:var(--panel);border-left:1px solid var(--line);padding:22px 20px 60px;display:flex;flex-direction:column;gap:18px}
+  .side h3{font-size:11.5px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--tx3);font-weight:600;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+  .outline{font-size:12.5px;display:flex;flex-direction:column;gap:2px}
+  .out-tab{display:flex;align-items:center;gap:6px;font-weight:640;margin-top:7px}
+  .out-tab .oi{font-size:12px}
+  .out-sec{display:flex;align-items:center;gap:6px;color:var(--tx2);padding-left:20px;font-size:12px}
+  .out-sec .adv{font-size:9px;font-family:var(--mono);color:var(--warn);border:1px solid rgba(219,162,92,.4);border-radius:3px;padding:0 4px}
+  .out-sec.hidden{display:none}
+  .out-sec .fx{color:var(--tx3);font-size:10px}
+  .tabsw{display:flex;gap:4px;background:var(--raised);border:1px solid var(--line);border-radius:8px;padding:2px}
+  .tabsw button{flex:1;background:none;border:none;color:var(--tx2);font-family:var(--mono);font-size:11px;padding:4px 7px;border-radius:6px;cursor:pointer}
+  .tabsw button.on{background:var(--accent);color:#1a1410}
+  pre{margin:0;background:var(--ground);border:1px solid var(--line);border-radius:10px;padding:12px 13px;font-family:var(--mono);font-size:11px;line-height:1.55;color:var(--tx);overflow:auto;white-space:pre;max-height:300px}
+  .kw{color:#a78bfa}.str{color:#93b384}.cm{color:var(--tx3)}.pk{color:var(--accent)}
+  .btns{display:flex;gap:8px}
+  .btn{flex:1;background:var(--accent);color:#1a1410;border:none;font-family:var(--ui);font-weight:640;font-size:13px;padding:9px;border-radius:9px;cursor:pointer}
+  .btn.sec{background:var(--raised);color:var(--tx);border:1px solid var(--line-strong)}
+  .btn:hover{filter:brightness(1.06)}
+  .imp{display:flex;flex-direction:column;gap:8px}
+  .imp textarea{width:100%;min-height:70px;background:var(--ground);border:1px solid var(--line-strong);color:var(--tx);font-family:var(--mono);font-size:11px;padding:9px;border-radius:8px;resize:vertical;outline:none}
+  .imp textarea:focus{border-color:var(--accent)}
+  .note{color:var(--tx3);font-size:11px;font-family:var(--mono);line-height:1.5}
+  .note.warn{color:var(--warn)} .note.ok{color:var(--ok)}
+  @media(max-width:1080px){ .app{grid-template-columns:1fr} .side{position:static;height:auto;border-left:none;border-top:1px solid var(--line)}}
+</style>
+
+<div class="app">
+  <div class="main">
+    <div class="eyebrow">custom:ha-device-dashboard · editor layout designer</div>
+    <h1>Organize the editor</h1>
+    <p class="lede">Drag the movable sections between tabs and reorder them. Set which are behind the Advanced toggle. Dashed cards are contextual panels pinned to their tab. Export drives a data-driven <span style="font-family:var(--mono);color:var(--accent)">editor-layout.ts</span>.</p>
+    <div class="toolbar">
+      <button class="tbtn accent" id="addtab">+ Add tab</button>
+      <button class="tbtn" id="resetbtn">Reset to shipped</button>
+      <span class="spacer"></span>
+      <span class="simlbl">Preview as</span>
+      <span class="tabsw"><button id="sim-basic" class="on">Basic</button><button id="sim-adv">Advanced</button></span>
+    </div>
+    <div class="board" id="board"></div>
+  </div>
+
+  <div class="side">
+    <div>
+      <h3>Editor outline</h3>
+      <div class="outline" id="outline"></div>
+    </div>
+    <div>
+      <h3>Export <span class="tabsw"><button id="ex-ts" class="on">editor-layout.ts</button><button id="ex-json">JSON</button></span></h3>
+      <pre id="export"></pre>
+    </div>
+    <div class="btns">
+      <button class="btn" id="copy">Copy</button>
+      <button class="btn sec" id="dl">Download .ts</button>
+    </div>
+    <div class="imp">
+      <h3 style="margin:0">Import (JSON)</h3>
+      <textarea id="imp" placeholder="Paste a previously exported JSON layout to keep iterating."></textarea>
+      <div class="btns"><button class="btn sec" id="impgo" style="flex:none;padding:8px 14px">Load</button><span class="note" id="impmsg" style="align-self:center"></span></div>
+    </div>
+    <div class="note">Pinned tabs & dashed sections are contextual — they stay in their tab. Only global sections (Layout &amp; Style, Graphs &amp; Sensors) move. The <b style="color:var(--tx2)">◆ Defaults</b> overlay is separate and not shown here.</div>
+  </div>
+</div>
+
+<script>
+/* ── master section metadata (from docs/card-reference.json) ── */
+const MASTER = {
+  // fixed / contextual
+  'rooms-toolbar':{label:'Rooms toolbar',movable:false,count:5},
+  'device-panel':{label:'Per-device style panel',movable:false,count:13},
+  'room-panel':{label:'Per-room style panel',movable:false,count:15},
+  'views-toolbar':{label:'Views toolbar',movable:false,count:2},
+  'view-card':{label:'Per-view card + filters',movable:false,count:16},
+  'yaml-pane':{label:'YAML output',movable:false,count:2},
+  // movable / global — Layout & Style
+  'header':{label:'Header',movable:true,count:17},
+  'tiles':{label:'Tiles',movable:true,count:9},
+  'card':{label:'Card',movable:true,count:5},
+  'colors':{label:'Colours',movable:true,count:4},
+  'typography':{label:'Typography',movable:true,count:2},
+  // movable / global — Graphs & Sensors
+  'graphtype':{label:'Graph type',movable:true,count:9},
+  'graphcolors':{label:'Graph colours',movable:true,count:3},
+  'graphranges':{label:'Graph ranges',movable:true,count:1},
+  'electrical':{label:'Sensor chips — Electrical',movable:true,count:8},
+  'environmental':{label:'Sensor chips — Environmental',movable:true,count:5},
+  'deviceinfo':{label:'Sensor chips — Device info',movable:true,count:8},
+  'alerts':{label:'Sensor chips — Alerts',movable:true,count:7},
+};
+
+function shipped(){ return [
+  {id:'devices',label:'Rooms & devices',icon:'⌂',sections:[s('rooms-toolbar'),s('device-panel'),s('room-panel')]},
+  {id:'views',label:'Views',icon:'☰',sections:[s('views-toolbar'),s('view-card')]},
+  {id:'layout',label:'Layout & Style',icon:'⊡',sections:[s('header'),s('tiles'),s('card',1),s('colors',1),s('typography',1)]},
+  {id:'graphs',label:'Graphs & Sensors',icon:'∿',sections:[s('graphtype'),s('graphcolors',1),s('graphranges',1),s('electrical'),s('environmental'),s('deviceinfo',1),s('alerts',1)]},
+  {id:'yaml',label:'YAML',icon:'</>',sections:[s('yaml-pane')]},
+];}
+function s(id,adv,coll){ return {id,advanced:!!adv,collapsed:!!coll}; }
+
+let TABS = shipped();
+let sim='basic', exMode='ts', editing=null, dragSrc=null;
+
+const $=x=>document.getElementById(x);
+const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
+const meta=id=>MASTER[id]||{label:id,movable:false,count:0};
+
+/* ── board ── */
+function renderBoard(){
+  const b=$('board'); b.innerHTML='';
+  TABS.forEach((tab,ti)=>{
+    const col=el('div','col'); col.dataset.ti=ti;
+    // header
+    const h=el('div','colh');
+    h.appendChild(el('span','ic',tab.icon));
+    if(editing==='tab:'+ti){
+      const inp=el('input'); inp.value=tab.label; h.appendChild(inp);
+      inp.onblur=()=>{tab.label=inp.value.trim()||tab.label;editing=null;renderAll();};
+      inp.onkeydown=e=>{if(e.key==='Enter')inp.blur();if(e.key==='Escape'){editing=null;renderAll();}};
+      setTimeout(()=>{inp.focus();inp.select();},0);
+    } else {
+      const nm=el('span','nm',tab.label); nm.title='double-click to rename'; nm.ondblclick=()=>{editing='tab:'+ti;renderAll();}; h.appendChild(nm);
+    }
+    const lf=el('span','arw','◀'); lf.title='move tab left'; lf.onclick=()=>moveTab(ti,-1); if(ti===0)lf.style.visibility='hidden';
+    const rt=el('span','arw','▶'); rt.title='move tab right'; rt.onclick=()=>moveTab(ti,1); if(ti===TABS.length-1)rt.style.visibility='hidden';
+    h.appendChild(lf); h.appendChild(rt);
+    const hasFixed=tab.sections.some(x=>!meta(x.id).movable);
+    if(tab.custom && !tab.sections.length){ const d=el('span','del','×'); d.title='delete empty tab'; d.onclick=()=>{TABS.splice(ti,1);renderAll();}; h.appendChild(d); }
+    else if(hasFixed){ h.appendChild(el('span','pin','📌')); }
+    col.appendChild(h);
+
+    // section cards
+    tab.sections.forEach((sec,si)=>{
+      const m=meta(sec.id), mov=m.movable;
+      const card=el('div','card '+(mov?'mov':'fixed')); card.dataset.ti=ti; card.dataset.si=si;
+      if(mov){ card.draggable=true;
+        card.addEventListener('dragstart',e=>{dragSrc={ti,si};card.classList.add('drag');e.dataTransfer.effectAllowed='move';});
+        card.addEventListener('dragend',()=>{card.classList.remove('drag');document.querySelectorAll('.col').forEach(c=>c.classList.remove('dropok'));});
+        card.addEventListener('dragover',e=>{e.preventDefault();});
+        card.addEventListener('drop',e=>{e.preventDefault();e.stopPropagation();dropAt(ti,si);});
+      }
+      const top=el('div','top');
+      top.innerHTML = mov?'<span class="gr">⠿</span>':'<span class="lock">🔒</span>';
+      if(editing==='sec:'+sec.id){
+        const wrap=el('span','lbl'); const inp=el('input'); inp.value=sec.label||m.label; wrap.appendChild(inp); top.appendChild(wrap);
+        inp.onblur=()=>{const v=inp.value.trim(); sec.label=(v&&v!==m.label)?v:undefined; editing=null; renderAll();};
+        inp.onkeydown=e=>{if(e.key==='Enter')inp.blur();if(e.key==='Escape'){editing=null;renderAll();}};
+        setTimeout(()=>{inp.focus();inp.select();},0);
+      } else {
+        top.appendChild(el('span','lbl',sec.label||m.label));
+      }
+      top.appendChild(el('span','cc',m.count+''));
+      card.appendChild(top);
+      if(mov){
+        const r=el('div','row2');
+        const adv=el('span','pill'+(sec.advanced?' on':''),'ADV'); adv.title='behind the Advanced toggle'; adv.onclick=()=>{sec.advanced=!sec.advanced;renderAll();}; r.appendChild(adv);
+        const cl=el('span','pill col2'+(sec.collapsed?' on':''),'⌄ collapsed'); cl.title='collapsed by default'; cl.onclick=()=>{sec.collapsed=!sec.collapsed;renderAll();}; r.appendChild(cl);
+        const rn=el('span','ren','✎'); rn.title='rename'; rn.onclick=()=>{editing='sec:'+sec.id;renderAll();}; r.appendChild(rn);
+        card.appendChild(r);
+      }
+      col.appendChild(card);
+    });
+
+    col.appendChild(el('div','cnt',tab.sections.length+' section'+(tab.sections.length!==1?'s':'')));
+    // column as drop target (append to end)
+    col.addEventListener('dragover',e=>{e.preventDefault();col.classList.add('dropok');});
+    col.addEventListener('dragleave',()=>col.classList.remove('dropok'));
+    col.addEventListener('drop',e=>{e.preventDefault();dropAt(ti,tab.sections.length);});
+    b.appendChild(col);
+  });
+}
+function dropAt(ti,si){
+  if(!dragSrc)return;
+  const sec=TABS[dragSrc.ti].sections[dragSrc.si];
+  TABS[dragSrc.ti].sections.splice(dragSrc.si,1);
+  if(dragSrc.ti===ti && dragSrc.si<si) si--;
+  TABS[ti].sections.splice(si,0,sec);
+  dragSrc=null; renderAll();
+}
+function moveTab(ti,d){ const j=ti+d; if(j<0||j>=TABS.length)return; const t=TABS.splice(ti,1)[0]; TABS.splice(j,0,t); renderAll(); }
+
+/* ── outline ── */
+function renderOutline(){
+  const o=$('outline'); o.innerHTML='';
+  TABS.forEach(tab=>{
+    o.appendChild(el('div','out-tab',`<span class="oi">${tab.icon}</span>${tab.label}`));
+    tab.sections.forEach(sec=>{ const m=meta(sec.id);
+      const hide = sim==='basic' && sec.advanced;
+      const row=el('div','out-sec'+(hide?' hidden':''));
+      row.innerHTML=`${!m.movable?'<span class="fx">🔒</span>':'•'} ${sec.label||m.label} ${sec.advanced?'<span class="adv">ADV</span>':''}`;
+      o.appendChild(row);
+    });
+  });
+}
+
+/* ── export ── */
+function secObj(sec){ const o={id:sec.id,label:sec.label||meta(sec.id).label}; if(sec.advanced)o.advanced=true; if(sec.collapsed)o.collapsedByDefault=true; return o; }
+function layoutObj(){ return TABS.map(t=>({id:t.id,label:t.label,icon:t.icon,sections:t.sections.map(secObj)})); }
+function genTS(html){
+  const q=s=>`'${s.replace(/'/g,"\\'")}'`;
+  let out=html?`<span class="cm">// Generated by the Editor Layout Designer — drives the data-driven editor.</span>\n`:'// Generated by the Editor Layout Designer — drives the data-driven editor.\n';
+  out+=html?`<span class="kw">export interface</span> EditorSection { id: <span class="kw">string</span>; label: <span class="kw">string</span>; advanced?: <span class="kw">boolean</span>; collapsedByDefault?: <span class="kw">boolean</span>; }\n`:`export interface EditorSection { id: string; label: string; advanced?: boolean; collapsedByDefault?: boolean; }\n`;
+  out+=html?`<span class="kw">export interface</span> EditorTab { id: <span class="kw">string</span>; label: <span class="kw">string</span>; icon: <span class="kw">string</span>; sections: EditorSection[]; }\n\n`:`export interface EditorTab { id: string; label: string; icon: string; sections: EditorSection[]; }\n\n`;
+  out+=html?`<span class="kw">export const</span> <span class="pk">EDITOR_LAYOUT</span>: EditorTab[] = [\n`:`export const EDITOR_LAYOUT: EditorTab[] = [\n`;
+  TABS.forEach(t=>{
+    out+=`  { id: ${str(q(t.id),html)}, label: ${str(q(t.label),html)}, icon: ${str(q(t.icon),html)}, sections: [\n`;
+    t.sections.forEach(sec=>{ const o=secObj(sec);
+      let line=`    { id: ${str(q(o.id),html)}, label: ${str(q(o.label),html)}`;
+      if(o.advanced)line+=`, advanced: ${html?'<span class="kw">true</span>':'true'}`;
+      if(o.collapsedByDefault)line+=`, collapsedByDefault: ${html?'<span class="kw">true</span>':'true'}`;
+      line+=' },\n'; out+=line;
+    });
+    out+='  ] },\n';
+  });
+  out+='];\n';
+  return out;
+}
+function str(s,html){ return html?`<span class="str">${s}</span>`:s; }
+function renderExport(){
+  const pre=$('export');
+  if(exMode==='ts'){ pre.innerHTML=genTS(true); window._copy=genTS(false); window._dl=genTS(false); }
+  else { const j=JSON.stringify(layoutObj(),null,2); pre.textContent=j; window._copy=j; window._dl=genTS(false); }
+}
+
+/* ── import ── */
+$('impgo').onclick=()=>{
+  const msg=$('impmsg'), txt=$('imp').value.trim(); if(!txt){msg.className='note warn';msg.textContent='Paste JSON first.';return;}
+  let data; try{ data=JSON.parse(txt); }catch(e){ msg.className='note warn'; msg.textContent='Not valid JSON.'; return; }
+  if(!Array.isArray(data)){ msg.className='note warn'; msg.textContent='Expected an array of tabs.'; return; }
+  try{
+    TABS=data.map(t=>({id:t.id,label:t.label,icon:t.icon||'▦',custom:!shipped().some(st=>st.id===t.id),
+      sections:(t.sections||[]).map(x=>({id:x.id,advanced:!!x.advanced,collapsed:!!x.collapsedByDefault,label:(x.label&&x.label!==meta(x.id).label)?x.label:undefined}))}));
+    editing=null; renderAll(); msg.className='note ok'; msg.textContent='Loaded ✓';
+  }catch(e){ msg.className='note warn'; msg.textContent='Could not load that layout.'; }
+};
+
+/* ── tabs ── */
+$('addtab').onclick=()=>{ let n=1; while(TABS.some(t=>t.id==='tab_'+n))n++; TABS.push({id:'tab_'+n,label:'New tab',icon:'▦',custom:true,sections:[]}); renderAll(); };
+$('resetbtn').onclick=()=>{ TABS=shipped(); editing=null; renderAll(); };
+$('sim-basic').onclick=()=>{sim='basic';$('sim-basic').classList.add('on');$('sim-adv').classList.remove('on');renderOutline();};
+$('sim-adv').onclick=()=>{sim='adv';$('sim-adv').classList.add('on');$('sim-basic').classList.remove('on');renderOutline();};
+$('ex-ts').onclick=()=>{exMode='ts';$('ex-ts').classList.add('on');$('ex-json').classList.remove('on');renderExport();};
+$('ex-json').onclick=()=>{exMode='json';$('ex-json').classList.add('on');$('ex-ts').classList.remove('on');renderExport();};
+$('copy').onclick=()=>{navigator.clipboard.writeText(window._copy).then(()=>{const b=$('copy');b.textContent='Copied ✓';setTimeout(()=>b.textContent='Copy',1300);});};
+$('dl').onclick=()=>{const bl=new Blob([window._dl],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(bl);a.download='editor-layout.ts';a.click();};
+
+function renderAll(){ renderBoard(); renderOutline(); renderExport(); }
+renderAll();
+</script>
