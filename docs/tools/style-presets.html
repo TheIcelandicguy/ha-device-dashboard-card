@@ -1,0 +1,249 @@
+<title>Shelly Card — Style Presets Designer</title>
+<style>
+  :root{
+    --ground:#16130f; --panel:#1e1a17; --raised:#241f1b; --raised2:#33291f;
+    --line:rgba(255,244,232,0.09); --line-strong:rgba(255,244,232,0.16);
+    --tx:#ece5dc; --tx2:#b3a596; --tx3:#7e7265;
+    --accent:#c98a63; --hot:#f4601e; --ok:#93b384; --warn:#dba25c;
+    --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace;
+    --ui:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--tx);font-family:var(--ui);font-size:14.5px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  h1,h3{margin:0;text-wrap:balance}
+  .app{display:grid;grid-template-columns:196px 1fr 420px;min-height:100vh}
+
+  .rail{background:var(--panel);border-right:1px solid var(--line);padding:22px 12px 60px;position:sticky;top:0;height:100vh;overflow-y:auto}
+  .eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin:2px 8px 15px}
+  .srow{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:9px;cursor:pointer;border-left:2px solid transparent;margin-bottom:1px}
+  .srow:hover{background:var(--raised)} .srow.on{background:var(--raised);border-left-color:var(--hot)}
+  .srow .sn{font-weight:580;font-size:13.5px}
+  .srow .mod{width:6px;height:6px;border-radius:50%;background:var(--hot);margin-left:auto;opacity:0}
+  .srow.dirty .mod{opacity:1}
+
+  .editor{padding:26px 28px 90px;min-width:0}
+  h1{font-size:22px;font-weight:680;letter-spacing:-.02em;display:flex;align-items:center;gap:11px}
+  h1 .badge{font-size:12px;font-family:var(--mono);color:#1a1410;background:var(--accent);padding:2px 9px;border-radius:6px}
+  .sub{color:var(--tx2);font-size:13.5px;margin:8px 0 20px}
+  .bh{display:flex;align-items:center;gap:10px;margin:24px 0 11px}
+  .bh .t{font-size:12px;font-family:var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--accent);font-weight:600}
+  .bh .l{height:1px;flex:1;background:var(--line)}
+  .seg{display:inline-flex;background:var(--raised);border:1px solid var(--line);border-radius:9px;padding:2px;flex-wrap:wrap}
+  .seg button{background:none;border:none;color:var(--tx2);font-family:var(--ui);font-size:12.5px;font-weight:550;padding:5px 11px;border-radius:7px;cursor:pointer}
+  .seg button.on{background:var(--accent);color:#1a1410}
+  .seg button:not(.on):hover{color:var(--tx)}
+
+  .els{display:flex;flex-direction:column;gap:7px}
+  .el{display:flex;align-items:center;gap:11px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 13px}
+  .el .en{flex:1;font-weight:540} .el .eid{font-family:var(--mono);font-size:11px;color:var(--tx3)}
+  .sw{position:relative;width:40px;height:23px;flex:none;cursor:pointer}
+  .sw input{opacity:0;width:0;height:0;position:absolute}
+  .sw .tk{position:absolute;inset:0;background:var(--raised2);border:1px solid var(--line-strong);border-radius:20px;transition:.15s}
+  .sw .kn{position:absolute;top:3px;left:3px;width:15px;height:15px;border-radius:50%;background:var(--tx3);transition:.15s}
+  .sw input:checked~.tk{background:rgba(147,179,132,.30);border-color:var(--ok)}
+  .sw input:checked~.kn{transform:translateX(17px);background:var(--ok)}
+
+  .grouplabel{font-size:11px;color:var(--tx3);font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;margin:12px 0 4px;display:flex;gap:8px;align-items:center}
+  .mini{color:var(--accent);cursor:pointer;font-family:var(--ui);text-transform:none;letter-spacing:0;font-size:11px}
+  .mini:hover{color:var(--hot)}
+  .chiprow{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{font-size:12px;font-family:var(--mono);color:var(--tx2);background:var(--raised);border:1px solid var(--line);border-radius:6px;padding:4px 9px;cursor:pointer;user-select:none}
+  .chip.on{color:#1a1410;background:var(--accent);border-color:var(--accent)} .chip:not(.on){opacity:.5} .chip:hover{opacity:1}
+  .disabled{opacity:.4;pointer-events:none}
+  .none{color:var(--tx3);font-family:var(--mono);font-size:12.5px;padding:6px 2px}
+
+  .stack{display:flex;flex-direction:column;gap:6px;min-height:40px}
+  .brow{display:flex;align-items:center;gap:9px;background:var(--raised);border:1px solid var(--line-strong);border-radius:8px;padding:7px 10px;cursor:grab;font-size:13px;font-weight:540}
+  .brow.drag{opacity:.35} .brow .gr{color:var(--tx3);letter-spacing:-2px;font-family:var(--mono)}
+  .brow .bl{flex:1} .brow .x{cursor:pointer;color:var(--tx3);width:18px;height:18px;display:grid;place-items:center;border-radius:5px}
+  .brow .x:hover{background:var(--raised2);color:var(--hot)}
+  .arow{display:flex;align-items:center;gap:9px;border:1px dashed var(--line-strong);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12.5px;color:var(--tx2)}
+  .arow:hover{border-color:var(--accent);color:var(--tx)} .arow .plus{color:var(--accent);font-weight:700}
+
+  .side{position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;background:var(--panel);border-left:1px solid var(--line);padding:24px 22px 60px;display:flex;flex-direction:column;gap:16px}
+  .side h3{font-size:11.5px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--tx3);font-weight:600;display:flex;justify-content:space-between;align-items:center}
+  pre{margin:0;background:var(--ground);border:1px solid var(--line);border-radius:10px;padding:13px 14px;font-family:var(--mono);font-size:12px;line-height:1.6;color:var(--tx);overflow:auto;max-height:60vh;white-space:pre}
+  .yk{color:var(--accent)} .yv{color:#93b384} .yb{color:#a78bfa} .cm{color:var(--tx3)}
+  .btns{display:flex;gap:8px}
+  .btn{flex:1;background:var(--accent);color:#1a1410;border:none;font-family:var(--ui);font-weight:640;font-size:13px;padding:9px;border-radius:9px;cursor:pointer}
+  .btn.sec{background:var(--raised);color:var(--tx);border:1px solid var(--line-strong)}
+  .btn:hover{filter:brightness(1.06)}
+  .note{color:var(--tx3);font-size:11.5px;font-family:var(--mono);line-height:1.6}
+  @media(max-width:1120px){ .app{grid-template-columns:1fr} .rail,.side{position:static;height:auto;border:none;border-bottom:1px solid var(--line)} .rail{display:flex;flex-wrap:wrap;gap:4px} .eyebrow{width:100%}}
+</style>
+
+<div class="app">
+  <div class="rail">
+    <div class="eyebrow">Tile styles</div>
+    <div id="rail"></div>
+  </div>
+  <div class="editor" id="editor"></div>
+  <div class="side">
+    <div>
+      <h3>style_presets YAML <span id="cnt" style="color:var(--accent)"></span></h3>
+      <pre id="out"></pre>
+    </div>
+    <div class="btns">
+      <button class="btn" id="copy">Copy YAML</button>
+      <button class="btn sec" id="reset">Reset all</button>
+    </div>
+    <div class="note">Paste this block into your card's YAML. Only settings you changed from the defaults are emitted; everything else stays adaptive. Per device/room overrides still win over these presets.</div>
+  </div>
+</div>
+
+<script>
+/* ── data (mirrors src/helpers.ts STYLE_ELEMENTS + types) ── */
+const STYLES = [
+  ['default','Default'],['power-monitor','Power'],['light-control','Light'],
+  ['climate-control','Climate'],['cover-control','Cover'],['sensor-card','Sensor'],['scene-button','Scene'],
+];
+const ELEMENTS = {
+  'power-monitor':  [['toggle','On/off button'],['graph','Sparkline graph'],['secondary','Secondary readings (V/A/kWh)'],['uptime','Uptime badge'],['lower_body','Lower body (blocks)']],
+  'light-control':  [['color_wheel','Colour wheel'],['brightness','Brightness slider'],['color_temp','Colour temperature'],['white','White channel'],['effects','Effects'],['power','Power reading']],
+  'climate-control':[['heating_badge','Heating badge'],['dial','Temperature dial'],['adjust_buttons','+/− buttons'],['stats','Stats row'],['presets','Preset buttons']],
+  'cover-control':  [['position_pct','Position %'],['shutter_graphic','Shutter graphic'],['moving_label','Moving label'],['buttons','Open / stop / close']],
+  'sensor-card':    [['primary_value','Primary value'],['trend','Trend arrow'],['graph','Sparkline graph'],['secondary','Secondary chips']],
+  'scene-button':   [['icon','Icon'],['name','Name'],['timestamp','Last-triggered time'],['input_rows','Input channel rows']],
+};
+const PM_VARIANTS = ['big-number','gauge','graph','compact','table'];
+const SENSOR_GROUPS = {
+  Electrical:[['power','Power'],['voltage','Voltage'],['current','Current'],['energy','Energy'],['frequency','Frequency'],['apparent_power','App. Power'],['reactive_power','React. Power'],['power_factor','Power Factor']],
+  Environmental:[['temperature','Temp'],['humidity','Humidity'],['illuminance','Illum'],['co2','CO₂'],['gas','Gas']],
+  'Device info':[['cloud','Cloud'],['rssi','RSSI'],['uptime','Uptime'],['ip','IP'],['ssid','SSID'],['battery','Battery'],['fw_version','Firmware'],['mac','MAC']],
+  Alerts:[['overtemp','Overtemp'],['overpower','Overpower'],['motion','Motion'],['door','Door'],['flood','Flood'],['smoke','Smoke'],['vibration','Vibration']],
+};
+const BLOCKS = [['name_row','Name & toggle'],['sensors','Sensor chips'],['graph','Graph'],['dimmer','Brightness / colour'],['cover_controls','Cover controls'],['trv_control','Temperature control'],['valve_controls','Valve controls'],['input_channels','Input channels'],['relay_channels','Relay channels'],['power_bar','Power bar'],['virtual_controls','Virtual controls'],['badges','Type & gen badges']];
+
+/* ── state: per style { variant, chipsMode, chips[], blocksMode, blocks[], hidden:Set } ── */
+function fresh(){ const s={}; STYLES.forEach(([k])=>{ s[k]={ variant:'big-number', chipsMode:'inherit', chips:[], blocksMode:'inherit', blocks:BLOCKS.map(b=>b[0]), hidden:{} }; }); return s; }
+let ST = fresh();
+let active='power-monitor', drag=null;
+const $=x=>document.getElementById(x);
+const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
+
+function styleDirty(k){
+  const s=ST[k];
+  if(k==='power-monitor' && s.variant!=='big-number') return true;
+  if(s.chipsMode==='curated') return true;
+  if(k==='default' && s.blocksMode==='custom') return true;
+  if(Object.values(s.hidden).some(v=>v)) return true;
+  return false;
+}
+
+function renderRail(){
+  const r=$('rail'); r.innerHTML='';
+  STYLES.forEach(([k,l])=>{
+    const row=el('div','srow'+(k===active?' on':'')+(styleDirty(k)?' dirty':''));
+    row.innerHTML=`<span class="sn">${l}</span><span class="mod"></span>`;
+    row.onclick=()=>{active=k;renderAll();};
+    r.appendChild(row);
+  });
+}
+
+function renderEditor(){
+  const s=ST[active], label=STYLES.find(x=>x[0]===active)[1];
+  const ed=$('editor'); ed.innerHTML='';
+  ed.appendChild(el('h1',null,`${label} <span class="badge" style="font-family:var(--mono)">${active}</span>${styleDirty(active)?'<span style="font-size:11px;color:var(--hot);font-family:var(--mono)">● changed</span>':''}`));
+  ed.appendChild(el('div','sub','Set what tiles of this style show by default. Blank = the card decides. Devices and rooms can still override.'));
+
+  // variant (power only)
+  if(active==='power-monitor'){
+    ed.appendChild(el('div','bh','<span class="t">Default variant</span><span class="l"></span>'));
+    const seg=el('div','seg'); PM_VARIANTS.forEach(v=>{const b=el('button',v===s.variant?'on':'',v);b.onclick=()=>{s.variant=v;renderAll();};seg.appendChild(b);}); ed.appendChild(seg);
+  }
+
+  // element toggles
+  const els=ELEMENTS[active];
+  if(els){
+    ed.appendChild(el('div','bh',`<span class="t">Elements</span><span class="l"></span><span class="note">green = shown</span>`));
+    const wrap=el('div','els');
+    els.forEach(([id,lbl])=>{
+      const on=!s.hidden[id];
+      const row=el('div','el'); row.innerHTML=`<span class="en">${lbl}</span><span class="eid">${id}</span>`;
+      const sw=el('label','sw'); sw.innerHTML=`<input type="checkbox" ${on?'checked':''}><span class="tk"></span><span class="kn"></span>`;
+      sw.querySelector('input').onchange=e=>{ if(e.target.checked) delete s.hidden[id]; else s.hidden[id]=true; renderAll(); };
+      row.appendChild(sw); wrap.appendChild(row);
+    });
+    ed.appendChild(wrap);
+  } else {
+    ed.appendChild(el('div','bh','<span class="t">Blocks</span><span class="l"></span>'));
+    ed.appendChild(el('div','note','The Default style is built from blocks. Choose to keep the adaptive order or set a custom one.'));
+    const modeSeg=el('div','seg'); modeSeg.style.margin='8px 0';
+    [['inherit','Adaptive'],['custom','Custom order']].forEach(([v,l])=>{const b=el('button',v===s.blocksMode?'on':'',l);b.onclick=()=>{s.blocksMode=v;renderAll();};modeSeg.appendChild(b);}); ed.appendChild(modeSeg);
+    if(s.blocksMode==='custom'){
+      const stack=el('div','stack');
+      s.blocks.forEach((id,i)=>{
+        const b=el('div','brow'); b.draggable=true; b.dataset.i=i;
+        b.innerHTML=`<span class="gr">⠿</span><span class="bl">${BLOCKS.find(x=>x[0]===id)?.[1]||id}</span><span class="x">×</span>`;
+        b.querySelector('.x').onclick=()=>{s.blocks.splice(i,1);renderAll();};
+        b.addEventListener('dragstart',()=>{drag=i;b.classList.add('drag');});
+        b.addEventListener('dragend',()=>b.classList.remove('drag'));
+        b.addEventListener('dragover',e=>e.preventDefault());
+        b.addEventListener('drop',e=>{e.preventDefault();if(drag==null||drag===i)return;const m=s.blocks.splice(drag,1)[0];s.blocks.splice(i,0,m);drag=null;renderAll();});
+        stack.appendChild(b);
+      });
+      ed.appendChild(stack);
+      const avail=BLOCKS.filter(([id])=>!s.blocks.includes(id));
+      if(avail.length){ const a=el('div');a.style.marginTop='7px'; avail.forEach(([id,l])=>{const r=el('div','arow',`<span class="plus">+</span>${l}`);r.style.marginTop='5px';r.onclick=()=>{s.blocks.push(id);renderAll();};a.appendChild(r);}); ed.appendChild(a); }
+    }
+  }
+
+  // chips
+  ed.appendChild(el('div','bh','<span class="t">Default sensor chips</span><span class="l"></span>'));
+  const cm=el('div','seg'); [['inherit','Inherit'],['curated','Curated set']].forEach(([v,l])=>{const b=el('button',v===s.chipsMode?'on':'',l);b.onclick=()=>{s.chipsMode=v;renderAll();};cm.appendChild(b);}); ed.appendChild(cm);
+  const cwrap=el('div', s.chipsMode==='inherit'?'disabled':''); cwrap.style.marginTop='6px';
+  Object.entries(SENSOR_GROUPS).forEach(([gn,list])=>{
+    const allOn=list.every(([k])=>s.chips.includes(k));
+    const gl=el('div','grouplabel'); gl.innerHTML=`${gn} <span class="mini">${allOn?'clear':'all'}</span>`;
+    gl.querySelector('.mini').onclick=()=>{ if(allOn)s.chips=s.chips.filter(k=>!list.some(([lk])=>lk===k)); else list.forEach(([k])=>{if(!s.chips.includes(k))s.chips.push(k);}); renderAll(); };
+    cwrap.appendChild(gl);
+    const cr=el('div','chiprow');
+    list.forEach(([k,l])=>{ const on=s.chips.includes(k); const c=el('div','chip'+(on?' on':''),l); c.onclick=()=>{ if(on)s.chips=s.chips.filter(x=>x!==k); else s.chips.push(k); renderAll(); }; cr.appendChild(c); });
+    cwrap.appendChild(cr);
+  });
+  ed.appendChild(cwrap);
+}
+
+/* ── build config + YAML ── */
+function buildPresets(){
+  const out={};
+  STYLES.forEach(([k])=>{
+    const s=ST[k], p={};
+    if(k==='power-monitor' && s.variant!=='big-number') p.variant=s.variant;
+    if(s.chipsMode==='curated') p.sensors=[...s.chips];
+    if(k==='default' && s.blocksMode==='custom') p.tile_layout=[...s.blocks];
+    const hidden=Object.keys(s.hidden).filter(id=>s.hidden[id]);
+    if(hidden.length){ p.elements={}; hidden.forEach(id=>p.elements[id]=false); }
+    if(Object.keys(p).length) out[k]=p;
+  });
+  return out;
+}
+function yamlScalar(v){ if(typeof v==='boolean'||typeof v==='number')return String(v); const s=String(v);
+  if(/^[A-Za-z0-9_][\w-]*$/.test(s))return s; return `"${s}"`; }
+function toYaml(o,ind){ ind=ind||0; const pad='  '.repeat(ind); let out='';
+  for(const [k,v] of Object.entries(o)){
+    if(Array.isArray(v)){ out+=`${pad}${k}: [${v.map(yamlScalar).join(', ')}]\n`; }
+    else if(v&&typeof v==='object'){ out+=`${pad}${k}:\n`+toYaml(v,ind+1); }
+    else out+=`${pad}${k}: ${yamlScalar(v)}\n`;
+  } return out; }
+function hl(y){ return y.split('\n').map(line=>{
+  const m=line.match(/^(\s*)([\w-]+):(.*)$/);
+  if(m){ const val=m[3].trim(); let vc='yv'; if(/^(true|false)$/.test(val))vc='yb';
+    return `${m[1]}<span class="yk">${m[2]}</span>:${m[3]?` <span class="${vc}">${m[3].trim()}</span>`:''}`; }
+  return line; }).join('\n'); }
+
+function renderOut(){
+  const presets=buildPresets();
+  const n=Object.keys(presets).length;
+  if(!n){ $('out').innerHTML='<span class="cm"># No changes yet — all styles adaptive.\n# Toggle an element or set chips to build a preset.</span>'; $('cnt').textContent=''; window._copy=''; return; }
+  const y='style_presets:\n'+toYaml(presets,1);
+  $('out').innerHTML=hl(y);
+  $('cnt').textContent=`${n} style${n>1?'s':''}`;
+  window._copy=y;
+}
+
+function renderAll(){ renderRail(); renderEditor(); renderOut(); }
+$('copy').onclick=()=>{ if(!window._copy)return; navigator.clipboard.writeText(window._copy).then(()=>{const b=$('copy');b.textContent='Copied ✓';setTimeout(()=>b.textContent='Copy YAML',1300);}); };
+$('reset').onclick=()=>{ ST=fresh(); renderAll(); };
+renderAll();
+</script>
