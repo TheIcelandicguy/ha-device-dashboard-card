@@ -2742,21 +2742,23 @@ export class HADeviceDashboardEditor extends LitElement {
     if (!this._config) return html``;
     const c = this._config;
     type TabId = 'devices'|'views'|'layout'|'graphs'|'yaml';
-    const tabs: Array<{id:TabId;label:string;icon:string}> = [
-      {id:'devices',label:'Rooms & devices',icon:'⌂'},
-      {id:'views',  label:'Views',          icon:'☰'},
-      {id:'layout', label:'Layout & Style', icon:'⊡'},
-      {id:'graphs', label:'Graphs & Sensors',icon:'∿'},
-      {id:'yaml',   label:'YAML',           icon:'</>'},
-    ];
+    // Tabs (order / label / icon) derive from EDITOR_LAYOUT — single source of truth.
+    const tabs = EDITOR_LAYOUT.map(t => ({ id: t.id as TabId, label: t.label, icon: t.icon }));
     // Section ids that only exist / matter in advanced mode — dropped from the
     // expand/collapse-all set (and their sections aren't rendered) when off.
-    const ADV_SECTIONS = new Set(['card','colors','typography','graphcolors','graphranges','deviceinfo','alerts']);
+    // Derived from the spec's per-section `advanced` flags.
+    const ADV_SECTIONS = new Set<string>(
+      EDITOR_LAYOUT.flatMap(t => t.sections.filter(s => s.advanced).map(s => s.id)),
+    );
+    // Collapsible-section keys per tab. Layout & Graphs render their sections from
+    // EDITOR_LAYOUT, so their keys come from the spec; the other tabs still use
+    // bespoke methods with their own section keys.
+    const specKeys = (id: string) => EDITOR_LAYOUT.find(t => t.id === id)?.sections.map(s => s.id) ?? [];
     const allTabSectionKeys: Record<TabId, string[]> = {
       devices: ['rooms'],
       views:   [],
-      layout:  ['header','tiles','card','colors','typography'],
-      graphs:  ['graphtype','graphcolors','graphranges','electrical','environmental','deviceinfo','alerts'],
+      layout:  specKeys('layout'),
+      graphs:  specKeys('graphs'),
       yaml:    [],
     };
     const tabSectionKeys: Record<TabId, string[]> = Object.fromEntries(
