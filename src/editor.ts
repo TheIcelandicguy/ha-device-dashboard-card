@@ -3,7 +3,7 @@ import { repeat } from 'lit/directives/repeat.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset } from './types';
-import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS } from './helpers';
+import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, applyThemePalette, detectTheme, type ThemePalette } from './themes';
 import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons';
 import { EDITOR_LAYOUT } from './editor-layout';
@@ -1050,6 +1050,7 @@ export class HADeviceDashboardEditor extends LitElement {
     entity_animations: Record<string, { on?: string; off?: string; speed?: number }> | undefined;
     sensors: string[] | undefined;
     show_graphs: boolean | undefined;
+    elements: Record<string, boolean> | undefined;
   }>) {
     const current = this._config.device_styles?.[deviceId] ?? {};
     const next: Record<string, unknown> = { ...current, ...patch };
@@ -1064,6 +1065,7 @@ export class HADeviceDashboardEditor extends LitElement {
     if (next['entity_animations'] === undefined) delete next['entity_animations'];
     if (next['sensors'] === undefined) delete next['sensors'];
     if (next['show_graphs'] === undefined) delete next['show_graphs'];
+    if (next['elements'] === undefined) delete next['elements'];
     const allStyles = { ...(this._config.device_styles ?? {}), [deviceId]: next };
     if (!Object.keys(next).length) delete allStyles[deviceId];
     this._set('device_styles', Object.keys(allStyles).length ? allStyles : undefined);
@@ -1101,6 +1103,67 @@ export class HADeviceDashboardEditor extends LitElement {
               ${opt.icon} ${opt.label}
             </span>`)}
         </div>` : nothing}`;
+  }
+
+  /** Device styling tab — pick a device (grouped by room), then style it via the
+   *  shared device panel + per-style element toggles. (Redesign Phase 3.) */
+  private _renderDeviceStylingTab(): TemplateResult {
+    const devices = this._allDevices();
+    const byArea = new Map<string, typeof devices>();
+    for (const d of devices) { const a = d.area || '—'; if (!byArea.has(a)) byArea.set(a, []); byArea.get(a)!.push(d); }
+    const areas = [...byArea.keys()].sort((a, b) => a.localeCompare(b));
+    const sel = this._selectedDeviceId;
+    const selDev = sel ? devices.find(d => d.device_id === sel) : null;
+    return html`
+      <div class="dev-styling-tab">
+        <div class="field" style="margin-bottom:8px">
+          <div class="field-lbl">Device to style</div>
+          <select class="inline-text" style="width:100%"
+            @change=${(e: Event) => { this._selectedDeviceId = (e.target as HTMLSelectElement).value || null; }}>
+            <option value="">— select a device —</option>
+            ${areas.map(a => html`<optgroup label=${a}>
+              ${byArea.get(a)!.map(d => html`<option value=${d.device_id} ?selected=${d.device_id === sel}>${d.name}</option>`)}
+            </optgroup>`)}
+          </select>
+        </div>
+        ${selDev ? html`
+          ${this._renderDeviceStylePanel(sel!)}
+          ${this._renderStyleElementToggles(sel!)}
+        ` : html`<div class="hint" style="margin:12px 2px">Pick a device above to style it. Changes apply to this device.</div>`}
+      </div>`;
+  }
+
+  /** Per-style element visibility toggles for the selected device (writes
+   *  device_styles[id].elements). Only shown for alt styles that expose elements. */
+  private _renderStyleElementToggles(deviceId: string): TemplateResult {
+    const dev = this._allDevices().find(d => d.device_id === deviceId);
+    if (!dev) return html``;
+    const devStyle: DeviceStyle = this._config.device_styles?.[deviceId] ?? {};
+    const profile = getDeviceProfile(dev);
+    const style: TileStyle = devStyle.tile_style
+      ?? (this._config.smart_tile_styles ? PROFILE_DEFAULT_TILE_STYLE[profile.type] : undefined)
+      ?? 'default';
+    const els = STYLE_ELEMENTS[style];
+    if (!els) return html``;   // 'default' style is built from blocks (edited above)
+    const cur = devStyle.elements ?? {};
+    const setEl = (id: string, visible: boolean) => {
+      const next = { ...cur };
+      if (visible) delete next[id]; else next[id] = false;
+      this._setDeviceStyle(deviceId, { elements: Object.keys(next).length ? next : undefined });
+    };
+    return html`
+      <div class="field" style="margin-top:10px">
+        <div class="field-lbl" style="display:flex;align-items:center;gap:6px">
+          Show elements <span class="dev-style-hint">${style}</span>
+        </div>
+        ${els.map(el => html`
+          <div class="tog-row" style="border:none;padding:3px 0">
+            <div class="tog-lbl">${el.label}</div>
+            <label class="sw"><input type="checkbox" .checked=${cur[el.id] !== false}
+              @change=${(e: Event) => setEl(el.id, (e.target as HTMLInputElement).checked)}>
+              <span class="sw-t"></span><span class="sw-b"></span></label>
+          </div>`)}
+      </div>`;
   }
 
   private _renderDeviceStylePanel(deviceId: string): TemplateResult {
@@ -2834,6 +2897,7 @@ export class HADeviceDashboardEditor extends LitElement {
             // render their assigned global sections.
             const bodyFor: Record<string, () => TemplateResult> = {
               devices: () => this._renderDevicesTab(),
+              'device-styling': () => this._renderDeviceStylingTab(),
               views:   () => this._renderViewsTab(),
               layout:  () => this._renderStyleTab(),
               graphs:  () => this._renderGraphsSensorsTab(),

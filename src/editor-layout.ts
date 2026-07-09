@@ -37,6 +37,8 @@ export const EDITOR_LAYOUT: EditorTab[] = [
     { id: 'device-panel',  label: 'Per-device style panel' },
     { id: 'room-panel',    label: 'Per-room style panel' },
   ] },
+  // Redesign Phase 3 — everything for a device in one place (bespoke body).
+  { id: 'device-styling', label: 'Device styling', icon: '◆', sections: [] },
   { id: 'views', label: 'Views', icon: '☰', sections: [
     { id: 'views-toolbar', label: 'Views toolbar' },
     { id: 'view-card',     label: 'Per-view card + filters' },
