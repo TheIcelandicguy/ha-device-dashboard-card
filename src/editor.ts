@@ -173,6 +173,7 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _config!: HADeviceDashboardConfig;
   @state() private _tab: string = 'devices';   // matches an EDITOR_LAYOUT tab id
   @state() private _styleScope: 'device' | 'profile' = 'device';  // Device styling tab: this device vs all of type
+  @state() private _cardThemeRoom: string = '';                   // Card & Theme tab: selected room for per-room styling
   /** Editor-only preference (persisted in localStorage, never written to config):
    *  when false, power-user controls are hidden to keep the common path simple. */
   @state() private _advanced = false;
@@ -849,12 +850,9 @@ export class HADeviceDashboardEditor extends LitElement {
             <span class="fav-room-star">★</span>
             <span class="room-name" style="color:var(--amber)">Favourites</span>
             <span class="room-count" style="color:var(--amber)">${favDevices.length}</span>
-            <button class="room-style-btn ${isFavStyleOpen ? 'active' : ''}" title="Edit room style" @click=${(e:Event)=>{
+            <button class="room-style-btn" title="Style Favourites →" @click=${(e:Event)=>{
               e.stopPropagation();
-              const expSet = new Set(this._expandedRooms); expSet.add(FAV_KEY); this._expandedRooms = expSet;
-              const styleSet = new Set(this._expandedRoomStyle);
-              styleSet.has(FAV_KEY) ? styleSet.delete(FAV_KEY) : styleSet.add(FAV_KEY);
-              this._expandedRoomStyle = styleSet;
+              this._cardThemeRoom = 'Favourites'; this._tab = 'card-theme';
             }}>✎</button>
             ${hasFavStyle ? html`<button class="room-reset-btn" title="Set Favourites style to default"
               @click=${(e:Event)=>{e.stopPropagation();this._clearAreaStyle('Favourites');}}>↺</button>` : nothing}
@@ -869,24 +867,6 @@ export class HADeviceDashboardEditor extends LitElement {
           </div>
           ${isFavExpanded ? html`
             <div class="room-expanded">
-              <div class="room-style-subsec">
-                <div class="room-style-subsec-hdr" @click=${()=>{
-                  const next = new Set(this._expandedRoomStyle);
-                  next.has(FAV_KEY) ? next.delete(FAV_KEY) : next.add(FAV_KEY);
-                  this._expandedRoomStyle = next;
-                }}>
-                  <span class="room-style-subsec-icon">◈</span>
-                  <span class="room-style-subsec-title">Favourites style</span>
-                  ${favSwatches.length ? html`<div class="room-swatch-strip">
-                    ${favSwatches.map(sw => html`<span class="room-swatch" style="background:${sw}"></span>`)}
-                  </div>` : nothing}
-                  ${hasFavStyle && !favSwatches.length ? html`<span class="dev-style-dot"></span>` : nothing}
-                  ${hasFavStyle ? html`<button class="color-reset" style="margin-left:auto"
-                    @click=${(e:Event)=>{e.stopPropagation();this._clearAreaStyle('Favourites');}}>Clear</button>` : nothing}
-                  <span class="room-style-chev">${isFavStyleOpen ? '▲' : '▼'}</span>
-                </div>
-                ${isFavStyleOpen ? this._renderRoomStylePanel('Favourites') : nothing}
-              </div>
               <div class="room-devices">
                 ${favDevices.map(dev => {
                   const isHidden    = hiddenDevices.includes(dev.device_id);
@@ -916,9 +896,9 @@ export class HADeviceDashboardEditor extends LitElement {
                         }}>★</button>
                       ${hasDevStyle ? html`<button class="room-reset-btn" title="Set device style to default"
                         @click=${(e:Event)=>{e.stopPropagation();this._clearDeviceStyle(dev.device_id);}}>↺</button>` : nothing}
-                      <button class="room-style-btn ${isDevExp ? 'active' : ''}" title="Edit device style" @click=${(e:Event) => {
+                      <button class="room-style-btn" title="Style this device →" @click=${(e:Event) => {
                         e.stopPropagation();
-                        this._selectedDeviceId = isDevExp ? null : dev.device_id;
+                        this._selectedDeviceId = dev.device_id; this._styleScope = 'device'; this._tab = 'device-styling';
                       }}>✎</button>
                     </div>`;
                 })}
@@ -944,12 +924,9 @@ export class HADeviceDashboardEditor extends LitElement {
               <span class="sw-t"></span><span class="sw-b"></span></label>
             ${hasAreaStyle ? html`<button class="room-reset-btn" title="Set room style to default"
               @click=${(e:Event)=>{e.stopPropagation();this._clearAreaStyle(areaKey);}}>↺</button>` : nothing}
-            <button class="room-style-btn ${isStyleOpen ? 'active' : ''}" title="Edit room style" @click=${(e:Event)=>{
+            <button class="room-style-btn" title="Style this room →" @click=${(e:Event)=>{
               e.stopPropagation();
-              const expSet = new Set(this._expandedRooms); expSet.add(areaKey); this._expandedRooms = expSet;
-              const styleSet = new Set(this._expandedRoomStyle);
-              styleSet.has(areaKey) ? styleSet.delete(areaKey) : styleSet.add(areaKey);
-              this._expandedRoomStyle = styleSet;
+              this._cardThemeRoom = areaKey; this._tab = 'card-theme';
             }}>✎</button>
             <button class="room-expand-btn ${isExpanded ? 'open' : ''}" @click=${(e:Event)=>{
               e.stopPropagation();
@@ -960,25 +937,7 @@ export class HADeviceDashboardEditor extends LitElement {
           </div>
           ${isExpanded ? html`
             <div class="room-expanded">
-              <!-- Room style sub-panel -->
-              <div class="room-style-subsec">
-                <div class="room-style-subsec-hdr" @click=${()=>{
-                  const next = new Set(this._expandedRoomStyle);
-                  next.has(areaKey) ? next.delete(areaKey) : next.add(areaKey);
-                  this._expandedRoomStyle = next;
-                }}>
-                  <span class="room-style-subsec-icon">◈</span>
-                  <span class="room-style-subsec-title">Room style</span>
-                  ${swatches.length ? html`<div class="room-swatch-strip">
-                    ${swatches.map(sw => html`<span class="room-swatch" style="background:${sw}"></span>`)}
-                  </div>` : nothing}
-                  ${hasAreaStyle && !swatches.length ? html`<span class="dev-style-dot"></span>` : nothing}
-                  ${hasAreaStyle ? html`<button class="color-reset" style="margin-left:auto" @click=${(e:Event)=>{e.stopPropagation();this._clearAreaStyle(areaKey);}}>Clear</button>` : nothing}
-                  <span class="room-style-chev">${isStyleOpen ? '▲' : '▼'}</span>
-                </div>
-                ${isStyleOpen ? this._renderRoomStylePanel(areaKey) : nothing}
-              </div>
-              <!-- Device list -->
+              <!-- Device list (room styling now lives in Card & Theme → Per-room styling) -->
               <div class="room-devices">
                 ${devicesInArea.length ? devicesInArea.map(dev => {
                   const isHidden = hiddenDevices.includes(dev.device_id);
@@ -1009,9 +968,9 @@ export class HADeviceDashboardEditor extends LitElement {
                         }}>★</button>
                       ${hasDevStyle ? html`<button class="room-reset-btn" title="Set device style to default"
                         @click=${(e:Event)=>{e.stopPropagation();this._clearDeviceStyle(dev.device_id);}}>↺</button>` : nothing}
-                      <button class="room-style-btn ${isDevExpanded ? 'active' : ''}" title="Edit device style" @click=${(e: Event) => {
+                      <button class="room-style-btn" title="Style this device →" @click=${(e: Event) => {
                         e.stopPropagation();
-                        this._selectedDeviceId = isDevExpanded ? null : dev.device_id;
+                        this._selectedDeviceId = dev.device_id; this._styleScope = 'device'; this._tab = 'device-styling';
                       }}>✎</button>
                     </div>`;
                 }) : html`<div class="room-device-empty">No devices in this room</div>`}
@@ -1019,20 +978,8 @@ export class HADeviceDashboardEditor extends LitElement {
             </div>` : nothing}`;
       })}`;
 
-    // Slide-in side panel for per-device style editing
-    const selectedId = this._selectedDeviceId;
-    const selectedDev = selectedId ? allDiscovered.find(d => d.device_id === selectedId) : null;
-    const sidePanel = selectedId && selectedDev ? html`
-      <div class="dev-panel-backdrop" @click=${() => { this._selectedDeviceId = null; }}></div>
-      <div class="dev-panel" role="dialog" aria-label="Device style" @click=${(e:Event) => e.stopPropagation()}>
-        <div class="dev-panel-hdr">
-          <span class="dev-panel-title">${selectedDev.name}</span>
-          <button class="dev-panel-close" title="Close" @click=${() => { this._selectedDeviceId = null; }}>✕</button>
-        </div>
-        <div class="dev-panel-body">
-          ${this._renderDeviceStylePanel(selectedId)}
-        </div>
-      </div>` : nothing;
+    // Per-device styling now lives in the Device styling tab; the ✎ shortcuts jump there.
+    const sidePanel = nothing;
 
     return html`
       ${this._sec('rooms','⌂','rgba(74,222,128,0.1)','#4ade80','Rooms & devices', roomsBadge, roomBody)}
@@ -2437,7 +2384,27 @@ export class HADeviceDashboardEditor extends LitElement {
         </div>` : nothing}
       `)}
       ${previewPreview}
-      ${this._renderTabSections('layout', this._globalSectionDescriptors())}`;
+      ${this._renderTabSections('card-theme', this._globalSectionDescriptors())}
+      ${this._renderRoomStyleSection()}`;
+  }
+
+  /** Relocated per-room styling (Redesign Phase 3c) — a room picker + the existing
+   *  room-style panel, now living under Card & Theme instead of Rooms & devices. */
+  private _renderRoomStyleSection(): TemplateResult {
+    const areas = this._getAreas().map(a => a.name);
+    const room = this._cardThemeRoom;
+    const body = html`
+      <div class="field" style="margin-bottom:8px">
+        <div class="field-lbl">Room</div>
+        <select class="inline-text" style="width:100%"
+          @change=${(e: Event) => { this._cardThemeRoom = (e.target as HTMLSelectElement).value; }}>
+          <option value="">— select a room —</option>
+          <option value="Favourites" ?selected=${room === 'Favourites'}>★ Favourites</option>
+          ${areas.map(a => html`<option value=${a} ?selected=${a === room}>${a}</option>`)}
+        </select>
+      </div>
+      ${room ? this._renderRoomStylePanel(room) : html`<div class="hint" style="margin:8px 2px">Pick a room to style its header, columns and tile look.</div>`}`;
+    return this._sec('room-style', '⌂', 'rgba(74,222,128,0.1)', '#4ade80', 'Per-room styling', nothing, body);
   }
 
   /** Every movable global section, keyed by id — used to render custom tabs. */
@@ -2958,7 +2925,7 @@ export class HADeviceDashboardEditor extends LitElement {
               devices: () => this._renderDevicesTab(),
               'device-styling': () => this._renderDeviceStylingTab(),
               views:   () => this._renderViewsTab(),
-              layout:  () => this._renderStyleTab(),
+              'card-theme': () => this._renderStyleTab(),
               graphs:  () => this._renderGraphsSensorsTab(),
               yaml:    () => this._renderYamlTab(),
             };
