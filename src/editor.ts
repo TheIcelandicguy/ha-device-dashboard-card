@@ -2,7 +2,7 @@ import { LitElement, html, css, TemplateResult, nothing } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
-import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset } from './types';
+import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef } from './types';
 import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, applyThemePalette, detectTheme, type ThemePalette } from './themes';
 import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons';
@@ -174,6 +174,7 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _tab: string = 'devices';   // matches an EDITOR_LAYOUT tab id
   @state() private _styleScope: 'device' | 'profile' = 'device';  // Device styling tab: this device vs all of type
   @state() private _cardThemeRoom: string = '';                   // Card & Theme tab: selected room for per-room styling
+  @state() private _newStyleName: string = '';                    // Device styling tab: "Save as style" name input
   /** Editor-only preference (persisted in localStorage, never written to config):
    *  when false, power-user controls are hidden to keep the common path simple. */
   @state() private _advanced = false;
@@ -1040,6 +1041,35 @@ export class HADeviceDashboardEditor extends LitElement {
     this._set('profile_styles', Object.keys(all).length ? all : undefined);
   }
 
+  /** Save the selected device's current look as a reusable named style, and assign
+   *  it to that device. */
+  private _saveDeviceAsStyle(deviceId: string): void {
+    const name = this._newStyleName.trim();
+    if (!name) return;
+    const slug = (name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')) || 'style';
+    const ds: DeviceStyle = this._config.device_styles?.[deviceId] ?? {};
+    const dev = this._allDevices().find(d => d.device_id === deviceId);
+    const profile = dev ? getDeviceProfile(dev) : null;
+    const chosen = ds.tile_style && !String(ds.tile_style).startsWith('custom:') ? ds.tile_style : undefined;
+    const base: TileStyle = chosen
+      ?? (this._config.smart_tile_styles && profile ? PROFILE_DEFAULT_TILE_STYLE[profile.type] : undefined)
+      ?? 'default';
+    const def: CustomStyleDef = { label: name, base };
+    if (ds.power_monitor_variant) def.variant = ds.power_monitor_variant;
+    if (ds.elements) def.elements = { ...ds.elements };
+    if (ds.sensors) def.sensors = [...ds.sensors];
+    if (ds.tile_layout) def.tile_layout = [...ds.tile_layout];
+    this._set('custom_styles', { ...(this._config.custom_styles ?? {}), [slug]: def });
+    this._setDeviceStyle(deviceId, { tile_style: `custom:${slug}` as TileStyle });
+    this._newStyleName = '';
+  }
+
+  private _deleteCustomStyle(key: string): void {
+    const cs = { ...(this._config.custom_styles ?? {}) };
+    delete cs[key];
+    this._set('custom_styles', Object.keys(cs).length ? cs : undefined);
+  }
+
   /** Shared tile-style grid + power-monitor variant pills for the per-device and
    *  per-room style panels. Same options everywhere; callers wire the config scope
    *  via the onStyle/onVariant setters. `recommended` (device profile) only drives
@@ -1063,6 +1093,22 @@ export class HADeviceDashboardEditor extends LitElement {
             <span class="ts-style-desc">${opt.desc}</span>
           </button>`)}
       </div>
+      ${(() => {
+        const customs = Object.entries(this._config.custom_styles ?? {});
+        if (!customs.length) return nothing;
+        return html`
+          <div class="field-lbl" style="margin-top:8px">Saved styles</div>
+          <div class="pill-grp">
+            ${customs.map(([key, def]) => {
+              const val = `custom:${key}` as TileStyle;
+              return html`<span class="pill ${current === val ? 'on' : ''}" @click=${() => onStyle(val)}>
+                ${def.label || key}
+                <span title="Delete style" style="margin-left:6px;cursor:pointer;opacity:.7"
+                  @click=${(e: Event) => { e.stopPropagation(); this._deleteCustomStyle(key); }}>×</span>
+              </span>`;
+            })}
+          </div>`;
+      })()}
       ${showVariant ? html`
         <div class="field-lbl" style="margin-top:8px">Power monitor variant</div>
         <div class="pill-grp">
@@ -1093,7 +1139,14 @@ export class HADeviceDashboardEditor extends LitElement {
       const style = (ds.tile_style ?? (this._config.smart_tile_styles ? PROFILE_DEFAULT_TILE_STYLE[profile!.type] : undefined) ?? 'default') as TileStyle;
       return html`
         ${this._renderDeviceStylePanel(sel!)}
-        ${this._renderStyleElementToggles(style, ds.elements ?? {}, e => this._setDeviceStyle(sel!, { elements: e }))}`;
+        ${this._renderStyleElementToggles(style, ds.elements ?? {}, e => this._setDeviceStyle(sel!, { elements: e }))}
+        <div class="field" style="margin-top:12px;display:flex;gap:6px;align-items:center">
+          <input type="text" class="inline-text" placeholder="Save this look as a named style…" style="flex:1"
+            .value=${this._newStyleName}
+            @input=${(e: Event) => { this._newStyleName = (e.target as HTMLInputElement).value; }}
+            @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') this._saveDeviceAsStyle(sel!); }}/>
+          <button class="btn-copy" title="Save as reusable style" @click=${() => this._saveDeviceAsStyle(sel!)}>💾 Save style</button>
+        </div>`;
     };
     const profileScopeBody = (): TemplateResult => {
       const ps = this._config.profile_styles?.[profile!.type] ?? {};
