@@ -6,9 +6,21 @@ import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAni
 import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, applyThemePalette, detectTheme, type ThemePalette } from './themes';
 import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons';
+import { EDITOR_LAYOUT } from './editor-layout';
 
 /** The global `style` sub-object — typed so key access catches typos. */
 type StyleCfg = NonNullable<HADeviceDashboardConfig['style']>;
+
+/** A collapsible editor section, ready to hand to `_sec()`. Built per-tab, then
+ *  ordered/gated by EDITOR_LAYOUT so the editor's structure is data-driven. */
+interface SectionDesc {
+  icon: string;
+  bg: string;
+  fg: string;
+  label: string;
+  badge: TemplateResult | typeof nothing;
+  body: TemplateResult;
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -2300,7 +2312,7 @@ export class HADeviceDashboardEditor extends LitElement {
   //  TAB: GRAPHS
   // ══════════════════════════════════════════════════════════════
 
-  private _renderGraphsTab(): TemplateResult {
+  private _graphSectionDescriptors(): Record<string, SectionDesc> {
     const c = this._config;
     const gs = c.graph_style ?? {};
     const graphType = gs.type ?? 'line';
@@ -2464,25 +2476,25 @@ export class HADeviceDashboardEditor extends LitElement {
         })}
       </div>`;
 
-    return html`
-      ${this._sec('graphtype','∿','rgba(45,212,191,0.1)','#2dd4bf','Graph Type', nothing, gtBody)}
-      ${this._adv(this._sec('graphcolors','◐','rgba(244,96,30,0.12)','#f4601e','Per-sensor Colors', nothing, colorBody))}
-      ${this._adv(this._sec('graphranges','⇕','rgba(251,191,36,0.1)','#fbbf24','Sensor Min / Max',
-        Object.keys(ranges).length ? this._badge(`${Object.keys(ranges).length} set`, '#fbbf24', 'rgba(251,191,36,0.1)') : nothing,
-        rangeBody))}`;
+    return {
+      graphtype:   { icon: '∿', bg: 'rgba(45,212,191,0.1)', fg: '#2dd4bf', label: 'Graph Type', badge: nothing, body: gtBody },
+      graphcolors: { icon: '◐', bg: 'rgba(244,96,30,0.12)', fg: '#f4601e', label: 'Per-sensor Colors', badge: nothing, body: colorBody },
+      graphranges: { icon: '⇕', bg: 'rgba(251,191,36,0.1)', fg: '#fbbf24', label: 'Sensor Min / Max',
+        badge: Object.keys(ranges).length ? this._badge(`${Object.keys(ranges).length} set`, '#fbbf24', 'rgba(251,191,36,0.1)') : nothing,
+        body: rangeBody },
+    };
   }
 
   // ══════════════════════════════════════════════════════════════
   //  TAB: SENSORS
   // ══════════════════════════════════════════════════════════════
 
-  private _renderSensorsTab(): TemplateResult {
+  private _sensorSectionDescriptors(): Record<string, SectionDesc> {
     const c = this._config;
     const selected = c.sensors ?? [];
 
-    return html`
-      <div class="hint" style="margin:4px 2px 8px">Global default — override per room (Layout & Style → room) or per device (Rooms & devices).</div>
-      ${SENSOR_GROUPS.map(grp => {
+    const out: Record<string, SectionDesc> = {};
+    SENSOR_GROUPS.forEach(grp => {
         const grpKeys = grp.items.map(i => i.key);
         const selectedCount = grpKeys.filter(k => selected.includes(k)).length;
         const grpAllOn = grpKeys.every(k => selected.includes(k));
@@ -2527,10 +2539,32 @@ export class HADeviceDashboardEditor extends LitElement {
             })}
           </div>`;
         const secId = grp.group.toLowerCase().replace(' ','');
-        const sec = this._sec(secId, grp.icon, grp.iconBg, grp.iconColor, grp.group, badge, body);
-        // Device Info + Alerts are power-user detail — hide unless advanced.
-        return (secId === 'deviceinfo' || secId === 'alerts') ? this._adv(sec) : sec;
-      })}`;
+        out[secId] = { icon: grp.icon, bg: grp.iconBg, fg: grp.iconColor, label: grp.group, badge, body };
+      });
+    return out;
+  }
+
+  /** Graphs & Sensors tab — renders its sections from EDITOR_LAYOUT via the
+   *  per-section registry, so order + advanced-gating + labels are data-driven. */
+  private _renderGraphsSensorsTab(): TemplateResult {
+    const reg = { ...this._graphSectionDescriptors(), ...this._sensorSectionDescriptors() };
+    const tab = EDITOR_LAYOUT.find(t => t.id === 'graphs');
+    if (!tab) return html``;
+    const SENSOR_IDS = new Set(['electrical','environmental','deviceinfo','alerts']);
+    let hintShown = false;
+    return html`${tab.sections.map(s => {
+      const d = reg[s.id];
+      if (!d) return nothing;
+      // The "global default — override per room/device" hint sits once, above the
+      // first sensor-chip group wherever it lands in the layout.
+      let pre: TemplateResult | typeof nothing = nothing;
+      if (SENSOR_IDS.has(s.id) && !hintShown) {
+        hintShown = true;
+        pre = html`<div class="hint" style="margin:4px 2px 8px">Global default — override per room (Layout & Style → room) or per device (Rooms & devices).</div>`;
+      }
+      const rendered = html`${pre}${this._sec(s.id, d.icon, d.bg, d.fg, s.label ?? d.label, d.badge, d.body)}`;
+      return s.advanced ? this._adv(rendered) : rendered;
+    })}`;
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -2755,7 +2789,7 @@ export class HADeviceDashboardEditor extends LitElement {
           ${this._tab==='devices' ? this._renderDevicesTab()
            :this._tab==='views'   ? this._renderViewsTab()
            :this._tab==='layout'  ? this._renderStyleTab()
-           :this._tab==='graphs'  ? html`${this._renderGraphsTab()}${this._renderSensorsTab()}`
+           :this._tab==='graphs'  ? this._renderGraphsSensorsTab()
            :                        this._renderYamlTab()}
         </div>
         ${this._renderIconGridPopover()}
