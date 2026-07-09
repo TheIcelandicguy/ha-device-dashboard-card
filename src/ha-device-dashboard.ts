@@ -3,7 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { styleMap } from 'lit/directives/style-map.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
-import { HADeviceDashboardConfig, HADevice, HAEntity, TileBlockId, DeviceProfileResult, EntityAnimationType, TileStyle, PowerMonitorVariant, SensorRange, HassAttrs, ViewConfig, DeviceStyle, AreaStyle } from './types';
+import { HADeviceDashboardConfig, HADevice, HAEntity, TileBlockId, DeviceProfileResult, EntityAnimationType, TileStyle, PowerMonitorVariant, SensorRange, HassAttrs, ViewConfig, DeviceStyle, AreaStyle, CustomStyleDef } from './types';
 import { BUNDLED_FONT_CSS } from './fonts';
 import { mainCss } from './styles/main';
 import { tilesCss } from './styles/tiles';
@@ -878,7 +878,9 @@ export class HADeviceDashboard extends LitElement {
     if (profSel !== undefined) return profSel;
     const areaSel = device.area ? this._config.area_styles?.[device.area]?.sensors : undefined;
     if (areaSel !== undefined) return areaSel;
-    // Per-tile-style preset — more specific than the global list.
+    // Saved custom style, then the per-tile-style preset — more specific than global.
+    const customSel = this._customDef(device)?.sensors;
+    if (customSel !== undefined) return customSel;
     const presetSel = this._config.style_presets?.[this._effectiveStyle(device)]?.sensors;
     if (presetSel !== undefined) return presetSel;
     if (this._config.sensors !== undefined) return this._config.sensors;
@@ -2279,17 +2281,38 @@ export class HADeviceDashboard extends LitElement {
     return this._config.profile_styles?.[this._profile(device).type];
   }
 
-  /** The tile style a device will actually render in — device → type → area → view
-   *  → global → smart/profile default. Drives the style-preset chips/element cascades. */
-  private _effectiveStyle(device: HADevice): TileStyle {
+  /** The raw chosen tile style (may be a legacy alias or a `custom:<key>`), from
+   *  the cascade device → type → area → view → global → smart/profile default. */
+  private _rawStyle(device: HADevice): TileStyle | undefined {
     const profile = this._profile(device);
     const devStyle = this._config.device_styles?.[device.device_id];
     const areaStyle = device.area ? this._config.area_styles?.[device.area] : undefined;
     const activeView = this._getActiveView();
-    const raw = devStyle?.tile_style ?? this._profileStyle(device)?.tile_style ?? areaStyle?.tile_style
+    return devStyle?.tile_style ?? this._profileStyle(device)?.tile_style ?? areaStyle?.tile_style
       ?? activeView?.tile_style ?? this._config.tile_style
       ?? (this._config.smart_tile_styles ? PROFILE_DEFAULT_TILE_STYLE[profile.type] : undefined);
-    return this._resolveStyle(raw, profile).style;
+  }
+
+  /** Resolve a raw style to its base built-in style + the custom def if it was a
+   *  `custom:<key>`. */
+  private _resolveCustomStyle(raw: TileStyle | undefined): { base: TileStyle | undefined; custom?: CustomStyleDef } {
+    if (typeof raw === 'string' && raw.startsWith('custom:')) {
+      const def = this._config.custom_styles?.[raw.slice(7)];
+      return { base: def?.base ?? 'default', custom: def };
+    }
+    return { base: raw };
+  }
+
+  /** The saved custom style config active for this device, if any. */
+  private _customDef(device: HADevice): CustomStyleDef | undefined {
+    return this._resolveCustomStyle(this._rawStyle(device)).custom;
+  }
+
+  /** The tile style a device will actually render in (custom → base). Drives the
+   *  style-preset chips/element cascades. */
+  private _effectiveStyle(device: HADevice): TileStyle {
+    const { base } = this._resolveCustomStyle(this._rawStyle(device));
+    return this._resolveStyle(base, this._profile(device)).style;
   }
 
   private _handleScenePress(device: HADevice): void {
@@ -2338,8 +2361,9 @@ export class HADeviceDashboard extends LitElement {
     const _devEl  = this._config.device_styles?.[device.device_id]?.elements;
     const _profEl = this._profileStyle(device)?.elements;
     const _areaEl = device.area ? this._config.area_styles?.[device.area]?.elements : undefined;
+    const _customEl = this._customDef(device)?.elements;
     const _presetEl = this._config.style_presets?.[_effStyle]?.elements;
-    const showEl = (id: string): boolean => _devEl?.[id] ?? _profEl?.[id] ?? _areaEl?.[id] ?? _presetEl?.[id] ?? true;
+    const showEl = (id: string): boolean => _devEl?.[id] ?? _profEl?.[id] ?? _areaEl?.[id] ?? _customEl?.[id] ?? _presetEl?.[id] ?? true;
     return {
       showEl,
       hass: this.hass,
@@ -2417,16 +2441,19 @@ export class HADeviceDashboard extends LitElement {
     const devStyle = this._config.device_styles?.[device.device_id];
     const rawStyle = devStyle?.tile_style ?? profStyle?.tile_style ?? areaTileStyle ?? activeView?.tile_style ?? this._config.tile_style
       ?? (this._config.smart_tile_styles ? PROFILE_DEFAULT_TILE_STYLE[profile.type] : undefined);
+    // Saved custom style → its base built-in style + config layer.
+    const { base: baseStyle, custom: customDef } = this._resolveCustomStyle(rawStyle);
 
-    // Resolve variant — device → type → area → view → global default → legacy alias
+    // Resolve variant — device → type → area → view → global → custom → preset → legacy
     const areaVariant = this._config.area_styles?.[device.area ?? '']?.power_monitor_variant;
-    const { style, variant: legacyVariant } = this._resolveStyle(rawStyle, profile);
+    const { style, variant: legacyVariant } = this._resolveStyle(baseStyle, profile);
     const variant: PowerMonitorVariant =
       devStyle?.power_monitor_variant
       ?? profStyle?.power_monitor_variant
       ?? areaVariant
       ?? activeView?.power_monitor_variant
       ?? this._config.power_monitor_variant
+      ?? customDef?.variant
       ?? this._config.style_presets?.['power-monitor']?.variant
       ?? legacyVariant;
 
@@ -2435,6 +2462,7 @@ export class HADeviceDashboard extends LitElement {
       const _defaultBlocks: TileBlockId[] = ['name_row', 'sensors', 'graph', 'dimmer', 'cover_controls', 'trv_control', 'valve_controls', 'input_channels', 'relay_channels', 'power_bar', 'badges'];
       const blockOrder: TileBlockId[] =
         devStyle?.tile_layout ?? profStyle?.tile_layout ?? this._config.tile_layout ??
+        customDef?.tile_layout ??
         this._config.style_presets?.['default']?.tile_layout ??
         PROFILE_DEFAULT_BLOCKS[profile.type] ?? _defaultBlocks;
       const areaAccent = this._tileAccent(device, device.area ?? '');

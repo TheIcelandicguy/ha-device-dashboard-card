@@ -156,7 +156,9 @@ export type TileStyle =
   | 'sensor-card'      // sensor — big primary value + sparkline + trend badge
   | 'scene-button'     // input/generic — large tappable icon button
   // Legacy aliases (remapped, not shown in picker)
-  | 'hero' | 'ring' | 'hbar' | 'spark' | 'list' | 'command';
+  | 'hero' | 'ring' | 'hbar' | 'spark' | 'list' | 'command'
+  // User-defined saved styles — `custom:<key>`, resolved to a base at render time
+  | `custom:${string}`;
 
 /** Sub-variants for the power-monitor style */
 export type PowerMonitorVariant =
@@ -265,6 +267,22 @@ export interface DeviceStyle {
   /** Per-element visibility override for this device's tile style. Element id →
    *  visible. Omitted ids inherit area → style preset → default (visible). */
   elements?: Record<string, boolean>;
+}
+
+/** A user-defined, savable tile style. Renders as `base` with the saved config
+ *  applied; assigned via `tile_style: 'custom:<key>'`. */
+export interface CustomStyleDef {
+  /** Display name in the style picker (defaults to the key). */
+  label?: string;
+  /** Which built-in tile style it renders as. */
+  base: TileStyle;
+  variant?: PowerMonitorVariant;
+  /** Element visibility for the base style. */
+  elements?: Record<string, boolean>;
+  /** Default sensor chips. */
+  sensors?: string[];
+  /** Block order (base = 'default'). */
+  tile_layout?: TileBlockId[];
 }
 
 /** A per-tile-style default preset. Applies to every tile rendered in that style,
@@ -443,6 +461,9 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   /** Per-tile-style presets: default chips / blocks / variant / element visibility
    *  for every tile rendered in a given style. Overridable per device/area. */
   style_presets?: Partial<Record<TileStyle, StylePreset>>;
+  /** User-defined saved tile styles, keyed by slug. Assigned via
+   *  `tile_style: 'custom:<key>'`; renders as `base` with the saved config. */
+  custom_styles?: Record<string, CustomStyleDef>;
 
   // ── Graphs ────────────────────────────────────────────────────
   /** device_class keys to graph. Empty = no graphs. */
