@@ -287,6 +287,15 @@ export const mainCss = css`
       isolation:isolate; box-shadow: var(--sc-tile-shadow, none);
     }
 
+    /* A tile_layout row holding two or more blocks side by side. Blocks share the
+       width evenly; min-width:0 lets a graph or chip row shrink rather than
+       overflow the tile. A block renders nothing when it doesn't apply to the
+       device, so a row whose blocks all opted out has no element children — hide
+       it, else the tile's flex gap leaves a phantom band. */
+    .tile-row { display:flex; gap:6px; align-items:flex-start; }
+    .tile-row > * { flex:1 1 0; min-width:0; }
+    .tile-row:not(:has(*)) { display:none; }
+
     .tile--clickable { cursor:default; }
 
     .tile-trigger { cursor:pointer; }

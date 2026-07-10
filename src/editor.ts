@@ -3,8 +3,8 @@ import { repeat } from 'lit/directives/repeat.js';
 import { ref } from 'lit/directives/ref.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
-import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef } from './types';
-import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE } from './helpers';
+import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout } from './types';
+import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, normalizeTileLayout, flattenTileLayout, cloneTileLayout, setBlockInLayout } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, applyThemePalette, detectTheme, type ThemePalette } from './themes';
 import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons';
 import { EDITOR_LAYOUT } from './editor-layout';
@@ -1023,7 +1023,7 @@ export class HADeviceDashboardEditor extends LitElement {
 
   private _setDeviceStyle(deviceId: string, patch: Partial<{
     color: string | undefined;
-    tile_layout: TileBlockId[] | undefined;
+    tile_layout: TileLayout | undefined;
     profile: DeviceProfile | undefined;
     tile_style: TileStyle | undefined;
     power_monitor_variant: PowerMonitorVariant | undefined;
@@ -1058,7 +1058,7 @@ export class HADeviceDashboardEditor extends LitElement {
    *  profile_styles[type]. A subset of DeviceStyle (no per-entity animations). */
   private _setProfileStyle(profileType: DeviceProfile, patch: Partial<{
     color: string | undefined;
-    tile_layout: TileBlockId[] | undefined;
+    tile_layout: TileLayout | undefined;
     tile_style: TileStyle | undefined;
     power_monitor_variant: PowerMonitorVariant | undefined;
     sensors: string[] | undefined;
@@ -1104,7 +1104,7 @@ export class HADeviceDashboardEditor extends LitElement {
     if (src.power_monitor_variant) def.variant = src.power_monitor_variant;
     if (src.elements) def.elements = { ...src.elements };
     if (src.sensors) def.sensors = [...src.sensors];
-    if (src.tile_layout) def.tile_layout = [...src.tile_layout];
+    if (src.tile_layout) def.tile_layout = cloneTileLayout(src.tile_layout);
     this._set('custom_styles', { ...(this._config.custom_styles ?? {}), [slug]: def });
     assign(`custom:${slug}` as TileStyle);
     this._newStyleName = '';
@@ -1351,17 +1351,20 @@ export class HADeviceDashboardEditor extends LitElement {
 
   private _renderDeviceStylePanel(deviceId: string): TemplateResult {
     const devStyle: DeviceStyle = this._config.device_styles?.[deviceId] ?? {};
-    const globalLayout: TileBlockId[] = this._config.tile_layout ?? TILE_BLOCKS.map(b => b.id);
-    const devLayout: TileBlockId[] | null = devStyle.tile_layout ?? null;
+    const canonical = TILE_BLOCKS.map(b => b.id);
+    const globalRaw: TileLayout = this._config.tile_layout ?? canonical;
+    const globalLayout: TileBlockId[] = flattenTileLayout(globalRaw)!;
+    const devLayout: TileBlockId[] | null = flattenTileLayout(devStyle.tile_layout) ?? null;
     const entityAnims: Record<string, { on?: string; off?: string; speed?: number }> = devStyle.entity_animations ?? {};
 
     const toggleBlock = (blockId: TileBlockId) => {
-      const isVisible = devLayout === null ? globalLayout.includes(blockId) : devLayout.includes(blockId);
-      const next = TILE_BLOCKS.map(b => b.id).filter(id => {
-        if (id === blockId) return !isVisible;
-        return devLayout === null ? globalLayout.includes(id) : devLayout.includes(id);
-      });
-      const sameAsGlobal = next.length === globalLayout.length && next.every(id => globalLayout.includes(id));
+      const isVisible = (devLayout ?? globalLayout).includes(blockId);
+      // Toggle within whichever layout is in force, so a device that has been
+      // given side-by-side rows keeps them when a block is shown or hidden.
+      const next = setBlockInLayout(devStyle.tile_layout ?? globalRaw, blockId, !isVisible, canonical);
+      // Structural compare, not a set compare: a device whose blocks match global
+      // but are arranged into rows must keep its own layout, not fall back to it.
+      const sameAsGlobal = JSON.stringify(next) === JSON.stringify(normalizeTileLayout(globalRaw));
       this._setDeviceStyle(deviceId, { tile_layout: sameAsGlobal ? undefined : next });
     };
 

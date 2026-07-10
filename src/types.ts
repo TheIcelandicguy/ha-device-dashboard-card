@@ -60,6 +60,17 @@ export type TileBlockId =
   | 'virtual_controls' // virtual component controls (select, number, button, text, boolean)
   | 'badges';         // type badge + gen badge + UI link
 
+/** One row of the tile face. Two or more blocks in a row sit side by side. */
+export type TileRow = TileBlockId[];
+
+/**
+ * Tile block layout, in either of two interchangeable forms:
+ *  - flat  `['name_row', 'sensors']`      — one block per row (the original shape)
+ *  - rows  `[['name_row'], ['sensors','graph']]` — explicit side-by-side rows
+ * Both are accepted everywhere; `normalizeTileLayout` folds the flat form into rows.
+ */
+export type TileLayout = TileBlockId[] | TileRow[];
+
 // ─── Style system ──────────────────────────────────────────────────────────────
 
 export type ButtonShape   = 'pill' | 'rect' | 'square' | 'circle';
@@ -245,7 +256,7 @@ export type EntityAnimationType =
 /** Per-device visual overrides */
 export interface DeviceStyle {
   color?: string;             // accent colour override
-  tile_layout?: TileBlockId[]; // per-device block order/visibility
+  tile_layout?: TileLayout; // per-device block order/visibility
   /** Override the auto-detected device profile (categorisation). undefined = auto. */
   profile?: DeviceProfile;
   /** Per-device tile style — overrides area tile_style */
@@ -282,7 +293,7 @@ export interface CustomStyleDef {
   /** Default sensor chips. */
   sensors?: string[];
   /** Block order (base = 'default'). */
-  tile_layout?: TileBlockId[];
+  tile_layout?: TileLayout;
 }
 
 /** A per-tile-style default preset. Applies to every tile rendered in that style,
@@ -293,7 +304,7 @@ export interface StylePreset {
   /** Default sensor chips for tiles of this style. undefined = inherit global. */
   sensors?: string[];
   /** Default block order/visibility for the 'default' (block) style. */
-  tile_layout?: TileBlockId[];
+  tile_layout?: TileLayout;
   /** Per-element visibility for this style. Element id → visible (omit = visible). */
   elements?: Record<string, boolean>;
 }
@@ -385,7 +396,7 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
    *  stays the "which sensors to plot" palette; this is "whether to show them". */
   show_graphs?: boolean;
   /** Ordered list of tile blocks. Omit a block to hide it. */
-  tile_layout?: TileBlockId[];
+  tile_layout?: TileLayout;
   tile_opacity?: number;               // 0-100, default 100 — tile background only
   card_opacity?: number;               // 0-100, default 100 — card background only
   header_opacity?: number;             // 0-100, default 100 — header background only

@@ -1,7 +1,7 @@
 import { HomeAssistant } from 'custom-card-helpers';
 import {
   HADevice, HAEntity, DeviceProfileResult, DeviceProfile, DeviceGen,
-  TileBlockId, TileStyle,
+  TileBlockId, TileStyle, TileLayout, TileRow,
 } from './types';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -218,6 +218,50 @@ export const STYLE_ELEMENTS: Partial<Record<TileStyle, Array<{ id: string; label
     { id: 'input_rows', label: 'Input channel rows' },
   ],
 };
+
+/**
+ * Fold a tile layout into rows. The flat form `['a','b']` means one block per
+ * row; the row form `[['a'],['b','c']]` puts b and c side by side.
+ */
+export function normalizeTileLayout(layout: TileLayout | undefined): TileRow[] | undefined {
+  if (!layout) return undefined;
+  return (layout as Array<TileBlockId | TileRow>).map(r => (Array.isArray(r) ? r : [r]));
+}
+
+/** Every block in a layout, row structure discarded — for the flat editor UIs. */
+export function flattenTileLayout(layout: TileLayout | undefined): TileBlockId[] | undefined {
+  const rows = normalizeTileLayout(layout);
+  return rows && rows.flat();
+}
+
+/** Deep copy a layout — rows are arrays, so a spread alone would share them. */
+export function cloneTileLayout(layout: TileLayout): TileLayout {
+  return (layout as Array<TileBlockId | TileRow>).map(r => (Array.isArray(r) ? [...r] : r)) as TileLayout;
+}
+
+/**
+ * Show or hide one block, keeping the rest of the row structure intact. Hiding
+ * drops the block from its row (and the row, if it was the last one there);
+ * showing inserts it as its own row at its canonical position. A flat layout
+ * stays flat, since every row it produces holds a single block.
+ */
+export function setBlockInLayout(
+  layout: TileLayout,
+  blockId: TileBlockId,
+  visible: boolean,
+  canonicalOrder: TileBlockId[],
+): TileRow[] {
+  const rows = normalizeTileLayout(layout)!.map(r => [...r]);
+  if (!visible) return rows.map(r => r.filter(b => b !== blockId)).filter(r => r.length > 0);
+  if (rows.some(r => r.includes(blockId))) return rows;
+  const rank = (b: TileBlockId) => {
+    const i = canonicalOrder.indexOf(b);
+    return i < 0 ? canonicalOrder.length : i;
+  };
+  const at = rows.findIndex(r => rank(r[0]) > rank(blockId));
+  rows.splice(at < 0 ? rows.length : at, 0, [blockId]);
+  return rows;
+}
 
 /**
  * Default tile block order for each device profile.

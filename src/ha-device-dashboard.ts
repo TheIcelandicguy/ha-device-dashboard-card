@@ -3,7 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { styleMap } from 'lit/directives/style-map.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
-import { HADeviceDashboardConfig, HADevice, TileBlockId, DeviceProfileResult, EntityAnimationType, TileStyle, PowerMonitorVariant, HassAttrs, ViewConfig, DeviceStyle, AreaStyle, CustomStyleDef } from './types';
+import { HADeviceDashboardConfig, HADevice, TileBlockId, DeviceProfileResult, EntityAnimationType, TileStyle, PowerMonitorVariant, HassAttrs, ViewConfig, DeviceStyle, AreaStyle, CustomStyleDef, TileLayout } from './types';
 import { BUNDLED_FONT_CSS } from './fonts';
 import { mainCss } from './styles/main';
 import { tilesCss } from './styles/tiles';
@@ -22,7 +22,7 @@ import { renderBlockTile } from './tiles/block-tile';
 import { renderDetailSheet } from './detail/detail-sheet';
 import {
   getAllDevices, getDeviceProfile, migrateConfig,
-  PROFILE_DEFAULT_BLOCKS, PROFILE_DEFAULT_SENSORS, PROFILE_DEFAULT_TILE_STYLE, PROFILE_LABELS, BLOCK_LABELS, GRAPH_DC_LABELS, GRAPH_SENSOR_DEFS,
+  PROFILE_DEFAULT_BLOCKS, normalizeTileLayout, flattenTileLayout, PROFILE_DEFAULT_SENSORS, PROFILE_DEFAULT_TILE_STYLE, PROFILE_LABELS, BLOCK_LABELS, GRAPH_DC_LABELS, GRAPH_SENSOR_DEFS,
   HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, downsamplePoints, normalizeGraphKey,
   formatPower, formatEnergy, formatVoltage, formatCurrent, formatTemp,
   formatUptime, formatApparentPower, formatReactivePower,
@@ -1549,9 +1549,11 @@ export class HADeviceDashboard extends LitElement {
   private _getBlockOrder(device: HADevice, profile: DeviceProfileResult): TileBlockId[] {
     const viewerOverride = this._tileBlockOverride.get(device.device_id);
     if (viewerOverride) return viewerOverride;
-    const deviceOverride = this._config.device_styles?.[device.device_id]?.tile_layout;
+    // Flat: the Customize panel deals in "which blocks are visible", not rows.
+    const deviceOverride = flattenTileLayout(this._config.device_styles?.[device.device_id]?.tile_layout);
     if (deviceOverride) return deviceOverride;
-    if (this._config.tile_layout) return this._config.tile_layout;
+    const globalLayout = flattenTileLayout(this._config.tile_layout);
+    if (globalLayout) return globalLayout;
     return PROFILE_DEFAULT_BLOCKS[profile.type] ?? PROFILE_DEFAULT_BLOCKS.generic;
   }
 
@@ -2460,11 +2462,12 @@ export class HADeviceDashboard extends LitElement {
     if (style === 'default' || !style) {
       // Original block-based layout
       const _defaultBlocks: TileBlockId[] = ['name_row', 'sensors', 'graph', 'dimmer', 'cover_controls', 'trv_control', 'valve_controls', 'input_channels', 'relay_channels', 'power_bar', 'badges'];
-      const blockOrder: TileBlockId[] =
+      const blockLayout: TileLayout =
         devStyle?.tile_layout ?? profStyle?.tile_layout ?? this._config.tile_layout ??
         customDef?.tile_layout ??
         this._config.style_presets?.['default']?.tile_layout ??
         PROFILE_DEFAULT_BLOCKS[profile.type] ?? _defaultBlocks;
+      const blockRows = normalizeTileLayout(blockLayout)!;
       const areaAccent = this._tileAccent(device, device.area ?? '');
       const blockCtx = this._buildTileCtx(device, profile, areaAccent);
       return html`
@@ -2473,7 +2476,9 @@ export class HADeviceDashboard extends LitElement {
           @pointerup=${(e: PointerEvent) => this._onTilePointerUp(device, e)}
           @pointercancel=${() => this._onTilePointerCancel()}
           @pointermove=${(e: PointerEvent) => this._onTilePointerMove(e)}>
-          ${repeat(blockOrder, (b) => b, (b) => renderBlockTile(blockCtx, b))}
+          ${repeat(blockRows, (r) => r.join('+'), (r) => r.length === 1
+            ? renderBlockTile(blockCtx, r[0])
+            : html`<div class="tile-row">${r.map((b) => renderBlockTile(blockCtx, b))}</div>`)}
         </div>`;
     }
 
