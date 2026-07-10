@@ -1,0 +1,7 @@
+# Source stays LF everywhere, regardless of core.autocrlf on the machine.
+* text=auto eol=lf
+
+# Built bundle: leave bytes exactly as the build wrote them. core.autocrlf=true
+# was rewriting its line endings on every checkout and showing it perpetually
+# "modified" even when the content was identical.
+dist/*.js -text
