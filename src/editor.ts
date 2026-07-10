@@ -193,9 +193,6 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _expandedRoomStyle: Set<string> = new Set();
   @state() private _selectedDeviceId: string | null = null;
   @state() private _deviceSearch = '';
-  @state() private _hiddenBlocks: Set<TileBlockId> = new Set();
-  @state() private _dragOrder: TileBlockId[] = TILE_BLOCKS.map(b => b.id);
-  @state() private _dragOver: TileBlockId | null = null;
   @state() private _styleClipFeedback = '';
   @state() private _copyAreaOpen = false;
   @state() private _copyJson = '';
@@ -853,9 +850,22 @@ export class HADeviceDashboardEditor extends LitElement {
     const onCount = selectedAreas === undefined ? allAreas.length : selectedAreas.length;
     const roomsBadge = this._badge(`${onCount} / ${allAreas.length}`, '#4ade80', 'rgba(74,222,128,0.1)');
 
+    // Devices with no HA area still render, grouped under a "No Area" section.
+    const unassigned = byArea.get('')?.length ?? 0;
+
     // Room rows
     const roomBody = html`
       <div class="rooms-toolbar">
+        ${unassigned > 0 ? html`
+          <div class="rooms-note">
+            <span class="rooms-note-ico">⌂</span>
+            <span>${unassigned} device${unassigned !== 1 ? 's' : ''}
+              ${unassigned !== 1 ? 'are' : 'is'} not assigned to a room, so
+              ${unassigned !== 1 ? 'they' : 'it'} appear under a <b>No Area</b> group on
+              the card. Assign areas in Home Assistant — the
+              <b>Entity Manager</b> custom component has a bulk area/room tool for
+              doing this across many devices at once.</span>
+          </div>` : nothing}
         <div class="toolbar-group">
           <span class="toolbar-lbl">Sort</span>
           <div class="pill-grp">
@@ -1345,6 +1355,25 @@ export class HADeviceDashboardEditor extends LitElement {
   /** Pointer travel before a press becomes a drag, so a tap isn't a move. */
   private static readonly DRAG_SLOP = 6;
 
+  /** Schematic mock of one block for the layout canvas's live preview. */
+  private _blockPreview(id: TileBlockId, accent: string): TemplateResult | typeof nothing {
+    switch (id) {
+      case 'name_row': return html`<div class="tp-row tp-name-row"><div class="tp-dot" style="background:#4ade80"></div><span class="tp-name">Ljós yfir vaska</span><span class="tp-tog" style="background:${accent}">ON</span></div>`;
+      case 'sensors':  return html`<div class="tp-row tp-chips"><span class="tp-chip">4.1 W</span><span class="tp-chip">235 V</span><span class="tp-chip">44.6 °C</span><span class="tp-chip">−54 dBm</span></div>`;
+      case 'graph':    return html`<div class="tp-row"><svg viewBox="0 0 200 28" preserveAspectRatio="none" style="width:100%;height:28px;display:block"><polygon points="0,24 25,20 50,22 75,15 100,17 125,11 150,13 175,7 200,5 200,28 0,28" fill="${accent}" fill-opacity="0.15"/><polyline points="0,24 25,20 50,22 75,15 100,17 125,11 150,13 175,7 200,5" fill="none" stroke="${accent}" stroke-width="1.5" stroke-linecap="round"/></svg></div>`;
+      case 'dimmer':   return html`<div class="tp-row" style="gap:8px"><span class="tp-lbl">Brightness</span><div class="tp-strack"><div class="tp-sfill" style="width:68%;background:${accent}"></div></div><span class="tp-val">68%</span></div>`;
+      case 'cover_controls':  return html`<div class="tp-row" style="gap:4px"><button class="tp-btn">▲</button><button class="tp-btn">■</button><button class="tp-btn">▼</button></div>`;
+      case 'trv_control':     return html`<div class="tp-row" style="gap:8px"><svg viewBox="0 0 80 44" style="width:60px;height:34px;flex-shrink:0"><path d="M 8 40 A 32 32 0 1 1 72 40" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="6" stroke-linecap="round"/><path d="M 8 40 A 32 32 0 0 1 52 10" fill="none" stroke="${accent}" stroke-width="6" stroke-linecap="round"/><text x="40" y="34" text-anchor="middle" font-size="11" font-weight="700" fill="white">21°</text></svg><span class="tp-val">Now 20°</span></div>`;
+      case 'valve_controls':  return html`<div class="tp-row" style="gap:4px"><button class="tp-btn">Open</button><button class="tp-btn">Close</button></div>`;
+      case 'input_channels':  return html`<div class="tp-row tp-chips"><span class="tp-chip" style="color:${accent}">● CH1</span><span class="tp-chip">○ CH2</span></div>`;
+      case 'relay_channels':  return html`<div class="tp-row tp-chips"><span class="tp-chip" style="background:${accent}20;color:${accent}">CH1 ON</span><span class="tp-chip">CH2 OFF</span></div>`;
+      case 'power_bar':       return html`<div class="tp-row" style="gap:8px"><div class="tp-strack" style="flex:1"><div class="tp-sfill" style="width:22%;background:${accent}"></div></div><span class="tp-val">4.1 W</span></div>`;
+      case 'virtual_controls':return html`<div class="tp-row tp-chips"><span class="tp-chip">Mode ▾</span><span class="tp-chip" style="background:${accent}20;color:${accent}">Script</span></div>`;
+      case 'badges':          return html`<div class="tp-row tp-chips"><span class="tp-chip" style="background:rgba(234,179,8,.18);color:#fde047">Dimmer</span><span class="tp-chip" style="background:rgba(34,197,94,.18);color:#86efac">G3</span></div>`;
+      default: return nothing;
+    }
+  }
+
   /**
    * In-flight layout drag. Deliberately NOT @state: mutating reactive state
    * mid-drag re-renders the canvas, replacing the chip element and silently
@@ -1486,11 +1515,18 @@ export class HADeviceDashboardEditor extends LitElement {
         @pointerup=${(e: PointerEvent) => this._layPointerUp(e)}
         @pointercancel=${() => this._layDragEnd()}>${label(id)}</span>`;
 
+    const accent = this._config.style?.accent_color ?? '#f4601e';
+
     return html`
       <div class="field" style="margin-top:10px">
         <div class="field-lbl" style="display:flex;align-items:center;gap:6px">
           Tile layout
           ${current ? this._resetBtn(true, () => apply(undefined)) : nothing}
+        </div>
+        <div class="tile-preview-live" style="--accent:${accent}">
+          ${rows.length
+            ? rows.map(r => html`<div class="tp-prow">${r.map(b => this._blockPreview(b, accent))}</div>`)
+            : html`<div style="color:var(--t3);font-size:11px;padding:8px;text-align:center">All blocks hidden</div>`}
         </div>
         <div class="lay-canvas">
           ${rows.map((r, ri) => html`
@@ -2277,77 +2313,6 @@ export class HADeviceDashboardEditor extends LitElement {
       </div>`;
   }
 
-  /** Tile block order drag list + live preview — inside the Tiles section. */
-  private _tileOrderBody(): TemplateResult {
-    // Tile order drag list
-    const accent        = this._config.style?.accent_color ?? '#f4601e';
-    const visibleBlocks = this._dragOrder.filter(id => !this._hiddenBlocks.has(id));
-
-    const blockPreview = (id: TileBlockId) => {
-      switch (id) {
-        case 'name_row': return html`<div class="tp-row tp-name-row"><div class="tp-dot" style="background:#4ade80"></div><span class="tp-name">Ljós yfir vaska</span><span class="tp-tog" style="background:${accent}">ON</span></div>`;
-        case 'sensors':  return html`<div class="tp-row tp-chips"><span class="tp-chip">4.1 W</span><span class="tp-chip">235 V</span><span class="tp-chip">44.6 °C</span><span class="tp-chip">−54 dBm</span></div>`;
-        case 'graph':    return html`<div class="tp-row"><svg viewBox="0 0 200 28" preserveAspectRatio="none" style="width:100%;height:28px;display:block"><polygon points="0,24 25,20 50,22 75,15 100,17 125,11 150,13 175,7 200,5 200,28 0,28" fill="${accent}" fill-opacity="0.15"/><polyline points="0,24 25,20 50,22 75,15 100,17 125,11 150,13 175,7 200,5" fill="none" stroke="${accent}" stroke-width="1.5" stroke-linecap="round"/></svg></div>`;
-        case 'dimmer':   return html`<div class="tp-row" style="gap:8px"><span class="tp-lbl">Brightness</span><div class="tp-strack"><div class="tp-sfill" style="width:68%;background:${accent}"></div></div><span class="tp-val">68%</span></div>`;
-        case 'cover_controls':  return html`<div class="tp-row" style="gap:4px"><button class="tp-btn">▲</button><button class="tp-btn">■</button><button class="tp-btn">▼</button></div>`;
-        case 'trv_control':     return html`<div class="tp-row" style="gap:8px"><svg viewBox="0 0 80 44" style="width:60px;height:34px;flex-shrink:0"><path d="M 8 40 A 32 32 0 1 1 72 40" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="6" stroke-linecap="round"/><path d="M 8 40 A 32 32 0 0 1 52 10" fill="none" stroke="${accent}" stroke-width="6" stroke-linecap="round"/><text x="40" y="34" text-anchor="middle" font-size="11" font-weight="700" fill="white">21°</text></svg><span class="tp-val">Now 20°</span></div>`;
-        case 'valve_controls':  return html`<div class="tp-row" style="gap:4px"><button class="tp-btn">Open</button><button class="tp-btn">Close</button></div>`;
-        case 'input_channels':  return html`<div class="tp-row tp-chips"><span class="tp-chip" style="color:${accent}">● CH1</span><span class="tp-chip">○ CH2</span></div>`;
-        case 'relay_channels':  return html`<div class="tp-row tp-chips"><span class="tp-chip" style="background:${accent}20;color:${accent}">CH1 ON</span><span class="tp-chip">CH2 OFF</span></div>`;
-        case 'power_bar':       return html`<div class="tp-row" style="gap:8px"><div class="tp-strack" style="flex:1"><div class="tp-sfill" style="width:22%;background:${accent}"></div></div><span class="tp-val">4.1 W</span></div>`;
-        case 'virtual_controls':return html`<div class="tp-row tp-chips"><span class="tp-chip">Mode ▾</span><span class="tp-chip" style="background:${accent}20;color:${accent}">Script</span></div>`;
-        case 'badges':          return html`<div class="tp-row tp-chips"><span class="tp-chip" style="background:rgba(234,179,8,.18);color:#fde047">Dimmer</span><span class="tp-chip" style="background:rgba(34,197,94,.18);color:#86efac">G3</span></div>`;
-        default: return nothing;
-      }
-    };
-
-    return html`
-      <div class="tile-preview-live">
-        ${visibleBlocks.length
-          ? visibleBlocks.map(blockPreview)
-          : html`<div style="color:var(--t3);font-size:11px;padding:8px;text-align:center">All blocks hidden</div>`}
-      </div>
-      <div class="field-lbl" style="margin:10px 0 6px">Drag to reorder · 👁 to hide</div>
-      <div class="drag-list">
-        ${this._dragOrder.map(blockId => {
-          const meta = TILE_BLOCKS.find(b => b.id === blockId);
-          if (!meta) return nothing;
-          const isHidden = this._hiddenBlocks.has(blockId);
-          const isDragOver = this._dragOver === blockId;
-          return html`
-            <div class="drag-item ${isHidden ? 'hidden-item' : ''} ${isDragOver ? 'drag-over' : ''}"
-              draggable="true"
-              @dragstart=${(e:DragEvent)=>{ e.dataTransfer!.setData('text', blockId); e.dataTransfer!.effectAllowed = 'move'; }}
-              @dragenter=${(e:DragEvent)=>{ e.preventDefault(); this._dragOver = blockId; }}
-              @dragover=${(e:DragEvent)=>{ e.preventDefault(); }}
-              @dragleave=${()=>{ if (this._dragOver === blockId) this._dragOver = null; }}
-              @drop=${(e:DragEvent)=>{
-                e.preventDefault();
-                const src = e.dataTransfer!.getData('text') as TileBlockId;
-                if (!src || src === blockId) { this._dragOver = null; return; }
-                const order = [...this._dragOrder];
-                const si = order.indexOf(src), ti = order.indexOf(blockId);
-                order.splice(si,1); order.splice(ti,0,src);
-                this._dragOrder = order; this._dragOver = null;
-                this._set('tile_layout', order.filter(id => !this._hiddenBlocks.has(id)));
-              }}>
-              <div class="drag-handle"><span></span><span></span><span></span></div>
-              <div style="flex:1">
-                <div class="drag-label">${meta.label}</div>
-                <div class="drag-sub">${meta.sub}</div>
-              </div>
-              <button class="drag-eye" @click=${()=>{
-                    const next = new Set(this._hiddenBlocks);
-                    next.has(blockId) ? next.delete(blockId) : next.add(blockId);
-                    this._hiddenBlocks = next;
-                    const visible = this._dragOrder.filter(id => !next.has(id));
-                    this._set('tile_layout', visible);
-                  }} style="opacity:${isHidden ? 0.35 : 1}">👁</button>
-            </div>`;
-        })}
-      </div>`;
-  }
-
   // ══════════════════════════════════════════════════════════════
   //  TAB: STYLE
   // ══════════════════════════════════════════════════════════════
@@ -2616,8 +2581,6 @@ export class HADeviceDashboardEditor extends LitElement {
       <div class="tiles-divider">Tile colours</div>
       ${tileColorRows}
       `)}
-      <div class="tiles-divider">Block order</div>
-      ${this._tileOrderBody()}
     `;
 
     const cardBody = html`
@@ -3452,6 +3415,11 @@ export class HADeviceDashboardEditor extends LitElement {
 
     /* ── Hint line ── */
     .hint { font-size:11px; color:var(--t3); font-style:italic; }
+    .rooms-note { display:flex; gap:8px; align-items:flex-start; font-size:11px; line-height:1.5;
+      color:var(--t2); background:var(--s3); border:1px solid var(--border); border-left:3px solid var(--amber, #f0a020);
+      border-radius:6px; padding:8px 10px; margin-bottom:8px; }
+    .rooms-note b { color:var(--text); font-weight:600; }
+    .rooms-note-ico { flex-shrink:0; opacity:.8; }
 
     /* ── Subgroup label (inside sections) ── */
     .subgroup-lbl { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--t3); opacity:0.8; margin:10px 0 4px; padding-top:6px; border-top:1px solid var(--border); }
@@ -3663,8 +3631,13 @@ export class HADeviceDashboardEditor extends LitElement {
     /* ── Tile block order preview ── */
     .tile-preview-live { background:#141418; border:1px solid var(--border); border-radius:10px; padding:8px 10px; margin-bottom:10px; display:flex; flex-direction:column; gap:0; position:relative; overflow:hidden; }
     .tile-preview-live::before { content:''; position:absolute; top:0; left:0; right:0; height:1.5px; background:linear-gradient(90deg,var(--accent),transparent); }
-    .tp-row { display:flex; align-items:center; gap:6px; padding:3px 0; border-bottom:1px solid rgba(255,255,255,0.04); }
-    .tp-row:last-child { border-bottom:none; }
+    /* A layout row in the preview. Multiple blocks on one row sit side by side,
+       each an equal share, mirroring the .tile-row runtime rule. Separator sits
+       on the row wrapper so it draws once per layout row, not per block. */
+    .tp-prow { display:flex; align-items:stretch; gap:8px; border-bottom:1px solid rgba(255,255,255,0.04); }
+    .tp-prow:last-child { border-bottom:none; }
+    .tp-prow > * { flex:1 1 0; min-width:0; }
+    .tp-row { display:flex; align-items:center; gap:6px; padding:3px 0; }
     .tp-name-row { justify-content:space-between; }
     .tp-name { font-size:11px; font-weight:600; color:rgba(255,255,255,0.85); flex:1; }
     .tp-dot  { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
