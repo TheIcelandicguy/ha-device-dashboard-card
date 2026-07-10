@@ -173,7 +173,6 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _cardThemeRoom: string = '';                   // Card & Theme tab: selected room for per-room styling
   @state() private _newStyleName: string = '';                    // Device styling tab: "Save as style" name input
   @state() private _renamingStyle: string | null = null;          // Saved-styles row: slug being renamed inline
-  @state() private _dragFrom: { r: number; i: number } | null = null; // Layout canvas: source of the in-flight drag (r<0 = palette)
   /** Editor-only preference (persisted in localStorage, never written to config):
    *  when false, power-user controls are hidden to keep the common path simple. */
   @state() private _advanced = false;
@@ -1335,6 +1334,86 @@ export class HADeviceDashboardEditor extends LitElement {
 
   /** Max blocks that can share one row before it gets too cramped to read. */
   private static readonly ROW_MAX = 3;
+  /** Pointer travel before a press becomes a drag, so a tap isn't a move. */
+  private static readonly DRAG_SLOP = 6;
+
+  /**
+   * In-flight layout drag. Deliberately NOT @state: mutating reactive state
+   * mid-drag re-renders the canvas, replacing the chip element and silently
+   * dropping its pointer capture. Hover feedback is applied straight to the DOM
+   * for the same reason.
+   */
+  private _layDrag: {
+    from: { r: number; i: number };
+    chip: HTMLElement;
+    x: number; y: number;
+    pointerId: number;
+    active: boolean;
+    over: HTMLElement | null;
+  } | null = null;
+
+  /** Set on every canvas render — the current scope's move-and-commit closure. */
+  private _layMove: ((from: { r: number; i: number }, to: { r: number } | 'new' | 'hide') => void) | null = null;
+
+  private _layPointerDown(e: PointerEvent, r: number, i: number): void {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    const chip = e.currentTarget as HTMLElement;
+    // Capture keeps pointermove/up on the chip once the finger leaves it. Throws
+    // if the pointer is already gone — harmless, the drag just won't track.
+    try { chip.setPointerCapture(e.pointerId); } catch { /* pointer already released */ }
+    this._layDrag = { from: { r, i }, chip, x: e.clientX, y: e.clientY, pointerId: e.pointerId, active: false, over: null };
+  }
+
+  /** The drop target under the pointer, or null. */
+  private _layTargetAt(x: number, y: number): HTMLElement | null {
+    const el = this.shadowRoot?.elementFromPoint(x, y) as HTMLElement | null;
+    return el?.closest('.lay-row, .lay-palette') ?? null;
+  }
+
+  private _layPointerMove(e: PointerEvent): void {
+    const d = this._layDrag;
+    if (!d || e.pointerId !== d.pointerId) return;
+    if (!d.active) {
+      if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < HADeviceDashboardEditor.DRAG_SLOP) return;
+      d.active = true;
+      d.chip.classList.add('lay-dragging');
+      // Take the chip out of hit-testing so elementFromPoint sees the row beneath.
+      d.chip.style.pointerEvents = 'none';
+    }
+    e.preventDefault();
+    const over = this._layTargetAt(e.clientX, e.clientY);
+    if (over !== d.over) {
+      d.over?.classList.remove('lay-over');
+      over?.classList.add('lay-over');
+      d.over = over;
+    }
+  }
+
+  private _layPointerUp(e: PointerEvent): void {
+    const d = this._layDrag;
+    if (!d || e.pointerId !== d.pointerId) return;
+    const over = d.active ? this._layTargetAt(e.clientX, e.clientY) : null;
+    const from = d.from;
+    this._layDragEnd();
+    if (!over || !this._layMove) return;   // released outside any target — no change
+    if (over.classList.contains('lay-palette')) this._layMove(from, 'hide');
+    else if (over.classList.contains('lay-new')) this._layMove(from, 'new');
+    else {
+      const rows = [...(this.shadowRoot?.querySelectorAll('.lay-canvas .lay-row:not(.lay-new)') ?? [])];
+      const r = rows.indexOf(over);
+      if (r >= 0) this._layMove(from, { r });
+    }
+  }
+
+  private _layDragEnd(): void {
+    const d = this._layDrag;
+    if (!d) return;
+    d.chip.classList.remove('lay-dragging');
+    d.chip.style.removeProperty('pointer-events');
+    d.over?.classList.remove('lay-over');
+    try { d.chip.releasePointerCapture(d.pointerId); } catch { /* already gone */ }
+    this._layDrag = null;
+  }
 
   /** The built-in style a raw tile_style renders as, unwrapping `custom:<key>`.
    *  Only the 'default' base is composed from blocks — the rest are monolithic
@@ -1364,10 +1443,7 @@ export class HADeviceDashboardEditor extends LitElement {
     const hidden = TILE_BLOCKS.map(b => b.id).filter(id => !used.has(id));
     const label = (id: TileBlockId) => TILE_BLOCKS.find(b => b.id === id)?.label ?? id;
 
-    const move = (to: { r: number } | 'new' | 'hide') => {
-      const from = this._dragFrom;
-      this._dragFrom = null;
-      if (!from) return;
+    const move = (from: { r: number; i: number }, to: { r: number } | 'new' | 'hide') => {
       const next = rows.map(r => [...r]);
       let blockId: TileBlockId;
       if (from.r < 0) {
@@ -1390,20 +1466,17 @@ export class HADeviceDashboardEditor extends LitElement {
       apply(cleaned.length ? cleaned : undefined);
     };
 
-    const chip = (id: TileBlockId, r: number, i: number) => html`
-      <span class="lay-chip ${r < 0 ? 'off' : ''}" draggable="true"
-        @dragstart=${(e: DragEvent) => {
-          this._dragFrom = { r, i };
-          // Firefox ignores a drag that carries no data.
-          e.dataTransfer?.setData('text/plain', id);
-          if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
-        }}
-        @dragend=${() => { this._dragFrom = null; }}>${label(id)}</span>`;
+    // Pointer events, not the HTML5 drag-and-drop API: dragstart/drop never fire
+    // from touch input, so a DnD canvas is dead on a phone. Pointer events cover
+    // mouse, touch and pen through one path.
+    this._layMove = move;
 
-    const allowDrop = (e: DragEvent) => {
-      e.preventDefault();
-      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-    };
+    const chip = (id: TileBlockId, r: number, i: number) => html`
+      <span class="lay-chip ${r < 0 ? 'off' : ''}"
+        @pointerdown=${(e: PointerEvent) => this._layPointerDown(e, r, i)}
+        @pointermove=${(e: PointerEvent) => this._layPointerMove(e)}
+        @pointerup=${(e: PointerEvent) => this._layPointerUp(e)}
+        @pointercancel=${() => this._layDragEnd()}>${label(id)}</span>`;
 
     return html`
       <div class="field" style="margin-top:10px">
@@ -1413,15 +1486,15 @@ export class HADeviceDashboardEditor extends LitElement {
         </div>
         <div class="lay-canvas">
           ${rows.map((r, ri) => html`
-            <div class="lay-row" @dragover=${allowDrop} @drop=${() => move({ r: ri })}>
+            <div class="lay-row">
               ${r.map((b, bi) => chip(b, ri, bi))}
               ${r.length < HADeviceDashboardEditor.ROW_MAX
                 ? html`<span class="lay-slot">drop here</span>` : nothing}
             </div>`)}
-          <div class="lay-row lay-new" @dragover=${allowDrop} @drop=${() => move('new')}>＋ new row</div>
+          <div class="lay-row lay-new">＋ new row</div>
         </div>
         <div class="field-lbl" style="margin-top:6px">Hidden blocks</div>
-        <div class="lay-palette" @dragover=${allowDrop} @drop=${() => move('hide')}>
+        <div class="lay-palette">
           ${hidden.length
             ? hidden.map((b, i) => chip(b, -1, i))
             : html`<span class="dev-style-hint">drag a block here to hide it</span>`}
@@ -3501,10 +3574,14 @@ export class HADeviceDashboardEditor extends LitElement {
     .lay-row { display:flex; flex-wrap:wrap; align-items:center; gap:4px; min-height:28px; padding:4px 6px;
       border:1px dashed var(--border); border-radius:6px; background:var(--s3); }
     .lay-row.lay-new { justify-content:center; font-size:10px; color:var(--t3); border-style:dotted; }
+    /* touch-action:none — without it the browser claims the gesture for scrolling
+       and pointermove never reaches us. Padding is a touch-sized target. */
     .lay-chip { font-size:10px; color:var(--text); background:var(--s2); border:1px solid var(--border2);
-      border-radius:4px; padding:3px 8px; cursor:grab; user-select:none; }
+      border-radius:4px; padding:5px 9px; cursor:grab; user-select:none; touch-action:none; }
     .lay-chip:active { cursor:grabbing; }
     .lay-chip.off { color:var(--t3); border-color:var(--border); }
+    .lay-chip.lay-dragging { opacity:.45; }
+    .lay-row.lay-over, .lay-palette.lay-over { border-style:solid; border-color:var(--accent, #03a9f4); }
     .lay-slot { font-size:9px; color:var(--t3); opacity:.6; padding:0 4px; }
     .lay-palette { display:flex; flex-wrap:wrap; gap:4px; min-height:28px; padding:4px 6px;
       border:1px dashed var(--border); border-radius:6px; }
