@@ -2920,10 +2920,10 @@ export class HADeviceDashboard extends LitElement {
     // strip under the form instead of pushing the full-height dashboard. Desktop
     // (side-by-side) is untouched.
     css`
-      @media (max-width: 870px) {
+      @media (max-width: 1024px) {
         :host([data-edit-preview]) {
           display: block;
-          max-height: 35vh;
+          max-height: 22vh;
           overflow-y: auto;
           -webkit-overflow-scrolling: touch;
         }
