@@ -4,7 +4,7 @@ import { ref } from 'lit/directives/ref.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout } from './types';
-import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, normalizeTileLayout, flattenTileLayout, cloneTileLayout, setBlockInLayout, PROFILE_DEFAULT_BLOCKS } from './helpers';
+import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, setBlockInLayout, PROFILE_DEFAULT_BLOCKS } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, applyThemePalette, detectTheme, type ThemePalette } from './themes';
 import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons';
 import { EDITOR_LAYOUT } from './editor-layout';
@@ -616,8 +616,16 @@ export class HADeviceDashboardEditor extends LitElement {
 
   private _getAreas(): Array<{ id: string; name: string }> {
     if (!this.hass) return [];
+    // Only areas that actually contain a fetched Shelly/BTHome device. HA areas
+    // full of non-Shelly kit (routers, TVs, price trackers) are noise in every
+    // room picker. Keep any area already named in the include list, so a
+    // configured selection never becomes impossible to toggle off.
+    const withDevices = new Set(
+      this._allDevices().map(d => (d.area ?? '').toLowerCase()).filter(Boolean));
+    const configured = new Set((this._config.areas ?? []).map(a => a.toLowerCase()));
     return Object.values((this.hass as any).areas ?? {})
       .map((a: any) => ({ id: a.area_id, name: a.name as string }))
+      .filter(a => withDevices.has(a.name.toLowerCase()) || configured.has(a.name.toLowerCase()))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
@@ -1114,8 +1122,8 @@ export class HADeviceDashboardEditor extends LitElement {
   private _saveDeviceAsStyle(deviceId: string): void {
     const dev = this._allDevices().find(d => d.device_id === deviceId);
     const profile = dev ? getDeviceProfile(dev) : null;
-    const fallback = (this._config.smart_tile_styles && profile
-      ? PROFILE_DEFAULT_TILE_STYLE[profile.type] : undefined) ?? 'default';
+    const fallback = (this._config.smart_tile_styles && profile && dev
+      ? profileDefaultTileStyle(profile.type, dev) : undefined) ?? 'default';
     this._saveAsStyle(this._config.device_styles?.[deviceId] ?? {}, fallback,
       v => this._setDeviceStyle(deviceId, { tile_style: v }));
   }
@@ -1265,7 +1273,7 @@ export class HADeviceDashboardEditor extends LitElement {
 
     const deviceScopeBody = (): TemplateResult => {
       const ds = this._config.device_styles?.[sel!] ?? {};
-      const style = (ds.tile_style ?? (this._config.smart_tile_styles ? PROFILE_DEFAULT_TILE_STYLE[profile!.type] : undefined) ?? 'default') as TileStyle;
+      const style = (ds.tile_style ?? (this._config.smart_tile_styles && selDev ? profileDefaultTileStyle(profile!.type, selDev) : undefined) ?? 'default') as TileStyle;
       return html`
         ${this._renderDeviceStylePanel(sel!)}
         ${this._renderStyleElementToggles(style, ds.elements ?? {}, e => this._setDeviceStyle(sel!, { elements: e }))}
@@ -1673,7 +1681,7 @@ export class HADeviceDashboardEditor extends LitElement {
           // power-monitor tile would offer toggles that change nothing.
           const profile = dev ? getDeviceProfile(dev) : null;
           const raw = devStyle.tile_style
-            ?? (this._config.smart_tile_styles && profile ? PROFILE_DEFAULT_TILE_STYLE[profile.type] : undefined)
+            ?? (this._config.smart_tile_styles && profile && dev ? profileDefaultTileStyle(profile.type, dev) : undefined)
             ?? this._config.tile_style;
           const base = this._baseStyleOf(raw);
           if (base && base !== 'default') return nothing;

@@ -22,7 +22,7 @@ import { renderBlockTile } from './tiles/block-tile';
 import { renderDetailSheet } from './detail/detail-sheet';
 import {
   getAllDevices, getDeviceProfile, migrateConfig,
-  PROFILE_DEFAULT_BLOCKS, normalizeTileLayout, flattenTileLayout, PROFILE_DEFAULT_SENSORS, PROFILE_DEFAULT_TILE_STYLE, PROFILE_LABELS, BLOCK_LABELS, GRAPH_DC_LABELS, GRAPH_SENSOR_DEFS,
+  PROFILE_DEFAULT_BLOCKS, normalizeTileLayout, flattenTileLayout, PROFILE_DEFAULT_SENSORS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, PROFILE_LABELS, BLOCK_LABELS, GRAPH_DC_LABELS, GRAPH_SENSOR_DEFS,
   HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, downsamplePoints, normalizeGraphKey,
   formatPower, formatEnergy, formatVoltage, formatCurrent, formatTemp,
   formatUptime, formatApparentPower, formatReactivePower,
@@ -2296,7 +2296,7 @@ export class HADeviceDashboard extends LitElement {
     const activeView = this._getActiveView();
     return devStyle?.tile_style ?? this._profileStyle(device)?.tile_style ?? areaStyle?.tile_style
       ?? activeView?.tile_style ?? this._config.tile_style
-      ?? (this._config.smart_tile_styles ? PROFILE_DEFAULT_TILE_STYLE[profile.type] : undefined);
+      ?? (this._config.smart_tile_styles ? profileDefaultTileStyle(profile.type, device) : undefined);
   }
 
   /** Resolve a raw style to its base built-in style + the custom def if it was a
@@ -2446,7 +2446,7 @@ export class HADeviceDashboard extends LitElement {
     // default → per-profile default (only when smart_tile_styles is enabled).
     const devStyle = this._config.device_styles?.[device.device_id];
     const rawStyle = devStyle?.tile_style ?? profStyle?.tile_style ?? areaTileStyle ?? activeView?.tile_style ?? this._config.tile_style
-      ?? (this._config.smart_tile_styles ? PROFILE_DEFAULT_TILE_STYLE[profile.type] : undefined);
+      ?? (this._config.smart_tile_styles ? profileDefaultTileStyle(profile.type, device) : undefined);
     // Saved custom style → its base built-in style + config layer.
     const { base: baseStyle, custom: customDef } = this._resolveCustomStyle(rawStyle);
 

@@ -166,8 +166,30 @@ export const PROFILE_DEFAULT_TILE_STYLE: Partial<Record<DeviceProfile, TileStyle
   cover:        'cover-control',
   sensor:       'sensor-card',
   input:        'scene-button',
-  // valve, uni, generic → 'default'
+  // wall_display is intentionally NOT here — its default is entity-aware, see
+  // profileDefaultTileStyle. valve, uni, generic → 'default'.
 };
+
+/**
+ * Per-profile default tile style, resolved against a specific device.
+ *
+ * Same as PROFILE_DEFAULT_TILE_STYLE for every profile except `wall_display`:
+ * a Shelly Wall Display is tagged by model name alone, but in the HA Shelly
+ * integration it only exposes a `climate.` entity when a thermostat is actually
+ * configured on it. Without one, the climate-control style has nothing to render
+ * ("No climate entity"). So a Display defaults to climate-control only when it
+ * has a climate entity, otherwise to the adaptive 'default' (which shows its
+ * temp/humidity/illuminance sensors and relay). Returns undefined = 'default'.
+ */
+export function profileDefaultTileStyle(
+  profile: DeviceProfile,
+  device: HADevice,
+): TileStyle | undefined {
+  if (profile === 'wall_display') {
+    return device.entities.some(e => e.domain === 'climate') ? 'climate-control' : undefined;
+  }
+  return PROFILE_DEFAULT_TILE_STYLE[profile];
+}
 
 /**
  * Toggleable elements per tile style — the shared vocabulary for the Style
