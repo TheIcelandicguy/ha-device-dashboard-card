@@ -22,7 +22,7 @@ import { renderBlockTile } from './tiles/block-tile';
 import { renderDetailSheet } from './detail/detail-sheet';
 import {
   getAllDevices, getDeviceProfile, migrateConfig,
-  PROFILE_DEFAULT_BLOCKS, normalizeTileLayout, flattenTileLayout, PROFILE_DEFAULT_SENSORS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, PROFILE_LABELS, BLOCK_LABELS, GRAPH_DC_LABELS, GRAPH_SENSOR_DEFS,
+  PROFILE_DEFAULT_BLOCKS, normalizeTileLayout, flattenTileLayout, PROFILE_DEFAULT_SENSORS, DEFAULT_GRAPH_SENSORS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, PROFILE_LABELS, BLOCK_LABELS, GRAPH_DC_LABELS, GRAPH_SENSOR_DEFS,
   HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, downsamplePoints, normalizeGraphKey,
   formatPower, formatEnergy, formatVoltage, formatCurrent, formatTemp,
   formatUptime, formatApparentPower, formatReactivePower,
@@ -1154,7 +1154,9 @@ export class HADeviceDashboard extends LitElement {
   private _getGraphEntities(device: HADevice): GraphEntity[] {
     if (!this._showGraphs(device)) return [];
     // Normalize to device_class keys so legacy 'co2'/'rssi' configs still match.
-    const dcList = (this._config.graph_sensors ?? []).map(normalizeGraphKey);
+    // Unset (never configured) falls back to a sensible default set; an explicit
+    // empty list ([]) is honoured as "no graphs".
+    const dcList = (this._config.graph_sensors ?? DEFAULT_GRAPH_SENSORS).map(normalizeGraphKey);
     if (!dcList.length) return [];
     const results: Array<{ entityId: string; label: string; dc: string; unit: string }> = [];
     for (const dc of dcList) {

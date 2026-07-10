@@ -4,7 +4,7 @@ import { ref } from 'lit/directives/ref.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout } from './types';
-import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, setBlockInLayout, PROFILE_DEFAULT_BLOCKS } from './helpers';
+import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, setBlockInLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, applyThemePalette, detectTheme, type ThemePalette } from './themes';
 import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons';
 import { EDITOR_LAYOUT } from './editor-layout';
@@ -479,9 +479,11 @@ export class HADeviceDashboardEditor extends LitElement {
   private _set(key: string, value: unknown) {
     if (!this._config) return;
     const updated: Record<string, unknown> = { ...this._config, [key]: value };
-    // '[]' is a valid "none" sentinel for these keys (rooms shown / sensor chips)
-    // — never delete it, so "Deselect all" persists as an explicit empty set.
-    const keepEmptyArray = key === 'areas' || key === 'sensors';
+    // '[]' is a valid "none" sentinel for these keys (rooms shown / sensor chips /
+    // graph sensors) — never delete it, so "Deselect all" persists as an explicit
+    // empty set. For graph_sensors that matters doubly: unset now means "use the
+    // default graph set", so a deleted [] would spring the defaults back.
+    const keepEmptyArray = key === 'areas' || key === 'sensors' || key === 'graph_sensors';
     if (value === '' || value === undefined || (Array.isArray(value) && value.length === 0 && !keepEmptyArray)) {
       delete updated[key];
     }
@@ -2845,7 +2847,9 @@ export class HADeviceDashboardEditor extends LitElement {
         <label class="sw"><input type="checkbox" .checked=${gs.tick_lines !== false} @change=${(e:Event)=>this._set('graph_style',{...gs,tick_lines:(e.target as HTMLInputElement).checked})}><span class="sw-t"></span><span class="sw-b"></span></label>
       </div>`)}`;
 
-    const selectedGraphs = c.graph_sensors ?? [];
+    // Unset = the card graphs a default set, so show that here too (ticked), not
+    // an empty picker. An explicit [] stays empty. First toggle materialises it.
+    const selectedGraphs = c.graph_sensors ?? DEFAULT_GRAPH_SENSORS;
 
     // Gauge ring sensors — always shown with their defaults
     const GAUGE_SENSORS = [
@@ -2993,7 +2997,7 @@ export class HADeviceDashboardEditor extends LitElement {
               // graph_sensors is keyed by device_class; map the chip key (e.g. 'co2').
               const graphKey = normalizeGraphKey(s.key);
               const isGraphable = !!GRAPH_SENSOR_DEFS.find(g => g.key === graphKey);
-              const graphSensors = c.graph_sensors ?? [];
+              const graphSensors = c.graph_sensors ?? DEFAULT_GRAPH_SENSORS;
               const graphOn = graphSensors.some(k => normalizeGraphKey(k) === graphKey);
               return html`
                 <div class="sensor-item ${on ? 'active' : ''}" @click=${()=>{

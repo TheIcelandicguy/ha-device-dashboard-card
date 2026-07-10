@@ -301,7 +301,7 @@ export const PROFILE_DEFAULT_BLOCKS: Record<DeviceProfile, TileBlockId[]> = {
   sensor:       ['name_row', 'sensors', 'graph', 'virtual_controls', 'badges'],
   input:        ['name_row', 'sensors', 'input_channels', 'virtual_controls', 'badges'],
   uni:          ['name_row', 'input_channels', 'sensors', 'virtual_controls', 'badges'],
-  wall_display: ['name_row', 'sensors', 'trv_control', 'virtual_controls', 'badges'],
+  wall_display: ['name_row', 'sensors', 'graph', 'trv_control', 'virtual_controls', 'badges'],
   generic:      ['name_row', 'sensors', 'virtual_controls', 'badges'],
 };
 
@@ -358,6 +358,14 @@ export const PROFILE_DEFAULT_SENSORS: Partial<Record<DeviceProfile, string[]>> =
   uni:          ['temperature', 'battery'],
   // 'generic' omitted → show all
 };
+
+/**
+ * Sensor device-classes graphed when a config has never set `graph_sensors`.
+ * Covers the common Shelly signals so a fresh install (and sensor-only devices
+ * like a Wall Display or BLU H&T) plot something without hand-configuring the
+ * list. An explicit empty `graph_sensors: []` still means "no graphs".
+ */
+export const DEFAULT_GRAPH_SENSORS: string[] = ['power', 'temperature', 'humidity', 'battery'];
 
 /** Human labels for tile blocks — used by the detail-dialog Customize panel. */
 export const BLOCK_LABELS: Record<TileBlockId, string> = {
