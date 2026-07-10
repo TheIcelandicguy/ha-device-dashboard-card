@@ -1,6 +1,16 @@
 import './ha-device-dashboard';
 import './editor';
 
+// Build marker — lets you confirm in the browser console which bundle HA loaded.
+// Bump the tag on each deploy while iterating on the mobile editor layout.
+const BUILD_TAG = 'mobile-editor-2026-07-10c';
+// eslint-disable-next-line no-console
+console.info(
+  `%c ha-device-dashboard %c ${BUILD_TAG} `,
+  'background:#c98a63;color:#1e1a17;font-weight:700;border-radius:3px 0 0 3px',
+  'background:#241f1b;color:#f3ece3;border-radius:0 3px 3px 0',
+);
+
 window.customCards = window.customCards || [];
 window.customCards.push({
   type:             'ha-device-dashboard',

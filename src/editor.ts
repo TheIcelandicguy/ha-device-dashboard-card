@@ -276,12 +276,17 @@ export class HADeviceDashboardEditor extends LitElement {
       if (!dialogShadow.getElementById(STYLE_ID)) {
         const s = document.createElement('style');
         s.id = STYLE_ID;
-        // Heights are driven dynamically in apply() (they depend on layout
-        // orientation), so keep only the orientation-independent bits here.
+        // DESKTOP ONLY. HA lays the edit dialog out side-by-side at >=1000px; the
+        // full-height fill below only makes sense there. Below 1000px HA stacks
+        // the dialog into a column and sizes the preview pane to `height:max-content`
+        // (per HA's own hui-dialog-edit-card CSS), so our card's max-height cap is
+        // enough — we must NOT force pane heights there or we fight HA's layout.
         s.textContent = `
-          div.element-editor { overflow:hidden !important; min-height:0 !important; box-sizing:border-box !important; }
-          hui-card-element-editor { display:block !important; height:100% !important; overflow:hidden !important; min-height:0 !important; box-sizing:border-box !important; }
-          div.element-preview { overflow-x:hidden !important; box-sizing:border-box !important; }
+          @media (min-width: 1000px) {
+            div.element-editor { overflow:hidden !important; min-height:0 !important; box-sizing:border-box !important; }
+            hui-card-element-editor { display:block !important; height:100% !important; overflow:hidden !important; min-height:0 !important; box-sizing:border-box !important; }
+            div.element-preview { overflow-x:hidden !important; box-sizing:border-box !important; }
+          }
         `;
         dialogShadow.appendChild(s);
       }
@@ -294,51 +299,48 @@ export class HADeviceDashboardEditor extends LitElement {
         for (const [k, v] of Object.entries(props)) el.style.setProperty(k, v, 'important');
       };
 
+      const clearInline = (el: HTMLElement | null, keys: string[]) => {
+        if (!el) return;
+        for (const k of keys) el.style.removeProperty(k);
+      };
+
       const apply = () => {
         const contentDiv = dialogShadow.querySelector<HTMLElement>('div.content');
         const shell      = this.shadowRoot?.querySelector<HTMLElement>('.shell');
         const footer     = dialogShadow.querySelector<HTMLElement>('ha-dialog-footer');
         if (!contentDiv || !shell) return;
 
+        const editorDiv  = dialogShadow.querySelector<HTMLElement>('div.element-editor');
+        const previewDiv = dialogShadow.querySelector<HTMLElement>('div.element-preview');
+
+        // Only touch the dialog on desktop, where HA lays editor + preview out
+        // side-by-side (>=1000px). Below that HA stacks them into a column and
+        // sizes the preview to `height:max-content`, so it shrinks to fit our card
+        // — the card's own max-height cap handles the "nested strip" there. If we
+        // forced pane heights on mobile we'd re-introduce the 50/50 split. Clear
+        // any styles left over from a wider layout so nothing leaks across resize.
+        if (!window.matchMedia('(min-width: 1000px)').matches) {
+          const props = ['height', 'max-height', 'overflow', 'overflow-y', 'align-items', 'flex', 'min-height', 'box-sizing'];
+          clearInline(contentDiv, props);
+          clearInline(editorDiv, props);
+          clearInline(previewDiv, props);
+          clearInline(shell, ['height', 'max-height']);
+          return;
+        }
+
+        // Desktop, side-by-side: make the config form fill the dialog height so the
+        // long form scrolls inside our shell instead of the whole dialog.
         const vh       = window.innerHeight;
         const footerH  = footer?.offsetHeight ?? 0;
         const cTop     = contentDiv.getBoundingClientRect().top;
         const contentH = Math.max(300, vh - cTop - footerH);
 
-        const editorDiv  = dialogShadow.querySelector<HTMLElement>('div.element-editor');
-        const previewDiv = dialogShadow.querySelector<HTMLElement>('div.element-preview');
-
-        // HA lays the edit dialog out side-by-side on wide screens (config left,
-        // live preview right) and stacked in a column when narrow — on a phone or
-        // a narrow desktop window. Detect which by geometry rather than guessing
-        // HA's exact px breakpoint: if the preview sits below the editor we're
-        // stacked. When stacked, forcing the preview pane to full height made it
-        // grab ~half the screen; instead let the form take what it needs and cap
-        // the preview to a nested strip below it.
-        const stacked = !!(editorDiv && previewDiv) &&
-          previewDiv.getBoundingClientRect().top >= editorDiv.getBoundingClientRect().bottom - 2;
-
         setImp(contentDiv, {
           height: `${contentH}px`, 'max-height': `${contentH}px`,
           overflow: 'hidden', 'align-items': 'stretch', 'box-sizing': 'border-box',
         });
-
-        if (stacked) {
-          // Keep the config form dominant: the preview is a nested strip capped to
-          // ~30% of the *available content height* (not the full viewport — the
-          // dialog header/tabs and footer eat a big chunk), so the editor always
-          // keeps ~70%. The card also self-caps to 35vh, so it scrolls inside the
-          // strip when its content is taller.
-          const previewCap = Math.max(150, Math.round(contentH * 0.3));
-          setImp(editorDiv,  { height: 'auto', 'max-height': '100%', flex: '1 1 auto', 'min-height': '0', overflow: 'hidden' });
-          setImp(previewDiv, { height: 'auto', 'max-height': `${previewCap}px`, flex: '0 0 auto', 'overflow-y': 'auto' });
-        } else {
-          setImp(editorDiv,  { height: `${contentH}px`, 'max-height': `${contentH}px`, overflow: 'hidden' });
-          setImp(previewDiv, { height: `${contentH}px`, 'max-height': `${contentH}px`, 'overflow-y': 'auto' });
-          // Restore HA's native flex so the two panes go back to 50/50 side-by-side.
-          editorDiv?.style.removeProperty('flex');
-          previewDiv?.style.removeProperty('flex');
-        }
+        setImp(editorDiv,  { height: `${contentH}px`, 'max-height': `${contentH}px`, overflow: 'hidden' });
+        setImp(previewDiv, { height: `${contentH}px`, 'max-height': `${contentH}px`, 'overflow-y': 'auto' });
 
         // Shell height = from shell's top to the bottom of element-editor (not viewport bottom)
         // This avoids overflowing past the element-editor's overflow:hidden boundary

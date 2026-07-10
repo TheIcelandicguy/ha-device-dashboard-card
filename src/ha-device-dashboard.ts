@@ -2919,11 +2919,15 @@ export class HADeviceDashboard extends LitElement {
     // our height there and scroll internally — the live preview stays a bounded
     // strip under the form instead of pushing the full-height dashboard. Desktop
     // (side-by-side) is untouched.
+    // Below 1000px HA stacks its edit dialog into a column and sizes the preview
+    // pane to our content (height:max-content), so this cap alone bounds it into a
+    // nested strip under the form. 999px matches HA's own column<->row breakpoint
+    // (>=1000px is side-by-side, where we must NOT cap).
     css`
-      @media (max-width: 1024px) {
+      @media (max-width: 999px) {
         :host([data-edit-preview]) {
           display: block;
-          max-height: 22vh;
+          max-height: 25vh;
           overflow-y: auto;
           -webkit-overflow-scrolling: touch;
         }
