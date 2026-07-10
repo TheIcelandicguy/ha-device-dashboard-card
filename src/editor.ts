@@ -324,8 +324,13 @@ export class HADeviceDashboardEditor extends LitElement {
         });
 
         if (stacked) {
-          const previewCap = Math.round(vh * 0.4);
-          setImp(editorDiv,  { height: 'auto', 'max-height': '100%', flex: '1 1 auto', overflow: 'hidden' });
+          // Keep the config form dominant: the preview is a nested strip capped to
+          // ~30% of the *available content height* (not the full viewport — the
+          // dialog header/tabs and footer eat a big chunk), so the editor always
+          // keeps ~70%. The card also self-caps to 35vh, so it scrolls inside the
+          // strip when its content is taller.
+          const previewCap = Math.max(150, Math.round(contentH * 0.3));
+          setImp(editorDiv,  { height: 'auto', 'max-height': '100%', flex: '1 1 auto', 'min-height': '0', overflow: 'hidden' });
           setImp(previewDiv, { height: 'auto', 'max-height': `${previewCap}px`, flex: '0 0 auto', 'overflow-y': 'auto' });
         } else {
           setImp(editorDiv,  { height: `${contentH}px`, 'max-height': `${contentH}px`, overflow: 'hidden' });
