@@ -3591,12 +3591,13 @@ function e(e,t,i,s){var r,a=arguments.length,o=a<3?t:null===s?s=Object.getOwnPro
         </div>
         ${(()=>{const i=c?nt(c):null,o=t.tile_style??(this._config.smart_tile_styles&&i?$e[i.type]:void 0)??this._config.tile_style,l=this._baseStyleOf(o);return l&&"default"!==l?V:G`
             ${this._renderLayoutCanvas(t.tile_layout,s,t=>this._setDeviceStyle(e,{tile_layout:t}))}
-            <div class="field-lbl" style="margin:6px 0 4px">Visible blocks</div>
-            <div class="block-toggles">
-              ${ci.filter(e=>"graph"!==e.id).map(e=>{const t=null===a?r.includes(e.id):a.includes(e.id);return G`<span class="block-tog ${t?"on":""}" @click=${()=>n(e.id)}>
-                  ${t?"👁":"○"} ${e.label}
-                </span>`})}
-            </div>`})()}
+            ${this._adv(G`
+                <div class="field-lbl" style="margin:6px 0 4px">Visible blocks</div>
+                <div class="block-toggles">
+                  ${ci.filter(e=>"graph"!==e.id).map(e=>{const t=null===a?r.includes(e.id):a.includes(e.id);return G`<span class="block-tog ${t?"on":""}" @click=${()=>n(e.id)}>
+                      ${t?"👁":"○"} ${e.label}
+                    </span>`})}
+                </div>`)}`})()}
         <div class="field-lbl" style="margin:6px 0 4px">Sensor chips</div>
         ${(()=>{const i=c?.area?this._config.area_styles?.[c.area]?.sensors:void 0;return this._chipPicker(t.sensors,i?.length?i:this._config.sensors,i?.length?`area (${c?.area})`:"global",t=>this._setDeviceStyle(e,{sensors:t}))})()}
         ${this._adv(v.length?G`

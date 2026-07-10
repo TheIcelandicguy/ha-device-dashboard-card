@@ -1607,15 +1607,20 @@ export class HADeviceDashboardEditor extends LitElement {
           return html`
             ${this._renderLayoutCanvas(devStyle.tile_layout, globalRaw,
               (l) => this._setDeviceStyle(deviceId, { tile_layout: l }))}
-            <div class="field-lbl" style="margin:6px 0 4px">Visible blocks</div>
-            <div class="block-toggles">
-              ${TILE_BLOCKS.filter(b => b.id !== 'graph').map(b => {
-                const on = devLayout === null ? globalLayout.includes(b.id) : devLayout.includes(b.id);
-                return html`<span class="block-tog ${on ? 'on' : ''}" @click=${() => toggleBlock(b.id)}>
-                  ${on ? '👁' : '○'} ${b.label}
-                </span>`;
-              })}
-            </div>`;
+            ${/* The canvas supersedes this flat grid — it hides a block by dragging
+                  it to the palette. Kept behind Advanced as a no-drag fallback
+                  (touch, accessibility) and in case the canvas doesn't stick. It is
+                  row-preserving via setBlockInLayout, so the two agree. */
+              this._adv(html`
+                <div class="field-lbl" style="margin:6px 0 4px">Visible blocks</div>
+                <div class="block-toggles">
+                  ${TILE_BLOCKS.filter(b => b.id !== 'graph').map(b => {
+                    const on = devLayout === null ? globalLayout.includes(b.id) : devLayout.includes(b.id);
+                    return html`<span class="block-tog ${on ? 'on' : ''}" @click=${() => toggleBlock(b.id)}>
+                      ${on ? '👁' : '○'} ${b.label}
+                    </span>`;
+                  })}
+                </div>`)}`;
         })()}
         <div class="field-lbl" style="margin:6px 0 4px">Sensor chips</div>
         ${(() => {
