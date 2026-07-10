@@ -106,6 +106,9 @@ export interface GraphStyle {
 export interface AreaStyle {
   // Background
   bgColor?: string;
+  /** Room backdrop photo (data: URL or /local/… path), behind this room's tiles. */
+  bg_image?: string;
+  bg_image_size?: 'cover' | 'contain' | 'stretch';
   // Border
   borderColor?: string;
   borderWidth?: number;
@@ -256,6 +259,9 @@ export type EntityAnimationType =
 /** Per-device visual overrides */
 export interface DeviceStyle {
   color?: string;             // accent colour override
+  /** Per-tile background photo (data: URL or /local/… path). Overrides the global tile image. */
+  bg_image?: string;
+  bg_image_size?: 'cover' | 'contain' | 'stretch';
   tile_layout?: TileLayout; // per-device block order/visibility
   /** Override the auto-detected device profile (categorisation). undefined = auto. */
   profile?: DeviceProfile;

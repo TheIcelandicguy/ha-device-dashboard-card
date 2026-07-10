@@ -223,6 +223,13 @@ export const mainCss = css`
       position:relative; overflow:hidden; margin:6px 10px 2px;
       border:1px solid var(--sc-tile-border); border-radius:10px;
     }
+    /* Room backdrop photo (AreaStyle.bg_image). A ::before layer sits behind the
+       header + tile grid; semi-transparent tiles let it show through. */
+    .area-section[style*="--area-bg-image"]::before {
+      content:''; position:absolute; inset:0; z-index:0; pointer-events:none;
+      background:var(--area-bg-image) center / var(--area-bg-image-sz, cover) no-repeat;
+    }
+    .area-section > * { position:relative; z-index:1; }
 
     .area-header {
       display:flex; align-items:center; justify-content:space-between;

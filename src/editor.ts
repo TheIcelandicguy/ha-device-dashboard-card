@@ -780,6 +780,45 @@ export class HADeviceDashboardEditor extends LitElement {
     input.value = '';
   }
 
+  /** Reusable background-image picker (upload / URL / thumbnail / fit) — shared by
+   *  the card, per-room and per-tile background controls. `apply(undefined)` clears
+   *  the image; `clear()` also drops the fit. */
+  private _renderBgImagePicker(
+    label: string,
+    uploadId: string,
+    current: string | undefined,
+    size: 'cover' | 'contain' | 'stretch' | undefined,
+    apply: (url: string | undefined) => void,
+    setSize: (v: 'cover' | 'contain' | 'stretch') => void,
+    clear: () => void,
+  ): TemplateResult {
+    return html`
+      <div class="tiles-divider">${label}</div>
+      <div class="field">
+        <div class="bg-img-row">
+          <input type="file" accept="image/*" hidden data-upload=${uploadId}
+            @change=${(e: Event) => this._handleBgUpload(e, url => apply(url), { maxDim: 720 })}/>
+          <button class="upload-btn" @click=${() => {
+            (this.renderRoot.querySelector(`input[data-upload="${uploadId}"]`) as HTMLInputElement | null)?.click();
+          }}>↑ Local</button>
+          ${current ? this._renderBgThumb(current) : nothing}
+          ${current?.startsWith('data:')
+            ? html`<span class="bg-embedded-note">Embedded · ${this._estimateImageSize(current)}</span>`
+            : html`<input type="text" class="inline-text" placeholder="/local/image.png or https://…"
+                .value=${current ?? ''}
+                @change=${(e: Event) => { const v = (e.target as HTMLInputElement).value.trim(); apply(v || undefined); }}/>`}
+          ${current ? html`<button class="color-reset" @click=${clear}>↺</button>` : nothing}
+        </div>
+        ${current ? html`
+          <div class="field-lbl" style="margin-top:6px">Image fit</div>
+          <div class="pill-grp">
+            ${(['cover', 'contain', 'stretch'] as const).map(v => html`
+              <span class="pill ${(size ?? 'cover') === v ? 'on' : ''}"
+                @click=${() => setSize(v)}>${v[0].toUpperCase() + v.slice(1)}</span>`)}
+          </div>` : nothing}
+      </div>`;
+  }
+
   private _handleCardBgUpload(e: Event) {
     return this._handleBgUpload(e, url => this._set('card_bg_image', url));
   }
@@ -1054,9 +1093,13 @@ export class HADeviceDashboardEditor extends LitElement {
     sensors: string[] | undefined;
     show_graphs: boolean | undefined;
     elements: Record<string, boolean> | undefined;
+    bg_image: string | undefined;
+    bg_image_size: 'cover' | 'contain' | 'stretch' | undefined;
   }>) {
     const current = this._config.device_styles?.[deviceId] ?? {};
     const next: Record<string, unknown> = { ...current, ...patch };
+    if (next['bg_image'] === undefined) delete next['bg_image'];
+    if (next['bg_image_size'] === undefined) delete next['bg_image_size'];
     if (next['color'] === undefined) delete next['color'];
     if (next['tile_layout'] === undefined) delete next['tile_layout'];
     if (next['profile'] === undefined) delete next['profile'];
@@ -1675,6 +1718,11 @@ export class HADeviceDashboardEditor extends LitElement {
           ${devStyle.color ? html`<button class="color-reset"
             @click=${() => this._setDeviceStyle(deviceId, { color: undefined })}>↺</button>` : nothing}
         </div>
+        ${this._renderBgImagePicker(
+          'Tile background photo', `tile-bg-${deviceId}`, devStyle.bg_image, devStyle.bg_image_size,
+          (url) => this._setDeviceStyle(deviceId, { bg_image: url }),
+          (v) => this._setDeviceStyle(deviceId, { bg_image_size: v }),
+          () => this._setDeviceStyle(deviceId, { bg_image: undefined, bg_image_size: undefined }))}
         ${this._adv(html`
         <div class="tile-icon-row">
           <span class="color-key">Tile icon</span>
@@ -1861,6 +1909,12 @@ export class HADeviceDashboardEditor extends LitElement {
                 @click=${() => this._setAreaStyle(name, 'show_graphs', val)}>${lbl}</span>`)}
           </div>
         </div>
+
+        ${this._renderBgImagePicker(
+          'Room background photo', `room-bg-${name}`, st.bg_image, st.bg_image_size,
+          (url) => this._setAreaStyle(name, 'bg_image', url),
+          (v) => this._setAreaStyle(name, 'bg_image_size', v),
+          () => { this._setAreaStyle(name, 'bg_image', undefined); this._setAreaStyle(name, 'bg_image_size', undefined); })}
 
         ${sectionLbl('Tile appearance')}
         ${colorRow('Tile background', 'tileBgColor', '#1c1c1e')}

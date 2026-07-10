@@ -2443,6 +2443,14 @@ export class HADeviceDashboard extends LitElement {
       tileStyleObj['borderColor'] = accentColor;
       tileStyleObj['boxShadow']   = `0 0 12px ${accentColor}50`;
     }
+    // Per-tile background photo — overrides the global/area tile image for this
+    // device only (the tile already renders var(--sc-tile-bg-image)).
+    const devBgImage = this._config.device_styles?.[device.device_id]?.bg_image;
+    if (devBgImage) {
+      const sz = this._config.device_styles?.[device.device_id]?.bg_image_size;
+      tileStyleObj['--sc-tile-bg-image']    = `url("${devBgImage}")`;
+      tileStyleObj['--sc-tile-bg-image-sz'] = sz === 'stretch' ? '100% 100%' : (sz ?? 'cover');
+    }
 
     // Priority: device tile_style → type → area tile_style → active view → global
     // default → per-profile default (only when smart_tile_styles is enabled).
@@ -2697,6 +2705,10 @@ export class HADeviceDashboard extends LitElement {
         styleObj['border'] = `${areaStyle.borderWidth ?? 1}px ${areaStyle.borderStyle ?? 'solid'} ${areaStyle.borderColor ?? 'var(--divider-color)'}`;
       }
       if (areaStyle.borderRadius) { styleObj['borderRadius'] = `${areaStyle.borderRadius}px`; styleObj['overflow'] = 'hidden'; }
+      if (areaStyle.bg_image) {
+        styleObj['--area-bg-image']    = `url("${areaStyle.bg_image}")`;
+        styleObj['--area-bg-image-sz'] = areaStyle.bg_image_size === 'stretch' ? '100% 100%' : (areaStyle.bg_image_size ?? 'cover');
+      }
       if (areaStyle.headerBgColor) {
         styleObj['--area-header-bg'] = areaStyle.headerBgColor2
           ? `linear-gradient(${areaStyle.headerBgDir ?? 'to right'}, ${areaStyle.headerBgColor}, ${areaStyle.headerBgColor2})`
