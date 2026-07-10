@@ -4,7 +4,7 @@ import { ref } from 'lit/directives/ref.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout } from './types';
-import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, normalizeTileLayout, flattenTileLayout, cloneTileLayout, setBlockInLayout } from './helpers';
+import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, normalizeTileLayout, flattenTileLayout, cloneTileLayout, setBlockInLayout, PROFILE_DEFAULT_BLOCKS } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, applyThemePalette, detectTheme, type ThemePalette } from './themes';
 import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons';
 import { EDITOR_LAYOUT } from './editor-layout';
@@ -173,6 +173,7 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _cardThemeRoom: string = '';                   // Card & Theme tab: selected room for per-room styling
   @state() private _newStyleName: string = '';                    // Device styling tab: "Save as style" name input
   @state() private _renamingStyle: string | null = null;          // Saved-styles row: slug being renamed inline
+  @state() private _dragFrom: { r: number; i: number } | null = null; // Layout canvas: source of the in-flight drag (r<0 = palette)
   /** Editor-only preference (persisted in localStorage, never written to config):
    *  when false, power-user controls are hidden to keep the common path simple. */
   @state() private _advanced = false;
@@ -1273,7 +1274,14 @@ export class HADeviceDashboardEditor extends LitElement {
     };
     const profileScopeBody = (): TemplateResult => {
       const ps = this._config.profile_styles?.[profile!.type] ?? {};
-      const style = (ps.tile_style ?? PROFILE_DEFAULT_TILE_STYLE[profile!.type] ?? 'default') as TileStyle;
+      // Mirror the render cascade: the per-profile recommendation only takes
+      // effect when smart_tile_styles is on. Assuming it unconditionally would
+      // show power-monitor element toggles for a relay that actually renders as
+      // a block tile.
+      const rawProfStyle = ps.tile_style
+        ?? (this._config.smart_tile_styles ? PROFILE_DEFAULT_TILE_STYLE[profile!.type] : undefined)
+        ?? this._config.tile_style;
+      const style = (this._baseStyleOf(rawProfStyle) ?? 'default') as TileStyle;
       return html`
         <div class="hint" style="margin:2px 2px 10px">Applies to all ${typeCount} ${profLabel} device${typeCount !== 1 ? 's' : ''}. A per-device setting still overrides.</div>
         <div class="dev-style-panel">
@@ -1293,6 +1301,12 @@ export class HADeviceDashboardEditor extends LitElement {
             </div>
           </div>
           ${this._renderStyleElementToggles(style, ps.elements ?? {}, e => this._setProfileStyle(profile!.type, { elements: e }))}
+          ${style === 'default'
+            ? this._renderLayoutCanvas(
+                ps.tile_layout,
+                this._config.tile_layout ?? PROFILE_DEFAULT_BLOCKS[profile!.type],
+                (l) => this._setProfileStyle(profile!.type, { tile_layout: l }))
+            : nothing}
           ${saveStyleRow(() => this._saveProfileAsStyle(profile!.type))}
         </div>`;
     };
@@ -1316,6 +1330,107 @@ export class HADeviceDashboardEditor extends LitElement {
           </div>
           ${scope === 'device' ? deviceScopeBody() : profileScopeBody()}
         ` : html`<div class="hint" style="margin:12px 2px">Pick a device above to style it.</div>`}
+      </div>`;
+  }
+
+  /** Max blocks that can share one row before it gets too cramped to read. */
+  private static readonly ROW_MAX = 3;
+
+  /** The built-in style a raw tile_style renders as, unwrapping `custom:<key>`.
+   *  Only the 'default' base is composed from blocks — the rest are monolithic
+   *  renderers shaped by element toggles, so the layout canvas doesn't apply. */
+  private _baseStyleOf(raw: TileStyle | undefined): TileStyle | undefined {
+    if (typeof raw === 'string' && raw.startsWith('custom:')) {
+      return this._config.custom_styles?.[raw.slice(7)]?.base ?? 'default';
+    }
+    return raw;
+  }
+
+  /**
+   * Drag-and-drop tile layout canvas. Blocks live in rows; a row holds up to
+   * ROW_MAX blocks side by side. Dragging a block onto another row moves it, onto
+   * "new row" gives it its own line, and into the palette hides it.
+   *
+   * `inherited` is what the scope renders when it sets no layout of its own — the
+   * canvas starts from it, and Reset returns to it by clearing the override.
+   */
+  private _renderLayoutCanvas(
+    current: TileLayout | undefined,
+    inherited: TileLayout,
+    apply: (layout: TileLayout | undefined) => void,
+  ): TemplateResult {
+    const rows = normalizeTileLayout(current ?? inherited)!;
+    const used = new Set(rows.flat());
+    const hidden = TILE_BLOCKS.map(b => b.id).filter(id => !used.has(id));
+    const label = (id: TileBlockId) => TILE_BLOCKS.find(b => b.id === id)?.label ?? id;
+
+    const move = (to: { r: number } | 'new' | 'hide') => {
+      const from = this._dragFrom;
+      this._dragFrom = null;
+      if (!from) return;
+      const next = rows.map(r => [...r]);
+      let blockId: TileBlockId;
+      if (from.r < 0) {
+        blockId = hidden[from.i];                       // dragged out of the palette
+      } else {
+        blockId = next[from.r][from.i];
+        next[from.r].splice(from.i, 1);                 // lift it out of its old row
+      }
+      if (to === 'new') {
+        next.push([blockId]);
+      } else if (to !== 'hide') {
+        const target = next[to.r];
+        // A full row pushes the block onto a fresh row just below it, rather than
+        // silently refusing the drop.
+        if (!target) next.push([blockId]);
+        else if (target.length < HADeviceDashboardEditor.ROW_MAX) target.push(blockId);
+        else next.splice(to.r + 1, 0, [blockId]);
+      }
+      const cleaned = next.filter(r => r.length > 0);
+      apply(cleaned.length ? cleaned : undefined);
+    };
+
+    const chip = (id: TileBlockId, r: number, i: number) => html`
+      <span class="lay-chip ${r < 0 ? 'off' : ''}" draggable="true"
+        @dragstart=${(e: DragEvent) => {
+          this._dragFrom = { r, i };
+          // Firefox ignores a drag that carries no data.
+          e.dataTransfer?.setData('text/plain', id);
+          if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+        }}
+        @dragend=${() => { this._dragFrom = null; }}>${label(id)}</span>`;
+
+    const allowDrop = (e: DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    };
+
+    return html`
+      <div class="field" style="margin-top:10px">
+        <div class="field-lbl" style="display:flex;align-items:center;gap:6px">
+          Tile layout
+          ${current ? this._resetBtn(true, () => apply(undefined)) : nothing}
+        </div>
+        <div class="lay-canvas">
+          ${rows.map((r, ri) => html`
+            <div class="lay-row" @dragover=${allowDrop} @drop=${() => move({ r: ri })}>
+              ${r.map((b, bi) => chip(b, ri, bi))}
+              ${r.length < HADeviceDashboardEditor.ROW_MAX
+                ? html`<span class="lay-slot">drop here</span>` : nothing}
+            </div>`)}
+          <div class="lay-row lay-new" @dragover=${allowDrop} @drop=${() => move('new')}>＋ new row</div>
+        </div>
+        <div class="field-lbl" style="margin-top:6px">Hidden blocks</div>
+        <div class="lay-palette" @dragover=${allowDrop} @drop=${() => move('hide')}>
+          ${hidden.length
+            ? hidden.map((b, i) => chip(b, -1, i))
+            : html`<span class="dev-style-hint">drag a block here to hide it</span>`}
+        </div>
+        <div class="hint" style="margin-top:6px">
+          Blocks on the same row sit side by side. A block that doesn't apply to the
+          device renders nothing, and a row of only those collapses. The graph block
+          also needs Show graphs on.
+        </div>
       </div>`;
   }
 
@@ -1480,15 +1595,28 @@ export class HADeviceDashboardEditor extends LitElement {
             <span class="pill ${devStyle.show_graphs === val ? 'on' : ''}"
               @click=${() => this._setDeviceStyle(deviceId, { show_graphs: val })}>${lbl}</span>`)}
         </div>
-        <div class="field-lbl" style="margin-bottom:4px">Visible blocks</div>
-        <div class="block-toggles">
-          ${TILE_BLOCKS.filter(b => b.id !== 'graph').map(b => {
-            const on = devLayout === null ? globalLayout.includes(b.id) : devLayout.includes(b.id);
-            return html`<span class="block-tog ${on ? 'on' : ''}" @click=${() => toggleBlock(b.id)}>
-              ${on ? '👁' : '○'} ${b.label}
-            </span>`;
-          })}
-        </div>
+        ${(() => {
+          // Blocks compose the 'default' style only. Showing this grid on a
+          // power-monitor tile would offer toggles that change nothing.
+          const profile = dev ? getDeviceProfile(dev) : null;
+          const raw = devStyle.tile_style
+            ?? (this._config.smart_tile_styles && profile ? PROFILE_DEFAULT_TILE_STYLE[profile.type] : undefined)
+            ?? this._config.tile_style;
+          const base = this._baseStyleOf(raw);
+          if (base && base !== 'default') return nothing;
+          return html`
+            ${this._renderLayoutCanvas(devStyle.tile_layout, globalRaw,
+              (l) => this._setDeviceStyle(deviceId, { tile_layout: l }))}
+            <div class="field-lbl" style="margin:6px 0 4px">Visible blocks</div>
+            <div class="block-toggles">
+              ${TILE_BLOCKS.filter(b => b.id !== 'graph').map(b => {
+                const on = devLayout === null ? globalLayout.includes(b.id) : devLayout.includes(b.id);
+                return html`<span class="block-tog ${on ? 'on' : ''}" @click=${() => toggleBlock(b.id)}>
+                  ${on ? '👁' : '○'} ${b.label}
+                </span>`;
+              })}
+            </div>`;
+        })()}
         <div class="field-lbl" style="margin:6px 0 4px">Sensor chips</div>
         ${(() => {
           const areaSel = dev?.area ? this._config.area_styles?.[dev.area]?.sensors : undefined;
@@ -3364,6 +3492,17 @@ export class HADeviceDashboardEditor extends LitElement {
     .range-inp:focus { outline:none; border-color:var(--accent); }
     .range-inp::placeholder { color:var(--t3); }
     .dev-style-panel { background:var(--s2); border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin:2px 0 6px 18px; display:flex; flex-direction:column; gap:8px; }
+    .lay-canvas { display:flex; flex-direction:column; gap:4px; }
+    .lay-row { display:flex; flex-wrap:wrap; align-items:center; gap:4px; min-height:28px; padding:4px 6px;
+      border:1px dashed var(--border); border-radius:6px; background:var(--s3); }
+    .lay-row.lay-new { justify-content:center; font-size:10px; color:var(--t3); border-style:dotted; }
+    .lay-chip { font-size:10px; color:var(--text); background:var(--s2); border:1px solid var(--border2);
+      border-radius:4px; padding:3px 8px; cursor:grab; user-select:none; }
+    .lay-chip:active { cursor:grabbing; }
+    .lay-chip.off { color:var(--t3); border-color:var(--border); }
+    .lay-slot { font-size:9px; color:var(--t3); opacity:.6; padding:0 4px; }
+    .lay-palette { display:flex; flex-wrap:wrap; gap:4px; min-height:28px; padding:4px 6px;
+      border:1px dashed var(--border); border-radius:6px; }
     .block-toggles { display:flex; flex-wrap:wrap; gap:5px; }
     .block-tog { display:flex; align-items:center; gap:3px; font-size:10px; color:var(--t3); cursor:pointer; padding:2px 7px; border-radius:4px; border:1px solid var(--border); background:var(--s3); user-select:none; transition:color .12s,border-color .12s; }
     .block-tog.on { color:var(--text); border-color:var(--border2); }
