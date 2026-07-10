@@ -524,9 +524,13 @@ export class HADeviceDashboard extends LitElement {
       blocks, chips, customized,
       graphs: this._showGraphs(device),
       setBlock: (bid: string, vis: boolean) => {
-        const wanted = new Set(this._getBlockOrder(device, profile));
+        // Rebuild from a universe that still contains 'graph'. blockUniverse drops
+        // it (the Show-graphs toggle owns it, so it gets no checkbox), and filtering
+        // through that list would delete the graph block on any other block's toggle.
+        const ordered: TileBlockId[] = [...canonical, ...effective.filter(b => !canonical.includes(b))];
+        const wanted = new Set(effective);
         if (vis) wanted.add(bid as TileBlockId); else wanted.delete(bid as TileBlockId);
-        this._setTileBlocks(id, blockUniverse.filter(b => wanted.has(b)));
+        this._setTileBlocks(id, ordered.filter(b => wanted.has(b)));
       },
       setChip: (key: string, vis: boolean) => {
         const allKeys = chips.map(c => c.key);
@@ -2463,6 +2467,9 @@ export class HADeviceDashboard extends LitElement {
       // Original block-based layout
       const _defaultBlocks: TileBlockId[] = ['name_row', 'sensors', 'graph', 'dimmer', 'cover_controls', 'trv_control', 'valve_controls', 'input_channels', 'relay_channels', 'power_bar', 'badges'];
       const blockLayout: TileLayout =
+        // The viewer's own Customize choices win over config. Always flat — the
+        // panel is a visibility list, so toggling a block there flattens any rows.
+        this._tileBlockOverride.get(device.device_id) ??
         devStyle?.tile_layout ?? profStyle?.tile_layout ?? this._config.tile_layout ??
         customDef?.tile_layout ??
         this._config.style_presets?.['default']?.tile_layout ??
