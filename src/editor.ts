@@ -791,13 +791,16 @@ export class HADeviceDashboardEditor extends LitElement {
     apply: (url: string | undefined) => void,
     setSize: (v: 'cover' | 'contain' | 'stretch') => void,
     clear: () => void,
+    opts?: { maxDim?: number; showFit?: boolean; extra?: TemplateResult | typeof nothing },
   ): TemplateResult {
+    const maxDim = opts?.maxDim ?? 720;
+    const showFit = opts?.showFit ?? true;
     return html`
       <div class="tiles-divider">${label}</div>
       <div class="field">
         <div class="bg-img-row">
           <input type="file" accept="image/*" hidden data-upload=${uploadId}
-            @change=${(e: Event) => this._handleBgUpload(e, url => apply(url), { maxDim: 720 })}/>
+            @change=${(e: Event) => this._handleBgUpload(e, url => apply(url), { maxDim })}/>
           <button class="upload-btn" @click=${() => {
             (this.renderRoot.querySelector(`input[data-upload="${uploadId}"]`) as HTMLInputElement | null)?.click();
           }}>↑ Local</button>
@@ -809,13 +812,14 @@ export class HADeviceDashboardEditor extends LitElement {
                 @change=${(e: Event) => { const v = (e.target as HTMLInputElement).value.trim(); apply(v || undefined); }}/>`}
           ${current ? html`<button class="color-reset" @click=${clear}>↺</button>` : nothing}
         </div>
-        ${current ? html`
+        ${current && showFit ? html`
           <div class="field-lbl" style="margin-top:6px">Image fit</div>
           <div class="pill-grp">
             ${(['cover', 'contain', 'stretch'] as const).map(v => html`
               <span class="pill ${(size ?? 'cover') === v ? 'on' : ''}"
                 @click=${() => setSize(v)}>${v[0].toUpperCase() + v.slice(1)}</span>`)}
           </div>` : nothing}
+        ${current ? (opts?.extra ?? nothing) : nothing}
       </div>`;
   }
 
@@ -1914,7 +1918,27 @@ export class HADeviceDashboardEditor extends LitElement {
           'Room background photo', `room-bg-${name}`, st.bg_image, st.bg_image_size,
           (url) => this._setAreaStyle(name, 'bg_image', url),
           (v) => this._setAreaStyle(name, 'bg_image_size', v),
-          () => { this._setAreaStyle(name, 'bg_image', undefined); this._setAreaStyle(name, 'bg_image_size', undefined); })}
+          () => ['bg_image', 'bg_image_size', 'bg_image_mode', 'bg_image_pos']
+            .forEach(k => this._setAreaStyle(name, k as keyof AreaStyle, undefined)),
+          {
+            maxDim: 1600,          // a room backdrop spans the full width — 720 was too soft
+            showFit: (st.bg_image_mode ?? 'sharp') === 'sharp',
+            extra: html`
+              <div class="field-lbl" style="margin-top:8px">Backdrop mode
+                <span class="dev-style-hint">a room section is a wide strip</span></div>
+              <div class="pill-grp">
+                ${([['Sharp', 'sharp'], ['Ambient', 'ambient']] as const).map(([lbl, v]) => html`
+                  <span class="pill ${(st.bg_image_mode ?? 'sharp') === v ? 'on' : ''}"
+                    @click=${() => this._setAreaStyle(name, 'bg_image_mode', v === 'sharp' ? undefined : v)}>${lbl}</span>`)}
+              </div>
+              ${(st.bg_image_mode ?? 'sharp') === 'sharp' ? html`
+                <div class="field-lbl" style="margin-top:6px">Show which part</div>
+                <div class="pill-grp">
+                  ${([['Top', 'top'], ['Center', 'center'], ['Bottom', 'bottom']] as const).map(([lbl, v]) => html`
+                    <span class="pill ${(st.bg_image_pos ?? 'center') === v ? 'on' : ''}"
+                      @click=${() => this._setAreaStyle(name, 'bg_image_pos', v === 'center' ? undefined : v)}>${lbl}</span>`)}
+                </div>` : nothing}`,
+          })}
 
         ${sectionLbl('Tile appearance')}
         ${colorRow('Tile background', 'tileBgColor', '#1c1c1e')}

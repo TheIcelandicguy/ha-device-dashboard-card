@@ -2707,7 +2707,12 @@ export class HADeviceDashboard extends LitElement {
       if (areaStyle.borderRadius) { styleObj['borderRadius'] = `${areaStyle.borderRadius}px`; styleObj['overflow'] = 'hidden'; }
       if (areaStyle.bg_image) {
         styleObj['--area-bg-image']    = `url("${areaStyle.bg_image}")`;
-        styleObj['--area-bg-image-sz'] = areaStyle.bg_image_size === 'stretch' ? '100% 100%' : (areaStyle.bg_image_size ?? 'cover');
+        // Ambient mode always fills (cover); fit only applies to sharp.
+        styleObj['--area-bg-image-sz'] = areaStyle.bg_image_mode === 'ambient'
+          ? 'cover'
+          : (areaStyle.bg_image_size === 'stretch' ? '100% 100%' : (areaStyle.bg_image_size ?? 'cover'));
+        const pos = areaStyle.bg_image_pos;
+        styleObj['--area-bg-pos'] = pos === 'top' ? 'center top' : pos === 'bottom' ? 'center bottom' : 'center';
       }
       if (areaStyle.headerBgColor) {
         styleObj['--area-header-bg'] = areaStyle.headerBgColor2
@@ -2758,7 +2763,7 @@ export class HADeviceDashboard extends LitElement {
     const areaChips = this._getAreaChips(devices, label);
 
     return html`
-      <div class="area-section ${isClosed ? 'closed' : ''}" style=${styleMap(styleObj)}>
+      <div class="area-section ${isClosed ? 'closed' : ''} ${areaStyle?.bg_image && areaStyle.bg_image_mode === 'ambient' ? 'area-bg-ambient' : ''}" style=${styleMap(styleObj)}>
         <div class="area-header" @click=${() => {
           const next = new Set(this._closedAreas);
           next.has(area) ? next.delete(area) : next.add(area);

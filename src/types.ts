@@ -109,6 +109,11 @@ export interface AreaStyle {
   /** Room backdrop photo (data: URL or /local/… path), behind this room's tiles. */
   bg_image?: string;
   bg_image_size?: 'cover' | 'contain' | 'stretch';
+  /** How the room backdrop reads: 'sharp' = crisp photo (cover), 'ambient' =
+   *  blurred + darkened so tiles stay readable. Default 'sharp'. */
+  bg_image_mode?: 'sharp' | 'ambient';
+  /** Which band of the photo shows when 'sharp' + cover crops it. Default center. */
+  bg_image_pos?: 'top' | 'center' | 'bottom';
   // Border
   borderColor?: string;
   borderWidth?: number;

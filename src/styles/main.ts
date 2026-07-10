@@ -227,7 +227,13 @@ export const mainCss = css`
        header + tile grid; semi-transparent tiles let it show through. */
     .area-section[style*="--area-bg-image"]::before {
       content:''; position:absolute; inset:0; z-index:0; pointer-events:none;
-      background:var(--area-bg-image) center / var(--area-bg-image-sz, cover) no-repeat;
+      background:var(--area-bg-image) var(--area-bg-pos, center) / var(--area-bg-image-sz, cover) no-repeat;
+    }
+    /* Ambient mode: blur + darken so the photo reads as mood behind the tiles.
+       inset:-28px pushes the soft blurred edges outside the section, which
+       overflow:hidden then clips — otherwise the blur feathers to transparent. */
+    .area-section.area-bg-ambient::before {
+      inset:-28px; filter:blur(16px) brightness(0.5) saturate(1.15);
     }
     .area-section > * { position:relative; z-index:1; }
 
