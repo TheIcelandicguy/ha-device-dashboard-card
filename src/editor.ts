@@ -276,10 +276,12 @@ export class HADeviceDashboardEditor extends LitElement {
       if (!dialogShadow.getElementById(STYLE_ID)) {
         const s = document.createElement('style');
         s.id = STYLE_ID;
+        // Heights are driven dynamically in apply() (they depend on layout
+        // orientation), so keep only the orientation-independent bits here.
         s.textContent = `
-          div.element-editor { height:100% !important; max-height:100% !important; overflow:hidden !important; box-sizing:border-box !important; }
+          div.element-editor { overflow:hidden !important; min-height:0 !important; box-sizing:border-box !important; }
           hui-card-element-editor { display:block !important; height:100% !important; overflow:hidden !important; min-height:0 !important; box-sizing:border-box !important; }
-          div.element-preview { height:100% !important; max-height:100% !important; overflow-y:auto !important; overflow-x:hidden !important; box-sizing:border-box !important; }
+          div.element-preview { overflow-x:hidden !important; box-sizing:border-box !important; }
         `;
         dialogShadow.appendChild(s);
       }
@@ -287,6 +289,11 @@ export class HADeviceDashboardEditor extends LitElement {
       // Measure and apply all pixel heights from actual DOM positions.
       // Uses window.innerHeight (actual visible viewport, not 100vh which
       // can differ in windowed mode on some browsers/OSes).
+      const setImp = (el: HTMLElement | null, props: Record<string, string>) => {
+        if (!el) return;
+        for (const [k, v] of Object.entries(props)) el.style.setProperty(k, v, 'important');
+      };
+
       const apply = () => {
         const contentDiv = dialogShadow.querySelector<HTMLElement>('div.content');
         const shell      = this.shadowRoot?.querySelector<HTMLElement>('.shell');
@@ -297,11 +304,39 @@ export class HADeviceDashboardEditor extends LitElement {
         const footerH  = footer?.offsetHeight ?? 0;
         const cTop     = contentDiv.getBoundingClientRect().top;
         const contentH = Math.max(300, vh - cTop - footerH);
-        contentDiv.style.cssText += `;height:${contentH}px !important;max-height:${contentH}px !important;overflow:hidden !important;align-items:stretch !important;box-sizing:border-box !important`;
+
+        const editorDiv  = dialogShadow.querySelector<HTMLElement>('div.element-editor');
+        const previewDiv = dialogShadow.querySelector<HTMLElement>('div.element-preview');
+
+        // HA lays the edit dialog out side-by-side on wide screens (config left,
+        // live preview right) and stacked in a column when narrow — on a phone or
+        // a narrow desktop window. Detect which by geometry rather than guessing
+        // HA's exact px breakpoint: if the preview sits below the editor we're
+        // stacked. When stacked, forcing the preview pane to full height made it
+        // grab ~half the screen; instead let the form take what it needs and cap
+        // the preview to a nested strip below it.
+        const stacked = !!(editorDiv && previewDiv) &&
+          previewDiv.getBoundingClientRect().top >= editorDiv.getBoundingClientRect().bottom - 2;
+
+        setImp(contentDiv, {
+          height: `${contentH}px`, 'max-height': `${contentH}px`,
+          overflow: 'hidden', 'align-items': 'stretch', 'box-sizing': 'border-box',
+        });
+
+        if (stacked) {
+          const previewCap = Math.round(vh * 0.4);
+          setImp(editorDiv,  { height: 'auto', 'max-height': '100%', flex: '1 1 auto', overflow: 'hidden' });
+          setImp(previewDiv, { height: 'auto', 'max-height': `${previewCap}px`, flex: '0 0 auto', 'overflow-y': 'auto' });
+        } else {
+          setImp(editorDiv,  { height: `${contentH}px`, 'max-height': `${contentH}px`, overflow: 'hidden' });
+          setImp(previewDiv, { height: `${contentH}px`, 'max-height': `${contentH}px`, 'overflow-y': 'auto' });
+          // Restore HA's native flex so the two panes go back to 50/50 side-by-side.
+          editorDiv?.style.removeProperty('flex');
+          previewDiv?.style.removeProperty('flex');
+        }
 
         // Shell height = from shell's top to the bottom of element-editor (not viewport bottom)
         // This avoids overflowing past the element-editor's overflow:hidden boundary
-        const editorDiv  = dialogShadow.querySelector<HTMLElement>('div.element-editor');
         const shellTop   = shell.getBoundingClientRect().top;
         const editorBottom = editorDiv ? editorDiv.getBoundingClientRect().bottom : vh;
         const shellH = Math.max(400, editorBottom - shellTop);
