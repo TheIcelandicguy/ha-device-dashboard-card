@@ -1,7 +1,7 @@
 # HA Device Dashboard
 
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange)](https://github.com/hacs/integration)
-![Version](https://img.shields.io/badge/version-2.0.1-blue)
+![Version](https://img.shields.io/badge/version-2.0.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 A Home Assistant Lovelace custom card that auto-discovers all your Shelly devices and displays them in a live, interactive fleet dashboard.
@@ -37,8 +37,8 @@ A Home Assistant Lovelace custom card that auto-discovers all your Shelly device
 
 1. Open HACS → Frontend
 2. Click the three-dot menu → **Custom repositories**
-3. Add: `https://github.com/TheIcelandicguy/shelly-dashboard-card` — Category: **Lovelace**
-4. Install **Shelly Dashboard Card**
+3. Add: `https://github.com/TheIcelandicguy/ha-device-dashboard-card` — Category: **Lovelace**
+4. Install **HA Device Dashboard**
 5. Reload the browser
 
 ### Manual
@@ -54,13 +54,13 @@ A Home Assistant Lovelace custom card that auto-discovers all your Shelly device
 ## Basic Configuration
 
 ```yaml
-type: custom:shelly-dashboard-card
+type: custom:ha-device-dashboard
 ```
 
 That's it — the card auto-discovers everything. Add options to customise:
 
 ```yaml
-type: custom:shelly-dashboard-card
+type: custom:ha-device-dashboard
 columns: 3
 show_offline: true
 tile_style: semi
@@ -200,7 +200,7 @@ area_styles:
 
 ## Visual Editor
 
-The card ships with a full GUI editor. Open it via **Edit Dashboard → Add Card → Shelly Dashboard Card → Configure**.
+The card ships with a full GUI editor. Open it via **Edit Dashboard → Add Card → HA Device Dashboard → Configure**.
 
 The editor is split into accordion sections:
 

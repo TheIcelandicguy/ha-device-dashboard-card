@@ -69,10 +69,6 @@ function ensureCdnFontsLoaded(): void {
   _cdnFontsInjected = true;
 }
 
-const INTEGRATIONS = [
-  { key: 'shelly', label: 'Shelly', badge: 'SHELLY', color: '#f4601e', bg: 'rgba(244,96,30,0.2)' },
-];
-
 const SENSOR_GROUPS: Array<{ group: string; icon: string; iconColor: string; iconBg: string; items: Array<{ key: string; label: string; unit: string; defaultColor: string }> }> = [
   { group: 'Electrical', icon: '⊕', iconColor: '#4a9eff', iconBg: 'rgba(74,158,255,0.1)',
     items: [
@@ -884,10 +880,7 @@ export class HADeviceDashboardEditor extends LitElement {
           .map(id => allDiscovered.find(d => d.device_id === id))
           .filter(Boolean) as Array<{device_id:string;name:string;area?:string}>;
         const isFavExpanded  = this._expandedRooms.has(FAV_KEY);
-        const isFavStyleOpen = this._expandedRoomStyle.has(FAV_KEY);
         const hasFavStyle    = !!(c.area_styles?.['Favourites'] && Object.keys(c.area_styles['Favourites']).length);
-        const favSt          = c.area_styles?.['Favourites'] ?? {};
-        const favSwatches    = [favSt.accentColor, favSt.tileBgColor, favSt.headerBgColor, favSt.bgColor].filter(Boolean) as string[];
         return html`
           <div class="room-row fav-room-row">
             <span class="fav-room-star">★</span>
@@ -953,10 +946,7 @@ export class HADeviceDashboardEditor extends LitElement {
         const devicesInArea = byArea.get(areaKey) ?? [];
         const isIncluded = isAreaOn(areaKey);
         const isExpanded = this._expandedRooms.has(areaKey);
-        const isStyleOpen = this._expandedRoomStyle.has(areaKey);
         const hasAreaStyle = !!(c.area_styles?.[areaKey] && Object.keys(c.area_styles[areaKey]).length);
-        const areaSt = c.area_styles?.[areaKey] ?? {};
-        const swatches = [areaSt.accentColor, areaSt.tileBgColor, areaSt.headerBgColor, areaSt.bgColor].filter(Boolean) as string[];
         return html`
           <div class="room-row">
             <div class="room-dot" style="background:${isIncluded ? '#4ade80' : 'var(--t3)'}"></div>
@@ -2400,7 +2390,6 @@ export class HADeviceDashboardEditor extends LitElement {
     const previewMuted    = sty.text_muted       ?? '#6b7280';
     const previewOnline   = sty.online_color     ?? '#4ade80';
     const previewOffline  = sty.offline_color    ?? '#ef4444';
-    const previewPower    = sty.power_color      ?? '#fb923c';
     const previewHdrBg1   = sty.header_bg        ?? '#1a1a2e';
     const previewHdrBg2   = sty.header_bg2       ?? '#0f3460';
     const previewHdrTx    = sty.header_text_color ?? '#ffffff';
@@ -2954,7 +2943,6 @@ export class HADeviceDashboardEditor extends LitElement {
 
   protected render(): TemplateResult {
     if (!this._config) return html``;
-    const c = this._config;
     type TabId = 'devices'|'views'|'layout'|'graphs'|'yaml';
     // Tabs (order / label / icon) derive from EDITOR_LAYOUT — single source of truth.
     const tabs = EDITOR_LAYOUT.map(t => ({ id: t.id as TabId, label: t.label, icon: t.icon }));

@@ -3,7 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { styleMap } from 'lit/directives/style-map.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
-import { HADeviceDashboardConfig, HADevice, HAEntity, TileBlockId, DeviceProfileResult, EntityAnimationType, TileStyle, PowerMonitorVariant, SensorRange, HassAttrs, ViewConfig, DeviceStyle, AreaStyle, CustomStyleDef } from './types';
+import { HADeviceDashboardConfig, HADevice, TileBlockId, DeviceProfileResult, EntityAnimationType, TileStyle, PowerMonitorVariant, HassAttrs, ViewConfig, DeviceStyle, AreaStyle, CustomStyleDef } from './types';
 import { BUNDLED_FONT_CSS } from './fonts';
 import { mainCss } from './styles/main';
 import { tilesCss } from './styles/tiles';
@@ -22,7 +22,7 @@ import { renderBlockTile } from './tiles/block-tile';
 import { renderDetailSheet } from './detail/detail-sheet';
 import {
   getAllDevices, getDeviceProfile, migrateConfig,
-  getIntegrationLabel, isPrivateIp, PROFILE_DEFAULT_BLOCKS, PROFILE_DEFAULT_SENSORS, PROFILE_DEFAULT_TILE_STYLE, PROFILE_LABELS, BLOCK_LABELS, GRAPH_DC_LABELS, GRAPH_SENSOR_DEFS,
+  PROFILE_DEFAULT_BLOCKS, PROFILE_DEFAULT_SENSORS, PROFILE_DEFAULT_TILE_STYLE, PROFILE_LABELS, BLOCK_LABELS, GRAPH_DC_LABELS, GRAPH_SENSOR_DEFS,
   HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, downsamplePoints, normalizeGraphKey,
   formatPower, formatEnergy, formatVoltage, formatCurrent, formatTemp,
   formatUptime, formatApparentPower, formatReactivePower,
@@ -661,7 +661,7 @@ export class HADeviceDashboard extends LitElement {
       const arr = map.get(g) ?? [];
       for (const d of devices) {
         const nl = d.name.toLowerCase();
-        const boundary = nl.length === gl.length || /[\s/\-]/.test(nl[gl.length] ?? '');
+        const boundary = nl.length === gl.length || /[\s/-]/.test(nl[gl.length] ?? '');
         if (nl.startsWith(gl) && boundary && !arr.includes(d)) arr.push(d);
       }
       if (arr.length) map.set(g, arr);
@@ -2264,7 +2264,7 @@ export class HADeviceDashboard extends LitElement {
   }
 
   /** Remap legacy style names to new purposeful names */
-  private _resolveStyle(raw: TileStyle | undefined, profile: DeviceProfileResult): { style: TileStyle; variant: PowerMonitorVariant } {
+  private _resolveStyle(raw: TileStyle | undefined, _profile: DeviceProfileResult): { style: TileStyle; variant: PowerMonitorVariant } {
     const legacyVariantMap: Partial<Record<TileStyle, PowerMonitorVariant>> = {
       hero: 'big-number', ring: 'gauge', spark: 'graph', hbar: 'compact', list: 'table',
     };
@@ -2480,8 +2480,6 @@ export class HADeviceDashboard extends LitElement {
     // Alt styles — shared setup
     const areaLabel = device.area ?? '';
     const accent    = this._tileAccent(device, areaLabel);
-    const sw        = this._getPrimarySwitch(device);
-    const isOn      = sw?.isOn ?? false;
     const base      = `tile tile-${tileSize} ${!online ? 'offline' : ''} tile--clickable`;
 
     return html`<div class="${base}" style=${styleMap(tileStyleObj)}
@@ -2678,7 +2676,6 @@ export class HADeviceDashboard extends LitElement {
     const areaPower = devices.reduce((s, d) => s + (this._getPower(d) ?? 0), 0);
     const areaStyle = this._config.area_styles?.[label];
     const cols = areaStyle?.columns ?? this._config.columns ?? 3;
-    const st = this._config.style ?? {};
 
     const styleObj: Record<string, string> = {};
     if (areaStyle) {
