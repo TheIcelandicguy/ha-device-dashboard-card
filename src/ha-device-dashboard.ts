@@ -2927,7 +2927,7 @@ export class HADeviceDashboard extends LitElement {
       @media (max-width: 999px) {
         :host([data-edit-preview]) {
           display: block;
-          max-height: 25vh;
+          max-height: 32vh;
           overflow-y: auto;
           -webkit-overflow-scrolling: touch;
         }
