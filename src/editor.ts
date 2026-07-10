@@ -1,5 +1,6 @@
 import { LitElement, html, css, TemplateResult, nothing } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
+import { ref } from 'lit/directives/ref.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef } from './types';
@@ -171,6 +172,7 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _styleScope: 'device' | 'profile' = 'device';  // Device styling tab: this device vs all of type
   @state() private _cardThemeRoom: string = '';                   // Card & Theme tab: selected room for per-room styling
   @state() private _newStyleName: string = '';                    // Device styling tab: "Save as style" name input
+  @state() private _renamingStyle: string | null = null;          // Saved-styles row: slug being renamed inline
   /** Editor-only preference (persisted in localStorage, never written to config):
    *  when false, power-user controls are hidden to keep the common path simple. */
   @state() private _advanced = false;
@@ -1073,33 +1075,104 @@ export class HADeviceDashboardEditor extends LitElement {
     this._set('profile_styles', Object.keys(all).length ? all : undefined);
   }
 
-  /** Save the selected device's current look as a reusable named style, and assign
-   *  it to that device. */
-  private _saveDeviceAsStyle(deviceId: string): void {
+  /** Config key for a new style name. The key is the style's identity — every
+   *  assignment is `custom:<slug>` — so it must never collide with an existing
+   *  one, and renaming later changes only the label. */
+  private _styleSlug(name: string): string {
+    const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'style';
+    const taken = this._config.custom_styles ?? {};
+    if (!taken[base]) return base;
+    let n = 2;
+    while (taken[`${base}-${n}`]) n++;
+    return `${base}-${n}`;
+  }
+
+  /** Snapshot a style scope's current look into a reusable named style, then point
+   *  that scope at it. `fallbackBase` is what the scope renders as when it has no
+   *  tile_style of its own (profile recommendation, or 'default'). */
+  private _saveAsStyle(src: DeviceStyle, fallbackBase: TileStyle, assign: (v: TileStyle) => void): void {
     const name = this._newStyleName.trim();
     if (!name) return;
-    const slug = (name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')) || 'style';
-    const ds: DeviceStyle = this._config.device_styles?.[deviceId] ?? {};
-    const dev = this._allDevices().find(d => d.device_id === deviceId);
-    const profile = dev ? getDeviceProfile(dev) : null;
-    const chosen = ds.tile_style && !String(ds.tile_style).startsWith('custom:') ? ds.tile_style : undefined;
-    const base: TileStyle = chosen
-      ?? (this._config.smart_tile_styles && profile ? PROFILE_DEFAULT_TILE_STYLE[profile.type] : undefined)
-      ?? 'default';
+    const slug = this._styleSlug(name);
+    const raw = src.tile_style;
+    // Saving a scope that already uses a custom style inherits that style's base,
+    // not the fallback — otherwise the snapshot silently changes how it renders.
+    const base: TileStyle = typeof raw === 'string' && raw.startsWith('custom:')
+      ? (this._config.custom_styles?.[raw.slice(7)]?.base ?? fallbackBase)
+      : (raw ?? fallbackBase);
     const def: CustomStyleDef = { label: name, base };
-    if (ds.power_monitor_variant) def.variant = ds.power_monitor_variant;
-    if (ds.elements) def.elements = { ...ds.elements };
-    if (ds.sensors) def.sensors = [...ds.sensors];
-    if (ds.tile_layout) def.tile_layout = [...ds.tile_layout];
+    if (src.power_monitor_variant) def.variant = src.power_monitor_variant;
+    if (src.elements) def.elements = { ...src.elements };
+    if (src.sensors) def.sensors = [...src.sensors];
+    if (src.tile_layout) def.tile_layout = [...src.tile_layout];
     this._set('custom_styles', { ...(this._config.custom_styles ?? {}), [slug]: def });
-    this._setDeviceStyle(deviceId, { tile_style: `custom:${slug}` as TileStyle });
+    assign(`custom:${slug}` as TileStyle);
     this._newStyleName = '';
   }
 
+  /** Save the selected device's current look as a reusable named style. */
+  private _saveDeviceAsStyle(deviceId: string): void {
+    const dev = this._allDevices().find(d => d.device_id === deviceId);
+    const profile = dev ? getDeviceProfile(dev) : null;
+    const fallback = (this._config.smart_tile_styles && profile
+      ? PROFILE_DEFAULT_TILE_STYLE[profile.type] : undefined) ?? 'default';
+    this._saveAsStyle(this._config.device_styles?.[deviceId] ?? {}, fallback,
+      v => this._setDeviceStyle(deviceId, { tile_style: v }));
+  }
+
+  /** Save a whole device type's look ("All relays") as a reusable named style. */
+  private _saveProfileAsStyle(profileType: DeviceProfile): void {
+    const fallback = PROFILE_DEFAULT_TILE_STYLE[profileType] ?? 'default';
+    this._saveAsStyle(this._config.profile_styles?.[profileType] ?? {}, fallback,
+      v => this._setProfileStyle(profileType, { tile_style: v }));
+  }
+
+  /** Rename = relabel. The slug stays put, so every `custom:<slug>` assignment
+   *  keeps resolving. */
+  private _renameCustomStyle(key: string, label: string): void {
+    const name = label.trim();
+    const def = this._config.custom_styles?.[key];
+    this._renamingStyle = null;
+    if (!def || !name || name === def.label) return;
+    this._set('custom_styles', { ...(this._config.custom_styles ?? {}), [key]: { ...def, label: name } });
+  }
+
   private _deleteCustomStyle(key: string): void {
+    const val = `custom:${key}` as TileStyle;
     const cs = { ...(this._config.custom_styles ?? {}) };
     delete cs[key];
     this._set('custom_styles', Object.keys(cs).length ? cs : undefined);
+
+    // Strip every assignment that pointed at it. A dangling `custom:<key>` still
+    // resolves — to 'default' — so leaving one behind silently restyles the tile
+    // instead of falling back to the profile recommendation.
+    const clean = <T extends { tile_style?: TileStyle }>(m: Record<string, T> | undefined) => {
+      if (!m || !Object.values(m).some(v => v.tile_style === val)) return null;
+      const out: Record<string, T> = {};
+      for (const [k, v] of Object.entries(m)) {
+        const n = { ...v };
+        if (n.tile_style === val) delete n.tile_style;
+        if (Object.keys(n).length) out[k] = n;
+      }
+      return Object.keys(out).length ? out : undefined;
+    };
+    const ds = clean(this._config.device_styles);
+    if (ds !== null) this._set('device_styles', ds);
+    const ps = clean(this._config.profile_styles as Record<string, DeviceStyle> | undefined);
+    if (ps !== null) this._set('profile_styles', ps);
+    const as = clean(this._config.area_styles);
+    if (as !== null) this._set('area_styles', as);
+
+    if (this._config.views?.some(v => v.tile_style === val)) {
+      this._set('views', this._config.views.map(v => {
+        if (v.tile_style !== val) return v;
+        const n = { ...v };
+        delete n.tile_style;
+        return n;
+      }));
+    }
+    if (this._config.tile_style === val) this._set('tile_style', undefined);
+    this._flushConfig();
   }
 
   /** Shared tile-style grid + power-monitor variant pills for the per-device and
@@ -1133,9 +1206,23 @@ export class HADeviceDashboardEditor extends LitElement {
           <div class="pill-grp">
             ${customs.map(([key, def]) => {
               const val = `custom:${key}` as TileStyle;
+              if (this._renamingStyle === key) {
+                return html`<input type="text" class="inline-text" style="width:9em"
+                  .value=${def.label || key}
+                  @click=${(e: Event) => e.stopPropagation()}
+                  @blur=${(e: Event) => this._renameCustomStyle(key, (e.target as HTMLInputElement).value)}
+                  @keydown=${(e: KeyboardEvent) => {
+                    if (e.key === 'Enter') this._renameCustomStyle(key, (e.target as HTMLInputElement).value);
+                    if (e.key === 'Escape') this._renamingStyle = null;
+                  }}
+                  @focus=${(e: Event) => (e.target as HTMLInputElement).select()}
+                  ${ref((el?: Element) => (el as HTMLInputElement | undefined)?.focus())}/>`;
+              }
               return html`<span class="pill ${current === val ? 'on' : ''}" @click=${() => onStyle(val)}>
                 ${def.label || key}
-                <span title="Delete style" style="margin-left:6px;cursor:pointer;opacity:.7"
+                <span title="Rename style" style="margin-left:6px;cursor:pointer;opacity:.7"
+                  @click=${(e: Event) => { e.stopPropagation(); this._renamingStyle = key; }}>✎</span>
+                <span title="Delete style" style="margin-left:4px;cursor:pointer;opacity:.7"
                   @click=${(e: Event) => { e.stopPropagation(); this._deleteCustomStyle(key); }}>×</span>
               </span>`;
             })}
@@ -1166,19 +1253,23 @@ export class HADeviceDashboardEditor extends LitElement {
     const typeCount = profile ? devices.filter(d => getDeviceProfile(d).type === profile.type).length : 0;
     const profLabel = profile ? (PROFILE_LABELS[profile.type] || profile.type) : '';
 
+    /** "Save this look as a named style" — same row for either scope. */
+    const saveStyleRow = (save: () => void): TemplateResult => html`
+      <div class="field" style="margin-top:12px;display:flex;gap:6px;align-items:center">
+        <input type="text" class="inline-text" placeholder="Save this look as a named style…" style="flex:1"
+          .value=${this._newStyleName}
+          @input=${(e: Event) => { this._newStyleName = (e.target as HTMLInputElement).value; }}
+          @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') save(); }}/>
+        <button class="btn-copy" title="Save as reusable style" @click=${save}>💾 Save style</button>
+      </div>`;
+
     const deviceScopeBody = (): TemplateResult => {
       const ds = this._config.device_styles?.[sel!] ?? {};
       const style = (ds.tile_style ?? (this._config.smart_tile_styles ? PROFILE_DEFAULT_TILE_STYLE[profile!.type] : undefined) ?? 'default') as TileStyle;
       return html`
         ${this._renderDeviceStylePanel(sel!)}
         ${this._renderStyleElementToggles(style, ds.elements ?? {}, e => this._setDeviceStyle(sel!, { elements: e }))}
-        <div class="field" style="margin-top:12px;display:flex;gap:6px;align-items:center">
-          <input type="text" class="inline-text" placeholder="Save this look as a named style…" style="flex:1"
-            .value=${this._newStyleName}
-            @input=${(e: Event) => { this._newStyleName = (e.target as HTMLInputElement).value; }}
-            @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') this._saveDeviceAsStyle(sel!); }}/>
-          <button class="btn-copy" title="Save as reusable style" @click=${() => this._saveDeviceAsStyle(sel!)}>💾 Save style</button>
-        </div>`;
+        ${saveStyleRow(() => this._saveDeviceAsStyle(sel!))}`;
     };
     const profileScopeBody = (): TemplateResult => {
       const ps = this._config.profile_styles?.[profile!.type] ?? {};
@@ -1202,6 +1293,7 @@ export class HADeviceDashboardEditor extends LitElement {
             </div>
           </div>
           ${this._renderStyleElementToggles(style, ps.elements ?? {}, e => this._setProfileStyle(profile!.type, { elements: e }))}
+          ${saveStyleRow(() => this._saveProfileAsStyle(profile!.type))}
         </div>`;
     };
 
