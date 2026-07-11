@@ -235,6 +235,29 @@ function e(e,t,i,s){var r,a=arguments.length,o=a<3?t:null===s?s=Object.getOwnPro
     }
     .area-section > * { position:relative; z-index:1; }
 
+    /* Frosted-glass tiles over a room photo. Each tile blurs the photo behind it
+       into a legible translucent panel, so the photo stays crisp in the gaps but
+       the data never sits on a busy image. This is what makes a room backdrop
+       look intentional rather than cluttered. */
+    .area-section[style*="--area-bg-image"] .device-grid { gap:calc(var(--tile-gap,10px) + 2px); }
+    .area-section[style*="--area-bg-image"] .tile {
+      backdrop-filter: blur(20px) saturate(1.35);
+      -webkit-backdrop-filter: blur(20px) saturate(1.35);
+      border-color: rgba(255,255,255,0.16);
+      /* drop shadow to lift the panel + a 1px inner top highlight for a glass edge */
+      box-shadow: 0 3px 16px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.14);
+    }
+    .area-section[style*="--area-bg-image"] .tile::after {
+      background: rgba(15,17,23,0.52);
+      background-image: none;          /* the room photo lives on the section, not each tile */
+      opacity: 1;                      /* the glass scrim owns its own alpha */
+    }
+    /* A soft dark gradient across the bottom of the photo grounds the tiles and
+       lifts white text — applied to sharp mode (ambient is already darkened). */
+    .area-section[style*="--area-bg-image"]:not(.area-bg-ambient)::before {
+      box-shadow: inset 0 -80px 90px -40px rgba(0,0,0,0.55), inset 0 0 0 1000px rgba(0,0,0,0.12);
+    }
+
     .area-header {
       display:flex; align-items:center; justify-content:space-between;
       background:var(--area-header-bg,rgba(255,255,255,0.04));
