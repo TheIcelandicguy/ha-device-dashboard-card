@@ -1,0 +1,494 @@
+# HA Device Dashboard — Project Overview
+
+A Home Assistant **Lovelace custom card** (frontend, TypeScript + Lit) that
+auto-discovers Shelly devices from Home Assistant and renders them as a live,
+device-centric fleet dashboard with per-device tiles, an expandable detail
+panel, sparkline history graphs, themes, animated status icons, and a full
+visual (GUI) config editor.
+
+> This is a **frontend card**, not a Python integration. It registers the custom
+> element `ha-device-dashboard` and is added to a dashboard as
+> `type: custom:ha-device-dashboard`. It reads its data from Home Assistant's
+> in-browser `hass` object (entity/device/area registries + live states) — it
+> installs no backend component and (see §8) does **not** depend on the separate
+> `device_pulse` integration.
+
+---
+
+## Table of Contents
+
+1. [What it is](#1-what-it-is)
+2. [Key features](#2-key-features)
+3. [Installation](#3-installation)
+4. [Configuration](#4-configuration)
+5. [Architecture](#5-architecture)
+6. [Config option reference](#6-config-option-reference)
+7. [How it works](#7-how-it-works)
+8. [Development & deployment](#8-development--deployment)
+9. [Known limitations / roadmap](#9-known-limitations--roadmap)
+
+---
+
+## 1. What it is
+
+- **Type:** Lovelace custom card for Home Assistant.
+- **Card type string:** `custom:ha-device-dashboard`
+- **Custom elements:** `ha-device-dashboard` (the card) and
+  `ha-device-dashboard-editor` (its visual editor), registered from `src/index.ts`.
+- **Package:** `ha-device-dashboard`, version **2.0.0**, MIT, author `TheIcelandicguy`.
+- **Stack:** Lit 3, TypeScript 5, bundled with Rollup to a single ES-module file
+  `dist/ha-device-dashboard.js` (minified with terser for production).
+- **Focus:** Strongly Shelly-oriented — discovery is limited to the HA `shelly`
+  integration plus `bthome` (Shelly BLU sensors). The card understands all Shelly
+  device profiles and generations (Gen1/2/3/4 + BLE) and picks a sensible tile
+  layout per profile.
+
+The card is registered in the "Add card" picker via `window.customCards` with the
+name **"HA Device Dashboard"** and marketing description "Universal device fleet
+overview". (Note the discovery code today is Shelly/BTHome-only — see §7 and §9.)
+
+---
+
+## 2. Key features
+
+- **Auto-discovery** — finds Shelly (and Shelly BLU/BTHome) devices registered in
+  HA; no manual entity list required.
+- **Device profiles** — 13 profiles (relay, plug, dimmer, rgb, climate/TRV, cover,
+  valve, energy, sensor, input, uni, wall_display, generic), each with a badge, a
+  default sensor-chip set, and a default tile block order.
+- **All generations** — Gen1, Gen2, Gen3, Gen4, and BLE.
+- **Room grouping** — devices grouped by HA area into collapsible sections; extra
+  `name_groups` sections can be built from device-name prefixes.
+- **Tile controls** — toggle relays/plugs, brightness sliders (dimmer/RGB),
+  open/stop/close + position for covers and valves, TRV setpoint, input channel
+  chips, and virtual-component controls, directly on the tile.
+- **Sensor chips** — compact readings (power, temperature, humidity, voltage,
+  battery, RSSI …) shown per tile; selectable by category.
+- **Tile styles** — purpose-driven layouts: `default` (adaptive blocks),
+  `power-monitor` (with `big-number`/`gauge`/`graph`/`compact`/`table` variants),
+  `light-control`, `climate-control`, `cover-control`, `sensor-card`,
+  `scene-button`; plus user-defined `custom:<key>` styles. "Smart tile styles"
+  auto-picks a style per profile.
+- **Expandable detail sheet** — clicking a tile opens an inline panel below the
+  row with all channels, sensors, firmware/IP/RSSI/uptime, an All-Entities list,
+  and taller history graphs.
+- **Sparkline history graphs** — per-metric labeled line/area/bar graphs with time
+  axis, peak/min markers, tick grid, and hover tooltip; window configurable
+  (1–168 h).
+- **Header stats** — clickable header chips (online/offline/power/energy/temp/
+  humidity/light/rssi/alerts/updates) that open high-to-low device drill-downs.
+- **Power bar** — optional mini wattage indicator at the tile bottom.
+- **Views** — optional multiple named dashboard views (tabs) with per-view filters
+  (profiles, domains, areas, device include/exclude, entity-id regex) and layout
+  overrides.
+- **Favourites** — devices pinned to a Favourites section.
+- **Theming** — 7 built-in colour presets (`warm_dusk` default, `dark_industrial`,
+  `teal_terminal`, `brutalist`, `frosted_light`, `nordic_warm`, `midnight_purple`)
+  plus fully custom palettes; bundled + Google-Fonts display fonts.
+- **Animated status icons** — a large library of SVG animation presets (flame,
+  snowflake, fan, pulse, bolt, bulb, water, sun, moon, wind, bell, thermometer,
+  battery, star, wave …) assignable per device/entity for on/off states.
+- **Per-scope styling cascade** — device → device-type (profile) → area/room →
+  view → global → built-in default.
+- **Responsive** — works in HA Sections view using CSS container queries; a
+  mobile-optimised editor layout.
+- **Visual editor** — full GUI editor (accordion tabs) with no YAML required; a
+  read-only YAML tab for copying the generated config.
+
+---
+
+## 3. Installation
+
+**Requires** Home Assistant with a dashboard that accepts custom cards, and the
+official **Shelly** integration set up for your devices.
+
+### HACS (custom repository)
+
+1. HACS → three-dot menu → **Custom repositories**.
+2. Add `https://github.com/TheIcelandicguy/ha-device-dashboard-card`, category
+   **Lovelace**.
+3. Install **HA Device Dashboard** and reload the browser.
+
+### Manual
+
+1. Copy `dist/ha-device-dashboard.js` to `/config/www/ha-device-dashboard.js`.
+2. **Settings → Dashboards → Resources** (or Edit Dashboard → Manage Resources)
+   → add resource:
+   - **URL:** `/local/ha-device-dashboard.js`
+   - **Type:** JavaScript Module
+3. Add the card to a dashboard (see §4).
+
+> The repo's own deploy target is `Z:\www\community\ha-device-dashboard\` (an HA
+> `www/community/...` path), giving the resource URL
+> `/local/community/ha-device-dashboard/ha-device-dashboard.js`. See §8.
+
+---
+
+## 4. Configuration
+
+The card works with zero configuration — it auto-discovers everything. Options are
+added on top and can also be set entirely through the visual editor.
+
+### Minimal example
+
+```yaml
+type: custom:ha-device-dashboard
+```
+
+### Fuller example
+
+```yaml
+type: custom:ha-device-dashboard
+title: Shelly
+theme: dark_industrial
+columns: 3
+tile_size: md
+sort_by: power
+show_offline: true
+smart_tile_styles: true
+areas:
+  - Living Room
+  - Kitchen
+sensors:
+  - power
+  - temperature
+  - battery
+header_chips: [online, offline, power, alerts]
+show_graphs: true
+graph_sensors: [power, temperature]
+graph_hours: 24
+area_styles:
+  Living Room:
+    columns: 4
+    headerBgColor: "#e65c00"
+    tileBgColor: "#16213e"
+    tile_style: power-monitor
+device_styles:
+  abcdef1234567890:
+    color: "#4fc3f7"
+    tile_icon: flame
+```
+
+The **canonical, machine-readable model** of the whole config surface lives in
+`docs/card-reference.json` (defaults, first-run values, the 13 profiles, themes,
+tile blocks, header chips, and every editor control with its config key, scope,
+default and advanced flag). The offline HTML tools in `docs/tools/` all read from
+that model. The authoritative TypeScript definition is
+`HADeviceDashboardConfig` in `src/types.ts`.
+
+> Note: the top-level option table in `README.md` lists a few legacy keys
+> (`include_all`, `hide_shelly`, `view_mode`, `tile_click`, `show_glow`) that are
+> **not** part of the v2 `HADeviceDashboardConfig` type. Treat `src/types.ts` /
+> `docs/card-reference.json` as the source of truth for current options.
+
+---
+
+## 5. Architecture
+
+### Repo layout
+
+```
+src/
+  index.ts              Entry point — imports the card + editor, registers
+                        the <ha-device-dashboard> custom card metadata,
+                        prints a BUILD_TAG marker to the console.
+  ha-device-dashboard.ts  The main card LitElement (~3k lines): config, hass
+                        wiring, device grouping, header, tiles, detail sheet,
+                        graph fetching, CSS-var/style building.
+  editor.ts             The visual editor LitElement
+                        <ha-device-dashboard-editor> (~3.8k lines): accordion
+                        tabs, live preview, YAML export.
+  editor-layout.ts      Data-driven EDITOR_LAYOUT — tabs/sections spec that the
+                        editor renders from (section-registry refactor).
+  types.ts              All config + data model types (single source of truth
+                        for options); HADeviceDashboardConfig.
+  helpers.ts            Device discovery (getAllDevices), profile detection,
+                        tile-block/sensor/graph constants and defaults, value
+                        formatters, config migration.
+  themes.ts             THEME_PRESETS (7 palettes) + apply/detect helpers.
+  anim-icons.ts         SVG animated status-icon library + renderer.
+  fonts.ts              Bundled offline @font-face CSS (BUNDLED_FONT_CSS).
+  tiles/                Per-style tile renderers (see below).
+  detail/detail-sheet.ts  The expanded per-device detail panel.
+  styles/               main.ts / tiles.ts / detail.ts — Lit css blocks.
+docs/                   README, card-reference.json, shelly-reference/, tools/.
+dist/ha-device-dashboard.js   Built bundle (committed).
+rollup.config.mjs, tsconfig.json, package.json, hacs.json
+sync-to-ha.ps1, update.ps1, create-ha-token.ps1   Deploy helpers.
+```
+
+### Main card class — `ha-device-dashboard.ts`
+
+`HADeviceDashboard extends LitElement` (`@customElement('ha-device-dashboard')`).
+Key elements:
+
+- Lovelace hooks: `setConfig()` (runs `migrateConfig`), `getConfigElement()`
+  (returns `ha-device-dashboard-editor`), `getStubConfig()`, `getLayoutOptions()`.
+- `@property hass` receives the Home Assistant object; a `shouldUpdate()` override
+  caches the device list and **throttles** re-renders so heavy Shelly sensor churn
+  (power sensors pushing every ~1–2 s) doesn't re-render the whole fleet
+  continuously (2 s coalescing for pure sensor updates).
+- Caches: device list, per-device profile, and the computed card-level CSS-var map
+  (rebuilt only when config changes — important because background images can be
+  large data URLs).
+- Local UI state (not saved to YAML): open/closed areas, expanded detail device,
+  graph data, drag positions, active view, and viewer-local block/chip overrides
+  persisted in `localStorage`.
+
+### Tile renderers — `src/tiles/`
+
+Each tile style is a standalone render function called by the main card:
+
+- `power-monitor.ts` — relay/plug/energy power view (big-number/gauge/graph/
+  compact/table variants).
+- `light-control.ts` — dimmer/RGB colour + brightness controls.
+- `climate-control.ts` — TRV / wall-display thermostat dial.
+- `cover-control.ts` — blind/shutter/roller graphic + open/stop/close.
+- `sensor-card.ts` — big primary value + sparkline + trend badge.
+- `scene-button.ts` — large tappable icon button (input/generic).
+- `block-tile.ts` — the `default` adaptive block-grid tile (name_row, sensors,
+  graph, dimmer, cover/valve/trv controls, relay/input channels, power_bar,
+  virtual_controls, badges).
+- `tile-parts.ts` — shared sub-components used across tiles.
+- `tile-context.ts` — the `TileCtx` type and helper interfaces (SensorChip,
+  TrvInfo, CoverInfo, GraphEntity, FirmwareInfo, VirtualControl, …) passed into
+  every renderer.
+
+### Detail view — `src/detail/detail-sheet.ts`
+
+`renderDetailSheet(...)` produces the expandable panel shown below a tile row: all
+channels, full sensor list, firmware/IP/RSSI/uptime, the All-Entities list, and
+the taller history graphs with a 24 h / 7 d / 30 d range selector.
+
+### Editor — `editor.ts` + `editor-layout.ts`
+
+The GUI editor is organised into accordion tabs (Rooms & devices, Device styling,
+Views, Header, Card & Theme, Graphs & Sensors, and a read-only YAML tab), with an
+**Advanced** toggle that reveals advanced controls and a **Defaults** overlay for
+the first-run look (theme, default tile style, columns, smart styles). Structure is
+being migrated to the data-driven `EDITOR_LAYOUT` spec (the Graphs tab is wired to
+it first). Editor and card must keep the `CDN_FONT_FAMILIES` / `FONT_OPTIONS` lists
+in sync.
+
+---
+
+## 6. Config option reference
+
+Top-level keys of `HADeviceDashboardConfig` (`src/types.ts`). Defaults are the
+runtime defaults from `docs/card-reference.json` where applicable.
+
+### Discovery
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `type` | string | — | Must be `custom:ha-device-dashboard`. |
+| `title` | string | `Shelly` | Header title text. |
+| `areas` | string[] | all | Area-name filter (`[]` = none). |
+| `name_groups` | string[] | — | Extra sections built from device-name prefixes. |
+| `hidden_devices` | string[] | `[]` | Device IDs to hide. |
+| `favorites` | string[] | `[]` | Device IDs pinned to the Favourites section. |
+| `hidden_entities` | string[] | `[]` | Entity IDs hidden from the expanded All-Entities list. |
+| `show_offline` | boolean | `true` | Show devices whose entities are all unavailable. |
+
+### Views
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `views` | ViewConfig[] | — | Named dashboard views (tabs). Each has `id`, `name`, `icon`, `show_favourites`, `show_rooms`, a `filter` (profiles/domains/areas/devices/exclude_devices/entity_id_pattern), and layout overrides. |
+| `default_view` | string | first | `id` of the view selected on first load. |
+
+### Layout
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `columns` | number | `3` | Grid columns per row (1–6). |
+| `tile_size` | `sm`\|`md`\|`lg` | `md` | Tile size. |
+| `sort_by` | `name`\|`power`\|`online`\|`area` | `name` | Tile sort order. |
+| `tile_style` | TileStyle | `default` | Global default tile style (lowest in cascade). |
+| `smart_tile_styles` | boolean | `false` | Auto-pick a style per device profile when none set. |
+| `power_monitor_variant` | variant | `big-number` | Default power-monitor sub-variant. |
+| `show_graphs` | boolean | `true` | Master switch for tile sparklines. |
+| `tile_layout` | TileLayout | all visible | Ordered/visible tile content blocks. |
+| `tile_opacity` / `card_opacity` / `header_opacity` | number | `100` | Background transparency for tiles / card / header. |
+| `header_show_title` / `header_show_stats` / `header_show_cloud` | boolean | `true`/`true`/`false` | Header sections. |
+| `header_show_orbs` | boolean | follows `effects` | Header glow orbs. |
+| `effects` | boolean | `false` | Ambient effects (orbs, pulse/glow, blur, hover shadows). |
+| `header_chips` | string[] | `online, offline, power, alerts` | Which header stat chips appear (from online/offline/power/energy/temperature/humidity/illuminance/rssi/alerts/updates). |
+| `card_bg_image` / `card_bg_image_size` | string | — | Card background image + fit. |
+| `show_power_bar` | boolean | `false` | Mini wattage bar at tile bottom. |
+| `power_bar_max` | number | `2000` | Watts at 100% fill. |
+| `show_entity_list` | boolean | `true` | All-Entities section in expanded view. |
+
+### Style
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `theme` | ThemePreset | `warm_dusk` | One of 7 presets (or `custom`); writes palette colours into `style`. |
+| `style` | object | — | ~50 global look keys: `accent_color`, `tile_radius`, `tile_gap`, `font_family`, `text_size_scale`, button shape/variant/size, card/header/tile colours, text tiers, status colours, header sizing, etc. |
+| `area_styles` | Record<area, AreaStyle> | — | Per-room overrides: background/image, borders, header gradient, typography, tile colours, columns, `tile_style`, per-area `sensors`/`header_chips`/`show_graphs`/`elements`. |
+| `device_styles` | Record<device_id, DeviceStyle> | — | Per-device: accent `color`, `tile_layout`, forced `profile`, `tile_style` + variant, `tile_icon`/`tile_icon_off`/`tile_icon_speed`, per-entity `entity_animations`, `sensors`, `show_graphs`, `elements`. |
+| `profile_styles` | Record<profile, DeviceStyle> | — | Per device-type overrides ("all relays"). |
+| `style_presets` | Record<tile_style, StylePreset> | — | Default chips/blocks/variant/element-visibility per tile style. |
+| `custom_styles` | Record<key, CustomStyleDef> | — | User-defined saved styles (assigned via `tile_style: custom:<key>`). |
+
+### Graphs & sensor chips
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `graph_sensors` | string[] | `[]` | device_class keys to graph as sparklines. |
+| `graph_hours` | number | `24` | History window (1–168 h). |
+| `graph_style` | GraphStyle | — | `type` (line/area/bar), line_width, fill, height, show_dots, time_labels, tick_lines, bar_radius, per-sensor `sensor_ranges`. |
+| `graph_line_color` | string | — | Global fallback line colour. |
+| `graph_sensor_colors` | Record<key,color> | — | Per-sensor-class line colours. |
+| `sensors` | string[] | all | Which sensor chip keys to show on tiles. |
+
+### Sensor-chip keys
+
+- **Electrical:** `power`, `apparent_power`, `reactive_power`, `power_factor`,
+  `frequency`, `energy`, `voltage`, `current`
+- **Environmental:** `temperature`, `humidity`, `illuminance`, `co2`, `gas`
+- **Device:** `battery`, `rssi`, `uptime`, `ip`, `ssid`, `fw_version`, `mac`,
+  `cloud`, `mqtt`, `eth`
+- **Alerts:** `motion`, `door`, `flood`, `smoke`, `vibration`, `overpower`,
+  `overtemp`
+
+### The resolution cascade
+
+Most style/layout options can be set at several scopes; the effective value
+resolves in order: **device → device-type (profile) → area/room → view → global →
+built-in profile default**, with viewer-local (`localStorage`) overrides on top for
+non-persisted "what to show" tweaks.
+
+---
+
+## 7. How it works
+
+### Reading Home Assistant state
+
+The card never talks to a backend of its own — it uses the `hass` object Lovelace
+passes in. `getAllDevices(hass)` in `helpers.ts`:
+
+1. Iterates `hass.entities` (the entity **registry**, indexed and fast — not the
+   `states` array) and keeps only device-like domains (`switch`, `light`, `cover`,
+   `valve`, `climate`, `sensor`, `binary_sensor`, `fan`, `lock`, `media_player`,
+   `vacuum`, `alarm_control_panel`, `humidifier`, `water_heater`, `update`,
+   `button`, `number`, `select`, `text`, `camera`, `event`; `device_tracker` is
+   deliberately excluded).
+2. **Filters to Shelly:** keeps only entities whose platform is `shelly` or
+   `bthome` (the latter for Shelly BLU BLE sensors that report through HA's BTHome
+   integration). Non-Shelly BTHome vendors are skipped.
+3. Groups entities under their device (`hass.devices`), resolving area name via
+   `hass.areas`, and extracts the device IP from `configuration_url`.
+4. Attaches live state from `hass.states[entity_id]` (O(1) lookup).
+5. **Merges sub-devices** into their parent when they are the same physical unit
+   (via `via_device_id` + matching config-URL host, e.g. a Shelly 2.5 that
+   registers per-channel sub-devices).
+
+### Profiles, grouping and rendering
+
+- `getDeviceProfile()` derives a **profile** (relay/plug/dimmer/rgb/climate/cover/
+  valve/energy/sensor/input/uni/wall_display/generic) and **generation** from the
+  device's entity domains and Shelly model, producing a badge label. Profiles are
+  cached per device.
+- Devices are grouped into collapsible **area** sections (plus any `name_groups`
+  and a Favourites section), filtered/sorted per the config and active view.
+- Each device renders as a tile in the resolved **tile style**. With
+  `smart_tile_styles`, each profile maps to a default style (relay/plug/energy →
+  `power-monitor`, dimmer/rgb → `light-control`, climate/wall_display →
+  `climate-control`, cover → `cover-control`, sensor → `sensor-card`, input →
+  `scene-button`); otherwise the adaptive `default` block tile is used with the
+  per-profile block order.
+- **Sensor chips** are chosen per profile (overridable by the `sensors` cascade).
+  Controls call HA services through `hass` (toggle, set brightness, cover/valve
+  position, climate setpoint, etc.).
+- **Graphs** are fetched from HA history for the selected `graph_sensors` over
+  `graph_hours`, downsampled and drawn as SVG sparklines, with fetch throttling and
+  a manual refresh.
+
+### Shelly specifics
+
+- Discovery is Shelly/BTHome only (above).
+- Handles all Shelly device classes and generations, multi-channel relays,
+  Shelly BLU sensors, TRV/valve, Wall Display, EM/3EM energy monitors, i3/i4
+  inputs, UNI, and **virtual components** (select/number/button/text/boolean) via
+  the `virtual_controls` tile block.
+- The header stat chips aggregate across the discovered Shelly fleet (online/
+  offline counts, summed power/energy, average temp/humidity/light/RSSI, alert and
+  firmware-update counts) and open drill-down lists.
+
+---
+
+## 8. Development & deployment
+
+### Build
+
+- **Toolchain:** Rollup (`rollup.config.mjs`) + `@rollup/plugin-typescript` +
+  node-resolve + terser. Entry `src/index.ts` → `dist/ha-device-dashboard.js`
+  (`format: es`, sourcemap only in watch/dev). `tsconfig.json` targets ES2020,
+  uses experimental decorators (Lit), strict mode.
+- **Scripts** (`package.json`):
+  - `npm run build` — production bundle.
+  - `npm run watch` — rebuild on change (also auto-deploys, see below).
+  - `npm run typecheck` — `tsc --noEmit`.
+  - `npm run lint` — ESLint over `src`.
+- **Runtime deps:** `lit` ^3.1, `custom-card-helpers` ^1.9.
+- `src/index.ts` prints a `BUILD_TAG` (e.g. `mobile-editor-2026-07-10f`) to the
+  browser console so you can confirm which bundle HA actually loaded.
+
+### Deploying to Home Assistant
+
+The repo targets an HA config mounted on the Windows `Z:` drive:
+
+- **`rollup.config.mjs` `autoDeploy` plugin** — after every build, copies the
+  bundle to `Z:/www/community/ha-device-dashboard/ha-device-dashboard.js` (silently
+  skipped if `Z:` isn't mapped). So `npm run build`/`watch` deploys automatically.
+- **`sync-to-ha.ps1`** — runs `npm run build`, ensures the dest dir, copies the
+  bundle to `Z:\www\community\ha-device-dashboard\`, and reminds you to
+  hard-refresh HA.
+- **`update.ps1`** — one-command update from Git: `git fetch` + `git reset --hard
+  origin/<branch>` (defaults to `master`) to avoid the committed-`dist` merge
+  conflict, then rebuilds and reports the deployed build tag.
+- **`create-ha-token.ps1`** — one-time helper to store a long-lived HA token in a
+  gitignored `.ha-token` for cache-busting.
+
+Because it deploys under `www/community/...`, the Lovelace resource URL is
+`/local/community/ha-device-dashboard/ha-device-dashboard.js` (Type: JavaScript
+Module).
+
+### Relationship to the `device_pulse` backend
+
+The card is **self-contained and does not depend on** the separate `device_pulse`
+("Shelly Devices") HA integration — a source search for `device_pulse` /
+`shelly_devices` in `src/` returns no matches. All device and online/offline counts
+the card shows are computed in-browser from the HA registries and live states. The
+two projects can coexist on the same HA instance but are independent.
+
+### Docs & offline tools
+
+`docs/card-reference.json` is the single machine-readable model of the config
+surface. `docs/tools/` holds self-contained offline HTML designers
+(`reference.html`, `config-builder.html`, `profile-tiles.html`,
+`editor-layout.html`, `style-presets.html`) that read that model. `docs/shelly-
+reference/` contains Shelly API / HA-integration reference notes.
+
+---
+
+## 9. Known limitations / roadmap
+
+- **Shelly/BTHome-only discovery.** Despite the "universal device fleet" marketing
+  string in the card picker, `getAllDevices` currently filters to the `shelly` and
+  `bthome` platforms — other integrations (ZHA, Hue, ESPHome, Matter) are not
+  discovered yet.
+- **README vs. types drift.** The top-level option table in `README.md` still lists
+  a few legacy keys (`include_all`, `hide_shelly`, `view_mode`, `tile_click`,
+  `show_glow`) that are not in the v2 `HADeviceDashboardConfig`. Use
+  `src/types.ts` / `docs/card-reference.json` as the source of truth.
+- **Editor refactor in progress.** The editor is migrating to the data-driven
+  `EDITOR_LAYOUT`; only the Graphs & Sensors tab is fully wired to it, with other
+  tabs still rendered from bespoke methods (documented as future phases).
+- **Docs tools duplicate the model.** The `docs/tools/*.html` designers inline
+  their own copy of `card-reference.json` and are kept in sync by hand; a build
+  step to generate them from the JSON is noted as future work.
+- **Performance on large fleets** is handled by render throttling/caching, but very
+  large HA instances with heavy Shelly power-sensor churn remain the main scaling
+  concern the card actively guards against.

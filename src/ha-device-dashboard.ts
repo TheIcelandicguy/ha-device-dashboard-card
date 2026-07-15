@@ -21,8 +21,8 @@ import { renderLightControlTile } from './tiles/light-control';
 import { renderBlockTile } from './tiles/block-tile';
 import { renderDetailSheet } from './detail/detail-sheet';
 import {
-  getAllDevices, getDeviceProfile, migrateConfig,
-  PROFILE_DEFAULT_BLOCKS, normalizeTileLayout, flattenTileLayout, PROFILE_DEFAULT_SENSORS, DEFAULT_GRAPH_SENSORS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, PROFILE_LABELS, BLOCK_LABELS, GRAPH_DC_LABELS, GRAPH_SENSOR_DEFS,
+  getAllDevices, getDeviceProfile, migrateConfig, factoryLook,
+  PROFILE_DEFAULT_BLOCKS, normalizeTileLayout, flattenTileLayout, PROFILE_DEFAULT_SENSORS, DEFAULT_GRAPH_SENSORS, profileDefaultTileStyle, PROFILE_LABELS, BLOCK_LABELS, GRAPH_DC_LABELS, GRAPH_SENSOR_DEFS,
   HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, downsamplePoints, normalizeGraphKey,
   formatPower, formatEnergy, formatVoltage, formatCurrent, formatTemp,
   formatUptime, formatApparentPower, formatReactivePower,
@@ -108,7 +108,9 @@ export class HADeviceDashboard extends LitElement {
   }
 
   static getStubConfig(): HADeviceDashboardConfig {
-    return { type: 'custom:ha-device-dashboard' };
+    // Materialise the factory default look so a fresh card has an explicit,
+    // revertible baseline (visually identical to the implicit runtime defaults).
+    return { type: 'custom:ha-device-dashboard', ...factoryLook() };
   }
 
   static getLayoutOptions() {

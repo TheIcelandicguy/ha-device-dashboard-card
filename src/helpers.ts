@@ -1,7 +1,7 @@
 import { HomeAssistant } from 'custom-card-helpers';
 import {
   HADevice, HAEntity, DeviceProfileResult, DeviceProfile, DeviceGen,
-  TileBlockId, TileStyle, TileLayout, TileRow,
+  TileBlockId, TileStyle, TileLayout, TileRow, HADeviceDashboardConfig,
 } from './types';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -384,11 +384,11 @@ export const BLOCK_LABELS: Record<TileBlockId, string> = {
 };
 
 /**
- * Classifies any HA device into a DeviceProfileResult.
- * Type is derived from entity domains (most reliable).
- * Generation is derived from the model string (Shelly only).
+ * Domain-based device type detection — the universal, integration-agnostic core.
+ * Returns the profile implied purely by the device's entity domains + attributes,
+ * before any provider-specific refinement (e.g. Shelly model reclassification).
  */
-export function getDeviceProfile(device: HADevice): DeviceProfileResult {
+export function detectTypeByDomain(device: HADevice): DeviceProfile {
   const modelLower = (device.model ?? '').toLowerCase();
   const domains = new Set(device.entities.map(e => e.domain));
 
@@ -466,27 +466,90 @@ export function getDeviceProfile(device: HADevice): DeviceProfileResult {
     else type = 'sensor';
   }
 
-  // ── Model refinement (Shelly) ────────────────────────────────────────────────
-  // The model string is unambiguous, so use it to reclassify the "weak"
-  // entity-signature cluster (fixes 1PM/2PM read as plug, i4 as sensor, etc.).
-  // Strong entity signals (cover/climate/valve/dimmer/rgb/wall_display) reflect
-  // the device's actual configuration and are left untouched.
-  const WEAK_TYPES = new Set<DeviceProfile>(['relay', 'plug', 'energy', 'sensor', 'input', 'uni', 'generic']);
-  if (device.isShelly && WEAK_TYPES.has(type)) {
-    const modelType = matchShellyModel(device.model);
-    if (modelType) type = modelType;
+  return type;
+}
+
+/**
+ * Entity-signature clusters whose type is "weak" enough that an unambiguous model
+ * string should be allowed to reclassify them. Strong signals (cover/climate/valve/
+ * dimmer/rgb/wall_display) reflect the device's actual config and are left alone.
+ */
+const WEAK_TYPES = new Set<DeviceProfile>(['relay', 'plug', 'energy', 'sensor', 'input', 'uni', 'generic']);
+
+/**
+ * A ProfileProvider owns device classification for a family of devices. The
+ * registry (`PROFILE_PROVIDERS`) is consulted most-specific-first; the first
+ * provider whose `matches()` returns true classifies the device. `GenericProvider`
+ * is the catch-all and matches everything.
+ *
+ * This is the Phase 0 seam from docs/universal-engine-plan.md: it lets Shelly
+ * devices keep full-fidelity detection (model reclassification + hardware
+ * generation) while non-Shelly devices route to the generic path (and, in later
+ * phases, ecosystem-specific providers). The mode flag gates discovery breadth,
+ * NOT provider routing — a Shelly is always handled by ShellyProvider.
+ */
+export interface ProfileProvider {
+  id: string;
+  /** True when this provider owns the given device. */
+  matches(device: HADevice): boolean;
+  /** Classify the device into a DeviceProfileResult. */
+  detect(device: HADevice): DeviceProfileResult;
+}
+
+/**
+ * Shelly / Shelly BLU. Refines the domain type via the (unambiguous) model string
+ * and derives the hardware generation — the full-fidelity path preserved verbatim
+ * from the original engine.
+ */
+export const ShellyProvider: ProfileProvider = {
+  id: 'shelly',
+  matches: (device) => device.isShelly,
+  detect: (device) => {
+    let type = detectTypeByDomain(device);
+    if (WEAK_TYPES.has(type)) {
+      const modelType = matchShellyModel(device.model);
+      if (modelType) type = modelType;
+    }
+    return {
+      type,
+      gen: detectShellyGen(device.model ?? ''),
+      label: PROFILE_LABELS[type],
+      integration: device.integration,
+    };
+  },
+};
+
+/**
+ * Catch-all fallback — pure domain classification, no model refinement, generation
+ * 'other'. Registered last; matches every device.
+ */
+export const GenericProvider: ProfileProvider = {
+  id: 'generic',
+  matches: () => true,
+  detect: (device) => {
+    const type = detectTypeByDomain(device);
+    return {
+      type,
+      gen: 'other',
+      label: PROFILE_LABELS[type],
+      integration: device.integration,
+    };
+  },
+};
+
+/** Ordered most-specific-first. GenericProvider must remain last (catch-all). */
+export const PROFILE_PROVIDERS: ProfileProvider[] = [ShellyProvider, GenericProvider];
+
+/**
+ * Classifies any HA device into a DeviceProfileResult by dispatching to the first
+ * matching ProfileProvider. Output for Shelly devices is identical to the pre-seam
+ * engine; non-Shelly devices (universal mode) fall to GenericProvider.
+ */
+export function getDeviceProfile(device: HADevice): DeviceProfileResult {
+  for (const p of PROFILE_PROVIDERS) {
+    if (p.matches(device)) return p.detect(device);
   }
-
-  // ── Generation (Shelly only) ─────────────────────────────────────────────────
-
-  const gen = device.isShelly ? detectShellyGen(device.model ?? '') : 'other';
-
-  return {
-    type,
-    gen,
-    label: PROFILE_LABELS[type],
-    integration: device.integration,
-  };
+  return GenericProvider.detect(device);
 }
 
 /**
@@ -804,3 +867,35 @@ export const HEADER_CHIP_DEFS: Array<{
 
 /** Chips shown when `header_chips` is not configured. */
 export const DEFAULT_HEADER_CHIPS = ['online', 'offline', 'power', 'alerts'];
+
+/**
+ * The hard-coded factory default look — the single source of truth for the
+ * first-run appearance and the target of the editor's "Reset look" / "Reset
+ * everything" actions (docs/universal-engine-plan.md).
+ *
+ * These mirror the card's implicit runtime defaults exactly, so seeding a fresh
+ * card from them is visually identical to today. It is a FROZEN, independent
+ * snapshot on purpose: it is applied by value only at first-run and explicit
+ * reset — never live-merged on load — so a user's later changes are preserved and
+ * a future version can ship a new default look without mutating existing configs.
+ */
+export const FACTORY_DEFAULTS: Readonly<Partial<HADeviceDashboardConfig>> = Object.freeze({
+  theme:             'warm_dusk',   // mirrors DEFAULT_THEME in themes.ts
+  tile_style:        'default',
+  tile_size:         'md',
+  columns:           3,
+  sort_by:           'name',
+  smart_tile_styles: false,
+  show_graphs:       true,
+  graph_hours:       24,
+  header_chips:      DEFAULT_HEADER_CHIPS,
+});
+
+/**
+ * A fresh, deeply-independent copy of {@link FACTORY_DEFAULTS}, safe to spread into
+ * or mutate on a live config (the frozen source's nested array is never shared).
+ * Used by first-run seeding and the reset actions.
+ */
+export function factoryLook(): Partial<HADeviceDashboardConfig> {
+  return { ...FACTORY_DEFAULTS, header_chips: [...(FACTORY_DEFAULTS.header_chips ?? [])] };
+}
