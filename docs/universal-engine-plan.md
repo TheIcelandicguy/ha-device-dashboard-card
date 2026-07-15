@@ -93,9 +93,23 @@ Each phase ships independently and is reversible.
     All-Entities list now groups by tier (config/diagnostic settle below as
     secondary sub-groups). Zero Shelly tile-face change; foundation ready for
     Phase 2's non-Shelly devices, which lack the Shelly chip curation.
-- **Phase 2 — Universal discovery behind `mode: universal`.** Drop the filter when
-  the flag is on; add ecosystem providers, `lock`/`media` profiles, integration
-  badge. The proving milestone.
+- **Phase 2 — Universal discovery behind `mode: universal`.** ✅ *Done.*
+  - `mode?: 'shelly' | 'universal'` config flag (default/undefined = shelly, i.e.
+    today's behaviour). `getAllDevices(hass, {universal})` skips the platform filter
+    only when the flag is on.
+  - New `lock` + `media` profiles (type, label, blocks, detection, lock→battery
+    chip). Ecosystem *provider classes* were intentionally NOT added — GenericProvider
+    already classifies zwave/zigbee/matter by domain, and the badge comes from the
+    integration label. Added `zwave_js`→'Z-Wave', `zha`→'Zigbee' labels.
+  - **Real-data finding (2728-entity instance):** classification works (media_player→
+    media, non-Shelly lights→dimmer/rgb, device_tracker excluded), but universal mode
+    is a FIREHOSE — it surfaces routers, PCs, browsers, cameras, 173 update entities.
+    A few domains (vacuum/fan/siren/water_heater) fall to `generic` (no detect branch
+    yet). **Before Phase 5 can flip the default, universal mode needs scoping**
+    (area/integration/domain filters or a "controllable devices only" default). This
+    is now the top input to the editor phase. Confirms the flag-first sequencing.
+  - Note: the `climate` badge label is still Shelly's 'TRV'; a generic thermostat
+    would mislabel. Cosmetic; revisit with per-integration labels.
 - **Phase 3 — Delegation fallback.** `loadCardHelpers()` for unstyled domains only.
 - **Phase 4 — Editor universal support + reset buttons.** The heavy one; builds
   incrementally.

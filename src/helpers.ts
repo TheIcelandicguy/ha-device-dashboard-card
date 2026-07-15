@@ -22,8 +22,10 @@ const DEVICE_DOMAINS = new Set([
  * Returns all Shelly devices, each with all their entities attached.
  */
 export function getAllDevices(
-  hass: HomeAssistant
+  hass: HomeAssistant,
+  opts: { universal?: boolean } = {},
 ): HADevice[] {
+  const universal = opts.universal === true;
   const entityRegistry: Record<string, any> = (hass as any).entities ?? {};
   const deviceRegistry: Record<string, any> = (hass as any).devices ?? {};
   const areaRegistry: Record<string, any>   = (hass as any).areas   ?? {};
@@ -39,9 +41,9 @@ export function getAllDevices(
     if (!DEVICE_DOMAINS.has(domain)) continue;
 
     const platform: string = (regEntry.platform ?? '').toLowerCase();
-    // Shelly integration, plus BTHome — Shelly BLU sensors (H&T, motion, door…)
-    // report through HA's BTHome integration, not the Shelly one.
-    if (platform !== 'shelly' && platform !== 'bthome') continue;
+    // Shelly mode: keep only Shelly + BTHome (Shelly BLU sensors report through
+    // HA's BTHome integration, not the Shelly one). Universal mode: keep all.
+    if (!universal && platform !== 'shelly' && platform !== 'bthome') continue;
 
     const deviceId: string = regEntry.device_id;
 
@@ -53,8 +55,9 @@ export function getAllDevices(
       const ipMatch = configUrl.match(/https?:\/\/((?:\d{1,3}\.){3}\d{1,3})/);
       const mfr: string = (devInfo.manufacturer ?? '').toLowerCase();
       const isShelly = mfr.includes('shelly') || platform === 'shelly';
-      // BTHome devices from other vendors (Tuya, generic BLE) aren't ours — skip.
-      if (platform === 'bthome' && !isShelly) continue;
+      // In Shelly mode, BTHome devices from other vendors (Tuya, generic BLE)
+      // aren't ours — skip. In universal mode they're legitimate devices.
+      if (!universal && platform === 'bthome' && !isShelly) continue;
 
       const areaId = devInfo.area_id ?? regEntry.area_id;
       const area = areaId ? (areaRegistry[areaId]?.name as string | undefined) : undefined;
@@ -158,6 +161,8 @@ export const PROFILE_LABELS: Record<DeviceProfile, string> = {
   climate:      'TRV',
   cover:        'Roller',
   valve:        'Valve',
+  lock:         'Lock',
+  media:        'Media',
   energy:       'Energy',
   sensor:       'Sensor',
   input:        'Input',
@@ -312,6 +317,8 @@ export const PROFILE_DEFAULT_BLOCKS: Record<DeviceProfile, TileBlockId[]> = {
   climate:      ['name_row', 'sensors', 'trv_control', 'virtual_controls', 'badges'],
   cover:        ['name_row', 'cover_controls', 'sensors', 'virtual_controls', 'badges'],
   valve:        ['name_row', 'sensors', 'valve_controls', 'virtual_controls', 'badges'],
+  lock:         ['name_row', 'sensors', 'virtual_controls', 'badges'],
+  media:        ['name_row', 'sensors', 'virtual_controls', 'badges'],
   energy:       ['name_row', 'sensors', 'graph', 'virtual_controls', 'badges'],
   sensor:       ['name_row', 'sensors', 'graph', 'virtual_controls', 'badges'],
   input:        ['name_row', 'sensors', 'input_channels', 'virtual_controls', 'badges'],
@@ -364,6 +371,7 @@ export const PROFILE_DEFAULT_SENSORS: Partial<Record<DeviceProfile, string[]>> =
   dimmer:       ['power', 'energy', 'temperature', 'overtemp'],
   rgb:          ['power', 'energy'],
   cover:        ['power', 'energy', 'temperature'],
+  lock:         ['battery'],
   climate:      ['temperature', 'humidity', 'battery'],
   wall_display: ['temperature', 'humidity', 'illuminance'],
   valve:        ['temperature'],
@@ -419,6 +427,10 @@ export function detectTypeByDomain(device: HADevice): DeviceProfile {
     type = 'cover';
   } else if (domains.has('valve')) {
     type = 'valve';
+  } else if (domains.has('lock')) {
+    type = 'lock';
+  } else if (domains.has('media_player')) {
+    type = 'media';
   } else if (domains.has('light')) {
     const hasColorMode = device.entities.some(e => {
       if (e.domain !== 'light') return false;
@@ -586,7 +598,8 @@ export function detectShellyGen(model: string): DeviceGen {
 /** Display label for known integration platforms */
 export const INTEGRATION_LABELS: Record<string, string> = {
   shelly:         'Shelly',
-  zha:            'ZHA',
+  zha:            'Zigbee',
+  zwave_js:       'Z-Wave',
   mqtt:           'MQTT',
   z2m:            'Z2M',
   zigbee2mqtt:    'Z2M',

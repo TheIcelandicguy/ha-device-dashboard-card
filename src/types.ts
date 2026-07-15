@@ -18,6 +18,8 @@ export type DeviceProfile =
   | 'climate'       // Shelly TRV
   | 'cover'         // Shelly 2.5 blind/shutter/roller
   | 'valve'         // Shelly Valve
+  | 'lock'          // any lock-domain device (Z-Wave / Zigbee / Matter locks)
+  | 'media'         // any media_player device (speakers, TVs, receivers)
   // Monitoring only
   | 'energy'        // Shelly EM/3EM
   | 'sensor'        // Shelly H&T, Smoke, Flood, Motion, Door/Window
@@ -371,6 +373,11 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   default_view?: string;
 
   // ── Device discovery ──────────────────────────────────────────
+  /** Discovery breadth. 'shelly' (default/undefined) discovers only Shelly +
+   *  BTHome devices — identical to the card's original behaviour. 'universal'
+   *  discovers every HA device; Shelly devices still get full-fidelity Shelly
+   *  detection (see the ProfileProvider registry in helpers.ts). */
+  mode?: 'shelly' | 'universal';
   /** Area filter. undefined = all; [] = none; ['Eldhús'] = specific */
   areas?: string[];
   /** Extra groups built from device-name prefixes. A device whose name starts

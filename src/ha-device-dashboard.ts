@@ -267,7 +267,7 @@ export class HADeviceDashboard extends LitElement {
     this._cacheConfigRef   = this._config;
     this._profileCache.clear();
 
-    let devices = getAllDevices(this.hass);
+    let devices = getAllDevices(this.hass, { universal: this._config.mode === 'universal' });
 
     // Area filter — undefined = show ALL rooms, [] = show nothing, [...] = show listed
     const areaFilter = this._config.areas;
