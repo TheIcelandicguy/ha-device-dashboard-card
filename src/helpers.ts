@@ -208,6 +208,32 @@ const RECOGNIZED_SENSOR_DCS = new Set([
   'smoke', 'vibration', 'occupancy',
 ]);
 
+/** Controllable domains this card renders with its own tiles — never delegated. */
+export const NATIVE_CONTROL_DOMAINS = new Set(['switch', 'light', 'cover', 'climate', 'valve']);
+
+/** Native HA tile `features` per delegated domain (Phase 3 fallback rendering). */
+export const DELEGATE_FEATURES: Record<string, Array<Record<string, unknown>>> = {
+  media_player:        [{ type: 'media-player-playback' }, { type: 'media-player-volume-slider' }],
+  lock:                [{ type: 'lock-commands' }],
+  fan:                 [{ type: 'fan-speed' }],
+  vacuum:              [{ type: 'vacuum-commands' }],
+  humidifier:          [{ type: 'humidifier-toggle' }, { type: 'humidifier-modes' }],
+  water_heater:        [{ type: 'water-heater-operation-modes' }],
+  lawn_mower:          [{ type: 'lawn-mower-commands' }],
+  siren:               [{ type: 'toggle' }],
+  alarm_control_panel: [{ type: 'alarm-modes' }],
+};
+
+/** Primary entities whose domain this card doesn't render natively — handed to a
+ *  native HA element by the `delegated_controls` block (see hdd-delegated). Returns
+ *  [] for devices whose controls we already render (the common case). */
+export function delegatableEntities(device: HADevice): HAEntity[] {
+  return device.entities.filter(e =>
+    entityTier(e) === 'primary' &&
+    !NATIVE_CONTROL_DOMAINS.has(e.domain) &&
+    e.domain in DELEGATE_FEATURES);
+}
+
 const deviceHasControllable = (d: HADevice): boolean =>
   d.entities.some(e => entityTier(e) === 'primary' && CONTROLLABLE_DOMAINS.has(e.domain));
 
@@ -384,21 +410,21 @@ export function setBlockInLayout(
  * Users can override this per-card, per-area, or per-device.
  */
 export const PROFILE_DEFAULT_BLOCKS: Record<DeviceProfile, TileBlockId[]> = {
-  relay:        ['name_row', 'relay_channels', 'sensors', 'graph', 'power_bar', 'virtual_controls', 'badges'],
-  plug:         ['name_row', 'sensors', 'graph', 'power_bar', 'virtual_controls', 'badges'],
-  dimmer:       ['name_row', 'dimmer', 'sensors', 'graph', 'virtual_controls', 'badges'],
-  rgb:          ['name_row', 'dimmer', 'sensors', 'graph', 'virtual_controls', 'badges'],
-  climate:      ['name_row', 'sensors', 'trv_control', 'virtual_controls', 'badges'],
-  cover:        ['name_row', 'cover_controls', 'sensors', 'virtual_controls', 'badges'],
-  valve:        ['name_row', 'sensors', 'valve_controls', 'virtual_controls', 'badges'],
-  lock:         ['name_row', 'sensors', 'virtual_controls', 'badges'],
-  media:        ['name_row', 'sensors', 'virtual_controls', 'badges'],
-  energy:       ['name_row', 'sensors', 'graph', 'virtual_controls', 'badges'],
-  sensor:       ['name_row', 'sensors', 'graph', 'virtual_controls', 'badges'],
-  input:        ['name_row', 'sensors', 'input_channels', 'virtual_controls', 'badges'],
-  uni:          ['name_row', 'input_channels', 'sensors', 'virtual_controls', 'badges'],
-  wall_display: ['name_row', 'sensors', 'graph', 'trv_control', 'virtual_controls', 'badges'],
-  generic:      ['name_row', 'sensors', 'virtual_controls', 'badges'],
+  relay:        ['name_row', 'relay_channels', 'sensors', 'graph', 'power_bar', 'virtual_controls', 'delegated_controls', 'badges'],
+  plug:         ['name_row', 'sensors', 'graph', 'power_bar', 'virtual_controls', 'delegated_controls', 'badges'],
+  dimmer:       ['name_row', 'dimmer', 'sensors', 'graph', 'virtual_controls', 'delegated_controls', 'badges'],
+  rgb:          ['name_row', 'dimmer', 'sensors', 'graph', 'virtual_controls', 'delegated_controls', 'badges'],
+  climate:      ['name_row', 'sensors', 'trv_control', 'virtual_controls', 'delegated_controls', 'badges'],
+  cover:        ['name_row', 'cover_controls', 'sensors', 'virtual_controls', 'delegated_controls', 'badges'],
+  valve:        ['name_row', 'sensors', 'valve_controls', 'virtual_controls', 'delegated_controls', 'badges'],
+  lock:         ['name_row', 'sensors', 'virtual_controls', 'delegated_controls', 'badges'],
+  media:        ['name_row', 'sensors', 'virtual_controls', 'delegated_controls', 'badges'],
+  energy:       ['name_row', 'sensors', 'graph', 'virtual_controls', 'delegated_controls', 'badges'],
+  sensor:       ['name_row', 'sensors', 'graph', 'virtual_controls', 'delegated_controls', 'badges'],
+  input:        ['name_row', 'sensors', 'input_channels', 'virtual_controls', 'delegated_controls', 'badges'],
+  uni:          ['name_row', 'input_channels', 'sensors', 'virtual_controls', 'delegated_controls', 'badges'],
+  wall_display: ['name_row', 'sensors', 'graph', 'trv_control', 'virtual_controls', 'delegated_controls', 'badges'],
+  generic:      ['name_row', 'sensors', 'virtual_controls', 'delegated_controls', 'badges'],
 };
 
 /**
@@ -477,6 +503,7 @@ export const BLOCK_LABELS: Record<TileBlockId, string> = {
   relay_channels:   'Relay channels',
   power_bar:        'Power bar',
   virtual_controls: 'Virtual controls',
+  delegated_controls: 'Native controls',
   badges:           'Type & gen badges',
 };
 

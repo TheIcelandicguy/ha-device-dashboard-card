@@ -1,5 +1,6 @@
 import './ha-device-dashboard';
 import './editor';
+import './tiles/delegated-control';
 
 // Build marker — lets you confirm in the browser console which bundle HA loaded.
 // Bump the tag on each deploy while iterating on the mobile editor layout.

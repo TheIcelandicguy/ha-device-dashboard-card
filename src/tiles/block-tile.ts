@@ -1,7 +1,7 @@
 import { html, nothing, TemplateResult } from 'lit';
 import { styleMap } from 'lit/directives/style-map.js';
 import { renderAnimSvg } from '../anim-icons';
-import { formatPower, getIntegrationLabel, isPrivateIp } from '../helpers';
+import { formatPower, getIntegrationLabel, isPrivateIp, delegatableEntities, DELEGATE_FEATURES } from '../helpers';
 import type { EntityAnimationType, TileBlockId, HassAttrs } from '../types';
 import type { TileCtx, SensorChip } from './tile-context';
 
@@ -359,6 +359,19 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
           </div>
         </div>
       ` : html``;
+    }
+
+    case 'delegated_controls': {
+      // Native HA controls for long-tail domains our own tiles don't render
+      // (lock, media_player, fan, vacuum, …). No-op for the common device.
+      const dels = delegatableEntities(device);
+      if (!dels.length) return html``;
+      return html`
+        <div class="tile-delegated" @click=${(e: Event) => e.stopPropagation()}>
+          ${dels.map(e => html`
+            <hdd-delegated .hass=${hass} .entity=${e.entity_id} .features=${DELEGATE_FEATURES[e.domain]}></hdd-delegated>
+          `)}
+        </div>`;
     }
 
     case 'power_bar':

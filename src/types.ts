@@ -60,6 +60,7 @@ export type TileBlockId =
   | 'relay_channels'  // per-channel toggles for multi-channel relays
   | 'power_bar'       // mini usage bar at tile bottom
   | 'virtual_controls' // virtual component controls (select, number, button, text, boolean)
+  | 'delegated_controls' // native HA controls for long-tail domains (lock, media, fan, vacuum …)
   | 'badges';         // type badge + gen badge + UI link
 
 /** One row of the tile face. Two or more blocks in a row sit side by side. */

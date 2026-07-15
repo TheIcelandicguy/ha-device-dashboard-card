@@ -1095,6 +1095,9 @@ export const mainCss = css`
     /* ── Virtual controls ── */
     .tile-virtuals { display:flex; flex-direction:column; gap:4px; }
 
+    /* Delegated (native HA) controls for long-tail domains — Phase 3 fallback */
+    .tile-delegated { display:flex; flex-direction:column; gap:6px; margin-top:2px; }
+
     .virt-row { display:flex; align-items:center; gap:8px; padding:4px 8px; border-radius:7px; border:1px solid rgba(255,255,255,.06); background:rgba(255,255,255,.03); }
 
     .virt-lbl { font-size:11px; color:var(--sc-text-muted); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

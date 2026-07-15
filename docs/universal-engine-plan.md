@@ -142,7 +142,19 @@ Each phase ships independently and is reversible.
     e.g. `mobile_app`). Battery devices are kept — filtering is by integration.
   - Re-verified live: Display wc → `Display`/`Shelly`; noise integrations gone;
     94 clean devices. Resource version bumped (service worker pins by `?v=`).
-- **Phase 3 — Delegation fallback.** `loadCardHelpers()` for unstyled domains only.
+- **Phase 3 — Delegation fallback.** ✅ *Done.* Native HA controls for the long-tail
+  controllable domains our tiles don't hand-roll — never for climate/cover/light/
+  switch/valve (those keep our renderers).
+  - `hdd-delegated` LitElement (`tiles/delegated-control.ts`): lazily builds a native
+    tile via `loadCardHelpers().createCardElement({type:'tile', features})`, re-pushes
+    `.hass`, dissolves the native card chrome (CSS vars) so it blends into our tile.
+  - `delegated_controls` tile block (added to every profile's default order, a no-op
+    when there's nothing to delegate — like `virtual_controls`). `delegatableEntities()`
+    + `DELEGATE_FEATURES` select primary entities in lock/media_player/fan/vacuum/
+    siren/humidifier/water_heater/lawn_mower/alarm_control_panel and their features.
+  - Verified live: 42 delegated controls, 42/42 rendering native controls (36 media
+    players w/ playback+volume, 4 fans, 1 vacuum, 1 water_heater). The Shelly Wall
+    Display now leads with our sensor graphs then embeds native media transport.
 - **Phase 4 — Editor universal support + reset buttons.** The heavy one; builds
   incrementally.
 - **Phase 5 — Flip the default.** Make universal default; update picker / README /
