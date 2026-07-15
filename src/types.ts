@@ -378,6 +378,23 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
    *  discovers every HA device; Shelly devices still get full-fidelity Shelly
    *  detection (see the ProfileProvider registry in helpers.ts). */
   mode?: 'shelly' | 'universal';
+  /** Universal-mode scope, taming the "every entity in HA" firehose. Ignored in
+   *  shelly mode.
+   *  - 'devices' (default): actuators + devices with a recognised sensor
+   *    (temperature/power/motion/…). Drops routers, PCs, browsers, pure-diagnostic
+   *    integrations.
+   *  - 'controllable': only devices with a controllable entity.
+   *  - 'all': every discovered device (the raw firehose). */
+  universal_scope?: 'all' | 'devices' | 'controllable';
+  /** Universal-mode platform allow-list (e.g. ['zwave_js','matter','shelly']).
+   *  When set, only these integrations are discovered. */
+  include_integrations?: string[];
+  /** Universal-mode platform deny-list (e.g. ['mobile_app','systemmonitor']). */
+  exclude_integrations?: string[];
+  /** Universal-mode entity-domain allow-list. When set, only these domains. */
+  include_domains?: string[];
+  /** Universal-mode entity-domain deny-list (e.g. ['update','device_tracker']). */
+  exclude_domains?: string[];
   /** Area filter. undefined = all; [] = none; ['Eldhús'] = specific */
   areas?: string[];
   /** Extra groups built from device-name prefixes. A device whose name starts

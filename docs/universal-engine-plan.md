@@ -110,6 +110,23 @@ Each phase ships independently and is reversible.
     is now the top input to the editor phase. Confirms the flag-first sequencing.
   - Note: the `climate` badge label is still Shelly's 'TRV'; a generic thermostat
     would mislabel. Cosmetic; revisit with per-integration labels.
+- **Phase 2.5 — Universal scoping (anti-firehose).** ✅ *Done.* Added because the
+  Phase 2 real-data finding showed universal mode surfaces routers/PCs/browsers.
+  - `universal_scope?: 'all' | 'devices' | 'controllable'` (default `'devices'`):
+    `devices` keeps actuators + devices with a recognised sensor (temp/power/motion/
+    …), dropping routers/PCs whose only sensors are data-rate/diagnostic;
+    `controllable` keeps actuators only; `all` is the raw firehose.
+  - Explicit `include_integrations` / `exclude_integrations` (platform allow/deny)
+    and `include_domains` / `exclude_domains` (entity-domain allow/deny). All gated
+    to universal mode — shelly mode is untouched.
+  - Implemented as `deviceInUniversalScope()` + `CONTROLLABLE_DOMAINS` /
+    `RECOGNIZED_SENSOR_DCS`, threaded through `getAllDevices` opts.
+  - Note: fan/vacuum/siren/etc. are kept (controllable) but still classify to a
+    basic profile — their *control* rendering is Phase 3 (delegation) territory,
+    same as lock/media.
+  - Live visual verification deferred: browser extension was offline and HA's
+    server-side screenshot beta is disabled. A hidden test dashboard `uv-verify`
+    (card in universal mode) is left for a hard-refresh eyeball, then deletion.
 - **Phase 3 — Delegation fallback.** `loadCardHelpers()` for unstyled domains only.
 - **Phase 4 — Editor universal support + reset buttons.** The heavy one; builds
   incrementally.

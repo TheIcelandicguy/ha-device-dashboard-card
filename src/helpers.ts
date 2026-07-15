@@ -23,9 +23,21 @@ const DEVICE_DOMAINS = new Set([
  */
 export function getAllDevices(
   hass: HomeAssistant,
-  opts: { universal?: boolean } = {},
+  opts: {
+    universal?: boolean;
+    scope?: 'all' | 'devices' | 'controllable';
+    includeIntegrations?: string[];
+    excludeIntegrations?: string[];
+    includeDomains?: string[];
+    excludeDomains?: string[];
+  } = {},
 ): HADevice[] {
   const universal = opts.universal === true;
+  // Scoping filters apply only in universal mode (shelly mode is already scoped).
+  const incInt  = universal && opts.includeIntegrations?.length ? new Set(opts.includeIntegrations.map(s => s.toLowerCase())) : null;
+  const excInt  = universal ? new Set((opts.excludeIntegrations ?? []).map(s => s.toLowerCase())) : null;
+  const incDom  = universal && opts.includeDomains?.length ? new Set(opts.includeDomains) : null;
+  const excDom  = universal ? new Set(opts.excludeDomains ?? []) : null;
   const entityRegistry: Record<string, any> = (hass as any).entities ?? {};
   const deviceRegistry: Record<string, any> = (hass as any).devices ?? {};
   const areaRegistry: Record<string, any>   = (hass as any).areas   ?? {};
@@ -39,11 +51,17 @@ export function getAllDevices(
 
     const domain = entityId.split('.')[0];
     if (!DEVICE_DOMAINS.has(domain)) continue;
+    // Universal-mode domain allow/deny (no-op in shelly mode: sets are null).
+    if (excDom?.has(domain)) continue;
+    if (incDom && !incDom.has(domain)) continue;
 
     const platform: string = (regEntry.platform ?? '').toLowerCase();
     // Shelly mode: keep only Shelly + BTHome (Shelly BLU sensors report through
     // HA's BTHome integration, not the Shelly one). Universal mode: keep all.
     if (!universal && platform !== 'shelly' && platform !== 'bthome') continue;
+    // Universal-mode integration allow/deny (no-op in shelly mode).
+    if (excInt?.has(platform)) continue;
+    if (incInt && !incInt.has(platform)) continue;
 
     const deviceId: string = regEntry.device_id;
 
@@ -125,9 +143,12 @@ export function getAllDevices(
   }
   for (const id of toMerge) devices.delete(id);
 
-  return Array.from(devices.values())
-    .filter(d => d.entities.length > 0)
-    .sort((a, b) => a.name.localeCompare(b.name));
+  let out = Array.from(devices.values()).filter(d => d.entities.length > 0);
+  // Universal-mode scope: tame the firehose (default 'devices').
+  if (universal) {
+    out = out.filter(d => deviceInUniversalScope(d, opts.scope ?? 'devices'));
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** Returns the HA area name for an area_id */
@@ -148,6 +169,40 @@ export type EntityTier = 'primary' | 'config' | 'diagnostic';
 export function entityTier(entity: HAEntity): EntityTier {
   const c = entity.entity_category;
   return c === 'diagnostic' ? 'diagnostic' : c === 'config' ? 'config' : 'primary';
+}
+
+/** Domains you can actuate — the signal for "this is a controllable device" used
+ *  by universal-mode scoping. */
+export const CONTROLLABLE_DOMAINS = new Set([
+  'switch', 'light', 'cover', 'climate', 'lock', 'media_player', 'fan', 'valve',
+  'vacuum', 'siren', 'humidifier', 'water_heater', 'lawn_mower', 'alarm_control_panel',
+]);
+
+/** device_class values that mark a sensor/binary_sensor as a "real" smart-home
+ *  reading (environmental / energy / alert). Used by universal 'devices' scope to
+ *  keep genuine sensor devices while dropping routers/PCs whose only sensors are
+ *  data-rate / diagnostic. */
+const RECOGNIZED_SENSOR_DCS = new Set([
+  'temperature', 'humidity', 'illuminance', 'carbon_dioxide', 'gas', 'battery',
+  'power', 'energy', 'voltage', 'current', 'apparent_power', 'reactive_power',
+  'power_factor', 'pressure', 'moisture', 'motion', 'door', 'window', 'opening',
+  'smoke', 'vibration', 'occupancy',
+]);
+
+const deviceHasControllable = (d: HADevice): boolean =>
+  d.entities.some(e => entityTier(e) === 'primary' && CONTROLLABLE_DOMAINS.has(e.domain));
+
+const deviceHasRecognizedSensor = (d: HADevice): boolean =>
+  d.entities.some(e => entityTier(e) === 'primary'
+    && (e.domain === 'sensor' || e.domain === 'binary_sensor')
+    && RECOGNIZED_SENSOR_DCS.has((e.attributes as any)?.device_class ?? ''));
+
+/** Universal-mode scope test. 'devices' (default) keeps actuators + real-sensor
+ *  devices; 'controllable' keeps actuators only; 'all' keeps everything. */
+export function deviceInUniversalScope(d: HADevice, scope: 'all' | 'devices' | 'controllable'): boolean {
+  if (scope === 'all') return true;
+  if (deviceHasControllable(d)) return true;
+  return scope === 'devices' && deviceHasRecognizedSensor(d);
 }
 
 // ─── Profile engine ────────────────────────────────────────────────────────────

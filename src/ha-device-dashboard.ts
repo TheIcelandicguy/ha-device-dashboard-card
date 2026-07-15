@@ -267,7 +267,14 @@ export class HADeviceDashboard extends LitElement {
     this._cacheConfigRef   = this._config;
     this._profileCache.clear();
 
-    let devices = getAllDevices(this.hass, { universal: this._config.mode === 'universal' });
+    let devices = getAllDevices(this.hass, {
+      universal:           this._config.mode === 'universal',
+      scope:               this._config.universal_scope,
+      includeIntegrations: this._config.include_integrations,
+      excludeIntegrations: this._config.exclude_integrations,
+      includeDomains:      this._config.include_domains,
+      excludeDomains:      this._config.exclude_domains,
+    });
 
     // Area filter — undefined = show ALL rooms, [] = show nothing, [...] = show listed
     const areaFilter = this._config.areas;
