@@ -124,9 +124,24 @@ Each phase ships independently and is reversible.
   - Note: fan/vacuum/siren/etc. are kept (controllable) but still classify to a
     basic profile — their *control* rendering is Phase 3 (delegation) territory,
     same as lock/media.
-  - Live visual verification deferred: browser extension was offline and HA's
-    server-side screenshot beta is disabled. A hidden test dashboard `uv-verify`
-    (card in universal mode) is left for a hard-refresh eyeball, then deletion.
+- **Phase 2.6 — Live verification + fixes.** ✅ *Done.* Verified in the browser
+  against the live instance (temp `uv-verify` dashboard, universal mode). Engine
+  confirmed working: 98 devices across 20 integrations, `media` profile (38), no
+  render crashes. Live data surfaced — and we fixed — three issues, all rooted in
+  "real devices are multi-integration" (HA merges router device_trackers + a Shelly
+  Wall Display + device_pulse under one device_id):
+  - **Bug A (P2 regression):** a Shelly Wall Display exposes a `media_player`
+    (speaker), so the new media branch typed it `media`. Fix: add `media`/`lock` to
+    `WEAK_TYPES` so the Shelly model string corrects it back to `wall_display`.
+  - **Bug B:** `integration` badge showed a router platform (NETGEA) not Shelly,
+    because the shelly-integration correction was gated on `!isShelly`. Fix: a
+    Shelly entity always sets `integration = 'shelly'`.
+  - **Scoping leak:** phones/browsers/routers/hassio slipped through 'devices'
+    scope. Fix: `DEFAULT_EXCLUDE_INTEGRATIONS` (built-in noise deny-list) +
+    changed `include_integrations` from allow-list to **force-include** (re-add
+    e.g. `mobile_app`). Battery devices are kept — filtering is by integration.
+  - Re-verified live: Display wc → `Display`/`Shelly`; noise integrations gone;
+    94 clean devices. Resource version bumped (service worker pins by `?v=`).
 - **Phase 3 — Delegation fallback.** `loadCardHelpers()` for unstyled domains only.
 - **Phase 4 — Editor universal support + reset buttons.** The heavy one; builds
   incrementally.

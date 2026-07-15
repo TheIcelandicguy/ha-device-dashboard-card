@@ -34,8 +34,12 @@ export function getAllDevices(
 ): HADevice[] {
   const universal = opts.universal === true;
   // Scoping filters apply only in universal mode (shelly mode is already scoped).
-  const incInt  = universal && opts.includeIntegrations?.length ? new Set(opts.includeIntegrations.map(s => s.toLowerCase())) : null;
-  const excInt  = universal ? new Set((opts.excludeIntegrations ?? []).map(s => s.toLowerCase())) : null;
+  // Force-include: platforms the user wants back despite being in the deny list.
+  const forceInt = universal ? new Set((opts.includeIntegrations ?? []).map(s => s.toLowerCase())) : null;
+  // Deny list = built-in noise integrations + user additions.
+  const excInt   = universal
+    ? new Set([...DEFAULT_EXCLUDE_INTEGRATIONS, ...(opts.excludeIntegrations ?? [])].map(s => s.toLowerCase()))
+    : null;
   const incDom  = universal && opts.includeDomains?.length ? new Set(opts.includeDomains) : null;
   const excDom  = universal ? new Set(opts.excludeDomains ?? []) : null;
   const entityRegistry: Record<string, any> = (hass as any).entities ?? {};
@@ -59,9 +63,8 @@ export function getAllDevices(
     // Shelly mode: keep only Shelly + BTHome (Shelly BLU sensors report through
     // HA's BTHome integration, not the Shelly one). Universal mode: keep all.
     if (!universal && platform !== 'shelly' && platform !== 'bthome') continue;
-    // Universal-mode integration allow/deny (no-op in shelly mode).
-    if (excInt?.has(platform)) continue;
-    if (incInt && !incInt.has(platform)) continue;
+    // Universal-mode integration deny (built-in + user), unless force-included.
+    if (excInt?.has(platform) && !forceInt?.has(platform)) continue;
 
     const deviceId: string = regEntry.device_id;
 
@@ -94,7 +97,12 @@ export function getAllDevices(
     }
 
     const device = devices.get(deviceId)!;
-    if (!device.isShelly && platform === 'shelly') {
+    // A Shelly entity always makes this a Shelly device, and Shelly is the
+    // authoritative integration even when routers / device_pulse also attach
+    // entities to the same HA device (common for multi-integration devices in
+    // universal mode — e.g. a Wi-Fi Wall Display the routers also track). Without
+    // this, `integration` would keep whichever platform was seen first.
+    if (platform === 'shelly') {
       device.isShelly = true;
       device.integration = 'shelly';
     }
@@ -170,6 +178,17 @@ export function entityTier(entity: HAEntity): EntityTier {
   const c = entity.entity_category;
   return c === 'diagnostic' ? 'diagnostic' : c === 'config' ? 'config' : 'primary';
 }
+
+/** Integrations excluded by default in universal mode: network / system /
+ *  companion platforms that expose entities but aren't smart-home devices (phones,
+ *  browsers, routers, the supervisor). Battery-powered *devices* are unaffected —
+ *  filtering is by integration, not by having a battery. Users re-add any of these
+ *  via `include_integrations` (force-include) or extend the list via
+ *  `exclude_integrations`. */
+export const DEFAULT_EXCLUDE_INTEGRATIONS = new Set([
+  'mobile_app', 'browser_mod', 'hassio', 'systemmonitor', 'backup', 'sun', 'nws',
+  'netgear', 'tplink_router', 'huawei_lte', 'huawei_ont', 'asuswrt', 'fritzbox_tools', 'fritz',
+]);
 
 /** Domains you can actuate — the signal for "this is a controllable device" used
  *  by universal-mode scoping. */
@@ -555,8 +574,14 @@ export function detectTypeByDomain(device: HADevice): DeviceProfile {
  * Entity-signature clusters whose type is "weak" enough that an unambiguous model
  * string should be allowed to reclassify them. Strong signals (cover/climate/valve/
  * dimmer/rgb/wall_display) reflect the device's actual config and are left alone.
+ *
+ * `media` and `lock` are weak for Shelly specifically: a Shelly Wall Display
+ * exposes a `media_player` (its speaker), which would otherwise type the whole
+ * device as `media` — the model string ("Shelly Wall Display") corrects it back to
+ * `wall_display`. Non-Shelly media/lock devices go through GenericProvider, which
+ * never runs this refinement, so they keep their `media`/`lock` type.
  */
-const WEAK_TYPES = new Set<DeviceProfile>(['relay', 'plug', 'energy', 'sensor', 'input', 'uni', 'generic']);
+const WEAK_TYPES = new Set<DeviceProfile>(['relay', 'plug', 'energy', 'sensor', 'input', 'uni', 'generic', 'media', 'lock']);
 
 /**
  * A ProfileProvider owns device classification for a family of devices. The

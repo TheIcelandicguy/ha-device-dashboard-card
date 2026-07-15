@@ -386,10 +386,11 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
    *  - 'controllable': only devices with a controllable entity.
    *  - 'all': every discovered device (the raw firehose). */
   universal_scope?: 'all' | 'devices' | 'controllable';
-  /** Universal-mode platform allow-list (e.g. ['zwave_js','matter','shelly']).
-   *  When set, only these integrations are discovered. */
+  /** Universal-mode force-include platforms — re-add integrations that are in the
+   *  built-in or user deny-list (e.g. ['mobile_app'] to show phones again). */
   include_integrations?: string[];
-  /** Universal-mode platform deny-list (e.g. ['mobile_app','systemmonitor']). */
+  /** Universal-mode platform deny-list, ADDED to the built-in defaults
+   *  (mobile_app / browser_mod / routers / systemmonitor / …). */
   exclude_integrations?: string[];
   /** Universal-mode entity-domain allow-list. When set, only these domains. */
   include_domains?: string[];
