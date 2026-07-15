@@ -155,6 +155,12 @@ Each phase ships independently and is reversible.
   - Verified live: 42 delegated controls, 42/42 rendering native controls (36 media
     players w/ playback+volume, 4 fans, 1 vacuum, 1 water_heater). The Shelly Wall
     Display now leads with our sensor graphs then embeds native media transport.
+  - **Opt-in:** `delegate_controls` config flag, OFF by default (each control embeds
+    a native tile — real render cost on big media fleets). When off, a one-time
+    dismissible notice ("N devices have extra controls… turn on Native controls in
+    the editor") appears if delegatable devices exist; dismissal persists in
+    localStorage. Editor toggle added in the defaults panel. Verified live: off →
+    0 native tiles created + notice shown.
 - **Phase 4 — Editor universal support + reset buttons.** The heavy one; builds
   incrementally.
 - **Phase 5 — Flip the default.** Make universal default; update picker / README /

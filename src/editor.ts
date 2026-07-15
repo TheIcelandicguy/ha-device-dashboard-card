@@ -3275,6 +3275,16 @@ export class HADeviceDashboardEditor extends LitElement {
           </div>
 
           <div class="dp-group">
+            <div class="dp-title" style="display:flex;align-items:center;justify-content:space-between">
+              <span>Native controls</span>
+              <label class="sw"><input type="checkbox" .checked=${c.delegate_controls === true}
+                @change=${(e:Event)=>this._set('delegate_controls',(e.target as HTMLInputElement).checked || undefined)}>
+                <span class="sw-t"></span><span class="sw-b"></span></label>
+            </div>
+            <div class="dp-hint-inline">Show controls for media players, fans, vacuums, locks and other devices this card doesn't draw itself, using Home Assistant's own tiles. Off by default — each one embeds a native element, so it costs a little render time on big media fleets.</div>
+          </div>
+
+          <div class="dp-group">
             <div class="dp-title">Default tile layout</div>
             <div class="field">
               <div class="field-lbl">Columns — <span style="color:#f4601e">${c.columns ?? 3}</span></div>

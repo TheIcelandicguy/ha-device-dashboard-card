@@ -21,7 +21,7 @@ import { renderLightControlTile } from './tiles/light-control';
 import { renderBlockTile } from './tiles/block-tile';
 import { renderDetailSheet } from './detail/detail-sheet';
 import {
-  getAllDevices, getDeviceProfile, migrateConfig, factoryLook,
+  getAllDevices, getDeviceProfile, migrateConfig, factoryLook, delegatableEntities,
   PROFILE_DEFAULT_BLOCKS, normalizeTileLayout, flattenTileLayout, PROFILE_DEFAULT_SENSORS, DEFAULT_GRAPH_SENSORS, profileDefaultTileStyle, PROFILE_LABELS, BLOCK_LABELS, GRAPH_DC_LABELS, GRAPH_SENSOR_DEFS,
   HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, downsamplePoints, normalizeGraphKey,
   formatPower, formatEnergy, formatVoltage, formatCurrent, formatTemp,
@@ -65,6 +65,8 @@ export class HADeviceDashboard extends LitElement {
   @state() private _detailDevice: string | null = null;
   @state() private _detailHistoryRange: 24 | 168 | 720 = 24;
   @state() private _activeViewId: string | null = null;
+  /** One-time notice: delegatable devices exist but native controls are off. */
+  @state() private _delegateNoticeDismissed = false;
   /** Per-viewer "what to show" overrides, persisted in localStorage (durable in
    *  view mode) and baked into config when the dashboard is edited. Highest
    *  priority in the block/chip resolution. */
@@ -412,6 +414,12 @@ export class HADeviceDashboard extends LitElement {
         if (raw === '0' || raw === '1') this._tileShowGraphsOverride.set(k.slice(pfx.length), raw === '1');
       }
     } catch { /* localStorage unavailable */ }
+    try { this._delegateNoticeDismissed = localStorage.getItem('hdd:delegateNoticeDismissed') === '1'; } catch { /* ignore */ }
+  }
+
+  private _dismissDelegateNotice(): void {
+    this._delegateNoticeDismissed = true;
+    try { localStorage.setItem('hdd:delegateNoticeDismissed', '1'); } catch { /* ignore */ }
   }
 
   /** Is the dashboard currently in Lovelace edit mode? Walks up through shadow
@@ -2914,6 +2922,7 @@ export class HADeviceDashboard extends LitElement {
           </div>` : nothing}
         ${this._renderHeaderDetail(devices)}
         ${this._renderViewTabs()}
+        ${this._renderDelegateNotice(devices)}
         <div class="dash-body">
           ${showFavourites ? this._renderFavoritesSection(devices) : nothing}
           ${showRooms
@@ -2926,6 +2935,23 @@ export class HADeviceDashboard extends LitElement {
     `;
 
     return dashboard;
+  }
+
+  /** One-time dismissible banner: some devices have native controls (media, fan,
+   *  vacuum …) that are off by default to avoid the render cost of embedding a
+   *  native tile per device. Points the user at the editor toggle. */
+  private _renderDelegateNotice(devices: HADevice[]): TemplateResult {
+    if (this._config.delegate_controls || this._delegateNoticeDismissed) return html``;
+    const n = devices.filter(d => delegatableEntities(d).length > 0).length;
+    if (!n) return html``;
+    return html`
+      <div class="delegate-notice">
+        <span class="dn-icon">◈</span>
+        <span class="dn-text">${n} ${n === 1 ? 'device has' : 'devices have'} extra controls
+          (media, fan, vacuum…). Turn on <b>Native controls</b> in the editor to show them.</span>
+        <button class="dn-dismiss" title="Dismiss"
+          @click=${(e: Event) => { e.stopPropagation(); this._dismissDelegateNotice(); }}>×</button>
+      </div>`;
   }
 
   /** Horizontal tab bar — rendered only when the card has ≥2 views. */

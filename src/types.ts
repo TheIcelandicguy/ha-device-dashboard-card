@@ -397,6 +397,10 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   include_domains?: string[];
   /** Universal-mode entity-domain deny-list (e.g. ['update','device_tracker']). */
   exclude_domains?: string[];
+  /** Render native HA controls for long-tail domains (lock/media/fan/vacuum/…) via
+   *  the `delegated_controls` block. Off by default because each embeds a native
+   *  tile element — real render cost on large media fleets. */
+  delegate_controls?: boolean;
   /** Area filter. undefined = all; [] = none; ['Eldhús'] = specific */
   areas?: string[];
   /** Extra groups built from device-name prefixes. A device whose name starts

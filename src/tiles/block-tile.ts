@@ -363,7 +363,9 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
 
     case 'delegated_controls': {
       // Native HA controls for long-tail domains our own tiles don't render
-      // (lock, media_player, fan, vacuum, …). No-op for the common device.
+      // (lock, media_player, fan, vacuum, …). Opt-in: each embeds a native tile
+      // element, so it's off unless delegate_controls is enabled.
+      if (!config.delegate_controls) return html``;
       const dels = delegatableEntities(device);
       if (!dels.length) return html``;
       return html`

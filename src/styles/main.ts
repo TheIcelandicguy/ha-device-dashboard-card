@@ -1098,6 +1098,22 @@ export const mainCss = css`
     /* Delegated (native HA) controls for long-tail domains — Phase 3 fallback */
     .tile-delegated { display:flex; flex-direction:column; gap:6px; margin-top:2px; }
 
+    /* One-time notice: native controls available but off by default */
+    .delegate-notice {
+      display:flex; align-items:center; gap:10px; margin:0 12px 10px;
+      padding:8px 12px; border-radius:10px;
+      background:var(--sc-tile-bg); border:1px solid var(--sc-tile-border);
+      font-size:.8em; color:var(--sc-text-secondary);
+    }
+    .delegate-notice .dn-icon { color:var(--sc-accent); flex-shrink:0; }
+    .delegate-notice .dn-text { flex:1; min-width:0; }
+    .delegate-notice .dn-text b { color:var(--sc-text-primary); font-weight:600; }
+    .delegate-notice .dn-dismiss {
+      flex-shrink:0; border:none; background:transparent; cursor:pointer;
+      color:var(--sc-text-muted); font-size:1.3em; line-height:1; padding:0 4px;
+    }
+    .delegate-notice .dn-dismiss:hover { color:var(--sc-text-primary); }
+
     .virt-row { display:flex; align-items:center; gap:8px; padding:4px 8px; border-radius:7px; border:1px solid rgba(255,255,255,.06); background:rgba(255,255,255,.03); }
 
     .virt-lbl { font-size:11px; color:var(--sc-text-muted); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
