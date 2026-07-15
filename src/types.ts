@@ -525,6 +525,8 @@ export interface HAEntity {
   device_id?: string;
   area_id?: string;
   platform?: string;
+  /** HA registry entity_category: 'config' | 'diagnostic' | undefined (primary). */
+  entity_category?: string;
 }
 
 /** Narrow structural type for the common HA state.attributes shape.

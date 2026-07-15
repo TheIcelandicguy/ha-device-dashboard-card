@@ -88,6 +88,7 @@ export function getAllDevices(
       device_id:  deviceId,
       area_id:    regEntry.area_id,
       platform,
+      entity_category: regEntry.entity_category ?? undefined,
     });
   }
 
@@ -130,6 +131,20 @@ export function getAllDevices(
 export function getAreaName(hass: HomeAssistant, areaId?: string): string | undefined {
   if (!areaId) return undefined;
   return (hass as any).areas?.[areaId]?.name;
+}
+
+// ─── Entity tiering ────────────────────────────────────────────────────────────
+
+/** Entity importance tier derived from the HA registry entity_category. This is
+ *  the universal "show only the basics" signal: `primary` entities are the ones a
+ *  card should surface by default; `config` and `diagnostic` belong in the expanded
+ *  detail view. Unlike the Shelly-tuned sensor-chip tiering (device_class based),
+ *  this works for any integration. */
+export type EntityTier = 'primary' | 'config' | 'diagnostic';
+
+export function entityTier(entity: HAEntity): EntityTier {
+  const c = entity.entity_category;
+  return c === 'diagnostic' ? 'diagnostic' : c === 'config' ? 'config' : 'primary';
 }
 
 // ─── Profile engine ────────────────────────────────────────────────────────────

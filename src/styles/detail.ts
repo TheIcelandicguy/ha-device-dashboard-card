@@ -102,6 +102,14 @@ export const detailCss = css`
       color: var(--sc-text-muted); text-transform: uppercase;
       margin-bottom: 10px;
     }
+    /* Sub-heading for the config / diagnostic tiers within the All-Entities list */
+    .ds-ent-subgroup {
+      font-size: .64em; font-weight: 600; letter-spacing: .07em;
+      color: var(--sc-text-muted); text-transform: uppercase; opacity: .75;
+      margin: 12px 0 6px;
+    }
+    /* Config/diagnostic rows read as secondary to the primary controls above */
+    .ds-entity-row.is-secondary { opacity: .7; }
     .ds-section .sparklines-block { padding: 0; margin: 0; }
 
     .ds-single-toggle { display: flex; justify-content: center; padding: 20px; }

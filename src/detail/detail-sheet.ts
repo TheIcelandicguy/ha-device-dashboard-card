@@ -1,8 +1,9 @@
 import { html, nothing, TemplateResult } from 'lit';
 import {
   formatCurrent, formatEnergy, formatPower, formatTemp, formatUptime, formatVoltage, rssiToQuality,
+  entityTier,
 } from '../helpers';
-import type { HassAttrs } from '../types';
+import type { HassAttrs, HAEntity } from '../types';
 import type { TileCtx } from '../tiles/tile-context';
 
 const BRIGHTNESS_MAX = 255;
@@ -130,26 +131,38 @@ function renderSheetEntityList(ctx: TileCtx): TemplateResult {
     d === 'select' ? '☰' : d === 'text' ? 'Aa' : '•';
   const hidden = new Set(ctx.config.hidden_entities ?? []);
   const shownEntities = device.entities.filter(e => !hidden.has(e.entity_id));
+  if (!shownEntities.length) return html``;
+
+  const row = (e: HAEntity, secondary: boolean) => {
+    const s = hass.states[e.entity_id];
+    const name = (s?.attributes as HassAttrs)?.friendly_name ?? e.entity_id;
+    const state = s?.state ?? 'unknown';
+    const unit = (s?.attributes as HassAttrs)?.unit_of_measurement ?? '';
+    const isToggle = e.domain === 'switch' || e.domain === 'light' || e.domain === 'input_boolean';
+    const isOn = state === 'on';
+    const lc = s?.last_changed ? ctx.timeAgo(s.last_changed) : '';
+    return html`
+      <div class="ds-entity-row ${secondary ? 'is-secondary' : ''}" @click=${() => ctx.fireMoreInfo(e.entity_id)}>
+        <span class="ds-ent-icon">${domainIcon(e.domain)}</span>
+        <span class="ds-ent-name">${name}</span>
+        <span class="ds-ent-state">${state}${unit ? ` ${unit}` : ''}</span>
+        ${lc ? html`<span class="ds-ent-age">${lc}</span>` : nothing}
+        ${isToggle ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(ev: Event) => { ev.stopPropagation(); ctx.toggle(e.entity_id, isOn, ev); }}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
+      </div>`;
+  };
+
+  // Tier by entity_category so the primary controls lead and config/diagnostic
+  // entities settle below as clearly-secondary groups (the "basics first" model).
+  const primary = shownEntities.filter(e => entityTier(e) === 'primary');
+  const config  = shownEntities.filter(e => entityTier(e) === 'config');
+  const diag    = shownEntities.filter(e => entityTier(e) === 'diagnostic');
+
   return html`
     <div class="ds-section">
       <div class="ds-section-title">All Entities</div>
-      ${shownEntities.map(e => {
-        const s = hass.states[e.entity_id];
-        const name = (s?.attributes as HassAttrs)?.friendly_name ?? e.entity_id;
-        const state = s?.state ?? 'unknown';
-        const unit = (s?.attributes as HassAttrs)?.unit_of_measurement ?? '';
-        const isToggle = e.domain === 'switch' || e.domain === 'light' || e.domain === 'input_boolean';
-        const isOn = state === 'on';
-        const lc = s?.last_changed ? ctx.timeAgo(s.last_changed) : '';
-        return html`
-          <div class="ds-entity-row" @click=${() => ctx.fireMoreInfo(e.entity_id)}>
-            <span class="ds-ent-icon">${domainIcon(e.domain)}</span>
-            <span class="ds-ent-name">${name}</span>
-            <span class="ds-ent-state">${state}${unit ? ` ${unit}` : ''}</span>
-            ${lc ? html`<span class="ds-ent-age">${lc}</span>` : nothing}
-            ${isToggle ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(ev: Event) => { ev.stopPropagation(); ctx.toggle(e.entity_id, isOn, ev); }}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
-          </div>`;
-      })}
+      ${primary.map(e => row(e, false))}
+      ${config.length ? html`<div class="ds-ent-subgroup">Configuration</div>${config.map(e => row(e, true))}` : nothing}
+      ${diag.length ? html`<div class="ds-ent-subgroup">Diagnostic</div>${diag.map(e => row(e, true))}` : nothing}
     </div>`;
 }
 

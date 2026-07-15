@@ -79,9 +79,20 @@ Each phase ships independently and is reversible.
 - **Phase 0 — Foundations (invisible).** Extract `ProfileProvider` seam
   (`ShellyProvider` + `GenericProvider` behind an ordered registry); add frozen
   `FACTORY_DEFAULTS` and seed first-run from it. Zero behavior change.
-- **Phase 1 — Tiering + basics-only face.** Add primary/config/diagnostic tiering;
-  gate the tile face; fold `registrySignature` into `shouldUpdate`. Tested on
-  current Shelly users first.
+- **Phase 1 — Tiering foundation + detail grouping.** ✅ *Done.* Two of the three
+  planned items were already solved in the existing code, so the phase narrowed:
+  - **Tile face was already "basics only."** `block-tile.ts` splits chips into
+    primary (large) / electrical (strip) / diag (muted footer), and
+    `PROFILE_DEFAULT_SENSORS` keeps diagnostics off the face by default. Touching
+    it would have *regressed* good behavior, so we didn't.
+  - **`registrySignature` dropped.** `_getDevices` already caches the device list
+    by reference-equality on `hass.entities` / `hass.devices` / `_config` — cheaper
+    and stronger than a string hash. The harvested pattern is superseded.
+  - **Shipped:** `entity_category` captured on `HAEntity`; a universal
+    `entityTier()` helper (primary/config/diagnostic); the detail sheet's flat
+    All-Entities list now groups by tier (config/diagnostic settle below as
+    secondary sub-groups). Zero Shelly tile-face change; foundation ready for
+    Phase 2's non-Shelly devices, which lack the Shelly chip curation.
 - **Phase 2 — Universal discovery behind `mode: universal`.** Drop the filter when
   the flag is on; add ecosystem providers, `lock`/`media` profiles, integration
   badge. The proving milestone.
