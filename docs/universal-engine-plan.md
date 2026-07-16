@@ -175,8 +175,16 @@ Each phase ships independently and is reversible.
     (shelly) / 93 (universal devices) / 167 (universal all).
   - Verified by instantiating the editor element live: all controls render, resets
     behave correctly, device list tracks mode/scope.
-  - *Remaining:* universal device styling polish (non-Shelly device rows in the
-    Device styling tab), and surfacing domain filters in the UI (YAML-only now).
+  - **4d — Polish.** ✅ Accurate integration badge labels (music_assistant→Music,
+    yamaha_musiccast→Yamaha, roborock→Roborock, spotify, cast, reolink, philips_js,
+    gecko, android, upnp, ipp, device_pulse→Pulse, bthome→BTHome…) replacing the
+    ugly 6-char truncations; neutral labels for non-Shelly types (climate→'Climate'
+    not 'TRV', relay→'Switch'); domain filters (Hide/Only entity types) surfaced in
+    the Discovery UI. Verified live: labels clean on 94-tile card; domain fields
+    render; Device styling tab opens cleanly for a non-Shelly media_player.
+
+  Phase 4 is functionally complete. Universal mode is fully usable from the GUI:
+  discover → scope → filter → style → native controls → factory-reset.
 - **Phase 5 — Flip the default.** Make universal default; update picker / README /
   screenshots. Deferred bravery.
 

@@ -665,7 +665,8 @@ export const GenericProvider: ProfileProvider = {
     return {
       type,
       gen: 'other',
-      label: PROFILE_LABELS[type],
+      // 'TRV'/'Relay' are Shelly framings; use neutral labels for other vendors.
+      label: type === 'climate' ? 'Climate' : type === 'relay' ? 'Switch' : PROFILE_LABELS[type],
       integration: device.integration,
     };
   },
@@ -705,6 +706,7 @@ export function detectShellyGen(model: string): DeviceGen {
 /** Display label for known integration platforms */
 export const INTEGRATION_LABELS: Record<string, string> = {
   shelly:         'Shelly',
+  bthome:         'BTHome',
   zha:            'Zigbee',
   zwave_js:       'Z-Wave',
   mqtt:           'MQTT',
@@ -725,6 +727,21 @@ export const INTEGRATION_LABELS: Record<string, string> = {
   lifx:           'LIFX',
   nanoleaf:       'Nanoleaf',
   sonos:          'Sonos',
+  music_assistant:  'Music',
+  spotify:          'Spotify',
+  spotifyplus:      'Spotify',
+  cast:             'Cast',
+  yamaha_musiccast: 'Yamaha',
+  androidtv_remote: 'Android',
+  philips_js:       'Philips',
+  roborock:         'Roborock',
+  reolink:          'Reolink',
+  gecko:            'Gecko',
+  upnp:             'UPnP',
+  ipp:              'Printer',
+  bermuda:          'Bermuda',
+  template:         'Template',
+  device_pulse:     'Pulse',
 };
 
 export function getIntegrationLabel(platform: string): string {

@@ -1138,6 +1138,8 @@ export class HADeviceDashboardEditor extends LitElement {
         </div>
         ${listField('Hide integrations', 'exclude_integrations', c.exclude_integrations, 'e.g. music_assistant, cast', 'Comma-separated. Added to the built-in list (phones, browsers, routers…) that is already hidden.')}
         ${listField('Show integrations anyway', 'include_integrations', c.include_integrations, 'e.g. mobile_app', 'Comma-separated. Re-adds integrations that would otherwise be hidden by the list above or the built-in defaults.')}
+        ${listField('Hide entity types', 'exclude_domains', c.exclude_domains, 'e.g. update, camera', 'Comma-separated domains to drop entirely (e.g. update, camera).')}
+        ${listField('Only entity types', 'include_domains', c.include_domains, 'e.g. light, switch, climate', 'Comma-separated. When set, ONLY these domains are discovered.')}
       ` : nothing}`;
     const badge = this._badge(universal ? 'Universal' : 'Shelly',
       universal ? '#c98a63' : '#4ade80',
