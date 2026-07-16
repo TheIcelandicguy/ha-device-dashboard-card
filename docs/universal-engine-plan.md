@@ -161,8 +161,22 @@ Each phase ships independently and is reversible.
     the editor") appears if delegatable devices exist; dismissal persists in
     localStorage. Editor toggle added in the defaults panel. Verified live: off →
     0 native tiles created + notice shown.
-- **Phase 4 — Editor universal support + reset buttons.** The heavy one; builds
-  incrementally.
+- **Phase 4 — Editor universal support + reset buttons.** 🚧 *In progress.*
+  - Native-controls toggle (shipped with P3 opt-in).
+  - **4a — Discovery section** in the Rooms & devices tab: Shelly↔Universal mode
+    pills, scope pills (Real devices / Controllable / Everything), and comma-list
+    fields for Hide integrations / Show-anyway (force-include).
+  - **4b — Reset buttons** in the Defaults panel: "Reset look" (factory look, keeps
+    content — verified: theme/columns/style reset, favourites/hidden/mode/scope/
+    views preserved) and "Reset everything" (two-click armed; wipes to type +
+    factory look).
+  - **4c — Editor device list respects universal mode** (`_allDevices` mirrors the
+    card's discovery opts, cache keyed on them). Verified live: editor lists 56
+    (shelly) / 93 (universal devices) / 167 (universal all).
+  - Verified by instantiating the editor element live: all controls render, resets
+    behave correctly, device list tracks mode/scope.
+  - *Remaining:* universal device styling polish (non-Shelly device rows in the
+    Device styling tab), and surfacing domain filters in the UI (YAML-only now).
 - **Phase 5 — Flip the default.** Make universal default; update picker / README /
   screenshots. Deferred bravery.
 

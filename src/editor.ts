@@ -4,7 +4,7 @@ import { ref } from 'lit/directives/ref.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout } from './types';
-import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, setBlockInLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS } from './helpers';
+import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, setBlockInLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, applyThemePalette, detectTheme, type ThemePalette } from './themes';
 import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons';
 import { EDITOR_LAYOUT } from './editor-layout';
@@ -178,6 +178,8 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _advanced = false;
   /** Whether the "Defaults" quick-setup panel is open. */
   @state() private _defaultsOpen = false;
+  /** Two-click arming for the destructive "Reset everything" button. */
+  @state() private _resetArmed = false;
   /** Theme awaiting a "replace custom colours?" confirmation, and the last
    *  saved custom palette (a restorable swatch). */
   @state() private _pendingTheme: Exclude<ThemePreset, 'custom'> | null = null;
@@ -631,12 +633,26 @@ export class HADeviceDashboardEditor extends LitElement {
   // getAllDevices scans the full HA entity/device registry (thousands of
   // entries) — never call it in a loop. Cached per hass reference.
   private _devCacheHass?: HomeAssistant;
+  private _devCacheKey = '';
   private _devCache: ReturnType<typeof getAllDevices> = [];
   private _allDevices(): ReturnType<typeof getAllDevices> {
     if (!this.hass) return [];
-    if (this._devCacheHass !== this.hass) {
-      this._devCache = getAllDevices(this.hass);
+    const c = this._config;
+    // Editor device list must match what the card discovers, so mirror the
+    // universal-mode discovery opts. Re-run when hass or those opts change.
+    const key = JSON.stringify([c?.mode, c?.universal_scope, c?.include_integrations,
+      c?.exclude_integrations, c?.include_domains, c?.exclude_domains]);
+    if (this._devCacheHass !== this.hass || this._devCacheKey !== key) {
+      this._devCache = getAllDevices(this.hass, {
+        universal:           c?.mode === 'universal',
+        scope:               c?.universal_scope,
+        includeIntegrations: c?.include_integrations,
+        excludeIntegrations: c?.exclude_integrations,
+        includeDomains:      c?.include_domains,
+        excludeDomains:      c?.exclude_domains,
+      });
       this._devCacheHass = this.hass;
+      this._devCacheKey = key;
     }
     return this._devCache;
   }
@@ -1080,8 +1096,53 @@ export class HADeviceDashboardEditor extends LitElement {
     const sidePanel = nothing;
 
     return html`
+      ${this._renderDiscoverySection()}
       ${this._sec('rooms','⌂','rgba(74,222,128,0.1)','#4ade80','Rooms & devices', roomsBadge, roomBody)}
       ${sidePanel}`;
+  }
+
+  /** Discovery section — Shelly vs Universal mode and the universal scope filters. */
+  private _renderDiscoverySection(): TemplateResult {
+    const c = this._config;
+    const universal = c.mode === 'universal';
+    const scope = c.universal_scope ?? 'devices';
+    const listField = (label: string, key: string, val: string[] | undefined, placeholder: string, hint: string) => html`
+      <div class="field">
+        <div class="field-lbl">${label}</div>
+        <input type="text" .value=${(val ?? []).join(', ')} placeholder=${placeholder}
+          @change=${(e: Event) => {
+            const v = ((e.target as HTMLInputElement).value || '').split(',').map(s => s.trim()).filter(Boolean);
+            this._set(key, v.length ? v : undefined);
+          }}>
+        <div class="dp-hint-inline">${hint}</div>
+      </div>`;
+    const body = html`
+      <div class="field">
+        <div class="field-lbl">Discovery mode</div>
+        <div class="pill-grp">
+          <span class="pill ${!universal ? 'on' : ''}" @click=${() => this._set('mode', undefined)}>Shelly only</span>
+          <span class="pill ${universal ? 'on' : ''}" @click=${() => this._set('mode', 'universal')}>Universal</span>
+        </div>
+        <div class="dp-hint-inline">Shelly only discovers Shelly + BTHome devices (the original behaviour). Universal discovers every device in Home Assistant — Shelly devices keep their full-fidelity detection.</div>
+      </div>
+      ${universal ? html`
+        <div class="field">
+          <div class="field-lbl">Scope</div>
+          <div class="pill-grp">
+            ${(['devices', 'controllable', 'all'] as const).map((v, i) => html`
+              <span class="pill ${scope === v ? 'on' : ''}"
+                @click=${() => this._set('universal_scope', v === 'devices' ? undefined : v)}>
+                ${['Real devices', 'Controllable', 'Everything'][i]}</span>`)}
+          </div>
+          <div class="dp-hint-inline">Real devices = things you can control plus real sensors (drops routers, PCs, phones). Controllable = only devices with controls. Everything = every discovered device.</div>
+        </div>
+        ${listField('Hide integrations', 'exclude_integrations', c.exclude_integrations, 'e.g. music_assistant, cast', 'Comma-separated. Added to the built-in list (phones, browsers, routers…) that is already hidden.')}
+        ${listField('Show integrations anyway', 'include_integrations', c.include_integrations, 'e.g. mobile_app', 'Comma-separated. Re-adds integrations that would otherwise be hidden by the list above or the built-in defaults.')}
+      ` : nothing}`;
+    const badge = this._badge(universal ? 'Universal' : 'Shelly',
+      universal ? '#c98a63' : '#4ade80',
+      universal ? 'rgba(201,138,99,0.12)' : 'rgba(74,222,128,0.1)');
+    return this._sec('discovery', '◎', 'rgba(201,138,99,0.12)', '#c98a63', 'Discovery', badge, body);
   }
 
   private _setDeviceStyle(deviceId: string, patch: Partial<{
@@ -3194,6 +3255,28 @@ export class HADeviceDashboardEditor extends LitElement {
     if (this._savedTheme) this._set('style', { ...(this._config.style ?? {}), ...this._savedTheme });
   }
 
+  /** Config keys that describe *content* (what's shown), preserved by "Reset look". */
+  private static readonly _CONTENT_KEYS = [
+    'type', 'title', 'mode', 'universal_scope', 'include_integrations', 'exclude_integrations',
+    'include_domains', 'exclude_domains', 'areas', 'name_groups', 'hidden_devices', 'favorites',
+    'hidden_entities', 'show_offline', 'views', 'default_view', 'delegate_controls',
+  ];
+
+  /** Reset the look to factory defaults, keeping content (rooms/devices/views/favourites/mode). */
+  private _resetLook(): void {
+    const c = this._config as unknown as Record<string, unknown>;
+    const kept: Record<string, unknown> = {};
+    for (const k of HADeviceDashboardEditor._CONTENT_KEYS) if (c[k] !== undefined) kept[k] = c[k];
+    this._emitNow({ type: 'custom:ha-device-dashboard', ...factoryLook(), ...kept } as HADeviceDashboardConfig);
+  }
+
+  /** Two-click: first arms, second wipes the whole card back to the factory look. */
+  private _onResetEverything(): void {
+    if (!this._resetArmed) { this._resetArmed = true; return; }
+    this._resetArmed = false;
+    this._emitNow({ type: 'custom:ha-device-dashboard', ...factoryLook() } as HADeviceDashboardConfig);
+  }
+
   /** "Defaults" quick-setup panel: the four global defaults in one place. */
   private _renderDefaultsPanel(): TemplateResult {
     const c = this._config;
@@ -3300,6 +3383,17 @@ export class HADeviceDashboardEditor extends LitElement {
             </div>
             <button class="sec-toolbar-btn" style="align-self:flex-start"
               @click=${() => { this._tab = 'card-theme'; this._defaultsOpen = false; }}>More tile settings →</button>
+          </div>
+
+          <div class="dp-group">
+            <div class="dp-title">Reset</div>
+            <div class="dp-hint-inline">Restore the built-in default look. “Reset look” keeps your rooms, devices, views, favourites and discovery settings; “Reset everything” clears the whole card back to factory.</div>
+            <div class="pill-grp" style="gap:8px">
+              <button class="sec-toolbar-btn" @click=${() => { this._resetArmed = false; this._resetLook(); }}>Reset look</button>
+              <button class="sec-toolbar-btn" style=${this._resetArmed ? 'color:#f4601e;border-color:#f4601e' : ''}
+                @click=${() => this._onResetEverything()}>
+                ${this._resetArmed ? 'Click again to wipe everything' : 'Reset everything'}</button>
+            </div>
           </div>
         </div>
       </div>`;
