@@ -187,7 +187,7 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _xcEditIndex: number | null = null;
   /** Initial config handed to ha-yaml-editor as defaultValue (stable while editing). */
   @state() private _xcDraft: Record<string, unknown> | null = null;
-  /** Latest value from ha-yaml-editor — NOT reactive, so keystrokes don't reset it. */
+  /** Latest value from the embedded card editor — NOT reactive, so keystrokes don't reset it. */
   private _xcLatest: Record<string, unknown> | null = null;
   /** Theme awaiting a "replace custom colours?" confirmation, and the last
    *  saved custom palette (a restorable swatch). */
@@ -1156,6 +1156,10 @@ export class HADeviceDashboardEditor extends LitElement {
   private _renderExtraCardsSection(): TemplateResult {
     const arr = this._xcArray();
     const rooms = this._getAreas().map(a => a.name);
+    // NB: we deliberately do NOT embed hui-card-element-editor (the visual/form
+    // editor). Nested inside our own card editor its events bubble to HA's
+    // edit-card dialog, which hijacks and replaces our editor. HA's native YAML
+    // editor has no such conflict.
     const yamlAvail = !!customElements.get('ha-yaml-editor');
     const body = html`
       <div class="field">
@@ -1195,10 +1199,10 @@ export class HADeviceDashboardEditor extends LitElement {
         </div>` : nothing}
       ${this._xcDraft ? html`
         <div class="field">
-          <div class="field-lbl">Card configuration</div>
+          <div class="field-lbl">Card configuration (YAML)</div>
           ${yamlAvail ? html`
             <ha-yaml-editor .hass=${this.hass} .defaultValue=${this._xcDraft}
-              @value-changed=${(e: CustomEvent) => { if (e.detail?.isValid !== false) this._xcLatest = e.detail.value; }}></ha-yaml-editor>`
+              @value-changed=${(e: CustomEvent) => { e.stopPropagation(); if (e.detail?.isValid !== false) this._xcLatest = e.detail.value; }}></ha-yaml-editor>`
           : html`
             <textarea class="xc-yaml" .value=${JSON.stringify(this._xcDraft, null, 2)}
               @input=${(e: Event) => { try { this._xcLatest = JSON.parse((e.target as HTMLTextAreaElement).value); } catch { /* keep last valid */ } }}></textarea>`}
