@@ -3742,7 +3742,7 @@ export class HADeviceDashboardEditor extends LitElement {
     .xc-del:hover { border-color:#e5837a; color:#fff; background:#e5837a; }
     .xc-actions { display:flex; gap:6px; margin-top:6px; }
     .xc-import-list { display:flex; flex-direction:column; gap:3px; margin-top:6px; max-height:220px; overflow-y:auto; }
-    .xc-import-row { text-align:left; font-size:11px; font-family:monospace; padding:5px 8px; border-radius:5px; border:1px solid var(--border); background:var(--s2); color:var(--t2); cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .xc-import-row { flex:0 0 auto; min-height:26px; text-align:left; font-size:11px; font-family:monospace; padding:5px 8px; border-radius:5px; border:1px solid var(--border); background:var(--s2); color:var(--t2); cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .xc-import-row:hover { background:var(--s3); color:var(--text); border-color:var(--accent); }
     .xc-yaml { width:100%; min-height:120px; font-family:monospace; font-size:12px; background:var(--s2); color:var(--t2); border:1px solid var(--border); border-radius:6px; padding:8px; resize:vertical; }
     ha-yaml-editor { display:block; margin-top:4px; }
