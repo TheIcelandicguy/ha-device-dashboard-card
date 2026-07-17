@@ -1,6 +1,7 @@
 import { LitElement, html, css, TemplateResult, nothing } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { ref } from 'lit/directives/ref.js';
+import { keyed } from 'lit/directives/keyed.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent, LovelaceCardConfig } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout } from './types';
@@ -189,6 +190,15 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _xcDraft: Record<string, unknown> | null = null;
   /** Latest value from the embedded card editor — NOT reactive, so keystrokes don't reset it. */
   private _xcLatest: Record<string, unknown> | null = null;
+  /** Bumped whenever the draft is replaced, to force the YAML editor to remount
+   *  (ha-yaml-editor only reads defaultValue on first mount). */
+  private _xcDraftKey = 0;
+  /** Replace the draft config and remount the YAML editor. */
+  private _setXcDraft(cfg: Record<string, unknown> | null): void {
+    this._xcDraft = cfg;
+    this._xcLatest = null;
+    this._xcDraftKey++;
+  }
   /** "Copy from a dashboard" import state. */
   @state() private _xcDashboards: Array<{ url_path: string; title: string }> | null = null;
   @state() private _xcImportCards: Array<{ config: LovelaceCardConfig; label: string }> | null = null;
@@ -1250,12 +1260,12 @@ export class HADeviceDashboardEditor extends LitElement {
         ${arr.length ? arr.map((card, i) => html`
           <div class="xc-row">
             <span class="xc-type">${(card as { type?: string }).type ?? '?'}</span>
-            <button class="xc-btn" @click=${() => { this._xcEditIndex = i; this._xcDraft = { ...card }; this._xcLatest = null; this._xcAdding = false; }}>Edit</button>
+            <button class="xc-btn" @click=${() => { this._xcEditIndex = i; this._xcAdding = false; this._setXcDraft({ ...card }); }}>Edit</button>
             <button class="xc-btn xc-del" @click=${() => { const next = arr.slice(); next.splice(i, 1); this._xcSetArray(next); }}>✕</button>
           </div>`) : html`<div class="dp-hint-inline">No cards here yet.</div>`}
       </div>
       ${!this._xcAdding && this._xcEditIndex === null ? html`
-        <button class="sec-toolbar-btn" @click=${() => { this._xcAdding = true; this._xcDraft = {}; this._xcLatest = null; this._xcLoadDashboards(); }}>+ Add card</button>` : nothing}
+        <button class="sec-toolbar-btn" @click=${() => { this._xcAdding = true; this._xcLoadDashboards(); this._setXcDraft({}); }}>+ Add card</button>` : nothing}
       ${this._xcAdding ? html`
         <div class="field">
           <div class="field-lbl">Copy from a dashboard</div>
@@ -1267,12 +1277,12 @@ export class HADeviceDashboardEditor extends LitElement {
           ${this._xcImportCards ? (this._xcImportCards.length ? html`
             <div class="xc-import-list">
               ${this._xcImportCards.map(c => html`
-                <button class="xc-import-row" title="Use this card" @click=${() => { this._xcDraft = { ...c.config }; this._xcLatest = null; }}>${c.label}</button>`)}
+                <button class="xc-import-row" title="Use this card" @click=${() => this._setXcDraft({ ...c.config })}>${c.label}</button>`)}
             </div>` : html`<div class="dp-hint-inline">No cards found on that dashboard.</div>`) : nothing}
         </div>
         <div class="field">
           <div class="field-lbl">Or start from a card type</div>
-          <select @change=${(e: Event) => { const t = (e.target as HTMLSelectElement).value; this._xcDraft = t ? { type: t } : {}; this._xcLatest = null; }}>
+          <select @change=${(e: Event) => { const t = (e.target as HTMLSelectElement).value; this._setXcDraft(t ? { type: t } : {}); }}>
             <option value="">— none, paste YAML below —</option>
             ${this._cardTypeOptions().map(o => html`<option value=${o.value}>${o.label}</option>`)}
           </select>
@@ -1281,12 +1291,12 @@ export class HADeviceDashboardEditor extends LitElement {
       ${this._xcDraft ? html`
         <div class="field">
           <div class="field-lbl">Card configuration (YAML)</div>
-          ${yamlAvail ? html`
+          ${keyed(this._xcDraftKey, yamlAvail ? html`
             <ha-yaml-editor .hass=${this.hass} .defaultValue=${this._xcDraft}
               @value-changed=${(e: CustomEvent) => { e.stopPropagation(); if (e.detail?.isValid !== false) this._xcLatest = e.detail.value; }}></ha-yaml-editor>`
           : html`
             <textarea class="xc-yaml" .value=${JSON.stringify(this._xcDraft, null, 2)}
-              @input=${(e: Event) => { try { this._xcLatest = JSON.parse((e.target as HTMLTextAreaElement).value); } catch { /* keep last valid */ } }}></textarea>`}
+              @input=${(e: Event) => { try { this._xcLatest = JSON.parse((e.target as HTMLTextAreaElement).value); } catch { /* keep last valid */ } }}></textarea>`)}
           <div class="xc-actions">
             <button class="sec-toolbar-btn" @click=${() => this._xcCommit()}>${this._xcEditIndex !== null ? 'Save' : 'Add'}</button>
             <button class="sec-toolbar-btn" @click=${() => this._xcCancel()}>Cancel</button>
