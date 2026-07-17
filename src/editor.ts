@@ -189,6 +189,10 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _xcDraft: Record<string, unknown> | null = null;
   /** Latest value from the embedded card editor — NOT reactive, so keystrokes don't reset it. */
   private _xcLatest: Record<string, unknown> | null = null;
+  /** "Copy from a dashboard" import state. */
+  @state() private _xcDashboards: Array<{ url_path: string; title: string }> | null = null;
+  @state() private _xcImportCards: Array<{ config: LovelaceCardConfig; label: string }> | null = null;
+  @state() private _xcImportLoading = false;
   /** Theme awaiting a "replace custom colours?" confirmation, and the last
    *  saved custom palette (a restorable swatch). */
   @state() private _pendingTheme: Exclude<ThemePreset, 'custom'> | null = null;
@@ -1140,7 +1144,59 @@ export class HADeviceDashboardEditor extends LitElement {
     }
   }
 
-  private _xcCancel(): void { this._xcAdding = false; this._xcEditIndex = null; this._xcDraft = null; this._xcLatest = null; }
+  private _xcCancel(): void {
+    this._xcAdding = false; this._xcEditIndex = null; this._xcDraft = null; this._xcLatest = null;
+    this._xcImportCards = null; this._xcImportLoading = false;
+  }
+
+  /** Load the list of storage dashboards the user can copy cards from. */
+  private async _xcLoadDashboards(): Promise<void> {
+    if (this._xcDashboards) return;
+    try {
+      const list = await this.hass.callWS<Array<{ url_path: string; title: string; mode: string }>>({ type: 'lovelace/dashboards/list' });
+      this._xcDashboards = (list ?? []).filter(d => d.mode === 'storage').map(d => ({ url_path: d.url_path, title: d.title }));
+    } catch { this._xcDashboards = []; }
+  }
+
+  /** Fetch a dashboard's config and flatten its cards into a pickable list. */
+  private async _xcLoadCardsFrom(urlPath: string): Promise<void> {
+    if (urlPath === '__none__') { this._xcImportCards = null; return; }
+    this._xcImportLoading = true; this._xcImportCards = null;
+    try {
+      const cfg = await this.hass.callWS<{ views?: Array<Record<string, unknown>> }>(
+        urlPath ? { type: 'lovelace/config', url_path: urlPath } : { type: 'lovelace/config' });
+      this._xcImportCards = this._collectCards(cfg);
+    } catch { this._xcImportCards = []; }
+    this._xcImportLoading = false;
+  }
+
+  /** Recursively collect every card (including nested stack/grid children). */
+  private _collectCards(cfg: { views?: Array<Record<string, unknown>> }): Array<{ config: LovelaceCardConfig; label: string }> {
+    const out: Array<{ config: LovelaceCardConfig; label: string }> = [];
+    const hintOf = (c: Record<string, unknown>): string => {
+      const first = Array.isArray(c.entities) ? c.entities[0] : undefined;
+      const cands = [c.name, c.title, c.entity, c.camera_entity, first, c.content];
+      for (const v of cands) {
+        if (typeof v === 'string' && v.trim()) return ` · ${v.replace(/\s+/g, ' ').slice(0, 34)}`;
+        if (v && typeof v === 'object' && typeof (v as { entity?: string }).entity === 'string') return ` · ${(v as { entity: string }).entity.slice(0, 34)}`;
+      }
+      return '';
+    };
+    const visit = (c: unknown): void => {
+      if (!c || typeof c !== 'object') return;
+      const card = c as Record<string, unknown>;
+      if (typeof card.type === 'string') out.push({ config: card as LovelaceCardConfig, label: `${card.type}${hintOf(card)}` });
+      for (const k of ['cards', 'card']) {
+        const v = card[k];
+        if (Array.isArray(v)) v.forEach(visit); else if (v && typeof v === 'object') visit(v);
+      }
+    };
+    for (const view of cfg.views ?? []) {
+      for (const c of (view.cards as unknown[] ?? [])) visit(c);
+      for (const s of (view.sections as Array<Record<string, unknown>> ?? [])) for (const c of (s.cards as unknown[] ?? [])) visit(c);
+    }
+    return out;
+  }
 
   private _xcCommit(): void {
     const cfg = this._xcLatest ?? this._xcDraft;
@@ -1199,15 +1255,28 @@ export class HADeviceDashboardEditor extends LitElement {
           </div>`) : html`<div class="dp-hint-inline">No cards here yet.</div>`}
       </div>
       ${!this._xcAdding && this._xcEditIndex === null ? html`
-        <button class="sec-toolbar-btn" @click=${() => { this._xcAdding = true; this._xcDraft = {}; this._xcLatest = null; }}>+ Add card</button>` : nothing}
+        <button class="sec-toolbar-btn" @click=${() => { this._xcAdding = true; this._xcDraft = {}; this._xcLatest = null; this._xcLoadDashboards(); }}>+ Add card</button>` : nothing}
       ${this._xcAdding ? html`
         <div class="field">
-          <div class="field-lbl">Start from a card type (optional)</div>
+          <div class="field-lbl">Copy from a dashboard</div>
+          <select @change=${(e: Event) => this._xcLoadCardsFrom((e.target as HTMLSelectElement).value)}>
+            <option value="__none__">— choose a dashboard —</option>
+            ${(this._xcDashboards ?? []).map(d => html`<option value=${d.url_path}>${d.title}</option>`)}
+          </select>
+          ${this._xcImportLoading ? html`<div class="dp-hint-inline">Loading cards…</div>` : nothing}
+          ${this._xcImportCards ? (this._xcImportCards.length ? html`
+            <div class="xc-import-list">
+              ${this._xcImportCards.map(c => html`
+                <button class="xc-import-row" title="Use this card" @click=${() => { this._xcDraft = { ...c.config }; this._xcLatest = null; }}>${c.label}</button>`)}
+            </div>` : html`<div class="dp-hint-inline">No cards found on that dashboard.</div>`) : nothing}
+        </div>
+        <div class="field">
+          <div class="field-lbl">Or start from a card type</div>
           <select @change=${(e: Event) => { const t = (e.target as HTMLSelectElement).value; this._xcDraft = t ? { type: t } : {}; this._xcLatest = null; }}>
             <option value="">— none, paste YAML below —</option>
             ${this._cardTypeOptions().map(o => html`<option value=${o.value}>${o.label}</option>`)}
           </select>
-          <div class="dp-hint-inline">Pick a type to start a fresh card, or just paste an existing card's full YAML below (with its own <code>type:</code>).</div>
+          <div class="dp-hint-inline">Copy a card from another dashboard above, pick a type, or paste a card's full YAML below (with its own <code>type:</code>).</div>
         </div>` : nothing}
       ${this._xcDraft ? html`
         <div class="field">
@@ -3672,6 +3741,9 @@ export class HADeviceDashboardEditor extends LitElement {
     .xc-del { color:#e5837a; }
     .xc-del:hover { border-color:#e5837a; color:#fff; background:#e5837a; }
     .xc-actions { display:flex; gap:6px; margin-top:6px; }
+    .xc-import-list { display:flex; flex-direction:column; gap:3px; margin-top:6px; max-height:220px; overflow-y:auto; }
+    .xc-import-row { text-align:left; font-size:11px; font-family:monospace; padding:5px 8px; border-radius:5px; border:1px solid var(--border); background:var(--s2); color:var(--t2); cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .xc-import-row:hover { background:var(--s3); color:var(--text); border-color:var(--accent); }
     .xc-yaml { width:100%; min-height:120px; font-family:monospace; font-size:12px; background:var(--s2); color:var(--t2); border:1px solid var(--border); border-radius:6px; padding:8px; resize:vertical; }
     ha-yaml-editor { display:block; margin-top:4px; }
     .tab-body { padding:16px; background:var(--bg); overflow-y:auto; flex:1; min-height:0; }
