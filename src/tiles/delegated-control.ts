@@ -68,3 +68,51 @@ export class HddDelegated extends LitElement {
     return this._el ?? nothing;
   }
 }
+
+/**
+ * Renders any Lovelace card (built-in or a HACS custom card the user has) from its
+ * normal card config, via loadCardHelpers().createCardElement(). Used to embed the
+ * user's own cards into the dashboard (header/footer/per-room). Unlike hdd-delegated
+ * it keeps the card's native chrome — it's a real card, not a control inside a tile.
+ */
+@customElement('hdd-card')
+export class HddCard extends LitElement {
+  @property({ attribute: false }) hass?: unknown;
+  @property({ attribute: false }) config?: unknown;
+
+  @state() private _el?: HTMLElement;
+  private _builtKey = '';
+
+  static styles = css`
+    :host { display: block; }
+    :host > * { width: 100%; }
+  `;
+
+  protected willUpdate(_changed: PropertyValues) {
+    const key = this.config ? JSON.stringify(this.config) : '';
+    if (key && key !== this._builtKey) this._build(key);
+  }
+
+  protected updated() {
+    if (this._el && this.hass) (this._el as unknown as { hass: unknown }).hass = this.hass;
+  }
+
+  private async _build(key: string): Promise<void> {
+    this._builtKey = key;
+    try {
+      const loader = (window as unknown as { loadCardHelpers?: () => Promise<any> }).loadCardHelpers;
+      const helpers = loader ? await loader() : undefined;
+      // config changed again while awaiting — abandon this build
+      if (!helpers || JSON.stringify(this.config) !== key) return;
+      const el: HTMLElement = helpers.createCardElement(this.config);
+      if (this.hass) (el as unknown as { hass: unknown }).hass = this.hass;
+      this._el = el;
+    } catch {
+      this._el = undefined;
+    }
+  }
+
+  protected render() {
+    return this._el ?? nothing;
+  }
+}

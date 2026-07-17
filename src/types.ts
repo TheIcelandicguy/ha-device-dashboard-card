@@ -401,6 +401,13 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
    *  the `delegated_controls` block. Off by default because each embeds a native
    *  tile element — real render cost on large media fleets. */
   delegate_controls?: boolean;
+
+  // ── Extra Lovelace cards (embed the user's own cards) ─────────
+  /** Any Lovelace cards to render across the top of the dashboard, above the
+   *  device grid (built-in or HACS custom cards). */
+  header_cards?: LovelaceCardConfig[];
+  /** Any Lovelace cards to render across the bottom, below the device grid. */
+  footer_cards?: LovelaceCardConfig[];
   /** Area filter. undefined = all; [] = none; ['Eldhús'] = specific */
   areas?: string[];
   /** Extra groups built from device-name prefixes. A device whose name starts

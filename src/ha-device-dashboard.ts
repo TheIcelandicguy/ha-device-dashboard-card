@@ -4,6 +4,7 @@ import { styleMap } from 'lit/directives/style-map.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, HADevice, TileBlockId, DeviceProfileResult, EntityAnimationType, TileStyle, PowerMonitorVariant, HassAttrs, ViewConfig, DeviceStyle, AreaStyle, CustomStyleDef, TileLayout } from './types';
+import type { LovelaceCardConfig } from 'custom-card-helpers';
 import { BUNDLED_FONT_CSS } from './fonts';
 import { mainCss } from './styles/main';
 import { tilesCss } from './styles/tiles';
@@ -2935,6 +2936,7 @@ export class HADeviceDashboard extends LitElement {
         ${this._renderHeaderDetail(devices)}
         ${this._renderViewTabs()}
         ${this._renderDelegateNotice(devices)}
+        ${this._renderExtraCards(this._config.header_cards)}
         <div class="dash-body">
           ${showFavourites ? this._renderFavoritesSection(devices) : nothing}
           ${showRooms
@@ -2943,10 +2945,20 @@ export class HADeviceDashboard extends LitElement {
                 ${repeat(viewDevices, (d) => d.device_id, (d) => this._renderTile(d))}
               </div>`}
         </div>
+        ${this._renderExtraCards(this._config.footer_cards)}
       </ha-card>
     `;
 
     return dashboard;
+  }
+
+  /** Embed the user's own Lovelace cards (built-in or HACS) across the dashboard. */
+  private _renderExtraCards(cards?: LovelaceCardConfig[]): TemplateResult {
+    if (!cards?.length) return html``;
+    return html`
+      <div class="extra-cards">
+        ${cards.map(c => html`<hdd-card .hass=${this.hass} .config=${c}></hdd-card>`)}
+      </div>`;
   }
 
   /** One-time dismissible banner: some devices have native controls (media, fan,

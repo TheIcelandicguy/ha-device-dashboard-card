@@ -1104,6 +1104,10 @@ export const mainCss = css`
     /* Delegated (native HA) controls for long-tail domains — Phase 3 fallback */
     .tile-delegated { display:flex; flex-direction:column; gap:6px; margin-top:2px; }
 
+    /* Embedded user cards (header_cards / footer_cards) */
+    .extra-cards { display:flex; flex-direction:column; gap:12px; padding:12px; }
+    .extra-cards:empty { display:none; }
+
     /* One-time notice: native controls available but off by default */
     .delegate-notice {
       display:flex; align-items:center; gap:10px; margin:0 12px 10px;
