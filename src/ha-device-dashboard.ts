@@ -2818,6 +2818,7 @@ export class HADeviceDashboard extends LitElement {
         </div>
         ${this._areaCustomizeOpen === area ? this._renderAreaHeaderCustomize(area, devices) : nothing}
         ${isClosed ? nothing : html`
+          ${this._renderExtraCards(this._config.area_cards?.[label])}
           <div class="device-grid" style="--cols:${cols}">
             ${repeat(devices, (d) => d.device_id, (d) => this._renderTile(d, areaTileStyle))}
           </div>

@@ -3259,6 +3259,7 @@ function e(e,t,i,s){var a,r=arguments.length,o=r<3?t:null===s?s=Object.getOwnPro
         </div>
         ${this._areaCustomizeOpen===e?this._renderAreaHeaderCustomize(e,t):Q}
         ${s?Q:G`
+          ${this._renderExtraCards(this._config.area_cards?.[i])}
           <div class="device-grid" style="--cols:${n}">
             ${Be(t,e=>e.device_id,e=>this._renderTile(e,c))}
           </div>
