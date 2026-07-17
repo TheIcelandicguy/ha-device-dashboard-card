@@ -2,7 +2,7 @@ import { LitElement, html, css, TemplateResult, nothing } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { ref } from 'lit/directives/ref.js';
 import { customElement, property, state } from 'lit/decorators.js';
-import { HomeAssistant, fireEvent } from 'custom-card-helpers';
+import { HomeAssistant, fireEvent, LovelaceCardConfig } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout } from './types';
 import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, setBlockInLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, applyThemePalette, detectTheme, type ThemePalette } from './themes';
@@ -180,6 +180,15 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _defaultsOpen = false;
   /** Two-click arming for the destructive "Reset everything" button. */
   @state() private _resetArmed = false;
+  /** Extra-cards manager state. */
+  @state() private _xcPlacement: 'header' | 'footer' | 'room' = 'header';
+  @state() private _xcRoom = '';
+  @state() private _xcAdding = false;
+  @state() private _xcEditIndex: number | null = null;
+  /** Initial config handed to ha-yaml-editor as defaultValue (stable while editing). */
+  @state() private _xcDraft: Record<string, unknown> | null = null;
+  /** Latest value from ha-yaml-editor — NOT reactive, so keystrokes don't reset it. */
+  private _xcLatest: Record<string, unknown> | null = null;
   /** Theme awaiting a "replace custom colours?" confirmation, and the last
    *  saved custom palette (a restorable swatch). */
   @state() private _pendingTheme: Exclude<ThemePreset, 'custom'> | null = null;
@@ -1097,8 +1106,109 @@ export class HADeviceDashboardEditor extends LitElement {
 
     return html`
       ${this._renderDiscoverySection()}
+      ${this._renderExtraCardsSection()}
       ${this._sec('rooms','⌂','rgba(74,222,128,0.1)','#4ade80','Rooms & devices', roomsBadge, roomBody)}
       ${sidePanel}`;
+  }
+
+  // ── Extra cards manager ──────────────────────────────────────────
+  private _xcArray(): LovelaceCardConfig[] {
+    const c = this._config;
+    if (this._xcPlacement === 'header') return c.header_cards ?? [];
+    if (this._xcPlacement === 'footer') return c.footer_cards ?? [];
+    return (c.area_cards?.[this._xcRoom]) ?? [];
+  }
+
+  private _xcSetArray(arr: LovelaceCardConfig[]): void {
+    if (this._xcPlacement === 'header') this._set('header_cards', arr.length ? arr : undefined);
+    else if (this._xcPlacement === 'footer') this._set('footer_cards', arr.length ? arr : undefined);
+    else {
+      const map: Record<string, LovelaceCardConfig[]> = { ...(this._config.area_cards ?? {}) };
+      if (arr.length) map[this._xcRoom] = arr; else delete map[this._xcRoom];
+      this._set('area_cards', Object.keys(map).length ? map : undefined);
+    }
+  }
+
+  private _xcCancel(): void { this._xcAdding = false; this._xcEditIndex = null; this._xcDraft = null; this._xcLatest = null; }
+
+  private _xcCommit(): void {
+    const cfg = this._xcLatest ?? this._xcDraft;
+    if (!cfg || !cfg.type) return;
+    const arr = this._xcArray().slice();
+    if (this._xcEditIndex !== null) arr[this._xcEditIndex] = cfg as LovelaceCardConfig;
+    else arr.push(cfg as LovelaceCardConfig);
+    this._xcSetArray(arr);
+    this._xcCancel();
+  }
+
+  /** Built-in card types + any custom cards the user has installed. */
+  private _cardTypeOptions(): Array<{ value: string; label: string }> {
+    const builtin = ['markdown','entities','tile','button','glance','weather-forecast','history-graph',
+      'statistics-graph','gauge','sensor','thermostat','light','media-control','picture-entity',
+      'picture-glance','area','map','calendar','iframe','vertical-stack','horizontal-stack','grid','conditional'];
+    const title = (t: string) => t.replace(/(?:^|-)(\w)/g, (_m, ch, i) => (i ? ' ' : '') + ch.toUpperCase());
+    const opts = builtin.map(t => ({ value: t, label: title(t) }));
+    const custom = ((window as unknown as { customCards?: Array<{ type: string; name?: string }> }).customCards) ?? [];
+    for (const c of custom) opts.push({ value: `custom:${c.type}`, label: `${c.name || c.type} (custom)` });
+    return opts;
+  }
+
+  private _renderExtraCardsSection(): TemplateResult {
+    const arr = this._xcArray();
+    const rooms = this._getAreas().map(a => a.name);
+    const yamlAvail = !!customElements.get('ha-yaml-editor');
+    const body = html`
+      <div class="field">
+        <div class="field-lbl">Placement</div>
+        <div class="pill-grp">
+          ${(['header','footer','room'] as const).map(p => html`
+            <span class="pill ${this._xcPlacement === p ? 'on' : ''}"
+              @click=${() => { this._xcPlacement = p; this._xcCancel(); if (p === 'room' && !this._xcRoom && rooms.length) this._xcRoom = rooms[0]; }}>
+              ${p === 'header' ? 'Header (top)' : p === 'footer' ? 'Footer (bottom)' : 'Room'}</span>`)}
+        </div>
+        <div class="dp-hint-inline">Header/footer cards frame the whole dashboard; room cards sit inside one room, above its tiles.</div>
+      </div>
+      ${this._xcPlacement === 'room' ? html`
+        <div class="field">
+          <div class="field-lbl">Room</div>
+          <select @change=${(e: Event) => { this._xcRoom = (e.target as HTMLSelectElement).value; this._xcCancel(); }}>
+            ${rooms.map(r => html`<option value=${r} ?selected=${r === this._xcRoom}>${r}</option>`)}
+          </select>
+        </div>` : nothing}
+      <div class="xc-list">
+        ${arr.length ? arr.map((card, i) => html`
+          <div class="xc-row">
+            <span class="xc-type">${(card as { type?: string }).type ?? '?'}</span>
+            <button class="xc-btn" @click=${() => { this._xcEditIndex = i; this._xcDraft = { ...card }; this._xcLatest = null; this._xcAdding = false; }}>Edit</button>
+            <button class="xc-btn xc-del" @click=${() => { const next = arr.slice(); next.splice(i, 1); this._xcSetArray(next); }}>✕</button>
+          </div>`) : html`<div class="dp-hint-inline">No cards here yet.</div>`}
+      </div>
+      ${!this._xcAdding && this._xcEditIndex === null ? html`
+        <button class="sec-toolbar-btn" @click=${() => { this._xcAdding = true; this._xcDraft = null; this._xcLatest = null; }}>+ Add card</button>` : nothing}
+      ${this._xcAdding ? html`
+        <div class="field">
+          <div class="field-lbl">Card type</div>
+          <select @change=${(e: Event) => { const t = (e.target as HTMLSelectElement).value; this._xcDraft = t ? { type: t } : null; this._xcLatest = null; }}>
+            <option value="">— pick a card —</option>
+            ${this._cardTypeOptions().map(o => html`<option value=${o.value}>${o.label}</option>`)}
+          </select>
+        </div>` : nothing}
+      ${this._xcDraft ? html`
+        <div class="field">
+          <div class="field-lbl">Card configuration</div>
+          ${yamlAvail ? html`
+            <ha-yaml-editor .hass=${this.hass} .defaultValue=${this._xcDraft}
+              @value-changed=${(e: CustomEvent) => { if (e.detail?.isValid !== false) this._xcLatest = e.detail.value; }}></ha-yaml-editor>`
+          : html`
+            <textarea class="xc-yaml" .value=${JSON.stringify(this._xcDraft, null, 2)}
+              @input=${(e: Event) => { try { this._xcLatest = JSON.parse((e.target as HTMLTextAreaElement).value); } catch { /* keep last valid */ } }}></textarea>`}
+          <div class="xc-actions">
+            <button class="sec-toolbar-btn" @click=${() => this._xcCommit()}>${this._xcEditIndex !== null ? 'Save' : 'Add'}</button>
+            <button class="sec-toolbar-btn" @click=${() => this._xcCancel()}>Cancel</button>
+          </div>
+        </div>` : nothing}`;
+    const badge = arr.length ? this._badge(String(arr.length), '#8aa0ff', 'rgba(120,140,255,0.12)') : nothing;
+    return this._sec('extra-cards', '▤', 'rgba(120,140,255,0.12)', '#8aa0ff', 'Extra cards', badge, body);
   }
 
   /** Discovery section — Shelly vs Universal mode and the universal scope filters. */
@@ -3536,6 +3646,18 @@ export class HADeviceDashboardEditor extends LitElement {
     .tw-apply:hover, .tw-cancel:hover { color:var(--text); border-color:var(--accent); }
     .sec-toolbar-btn { font-size:10px; padding:4px 9px; border-radius:4px; border:1px solid var(--border2); background:transparent; color:var(--t2); cursor:pointer; transition:all .15s; }
     .sec-toolbar-btn:hover { background:var(--s3); color:var(--text); border-color:var(--accent); }
+
+    /* Extra-cards manager */
+    .xc-list { display:flex; flex-direction:column; gap:4px; margin:6px 0; }
+    .xc-row { display:flex; align-items:center; gap:6px; padding:5px 8px; border-radius:6px; background:var(--s2); border:1px solid var(--border); }
+    .xc-type { flex:1; font-size:12px; font-family:monospace; color:var(--t2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .xc-btn { font-size:10px; padding:2px 8px; border-radius:4px; border:1px solid var(--border2); background:transparent; color:var(--t2); cursor:pointer; }
+    .xc-btn:hover { background:var(--s3); color:var(--text); }
+    .xc-del { color:#e5837a; }
+    .xc-del:hover { border-color:#e5837a; color:#fff; background:#e5837a; }
+    .xc-actions { display:flex; gap:6px; margin-top:6px; }
+    .xc-yaml { width:100%; min-height:120px; font-family:monospace; font-size:12px; background:var(--s2); color:var(--t2); border:1px solid var(--border); border-radius:6px; padding:8px; resize:vertical; }
+    ha-yaml-editor { display:block; margin-top:4px; }
     .tab-body { padding:16px; background:var(--bg); overflow-y:auto; flex:1; min-height:0; }
     .tab-body::-webkit-scrollbar { width:5px; }
     .tab-body::-webkit-scrollbar-track { background:var(--s2); }
