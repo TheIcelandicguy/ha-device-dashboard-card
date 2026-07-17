@@ -2538,16 +2538,28 @@ export class HADeviceDashboard extends LitElement {
 
   // ── Tile click / long-press ────────────────────────────────────────────────
 
+  /** Interactive controls that handle their own tap — a tap on any of these does
+   *  NOT open the detail sheet. Everything else on the tile does (like HA's own
+   *  tile card). */
+  private static readonly _TILE_CONTROL_SEL =
+    'button, a, input, select, textarea, hdd-delegated, ' +
+    '.ts-light-wheel, .trv-dial-svg, .valve-interactive, .tile-trv-dial';
+
+  private _tileTapIsControl(e: Event): boolean {
+    const t = e.target as Element | null;
+    return !!t?.closest?.(HADeviceDashboard._TILE_CONTROL_SEL);
+  }
+
   private _onTilePointerDown(_device: HADevice, e: PointerEvent): void {
-    if (!(e.target as Element | null)?.closest?.('.tile-trigger')) return;
+    if (this._tileTapIsControl(e)) return;
     this._lpStart = { x: e.clientX, y: e.clientY };
   }
 
   private _onTilePointerUp(device: HADevice, e: PointerEvent): void {
-    if (!(e.target as Element | null)?.closest?.('.tile-trigger')) return;
+    if (this._tileTapIsControl(e)) return;
     const start = this._lpStart;
     this._lpStart = null;
-    if (!start) return; // cancelled by move or pointercancel
+    if (!start) return; // cancelled by move, pointercancel, or a down on a control
     this._detailDevice = device.device_id;
     this._detailHistoryRange = 24;
   }

@@ -335,6 +335,12 @@ export const mainCss = css`
     .tile--clickable { cursor:default; }
 
     .tile-trigger { cursor:pointer; }
+    /* Whole tile opens the detail sheet; interactive controls keep their own cursor */
+    .tile--clickable { cursor:pointer; }
+    .tile--clickable button, .tile--clickable a, .tile--clickable input,
+    .tile--clickable .ts-light-wheel, .tile--clickable .trv-dial-svg,
+    .tile--clickable .valve-interactive, .tile--clickable hdd-delegated { cursor:auto; }
+    .tile--clickable button, .tile--clickable a { cursor:pointer; }
 
     .tile::after {
       content:''; position:absolute; inset:0; z-index:-1; pointer-events:none;
