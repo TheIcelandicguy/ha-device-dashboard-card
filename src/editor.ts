@@ -1199,14 +1199,15 @@ export class HADeviceDashboardEditor extends LitElement {
           </div>`) : html`<div class="dp-hint-inline">No cards here yet.</div>`}
       </div>
       ${!this._xcAdding && this._xcEditIndex === null ? html`
-        <button class="sec-toolbar-btn" @click=${() => { this._xcAdding = true; this._xcDraft = null; this._xcLatest = null; }}>+ Add card</button>` : nothing}
+        <button class="sec-toolbar-btn" @click=${() => { this._xcAdding = true; this._xcDraft = {}; this._xcLatest = null; }}>+ Add card</button>` : nothing}
       ${this._xcAdding ? html`
         <div class="field">
-          <div class="field-lbl">Card type</div>
-          <select @change=${(e: Event) => { const t = (e.target as HTMLSelectElement).value; this._xcDraft = t ? { type: t } : null; this._xcLatest = null; }}>
-            <option value="">— pick a card —</option>
+          <div class="field-lbl">Start from a card type (optional)</div>
+          <select @change=${(e: Event) => { const t = (e.target as HTMLSelectElement).value; this._xcDraft = t ? { type: t } : {}; this._xcLatest = null; }}>
+            <option value="">— none, paste YAML below —</option>
             ${this._cardTypeOptions().map(o => html`<option value=${o.value}>${o.label}</option>`)}
           </select>
+          <div class="dp-hint-inline">Pick a type to start a fresh card, or just paste an existing card's full YAML below (with its own <code>type:</code>).</div>
         </div>` : nothing}
       ${this._xcDraft ? html`
         <div class="field">
