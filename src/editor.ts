@@ -277,6 +277,17 @@ export class HADeviceDashboardEditor extends LitElement {
       const dialogShadow = dialogEditCard.shadowRoot;
       if (!dialogShadow) return;
 
+      // Auto-widen the edit dialog on large displays — the same "enlarge" the user
+      // would otherwise click on the header, giving a bigger form + preview. Done
+      // once on open (fresh editor instance per dialog), so a later manual toggle
+      // sticks. Guarded against HA renaming the internals.
+      try {
+        if (window.matchMedia('(min-width: 1600px)').matches) {
+          const dlg = dialogEditCard as unknown as { large?: boolean; _enlarge?: () => void };
+          if (dlg.large === false && typeof dlg._enlarge === 'function') dlg._enlarge();
+        }
+      } catch { /* dialog internals changed — ignore */ }
+
       // Inject structural styles (only the parts that don't depend on window size)
       const STYLE_ID = 'ha-device-dashboard-editor-fix';
       if (!dialogShadow.getElementById(STYLE_ID)) {
