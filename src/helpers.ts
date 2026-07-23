@@ -748,6 +748,31 @@ export function getIntegrationLabel(platform: string): string {
   return INTEGRATION_LABELS[platform.toLowerCase()] ?? platform.toUpperCase().slice(0, 6);
 }
 
+/**
+ * Distinct integrations (entity-registry platforms) and entity domains present
+ * in this HA, for the editor's Discovery hide-checkbox lists. Walks the entity
+ * registry once — the same source `getAllDevices` reads — so what's offered
+ * matches what's discoverable. Both lists are sorted; integrations exclude the
+ * empty platform.
+ */
+export function getDiscoverySources(hass: HomeAssistant): { integrations: string[]; domains: string[] } {
+  const entityRegistry: Record<string, any> = (hass as any).entities ?? {};
+  const integrations = new Set<string>();
+  const domains = new Set<string>();
+  for (const [entityId, regEntry] of Object.entries(entityRegistry)) {
+    if (!regEntry?.device_id || regEntry.hidden_by) continue;
+    const domain = entityId.split('.')[0];
+    if (!DEVICE_DOMAINS.has(domain)) continue;
+    domains.add(domain);
+    const platform = (regEntry.platform ?? '').toLowerCase();
+    if (platform) integrations.add(platform);
+  }
+  return {
+    integrations: [...integrations].sort((a, b) => getIntegrationLabel(a).localeCompare(getIntegrationLabel(b))),
+    domains: [...domains].sort(),
+  };
+}
+
 // ─── Entity helpers ────────────────────────────────────────────────────────────
 
 export function getEntityByDomain(entities: HAEntity[], domain: string): HAEntity | undefined {
@@ -1019,6 +1044,43 @@ export const HEADER_CHIP_DEFS: Array<{
 
 /** Chips shown when `header_chips` is not configured. */
 export const DEFAULT_HEADER_CHIPS = ['online', 'offline', 'power', 'alerts'];
+
+/**
+ * Room (area) header chip catalogue. Each entry maps a chip key to the sensor
+ * device_class it aggregates, a short label, and how per-sensor values combine.
+ * Shared by the room-header renderer (`_getAreaChips`), the in-card ⚙ cog popup
+ * (`_areaHeaderCandidates`), and the editor's per-room chip picker.
+ *  - sum: total across the room (power, current, energy)
+ *  - avg: mean across the room (temperature, humidity, …)
+ * `rssi` has no clean device_class — it's matched by `signal_strength` or a
+ * `_rssi` entity id at the call site.
+ */
+export const AREA_CHIP_DEFS: Array<{
+  key: string;
+  label: string;
+  dc: string;
+  agg: 'sum' | 'avg';
+}> = [
+  { key: 'power',       label: 'Power',   dc: 'power',          agg: 'sum' },
+  { key: 'energy',      label: 'Energy',  dc: 'energy',         agg: 'sum' },
+  { key: 'voltage',     label: 'Volt',    dc: 'voltage',        agg: 'avg' },
+  { key: 'current',     label: 'Amp',     dc: 'current',        agg: 'sum' },
+  { key: 'temperature', label: 'Temp',    dc: 'temperature',    agg: 'avg' },
+  { key: 'humidity',    label: 'Hum',     dc: 'humidity',       agg: 'avg' },
+  { key: 'co2',         label: 'CO₂',     dc: 'carbon_dioxide', agg: 'avg' },
+  { key: 'illuminance', label: 'Light',   dc: 'illuminance',    agg: 'avg' },
+  { key: 'battery',     label: 'Batt',    dc: 'battery',        agg: 'avg' },
+  { key: 'rssi',        label: 'Wi-Fi',   dc: 'signal_strength', agg: 'avg' },
+];
+
+/**
+ * Room-header chips shown when a room sets no `header_chips`. Environmental/
+ * status metrics only — live Power already shows as the always-on number in the
+ * room's meta row, and cumulative Energy is deliberately opt-in (its kWh total
+ * is misleading as a "current" readout). Only chips whose sensor is actually
+ * present in the room are rendered.
+ */
+export const DEFAULT_AREA_HEADER_CHIPS = ['temperature', 'humidity', 'co2', 'illuminance', 'battery'];
 
 /**
  * The hard-coded factory default look — the single source of truth for the

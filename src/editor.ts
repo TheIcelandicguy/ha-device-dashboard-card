@@ -5,7 +5,7 @@ import { keyed } from 'lit/directives/keyed.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent, LovelaceCardConfig } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout } from './types';
-import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, setBlockInLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook } from './helpers';
+import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, setBlockInLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, applyThemePalette, detectTheme, type ThemePalette } from './themes';
 import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons';
 import { EDITOR_LAYOUT } from './editor-layout';
@@ -149,17 +149,6 @@ const PM_VARIANT_OPTIONS: Array<{ v: PowerMonitorVariant; label: string; icon: s
   { v: 'table',      label: 'Table',   icon: '≡' },
 ];
 
-/** Config keys that belong to style/layout — copied by "Copy style", excluded: device/room keys */
-const STYLE_KEYS: ReadonlyArray<string> = [
-  'style', 'tile_size', 'tile_opacity', 'card_opacity',
-  'card_bg_image', 'card_bg_image_size',
-  'tile_layout', 'graph_style', 'graph_sensors',
-  'graph_hours', 'graph_line_color', 'graph_sensor_colors',
-  'sensors', 'sort_by', 'columns',
-  'show_power_bar', 'power_bar_max',
-  'area_styles', 'device_styles',
-  'views', 'default_view',
-];
 
 
 
@@ -218,11 +207,8 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _expandedRoomStyle: Set<string> = new Set();
   @state() private _selectedDeviceId: string | null = null;
   @state() private _deviceSearch = '';
-  @state() private _styleClipFeedback = '';
-  @state() private _copyAreaOpen = false;
-  @state() private _copyJson = '';
-  @state() private _pasteOpen = false;
-  @state() private _pasteText = '';
+  @state() private _styleClipFeedback = '';   // transient feedback for image-upload errors
+  @state() private _openDiscDropdown: string | null = null;  // Discovery: which hide-checklist dropdown is expanded
   @state() private _iconPickerState: {
     currentValue: string | undefined;
     isOn: boolean;
@@ -614,41 +600,6 @@ export class HADeviceDashboardEditor extends LitElement {
     this._styleClipTimer = window.setTimeout(() => { this._styleClipFeedback = ''; }, 1500);
   }
 
-  private _copyStyle() {
-    const snapshot: Record<string, unknown> = {};
-    for (const k of STYLE_KEYS) {
-      const v = (this._config as Record<string, unknown>)[k];
-      if (v !== undefined) snapshot[k] = v;
-    }
-    this._copyJson = JSON.stringify(snapshot);
-    this._copyAreaOpen = true;
-    this._pasteOpen = false;
-    navigator.clipboard.writeText(this._copyJson)
-      .then(() => this._showStyleFeedback('Copied to clipboard'))
-      .catch((err) => {
-        console.warn('[editor] clipboard write failed', err);
-        this._showStyleFeedback('Copy failed — select the text below and copy manually');
-      });
-  }
-
-  private _applyPastedStyle() {
-    try {
-      const parsed = JSON.parse(this._pasteText) as Record<string, unknown>;
-      const hasKnownKey = STYLE_KEYS.some(k => k in parsed);
-      if (!hasKnownKey) { this._showStyleFeedback('Invalid style data'); return; }
-      const updated = { ...this._config } as Record<string, unknown>;
-      for (const k of STYLE_KEYS) {
-        if (k in parsed) updated[k] = parsed[k];
-      }
-      this._emitNow(updated as HADeviceDashboardConfig);
-      this._showStyleFeedback('Applied!');
-      this._pasteOpen = false;
-      this._pasteText = '';
-    } catch {
-      this._showStyleFeedback('Invalid style data');
-    }
-  }
-
   private _getAreas(): Array<{ id: string; name: string }> {
     if (!this.hass) return [];
     // Only areas that actually contain a fetched Shelly/BTHome device. HA areas
@@ -861,6 +812,7 @@ export class HADeviceDashboardEditor extends LitElement {
                 .value=${current ?? ''}
                 @change=${(e: Event) => { const v = (e.target as HTMLInputElement).value.trim(); apply(v || undefined); }}/>`}
           ${current ? html`<button class="color-reset" @click=${clear}>↺</button>` : nothing}
+          ${this._styleClipFeedback ? html`<span class="clip-feedback">${this._styleClipFeedback}</span>` : nothing}
         </div>
         ${current && showFit ? html`
           <div class="field-lbl" style="margin-top:6px">Image fit</div>
@@ -978,15 +930,6 @@ export class HADeviceDashboardEditor extends LitElement {
           <label class="sw"><input type="checkbox" .checked=${c.show_offline !== false}
             @change=${(e:Event)=>this._set('show_offline',(e.target as HTMLInputElement).checked)}>
             <span class="sw-t"></span><span class="sw-b"></span></label>
-        </div>
-        <div class="tog-row" style="border:none;padding:6px 0 0;align-items:center">
-          <div class="tog-lbl" title="Devices whose name starts with one of these ALSO appear under a section of that name, in addition to their room. Comma-separated.">Name-based groups</div>
-          <input type="text" class="inline-text" style="max-width:190px" placeholder="e.g. Gólfhiti"
-            .value=${(c.name_groups ?? []).join(', ')}
-            @change=${(e:Event)=>{
-              const list=(e.target as HTMLInputElement).value.split(',').map(s=>s.trim()).filter(Boolean);
-              this._set('name_groups', list.length ? list : undefined);
-            }}>
         </div>
       </div>
       ${(c.favorites?.length) ? (() => {
@@ -1306,21 +1249,50 @@ export class HADeviceDashboardEditor extends LitElement {
     return this._sec('extra-cards', '▤', 'rgba(120,140,255,0.12)', '#8aa0ff', 'Extra cards', badge, body);
   }
 
-  /** Discovery section — Shelly vs Universal mode and the universal scope filters. */
+  /** A collapsible checkbox list. `options` = {value,label}; `hidden` = the set
+   *  of values currently checked (hidden). Toggling writes back the new array. */
+  private _renderCheckDropdown(
+    id: string,
+    label: string,
+    options: Array<{ value: string; label: string }>,
+    hidden: string[],
+    onChange: (next: string[] | undefined) => void,
+    hint: string,
+  ): TemplateResult {
+    const open = this._openDiscDropdown === id;
+    const hidSet = new Set(hidden);
+    const n = hidSet.size;
+    const toggle = (value: string) => {
+      const next = hidSet.has(value) ? hidden.filter(v => v !== value) : [...hidden, value];
+      onChange(next.length ? next : undefined);
+    };
+    return html`
+      <div class="field">
+        <div class="field-lbl">${label}</div>
+        <button class="check-dd-btn ${open ? 'open' : ''}"
+          @click=${() => { this._openDiscDropdown = open ? null : id; }}>
+          <span>${n ? `${n} hidden` : 'None hidden'}</span><span class="check-dd-caret">▾</span>
+        </button>
+        ${open ? html`
+          <div class="check-dd-panel">
+            ${options.length ? options.map(o => html`
+              <label class="check-dd-row">
+                <input type="checkbox" .checked=${hidSet.has(o.value)}
+                  @change=${() => toggle(o.value)}>
+                <span>${o.label}</span>
+              </label>`)
+              : html`<div class="check-dd-empty">Nothing discovered.</div>`}
+          </div>` : nothing}
+        <div class="dp-hint-inline">${hint}</div>
+      </div>`;
+  }
+
+  /** Discovery section — Shelly vs Universal mode, scope, and hide-checklists. */
   private _renderDiscoverySection(): TemplateResult {
     const c = this._config;
     const universal = c.mode === 'universal';
     const scope = c.universal_scope ?? 'devices';
-    const listField = (label: string, key: string, val: string[] | undefined, placeholder: string, hint: string) => html`
-      <div class="field">
-        <div class="field-lbl">${label}</div>
-        <input type="text" .value=${(val ?? []).join(', ')} placeholder=${placeholder}
-          @change=${(e: Event) => {
-            const v = ((e.target as HTMLInputElement).value || '').split(',').map(s => s.trim()).filter(Boolean);
-            this._set(key, v.length ? v : undefined);
-          }}>
-        <div class="dp-hint-inline">${hint}</div>
-      </div>`;
+    const sources = this.hass ? getDiscoverySources(this.hass) : { integrations: [], domains: [] };
     const body = html`
       <div class="field">
         <div class="field-lbl">Discovery mode</div>
@@ -1341,10 +1313,16 @@ export class HADeviceDashboardEditor extends LitElement {
           </div>
           <div class="dp-hint-inline">Real devices = things you can control plus real sensors (drops routers, PCs, phones). Controllable = only devices with controls. Everything = every discovered device.</div>
         </div>
-        ${listField('Hide integrations', 'exclude_integrations', c.exclude_integrations, 'e.g. music_assistant, cast', 'Comma-separated. Added to the built-in list (phones, browsers, routers…) that is already hidden.')}
-        ${listField('Show integrations anyway', 'include_integrations', c.include_integrations, 'e.g. mobile_app', 'Comma-separated. Re-adds integrations that would otherwise be hidden by the list above or the built-in defaults.')}
-        ${listField('Hide entity types', 'exclude_domains', c.exclude_domains, 'e.g. update, camera', 'Comma-separated domains to drop entirely (e.g. update, camera).')}
-        ${listField('Only entity types', 'include_domains', c.include_domains, 'e.g. light, switch, climate', 'Comma-separated. When set, ONLY these domains are discovered.')}
+        ${this._renderCheckDropdown('disc-int', 'Hide integrations',
+          sources.integrations.map(p => ({ value: p, label: getIntegrationLabel(p) })),
+          c.exclude_integrations ?? [],
+          (next) => this._set('exclude_integrations', next),
+          'Tick the integrations to drop. The built-in list (phones, browsers, routers…) is always hidden on top of these.')}
+        ${this._renderCheckDropdown('disc-dom', 'Hide entity types',
+          sources.domains.map(d => ({ value: d, label: d })),
+          c.exclude_domains ?? [],
+          (next) => this._set('exclude_domains', next),
+          'Tick the entity domains to drop entirely (e.g. update, camera).')}
       ` : nothing}`;
     const badge = this._badge(universal ? 'Universal' : 'Shelly',
       universal ? '#c98a63' : '#4ade80',
@@ -2137,6 +2115,41 @@ export class HADeviceDashboardEditor extends LitElement {
       </div>`;
   }
 
+  /** Per-room header-chip picker. Offers only metrics whose sensor is present in
+   *  the room; live power stays the always-on number in the room meta row. */
+  private _renderRoomHeaderChips(name: string, st: AreaStyle): TemplateResult {
+    const roomDevices = this._allDevices().filter(d => (d.area ?? '') === name);
+    const present = new Set<string>();
+    for (const d of roomDevices) for (const e of d.entities) {
+      if (e.domain !== 'sensor') continue;
+      const dc = ((e.attributes as any)?.device_class as string) ?? '';
+      const def = AREA_CHIP_DEFS.find(x =>
+        x.dc === dc || (x.key === 'rssi' && (dc === 'signal_strength' || e.entity_id.includes('_rssi'))));
+      if (def) present.add(def.key);
+    }
+    const defs = AREA_CHIP_DEFS.filter(d => present.has(d.key));
+    if (!defs.length) return html`<div class="hint" style="margin:2px 2px 6px">No summary sensors in this room.</div>`;
+    const sel = st.header_chips ?? DEFAULT_AREA_HEADER_CHIPS;
+    const isDefault = (arr: string[]) =>
+      arr.length === DEFAULT_AREA_HEADER_CHIPS.length && DEFAULT_AREA_HEADER_CHIPS.every(k => arr.includes(k));
+    return html`
+      <div class="field" style="margin-bottom:4px">
+        ${st.header_chips !== undefined
+          ? html`<button class="color-reset" style="margin-bottom:4px" @click=${() => this._setAreaStyle(name, 'header_chips', undefined)}>↺ Default</button>`
+          : nothing}
+        <div class="pill-grp">
+          ${defs.map(def => {
+            const on = sel.includes(def.key);
+            return html`<span class="pill ${on ? 'on' : ''}" @click=${() => {
+              const next = on ? sel.filter(k => k !== def.key) : [...sel, def.key];
+              this._setAreaStyle(name, 'header_chips', isDefault(next) ? undefined : next);
+            }}>${def.label}</span>`;
+          })}
+        </div>
+        <div class="hint" style="margin-top:4px">Live power already shows in the room's meta row; add Energy/Voltage/etc. here.</div>
+      </div>`;
+  }
+
   private _renderRoomStylePanel(name: string): TemplateResult {
     const st: AreaStyle = this._config.area_styles?.[name] ?? {};
 
@@ -2223,6 +2236,9 @@ export class HADeviceDashboardEditor extends LitElement {
         ${colorRow('Header text', 'textColor', '#f4601e')}
         ${slRow('Font size', 'fontSize', 8, 32, 1, 12, 'px')}
         `)}
+
+        ${sectionLbl('Room header chips')}
+        ${this._renderRoomHeaderChips(name, st)}
 
         ${sectionLbl('Sensor chips')}
         ${this._chipPicker(
@@ -3065,28 +3081,6 @@ export class HADeviceDashboardEditor extends LitElement {
       </div>`;
 
     return html`
-      ${this._adv(html`
-      <div class="style-toolbar">
-        <button class="btn-copy ${this._copyAreaOpen ? 'active' : ''}" @click=${() => { this._copyStyle(); }}>⧉ Copy style</button>
-        <button class="btn-copy ${this._pasteOpen ? 'active' : ''}" @click=${() => { this._pasteOpen = !this._pasteOpen; this._copyAreaOpen = false; }}>⬇ Paste style</button>
-        ${this._styleClipFeedback ? html`<span class="clip-feedback">${this._styleClipFeedback}</span>` : nothing}
-      </div>
-      ${this._copyAreaOpen ? html`
-        <div class="paste-area">
-          <div style="font-size:10px;color:var(--t2);margin-bottom:2px">Select all and copy (Ctrl+A, Ctrl+C), then paste into another card's Paste style box</div>
-          <textarea class="paste-ta" rows="3" readonly
-            .value=${this._copyJson}
-            @focus=${(e: Event) => { (e.target as HTMLTextAreaElement).select(); }}></textarea>
-        </div>` : nothing}
-      ${this._pasteOpen ? html`
-        <div class="paste-area">
-          <div style="font-size:10px;color:var(--t2);margin-bottom:2px">Paste style JSON, then click Apply</div>
-          <textarea class="paste-ta" rows="3" placeholder="Paste style JSON here…"
-            .value=${this._pasteText}
-            @input=${(e: Event) => { this._pasteText = (e.target as HTMLTextAreaElement).value; }}></textarea>
-          <button class="btn-copy" @click=${() => this._applyPastedStyle()}>Apply</button>
-        </div>` : nothing}
-      `)}
       ${previewPreview}
       ${this._renderTabSections('card-theme', this._globalSectionDescriptors())}
       ${this._renderRoomStyleSection()}`;
@@ -3465,7 +3459,7 @@ export class HADeviceDashboardEditor extends LitElement {
   /** Config keys that describe *content* (what's shown), preserved by "Reset look". */
   private static readonly _CONTENT_KEYS = [
     'type', 'title', 'mode', 'universal_scope', 'include_integrations', 'exclude_integrations',
-    'include_domains', 'exclude_domains', 'areas', 'name_groups', 'hidden_devices', 'favorites',
+    'include_domains', 'exclude_domains', 'areas', 'hidden_devices', 'favorites',
     'hidden_entities', 'show_offline', 'views', 'default_view', 'delegate_controls',
   ];
 
@@ -3722,6 +3716,18 @@ export class HADeviceDashboardEditor extends LitElement {
     .dp-group { display:flex; flex-direction:column; gap:8px; background:var(--s2); border:1px solid var(--border); border-radius:8px; padding:10px; }
     .dp-title { font-size:11px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; color:var(--t2); display:flex; align-items:center; gap:8px; }
     .dp-hint-inline { font-size:10px; font-weight:400; text-transform:none; letter-spacing:0; color:var(--t3); }
+    .check-dd-btn { display:flex; align-items:center; justify-content:space-between; width:100%; gap:8px;
+      font-size:12px; color:var(--text); background:var(--s2); border:1px solid var(--border); border-radius:6px;
+      padding:7px 10px; cursor:pointer; text-align:left; }
+    .check-dd-btn:hover { border-color:var(--border2); }
+    .check-dd-caret { transition:transform .15s; color:var(--t3); }
+    .check-dd-btn.open .check-dd-caret { transform:rotate(180deg); }
+    .check-dd-panel { margin-top:4px; max-height:220px; overflow-y:auto; border:1px solid var(--border);
+      border-radius:6px; background:var(--s2); padding:4px; display:flex; flex-direction:column; gap:1px; }
+    .check-dd-row { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text);
+      padding:5px 7px; border-radius:4px; cursor:pointer; }
+    .check-dd-row:hover { background:var(--s3); }
+    .check-dd-empty { font-size:11px; color:var(--t3); padding:6px 7px; }
     .theme-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
     .theme-swatch { display:flex; flex-direction:column; align-items:center; gap:4px; padding:5px 3px; border:1px solid var(--border2); border-radius:6px; background:transparent; cursor:pointer; transition:all .15s; }
     .theme-swatch:hover { border-color:var(--accent); }
@@ -4091,12 +4097,8 @@ export class HADeviceDashboardEditor extends LitElement {
     .yaml-out::-webkit-scrollbar-thumb { background:var(--s3); border-radius:2px; }
     .btn-copy { font-size:11px; padding:4px 10px; border-radius:20px; border:1px solid var(--border2); background:transparent; color:var(--t2); cursor:pointer; transition:all .15s; }
     .btn-copy:hover { background:var(--s3); color:var(--text); }
-    .style-toolbar { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
-    .btn-copy.active { background:var(--s3); color:var(--text); }
     .clip-feedback { font-size:11px; color:var(--t2); animation:fadeout 1.5s forwards; }
     @keyframes fadeout { 0%{opacity:1} 70%{opacity:1} 100%{opacity:0} }
-    .paste-area { display:flex; flex-direction:column; gap:6px; margin-bottom:12px; }
-    .paste-ta { font-size:11px; font-family:monospace; background:var(--s2); border:1px solid var(--border); border-radius:6px; color:var(--text); padding:8px; resize:vertical; width:100%; box-sizing:border-box; }
 
     /* ── Views tab ── */
     .views-header { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:6px 0 10px; }

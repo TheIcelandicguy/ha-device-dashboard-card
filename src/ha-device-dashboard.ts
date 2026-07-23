@@ -24,7 +24,7 @@ import { renderDetailSheet } from './detail/detail-sheet';
 import {
   getAllDevices, getDeviceProfile, migrateConfig, factoryLook, delegatableEntities,
   PROFILE_DEFAULT_BLOCKS, normalizeTileLayout, flattenTileLayout, PROFILE_DEFAULT_SENSORS, DEFAULT_GRAPH_SENSORS, profileDefaultTileStyle, PROFILE_LABELS, BLOCK_LABELS, GRAPH_DC_LABELS, GRAPH_SENSOR_DEFS,
-  HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, downsamplePoints, normalizeGraphKey,
+  HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, downsamplePoints, normalizeGraphKey,
   formatPower, formatEnergy, formatVoltage, formatCurrent, formatTemp,
   formatUptime, formatApparentPower, formatReactivePower,
   formatFrequency, formatHumidity, formatIlluminance, formatPpm, formatPercent,
@@ -673,20 +673,6 @@ export class HADeviceDashboard extends LitElement {
       const key = d.area ?? '';
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(d);
-    }
-
-    // Name-based groups: a device whose name starts with a configured prefix
-    // ALSO appears under a section of that name (in addition to its area group).
-    // Same object reference in two groups — no reassignment, purely additive.
-    for (const g of this._config.name_groups ?? []) {
-      const gl = g.toLowerCase();
-      const arr = map.get(g) ?? [];
-      for (const d of devices) {
-        const nl = d.name.toLowerCase();
-        const boundary = nl.length === gl.length || /[\s/-]/.test(nl[gl.length] ?? '');
-        if (nl.startsWith(gl) && boundary && !arr.includes(d)) arr.push(d);
-      }
-      if (arr.length) map.set(g, arr);
     }
 
     const sortBy = this._config.sort_by ?? 'name';
@@ -2624,15 +2610,14 @@ export class HADeviceDashboard extends LitElement {
     // the sensor whitelists keep legacy semantics (empty/undefined = show all).
     const override = areaName ? this._areaHeaderOverride.get(areaName) : undefined;
     const headerChips = areaName ? this._config.area_styles?.[areaName]?.header_chips : undefined;
-    let allowed: Set<string> | null;
-    if (override !== undefined) allowed = new Set(override);
-    else if (headerChips !== undefined) allowed = new Set(headerChips);
-    else {
-      const areaSel = areaName ? this._config.area_styles?.[areaName]?.sensors : undefined;
-      const sel = areaSel?.length ? areaSel : this._config.sensors;
-      allowed = sel?.length ? new Set(sel) : null;
-    }
-    const show = (k: string) => !allowed || allowed.has(k);
+    // Precedence: viewer override → area header_chips → the default set (env/
+    // status metrics; NOT energy or per-sensor power — live power is the always-on
+    // number in the room meta row).
+    const allowed: Set<string> =
+      override !== undefined ? new Set(override)
+      : headerChips !== undefined ? new Set(headerChips)
+      : new Set(DEFAULT_AREA_HEADER_CHIPS);
+    const show = (k: string) => allowed.has(k);
     const acc: Record<string, { sum: number; count: number }> = {};
     const add = (k: string, v: number) => {
       if (!acc[k]) acc[k] = { sum: 0, count: 0 };
@@ -2646,54 +2631,70 @@ export class HADeviceDashboard extends LitElement {
         const v = parseFloat(s.state);
         if (isNaN(v)) continue;
         const dc = ((s.attributes as Record<string, unknown>).device_class as string) ?? '';
-        if      (dc === 'power'          && show('power'))       add('power', v);
-        else if (dc === 'energy'         && show('energy'))      add('energy', v);
-        else if (dc === 'temperature'    && show('temperature')) add('temperature', v);
-        else if (dc === 'humidity'       && show('humidity'))    add('humidity', v);
-        else if (dc === 'carbon_dioxide' && show('co2'))         add('co2', v);
-        else if (dc === 'illuminance'    && show('illuminance')) add('illuminance', v);
+        const def = AREA_CHIP_DEFS.find(d =>
+          d.dc === dc || (d.key === 'rssi' && (dc === 'signal_strength' || e.entity_id.includes('_rssi'))));
+        if (def && show(def.key)) add(def.key, v);
       }
     }
     const chips: Array<{ label: string; value: string }> = [];
-    if (acc['power'])       chips.push({ label: 'Power',  value: formatPower(acc['power'].sum) });
-    if (acc['energy'])      chips.push({ label: 'Energy', value: formatEnergy(acc['energy'].sum) });
-    if (acc['temperature']) chips.push({ label: 'Temp',   value: formatTemp(acc['temperature'].sum / acc['temperature'].count) });
-    if (acc['humidity'])    chips.push({ label: 'Hum',    value: formatHumidity(acc['humidity'].sum / acc['humidity'].count) });
-    if (acc['co2'])         chips.push({ label: 'CO₂',   value: formatPpm(acc['co2'].sum / acc['co2'].count) });
-    if (acc['illuminance']) chips.push({ label: 'Light',  value: formatIlluminance(acc['illuminance'].sum / acc['illuminance'].count) });
+    for (const def of AREA_CHIP_DEFS) {
+      const a = acc[def.key];
+      if (!a) continue;
+      const val = def.agg === 'sum' ? a.sum : a.sum / a.count;
+      chips.push({ label: def.label, value: this._formatAreaChip(def.key, val) });
+    }
     return chips;
+  }
+
+  /** Format a room-header chip value by key. Mirrors the tile formatters. */
+  private _formatAreaChip(key: string, v: number): string {
+    switch (key) {
+      case 'power':       return formatPower(v);
+      case 'energy':      return formatEnergy(v);
+      case 'voltage':     return formatVoltage(v);
+      case 'current':     return formatCurrent(v);
+      case 'temperature': return formatTemp(v);
+      case 'humidity':    return formatHumidity(v);
+      case 'co2':         return formatPpm(v);
+      case 'illuminance': return formatIlluminance(v);
+      case 'battery':     return formatPercent(v);
+      case 'rssi':        return `${Math.round(v)} dBm`;
+      default:            return String(Math.round(v));
+    }
   }
 
   /** Candidate summary chips for a room header + their current visibility. */
   private _areaHeaderCandidates(devices: HADevice[], areaName: string): Array<{ key: string; label: string; visible: boolean }> {
-    const DEFS: Array<[string, string, string]> = [
-      ['power', 'Power', 'power'], ['energy', 'Energy', 'energy'], ['temperature', 'Temp', 'temperature'],
-      ['humidity', 'Hum', 'humidity'], ['co2', 'CO₂', 'carbon_dioxide'], ['illuminance', 'Light', 'illuminance'],
-    ];
+    // Which metrics actually have a sensor in this room (drives the ⚙ popup list).
+    const present = this._areaChipsPresent(devices);
+    // Same precedence as _getAreaChips for the current visibility.
+    const override = this._areaHeaderOverride.get(areaName);
+    const headerChips = this._config.area_styles?.[areaName]?.header_chips;
+    const allowed: Set<string> =
+      override !== undefined ? new Set(override)
+      : headerChips !== undefined ? new Set(headerChips)
+      : new Set(DEFAULT_AREA_HEADER_CHIPS);
+    const out: Array<{ key: string; label: string; visible: boolean }> = [];
+    for (const def of AREA_CHIP_DEFS) {
+      if (!present.has(def.key)) continue;
+      out.push({ key: def.key, label: def.label, visible: allowed.has(def.key) });
+    }
+    return out;
+  }
+
+  /** The set of AREA_CHIP_DEFS keys that have a matching sensor in this room. */
+  private _areaChipsPresent(devices: HADevice[]): Set<string> {
     const present = new Set<string>();
     for (const d of devices) for (const e of d.entities) {
       if (e.domain !== 'sensor') continue;
       const s = this.hass.states[e.entity_id];
       if (!s) continue;
-      present.add(((s.attributes as Record<string, unknown>).device_class as string) ?? '');
+      const dc = ((s.attributes as Record<string, unknown>).device_class as string) ?? '';
+      const def = AREA_CHIP_DEFS.find(x =>
+        x.dc === dc || (x.key === 'rssi' && (dc === 'signal_strength' || e.entity_id.includes('_rssi'))));
+      if (def) present.add(def.key);
     }
-    // Same precedence as _getAreaChips for the current visibility.
-    const override = this._areaHeaderOverride.get(areaName);
-    const headerChips = this._config.area_styles?.[areaName]?.header_chips;
-    let allowed: Set<string> | null;
-    if (override !== undefined) allowed = new Set(override);
-    else if (headerChips !== undefined) allowed = new Set(headerChips);
-    else {
-      const areaSel = this._config.area_styles?.[areaName]?.sensors;
-      const sel = areaSel?.length ? areaSel : this._config.sensors;
-      allowed = sel?.length ? new Set(sel) : null;
-    }
-    const out: Array<{ key: string; label: string; visible: boolean }> = [];
-    for (const [key, label, dc] of DEFS) {
-      if (!present.has(dc)) continue;
-      out.push({ key, label, visible: !allowed || allowed.has(key) });
-    }
-    return out;
+    return present;
   }
 
   private _renderAreaHeaderCustomize(area: string, devices: HADevice[]): TemplateResult {
