@@ -1074,13 +1074,13 @@ export const AREA_CHIP_DEFS: Array<{
 ];
 
 /**
- * Room-header chips shown when a room sets no `header_chips`. Environmental/
- * status metrics only — live Power already shows as the always-on number in the
- * room's meta row, and cumulative Energy is deliberately opt-in (its kWh total
- * is misleading as a "current" readout). Only chips whose sensor is actually
- * present in the room are rendered.
+ * Room-header chips shown when a room sets no `header_chips`. A consistent set
+ * across rooms — live Power, Energy, Voltage, Current, Temperature. Only chips
+ * whose sensor is actually present in the room are rendered, so an env-only room
+ * just shows Temp. (Power moved from the meta row into the chip set so every
+ * room reads the same way.)
  */
-export const DEFAULT_AREA_HEADER_CHIPS = ['temperature', 'humidity', 'co2', 'illuminance', 'battery'];
+export const DEFAULT_AREA_HEADER_CHIPS = ['power', 'energy', 'voltage', 'current', 'temperature'];
 
 /**
  * The hard-coded factory default look — the single source of truth for the

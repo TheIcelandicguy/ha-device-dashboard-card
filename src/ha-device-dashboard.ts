@@ -725,12 +725,31 @@ export class HADeviceDashboard extends LitElement {
     return found ? total : null;
   }
 
+  /** A switch entity that is a device config toggle, not the load relay — e.g.
+   *  the Shelly Bluetooth-gateway enable (`aioshelly_ble_integration`). These
+   *  must never be treated as the tile's primary on/off. */
+  private static _isConfigSwitch(entityId: string): boolean {
+    return /aioshelly_ble|ble_integration|bluetooth_gateway/i.test(entityId);
+  }
+
   private _getPrimarySwitch(device: HADevice): {
     entityId: string; isOn: boolean; brightness?: number;
     colorModes?: string[]; rgbColor?: [number, number, number]; whiteValue?: number;
   } | null {
-    for (const e of device.entities) {
-      if (e.domain !== 'switch' && e.domain !== 'light') continue;
+    // Rank candidates so the load relay wins over a config toggle: a light, or a
+    // relay-shaped switch id, ranks above a plain switch, which ranks above a
+    // config toggle (BLE gateway etc.). Fixes 1PMs that expose both a relay
+    // (`_switch_0`, on) and a BLE toggle (`_aioshelly_ble_integration`, off).
+    const rank = (e: { domain: string; entity_id: string }): number => {
+      if (e.domain === 'light') return 0;
+      if (HADeviceDashboard._isConfigSwitch(e.entity_id)) return 3;
+      if (/_switch_\d|_relay|_output/i.test(e.entity_id)) return 1;
+      return 2;
+    };
+    const candidates = device.entities
+      .filter(e => (e.domain === 'switch' || e.domain === 'light') && this.hass.states[e.entity_id])
+      .sort((a, b) => rank(a) - rank(b));
+    for (const e of candidates) {
       const s = this.hass.states[e.entity_id];
       if (!s) continue;
       const attrs = s.attributes as Record<string, unknown>;
@@ -2726,7 +2745,6 @@ export class HADeviceDashboard extends LitElement {
     const label = area || 'No Area';
     const isClosed = this._closedAreas.has(area);
     const onlineCount = devices.filter(d => this._isOnline(d)).length;
-    const areaPower = devices.reduce((s, d) => s + (this._getPower(d) ?? 0), 0);
     const areaStyle = this._config.area_styles?.[label];
     const cols = areaStyle?.columns ?? this._config.columns ?? 3;
 
@@ -2811,7 +2829,6 @@ export class HADeviceDashboard extends LitElement {
             </div>` : nothing}
           <div class="area-meta">
             <span class="area-count">${onlineCount}/${devices.length}</span>
-            ${areaPower > 0 ? html`<span class="area-power">${formatPower(areaPower)}</span>` : nothing}
             <button class="area-cog ${this._areaCustomizeOpen === area ? 'on' : ''}" title="Customise room header"
               @click=${(e: Event) => { e.stopPropagation(); this._areaCustomizeOpen = this._areaCustomizeOpen === area ? null : area; }}>⚙</button>
             <span class="chevron ${isClosed ? '' : 'open'}">▼</span>
