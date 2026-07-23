@@ -82,6 +82,8 @@ export type ButtonSize    = 'sm' | 'md' | 'lg';
 export type GraphType     = 'line' | 'area' | 'bar';
 export type DetailHistoryRange = 24 | 168 | 720;
 export type TileSize      = 'sm' | 'md' | 'lg';
+/** Energy display window: lifetime total, or consumption this day/week/month. */
+export type EnergyPeriod  = 'total' | 'today' | 'week' | 'month';
 export type SortBy        = 'name' | 'power' | 'online' | 'area';
 export type BoxShadow     = 'none' | 'soft' | 'medium' | 'strong';
 export type ThemePreset   = 'warm_dusk' | 'dark_industrial' | 'teal_terminal' | 'brutalist' | 'frosted_light' | 'nordic_warm' | 'midnight_purple' | 'custom';
@@ -162,6 +164,8 @@ export interface AreaStyle {
   /** Per-element visibility override for tiles in this area. Element id → visible.
    *  Omitted ids inherit style preset → default (visible). */
   elements?: Record<string, boolean>;
+  /** Per-room energy window override (total/today/week/month). */
+  energy_period?: EnergyPeriod;
 }
 
 /**
@@ -270,6 +274,11 @@ export interface DeviceStyle {
   /** Per-tile background photo (data: URL or /local/… path). Overrides the global tile image. */
   bg_image?: string;
   bg_image_size?: 'cover' | 'contain' | 'stretch';
+  /** Per-device energy window override (total/today/week/month). */
+  energy_period?: EnergyPeriod;
+  /** Point the energy value at a specific entity (e.g. a Utility Meter) instead
+   *  of the device's auto-detected `_energy` sensor. */
+  energy_entity?: string;
   tile_layout?: TileLayout; // per-device block order/visibility
   /** Override the auto-detected device profile (categorisation). undefined = auto. */
   profile?: DeviceProfile;
@@ -522,6 +531,11 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   /** User-defined saved tile styles, keyed by slug. Assigned via
    *  `tile_style: 'custom:<key>'`; renders as `base` with the saved config. */
   custom_styles?: Record<string, CustomStyleDef>;
+
+  /** What the Energy value shows: cumulative lifetime total (default) or the
+   *  consumption over the current day/week/month, computed from recorder
+   *  statistics. Applies to every energy chip; overridable per room/device. */
+  energy_period?: EnergyPeriod;
 
   // ── Graphs ────────────────────────────────────────────────────
   /** device_class keys to graph. Empty = no graphs. */

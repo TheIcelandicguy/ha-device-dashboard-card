@@ -3,7 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { styleMap } from 'lit/directives/style-map.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
-import { HADeviceDashboardConfig, HADevice, TileBlockId, DeviceProfileResult, EntityAnimationType, TileStyle, PowerMonitorVariant, HassAttrs, ViewConfig, DeviceStyle, AreaStyle, CustomStyleDef, TileLayout } from './types';
+import { HADeviceDashboardConfig, HADevice, TileBlockId, DeviceProfileResult, EntityAnimationType, TileStyle, PowerMonitorVariant, HassAttrs, ViewConfig, DeviceStyle, AreaStyle, CustomStyleDef, TileLayout, EnergyPeriod } from './types';
 import type { LovelaceCardConfig } from 'custom-card-helpers';
 import { BUNDLED_FONT_CSS } from './fonts';
 import { mainCss } from './styles/main';
@@ -58,6 +58,10 @@ export class HADeviceDashboard extends LitElement {
   @state() private _closedAreas = new Set<string>();
   @state() private _entityListOpen = new Set<string>();
   @state() private _graphData = new Map<string, Array<{ t: number; v: number }>>();
+  /** Period-energy consumption (kWh) from recorder statistics, keyed `${entityId}|${period}`. */
+  @state() private _periodEnergy = new Map<string, number>();
+  private _periodEnergyFetching = new Set<string>();
+  private _periodEnergyAt = new Map<string, number>();
   @state() private _valveDragPos: number | null = null;
   @state() private _trvDragTemp: number | null = null;
   private _trvBtnTimer: ReturnType<typeof setTimeout> | null = null;
@@ -140,6 +144,7 @@ export class HADeviceDashboard extends LitElement {
       changed.has('_closedAreas') ||
       changed.has('_entityListOpen') ||
       changed.has('_graphData') ||
+      changed.has('_periodEnergy') ||
       changed.has('_valveDragPos') ||
       changed.has('_trvDragTemp') ||
       changed.has('_detailDevice') ||
@@ -977,7 +982,15 @@ export class HADeviceDashboard extends LitElement {
         else if (dc === 'reactive_power'  && show('reactive_power')) push('reactive_power', 'Re.P',   formatReactivePower(v), false, id);
         else if (dc === 'power_factor'    && show('power_factor'))   push('power_factor',   'PF',     formatPercent(v),       false, id);
         else if (dc === 'frequency'       && show('frequency'))      push('frequency',      'Freq',   formatFrequency(v),     false, id);
-        else if (dc === 'energy'          && show('energy'))         push('energy',         'Energy', formatEnergy(v),        false, id);
+        else if (dc === 'energy'          && show('energy')) {
+          const period = this._energyPeriod(device);
+          if (period === 'total') { push('energy', 'Energy', formatEnergy(v), false, id); }
+          else {
+            const pv = this._periodEnergyValue(id, period);
+            const lbl = period === 'today' ? 'Today' : period === 'week' ? 'Week' : 'Month';
+            push('energy', lbl, pv == null ? '…' : formatEnergy(pv), false, id);
+          }
+        }
         else if (dc === 'voltage'         && show('voltage'))        push('voltage',        'Volt',   formatVoltage(v),       false, id);
         else if (dc === 'current'         && show('current'))        push('current',        'Curr',   formatCurrent(v),       false, id);
         else if (dc === 'temperature'     && show('temperature'))    push('temperature',    'Temp',   formatTemp(v));
@@ -1291,6 +1304,81 @@ export class HADeviceDashboard extends LitElement {
       points.push({ t: Date.now(), v: isNaN(live) ? points[0].v : live });
     }
     return points;
+  }
+
+  // ── Period energy (today/week/month consumption from recorder statistics) ──
+
+  /** Resolve the energy window for a device: device → area → global → 'total'. */
+  private _energyPeriod(device: HADevice): EnergyPeriod {
+    return this._config.device_styles?.[device.device_id]?.energy_period
+      ?? (device.area ? this._config.area_styles?.[device.area]?.energy_period : undefined)
+      ?? this._config.energy_period
+      ?? 'total';
+  }
+
+  /** The entity whose energy value drives this device's Energy chip — a per-device
+   *  override (e.g. a Utility Meter) or the device's own `_energy` sensor. */
+  private _energyEntityFor(device: HADevice): string | undefined {
+    const override = this._config.device_styles?.[device.device_id]?.energy_entity;
+    if (override) return override;
+    const ent = device.entities.find(e => e.domain === 'sensor' &&
+      (this.hass.states[e.entity_id]?.attributes as HassAttrs)?.device_class === 'energy');
+    return ent?.entity_id;
+  }
+
+  /** Start of the current day/week(Mon)/month, local time. */
+  private _periodStart(period: EnergyPeriod): { start: Date; stat: 'day' | 'week' | 'month' } | null {
+    const now = new Date();
+    if (period === 'today') return { start: new Date(now.getFullYear(), now.getMonth(), now.getDate()), stat: 'day' };
+    if (period === 'month') return { start: new Date(now.getFullYear(), now.getMonth(), 1), stat: 'month' };
+    if (period === 'week') {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const dow = (d.getDay() + 6) % 7; // 0 = Monday
+      d.setDate(d.getDate() - dow);
+      return { start: d, stat: 'week' };
+    }
+    return null;
+  }
+
+  /** Cached period-energy (kWh) for an entity, or null until fetched. Triggers a
+   *  fetch on miss. `total` is handled by the caller (uses the live state). */
+  private _periodEnergyValue(entityId: string, period: EnergyPeriod): number | null {
+    if (period === 'total') return null;
+    const key = `${entityId}|${period}`;
+    if (this._periodEnergy.has(key)) {
+      const age = Date.now() - (this._periodEnergyAt.get(key) ?? 0);
+      if (age < 5 * 60_000) return this._periodEnergy.get(key)!;
+    }
+    void this._fetchPeriodEnergy(entityId, period);
+    return this._periodEnergy.get(key) ?? null;
+  }
+
+  private async _fetchPeriodEnergy(entityId: string, period: EnergyPeriod): Promise<void> {
+    const key = `${entityId}|${period}`;
+    if (this._periodEnergyFetching.has(key)) return;
+    const age = Date.now() - (this._periodEnergyAt.get(key) ?? 0);
+    if (age < 5 * 60_000 && this._periodEnergy.has(key)) return;
+    const ps = this._periodStart(period);
+    if (!ps) return;
+    this._periodEnergyFetching.add(key);
+    try {
+      const rows = await (this.hass as any).callWS({
+        type: 'recorder/statistics_during_period',
+        start_time: ps.start.toISOString(),
+        statistic_ids: [entityId],
+        period: ps.stat,
+        types: ['change'],
+      }) as Record<string, Array<{ change?: number | null }>>;
+      const change = (rows?.[entityId] ?? []).reduce((a, r) => a + (r.change ?? 0), 0);
+      this._periodEnergyAt.set(key, Date.now());
+      const next = new Map(this._periodEnergy);
+      next.set(key, change);
+      this._periodEnergy = next; // reassign → reactive re-render
+    } catch {
+      // leave uncached; caller falls back to the live total
+    } finally {
+      this._periodEnergyFetching.delete(key);
+    }
   }
 
   /** Upper bound on cached series (entities × ranges). Opening the detail
@@ -2655,8 +2743,28 @@ export class HADeviceDashboard extends LitElement {
         if (def && show(def.key)) add(def.key, v);
       }
     }
+    // Room energy window (area → global → total). When not total, the Energy chip
+    // shows the summed period consumption from statistics instead of raw totals.
+    const areaPeriod: EnergyPeriod =
+      (areaName ? this._config.area_styles?.[areaName]?.energy_period : undefined)
+      ?? this._config.energy_period ?? 'total';
+
     const chips: Array<{ label: string; value: string }> = [];
     for (const def of AREA_CHIP_DEFS) {
+      if (def.key === 'energy' && show('energy') && areaPeriod !== 'total') {
+        let sum = 0, got = false;
+        for (const d of devices) {
+          const eid = this._energyEntityFor(d);
+          if (!eid) continue;
+          const pv = this._periodEnergyValue(eid, areaPeriod);
+          if (pv != null) { sum += pv; got = true; }
+        }
+        if (got || acc['energy']) {
+          const lbl = areaPeriod === 'today' ? 'Today' : areaPeriod === 'week' ? 'Week' : 'Month';
+          chips.push({ label: lbl, value: got ? formatEnergy(sum) : '…' });
+        }
+        continue;
+      }
       const a = acc[def.key];
       if (!a) continue;
       const val = def.agg === 'sum' ? a.sum : a.sum / a.count;

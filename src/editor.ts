@@ -4,7 +4,7 @@ import { ref } from 'lit/directives/ref.js';
 import { keyed } from 'lit/directives/keyed.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent, LovelaceCardConfig } from 'custom-card-helpers';
-import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout } from './types';
+import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout, EnergyPeriod } from './types';
 import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, setBlockInLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, applyThemePalette, detectTheme, type ThemePalette } from './themes';
 import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons';
@@ -1287,6 +1287,24 @@ export class HADeviceDashboardEditor extends LitElement {
       </div>`;
   }
 
+  /** Energy-window pills (Total/Today/Week/Month). `includeInherit` adds an
+   *  Inherit option (undefined) for per-room / per-device overrides. */
+  private _renderEnergyPeriodPicker(
+    current: EnergyPeriod | undefined,
+    onChange: (v: EnergyPeriod | undefined) => void,
+    includeInherit = false,
+  ): TemplateResult {
+    const opts: Array<[string, EnergyPeriod | undefined]> = includeInherit
+      ? [['Inherit', undefined], ['Total', 'total'], ['Today', 'today'], ['Week', 'week'], ['Month', 'month']]
+      : [['Total', 'total'], ['Today', 'today'], ['Week', 'week'], ['Month', 'month']];
+    const cur = current ?? (includeInherit ? undefined : 'total');
+    return html`
+      <div class="pill-grp">
+        ${opts.map(([lbl, v]) => html`
+          <span class="pill ${cur === v ? 'on' : ''}" @click=${() => onChange(v)}>${lbl}</span>`)}
+      </div>`;
+  }
+
   /** Discovery section — Shelly vs Universal mode, scope, and hide-checklists. */
   private _renderDiscoverySection(): TemplateResult {
     const c = this._config;
@@ -1345,9 +1363,13 @@ export class HADeviceDashboardEditor extends LitElement {
     elements: Record<string, boolean> | undefined;
     bg_image: string | undefined;
     bg_image_size: 'cover' | 'contain' | 'stretch' | undefined;
+    energy_period: EnergyPeriod | undefined;
+    energy_entity: string | undefined;
   }>) {
     const current = this._config.device_styles?.[deviceId] ?? {};
     const next: Record<string, unknown> = { ...current, ...patch };
+    if (next['energy_period'] === undefined) delete next['energy_period'];
+    if (next['energy_entity'] === undefined) delete next['energy_entity'];
     if (next['bg_image'] === undefined) delete next['bg_image'];
     if (next['bg_image_size'] === undefined) delete next['bg_image_size'];
     if (next['color'] === undefined) delete next['color'];
@@ -1973,7 +1995,18 @@ export class HADeviceDashboardEditor extends LitElement {
           (url) => this._setDeviceStyle(deviceId, { bg_image: url }),
           (v) => this._setDeviceStyle(deviceId, { bg_image_size: v }),
           () => this._setDeviceStyle(deviceId, { bg_image: undefined, bg_image_size: undefined }))}
+        <div class="field" style="margin-top:6px">
+          <div class="field-lbl">Energy shows</div>
+          ${this._renderEnergyPeriodPicker(devStyle.energy_period, (v) => this._setDeviceStyle(deviceId, { energy_period: v }), true)}
+        </div>
         ${this._adv(html`
+        <div class="field" style="margin-top:6px">
+          <div class="field-lbl">Energy entity — optional</div>
+          <input type="text" class="inline-text" placeholder="sensor.…_energy_daily (Utility Meter)"
+            .value=${devStyle.energy_entity ?? ''}
+            @change=${(e:Event)=>{ const v=(e.target as HTMLInputElement).value.trim(); this._setDeviceStyle(deviceId, { energy_entity: v || undefined }); }}/>
+          <div class="hint" style="margin-top:2px">Point the Energy value at a specific entity (e.g. a Utility Meter). Empty = the device's own energy sensor.</div>
+        </div>
         <div class="tile-icon-row">
           <span class="color-key">Tile icon</span>
           <div class="tile-icon-pickers">
@@ -2239,6 +2272,10 @@ export class HADeviceDashboardEditor extends LitElement {
 
         ${sectionLbl('Room header chips')}
         ${this._renderRoomHeaderChips(name, st)}
+        <div class="field" style="margin-top:6px">
+          <div class="field-lbl">Energy shows</div>
+          ${this._renderEnergyPeriodPicker(st.energy_period, (v) => this._setAreaStyle(name, 'energy_period', v), true)}
+        </div>
 
         ${sectionLbl('Sensor chips')}
         ${this._chipPicker(
@@ -3172,6 +3209,11 @@ export class HADeviceDashboardEditor extends LitElement {
         <div class="field-lbl">History window — <span style="color:#f4601e">${c.graph_hours ?? 24}h</span>${this._resetBtn(c.graph_hours !== undefined, () => this._clearCfg('graph_hours'))}</div>
         <input type="range" min="1" max="168" step="1" .value=${String(c.graph_hours ?? 24)}
           @input=${(e:Event)=>this._set('graph_hours',parseInt((e.target as HTMLInputElement).value,10))}/>
+      </div>
+      <div class="field">
+        <div class="field-lbl">Energy shows${this._resetBtn(c.energy_period !== undefined, () => this._clearCfg('energy_period'))}</div>
+        ${this._renderEnergyPeriodPicker(c.energy_period, (v) => this._set('energy_period', v === 'total' ? undefined : v))}
+        <div class="hint" style="margin-top:4px">Total = lifetime meter reading. Today/Week/Month = consumption this period (from HA statistics). Applies to every Energy chip; override per room or device.</div>
       </div>
       ${this._adv(html`
       <div class="tog-row">
