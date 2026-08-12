@@ -196,7 +196,7 @@ function renderSheetSensors(ctx: TileCtx): TemplateResult {
         ${s.power   != null ? html`<div class="ds-sensor-item"><span class="ds-sensor-val">${formatPower(s.power)}</span><span class="ds-sensor-label">Power</span></div>` : nothing}
         ${s.voltage != null ? html`<div class="ds-sensor-item"><span class="ds-sensor-val">${formatVoltage(s.voltage)}</span><span class="ds-sensor-label">Voltage</span></div>` : nothing}
         ${s.current != null ? html`<div class="ds-sensor-item"><span class="ds-sensor-val">${formatCurrent(s.current)}</span><span class="ds-sensor-label">Current</span></div>` : nothing}
-        ${s.energy  != null ? html`<div class="ds-sensor-item"><span class="ds-sensor-val">${formatEnergy(s.energy)}</span><span class="ds-sensor-label">Energy</span></div>` : nothing}
+        ${s.energy  != null ? html`<div class="ds-sensor-item"><span class="ds-sensor-val">${formatEnergy(s.energy)}</span><span class="ds-sensor-label">${s.energyLabel}</span></div>` : nothing}
         ${s.temp    != null ? html`<div class="ds-sensor-item"><span class="ds-sensor-val">${formatTemp(s.temp)}</span><span class="ds-sensor-label">Temp</span></div>` : nothing}
       </div>
     </div>`;

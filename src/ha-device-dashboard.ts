@@ -959,6 +959,12 @@ export class HADeviceDashboard extends LitElement {
     }
     const multiDcs = new Set([...dcIds.entries()].filter(([, ids]) => ids.length > 1).map(([dc]) => dc));
 
+    // A per-device energy_entity override (typically a Utility Meter helper, which
+    // is NOT one of the device's own entities) replaces the device's energy chips
+    // entirely — otherwise the override would sit alongside the raw sensors it was
+    // configured to stand in for.
+    const energyOverride = this._config.device_styles?.[device.device_id]?.energy_entity;
+
     const push = (k: string, label: string, value: string, warn = false, entityId?: string, tier?: SensorChipTier) => {
       // For multi-channel sensors, key by (device_class + channel label) so that two entities
       // mapping to the same channel slot (e.g. energy_0 and switch_0_energy) only show once,
@@ -986,16 +992,9 @@ export class HADeviceDashboard extends LitElement {
         else if (dc === 'reactive_power'  && show('reactive_power')) push('reactive_power', 'Re.P',   formatReactivePower(v), false, id);
         else if (dc === 'power_factor'    && show('power_factor'))   push('power_factor',   'PF',     formatPercent(v),       false, id);
         else if (dc === 'frequency'       && show('frequency'))      push('frequency',      'Freq',   formatFrequency(v),     false, id);
-        else if (dc === 'energy'          && show('energy')) {
-          const period = this._energyPeriod(device);
-          const pe = period === 'total' ? null : this._periodEnergyValue(id, period);
-          // A failed statistics call degrades to the lifetime total rather than
-          // pinning the chip at '…'.
-          if (!pe || pe.failed) { push('energy', 'Energy', formatEnergy(v), false, id); }
-          else {
-            const lbl = period === 'today' ? 'Today' : period === 'week' ? 'Week' : 'Month';
-            push('energy', lbl, pe.kwh == null ? '…' : formatEnergy(pe.kwh), false, id);
-          }
+        else if (dc === 'energy'          && show('energy') && !energyOverride) {
+          const c = this._energyChip(device, id, v);
+          if (c) push('energy', c.label, c.value, false, id);
         }
         else if (dc === 'voltage'         && show('voltage'))        push('voltage',        'Volt',   formatVoltage(v),       false, id);
         else if (dc === 'current'         && show('current'))        push('current',        'Curr',   formatCurrent(v),       false, id);
@@ -1029,6 +1028,19 @@ export class HADeviceDashboard extends LitElement {
           push('mqtt', 'MQTT', on ? 'Connected' : 'Offline', !on, undefined, alertTier(!on));
         else if (dc === 'connectivity' && id.includes('eth') && show('eth'))
           push('eth', 'Ethernet', on ? 'Connected' : 'Offline', !on, undefined, alertTier(!on));
+      }
+    }
+
+    // The override's own chip, pushed here because the entity is usually external
+    // to the device and so never appears in the loop above.
+    if (energyOverride && show('energy')) {
+      const os = this.hass.states[energyOverride];
+      if (os && os.state !== 'unavailable' && os.state !== 'unknown') {
+        const ov = parseFloat(os.state);
+        const c = this._energyChip(device, energyOverride, isNaN(ov) ? null : ov);
+        // No entityId: it stands for the whole device, so it must not pick up a
+        // per-channel label from the multi-channel pre-scan.
+        if (c) push('energy', c.label, c.value);
       }
     }
     return result;
@@ -1388,6 +1400,27 @@ export class HADeviceDashboard extends LitElement {
       return { start: this._zonedMidnight(tz, y, m, d - dow), stat: 'week' };
     }
     return null;
+  }
+
+  /** Display label for an energy window. */
+  private _energyPeriodLabel(period: EnergyPeriod): string {
+    return period === 'today' ? 'Today' : period === 'week' ? 'Week' : period === 'month' ? 'Month' : 'Energy';
+  }
+
+  /** Label + value for one energy chip, resolved through the device's energy
+   *  window. The single place that decides period-vs-total presentation, so tiles,
+   *  room headers, card headers and the detail sheet can't drift apart: a failed
+   *  statistics call degrades to `liveKwh` under the plain "Energy" label, and a
+   *  pending one shows '…' rather than a wrong number.
+   *  `liveKwh` is the entity's lifetime total (null if it has no usable state). */
+  private _energyChip(device: HADevice, entityId: string, liveKwh: number | null): { label: string; value: string } | null {
+    const period = this._energyPeriod(device);
+    const total = liveKwh == null ? null : { label: 'Energy', value: formatEnergy(liveKwh) };
+    if (period === 'total') return total;
+    const pe = this._periodEnergyValue(entityId, period);
+    if (pe.failed) return total;
+    if (pe.kwh == null) return { label: this._energyPeriodLabel(period), value: '…' };
+    return { label: this._energyPeriodLabel(period), value: formatEnergy(pe.kwh) };
   }
 
   /** Cached period-energy for an entity. `kwh` is null until the first fetch
@@ -2081,8 +2114,8 @@ export class HADeviceDashboard extends LitElement {
   /** Quick sensor snapshot used by alternative tile styles */
   private _tileSensors(device: HADevice): {
     power: number | null; voltage: number | null; current: number | null;
-    temp: number | null; energy: number | null; rssi: number | null;
-    uptime: number | null;
+    temp: number | null; energy: number | null; energyLabel: string;
+    rssi: number | null; uptime: number | null;
   } {
     let power: number | null = null, voltage: number | null = null,
         current: number | null = null, temp: number | null = null,
@@ -2103,7 +2136,30 @@ export class HADeviceDashboard extends LitElement {
       if (uid.includes('rssi') || uid.includes('signal')) rssi = isNaN(v) ? null : v;
       if (uid.includes('uptime')) uptime = isNaN(v) ? null : v;
     }
-    return { power, voltage, current, temp, energy, rssi, uptime };
+
+    // Energy honours the device's window and entity override, same as the chips —
+    // otherwise a power-monitor tile shows a lifetime total next to a "Today" chip.
+    let energyLabel = 'Energy';
+    const eOverride = this._config.device_styles?.[device.device_id]?.energy_entity;
+    if (eOverride) {
+      const os = this.hass.states[eOverride];
+      const ov = os && os.state !== 'unavailable' && os.state !== 'unknown' ? parseFloat(os.state) : NaN;
+      energy = isNaN(ov) ? null : ov;
+    }
+    const ePeriod = this._energyPeriod(device);
+    if (ePeriod !== 'total') {
+      const eid = eOverride ?? this._energyEntitiesFor(device)[0];
+      if (eid) {
+        const pe = this._periodEnergyValue(eid, ePeriod);
+        // Failure keeps the lifetime total under the plain label; a pending fetch
+        // hides the value rather than showing a total labelled "Today".
+        if (!pe.failed) {
+          energy = pe.kwh;
+          energyLabel = this._energyPeriodLabel(ePeriod);
+        }
+      }
+    }
+    return { power, voltage, current, temp, energy, energyLabel, rssi, uptime };
   }
 
   // ── Header stat chips ───────────────────────────────────────────────────────
@@ -2111,8 +2167,9 @@ export class HADeviceDashboard extends LitElement {
   /** Per-device value for a header chip metric. null = device doesn't report it. */
   private _deviceMetric(device: HADevice, key: string): number | null {
     if (key === 'power') return this._getPower(device);
+    if (key === 'energy') return this._deviceEnergy(device).value;
     const DC_KEYS: Record<string, string> = {
-      energy: 'energy', temperature: 'temperature', humidity: 'humidity', illuminance: 'illuminance',
+      temperature: 'temperature', humidity: 'humidity', illuminance: 'illuminance',
     };
     for (const e of device.entities) {
       if (e.domain !== 'sensor') continue;
@@ -2126,6 +2183,57 @@ export class HADeviceDashboard extends LitElement {
       } else if (dc === DC_KEYS[key]) return v;
     }
     return null;
+  }
+
+  /** A device's total energy: every energy sensor summed (or the override alone),
+   *  in the device's own window. `period` is what the value actually represents,
+   *  which is 'total' whenever statistics aren't usable — callers aggregating
+   *  across devices need that to know whether the numbers are commensurable. */
+  private _deviceEnergy(device: HADevice): { value: number | null; period: EnergyPeriod } {
+    const ids = this._energyEntitiesFor(device);
+    if (!ids.length) return { value: null, period: 'total' };
+    const period = this._energyPeriod(device);
+    if (period === 'total') return { value: this._deviceEnergyLifetime(device), period: 'total' };
+    let sum = 0, got = false;
+    for (const id of ids) {
+      const pe = this._periodEnergyValue(id, period);
+      if (pe.failed) return { value: this._deviceEnergyLifetime(device), period: 'total' };
+      if (pe.kwh != null) { sum += pe.kwh; got = true; }
+    }
+    return got ? { value: sum, period } : { value: null, period };
+  }
+
+  /** A device's lifetime energy total — every energy sensor's live state summed. */
+  private _deviceEnergyLifetime(device: HADevice): number | null {
+    let sum = 0, got = false;
+    for (const id of this._energyEntitiesFor(device)) {
+      const s = this.hass.states[id];
+      if (!s || s.state === 'unavailable' || s.state === 'unknown') continue;
+      const v = parseFloat(s.state);
+      if (!isNaN(v)) { sum += v; got = true; }
+    }
+    return got ? sum : null;
+  }
+
+  /** Card-header Energy across the fleet. Devices can land on different windows —
+   *  per-device or per-area overrides, or a failed statistics call dropping one
+   *  back to its lifetime total. Adding "Today" kWh to lifetime kWh would be a
+   *  meaningless number, so a mixed fleet drops every device to its lifetime
+   *  total and says so with the plain "Energy" label. */
+  private _headerEnergyAgg(devices: HADevice[]): { value: number; label: string } | null {
+    const per = devices.map(d => ({ d, e: this._deviceEnergy(d) })).filter(x => x.e.value != null);
+    if (!per.length) return null;
+    const periods = new Set(per.map(x => x.e.period));
+    if (periods.size === 1) {
+      const p = [...periods][0];
+      return { value: per.reduce((a, x) => a + x.e.value!, 0), label: this._energyPeriodLabel(p) };
+    }
+    let sum = 0, got = false;
+    for (const { d } of per) {
+      const lt = this._deviceEnergyLifetime(d);
+      if (lt != null) { sum += lt; got = true; }
+    }
+    return got ? { value: sum, label: 'Energy' } : null;
   }
 
   private _formatHeaderMetric(key: string, v: number): string {
@@ -2150,10 +2258,13 @@ export class HADeviceDashboard extends LitElement {
   /** Aggregate all selected numeric-metric chips in ONE pass over devices —
    *  each device's entities are scanned once, not once per metric chip. */
   private _headerMetricAggs(devices: HADevice[], keys: string[]): Map<string, { sum: number; count: number }> {
-    const DC: Record<string, string> = { energy: 'energy', temperature: 'temperature', humidity: 'humidity', illuminance: 'illuminance' };
+    const DC: Record<string, string> = { temperature: 'temperature', humidity: 'humidity', illuminance: 'illuminance' };
     const dcKeys = keys.filter(k => DC[k]);
     const wantPower = keys.includes('power');
     const wantRssi = keys.includes('rssi');
+    // Energy is aggregated by _headerEnergyAgg instead: it sums every sensor on a
+    // device (not the first match this loop uses) and each device carries its own
+    // window, so it can't share this pass.
     const agg = new Map<string, { sum: number; count: number }>();
     const add = (k: string, v: number) => {
       const a = agg.get(k) ?? { sum: 0, count: 0 };
@@ -2205,6 +2316,10 @@ export class HADeviceDashboard extends LitElement {
             const n = this._devicesWithUpdates(devices).length;
             if (!n) return nothing;
             text = `⬆ ${n} update${n > 1 ? 's' : ''}`; cls = 'updates-count';
+          } else if (key === 'energy') {
+            const e = this._headerEnergyAgg(devices);
+            if (!e) return nothing;
+            text = `${e.label} ${this._formatHeaderMetric('energy', e.value)}`;
           } else {
             const a = metricAggs.get(key);
             if (!a || !a.count) return nothing;
@@ -2250,9 +2365,12 @@ export class HADeviceDashboard extends LitElement {
         .map(x => ({ name: x.d.name, value: this._formatHeaderMetric(key, x.v) }));
     }
     if (!rows.length) return html``;
+    // The energy rows carry whatever window each device resolved to, so the
+    // heading has to name it too rather than always saying "Energy".
+    const hdrLabel = key === 'energy' ? (this._headerEnergyAgg(devices)?.label ?? def.label) : def.label;
     return html`
       <div class="cloud-detail" @click=${(e: Event) => e.stopPropagation()}>
-        <div class="cloud-detail-hdr ${hdrCls}">● ${def.label} — ${rows.length} device${rows.length > 1 ? 's' : ''}</div>
+        <div class="cloud-detail-hdr ${hdrCls}">● ${hdrLabel} — ${rows.length} device${rows.length > 1 ? 's' : ''}</div>
         <div class="metric-list">
           ${rows.map(r => html`
             <div class="metric-row">

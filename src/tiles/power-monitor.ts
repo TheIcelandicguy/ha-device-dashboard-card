@@ -241,7 +241,7 @@ function renderPMTable(ctx: TileCtx): TemplateResult {
       ${ctx.showEl('secondary') ? html`
         ${s.voltage != null ? row('Voltage', `${s.voltage.toFixed(1)} V`)       : nothing}
         ${s.current != null ? row('Current', `${s.current.toFixed(3)} A`)       : nothing}
-        ${s.energy  != null ? row('Energy',  formatEnergy(s.energy))            : nothing}
+        ${s.energy  != null ? row(s.energyLabel, formatEnergy(s.energy))        : nothing}
         ${s.temp    != null ? row('Temp',    `${s.temp.toFixed(1)} °C`)         : nothing}
         ${s.rssi    != null ? row('WiFi',    `${s.rssi} dBm`)                   : nothing}` : nothing}
       ${s.uptime  != null && ctx.showEl('uptime') ? row('Uptime',  formatUptime(s.uptime)) : nothing}

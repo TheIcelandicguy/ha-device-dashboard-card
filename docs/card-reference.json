@@ -35,6 +35,7 @@
     "show_offline": true,
     "show_graphs": true,
     "graph_hours": 24,
+    "energy_period": "total",
     "effects": false,
     "header_show_title": true,
     "header_show_stats": true,
@@ -219,6 +220,8 @@
           { "control": "Show graphs", "fn": "Per-device sparkline override (Inherit / On / Off)", "key": "device_styles[id].show_graphs", "scope": "device", "default": "Inherit", "advanced": false },
           { "control": "Visible blocks", "fn": "Show / hide each tile block", "key": "device_styles[id].tile_layout", "scope": "device", "default": "inherits global", "advanced": false },
           { "control": "Sensor chips", "fn": "Whitelist of sensor chips for this device", "key": "device_styles[id].sensors", "scope": "device", "default": "inherit", "advanced": false },
+          { "control": "Energy shows", "fn": "Energy window for this device only (Total / Today / Week / Month)", "key": "device_styles[id].energy_period", "scope": "device", "default": "inherit", "advanced": false },
+          { "control": "Energy entity", "fn": "Entity id whose energy value stands in for this device — typically a Utility Meter helper. Replaces the device's own energy sensors on the tile, in room totals and in the header chip.", "key": "device_styles[id].energy_entity", "scope": "device", "default": "the device's own energy sensors", "advanced": true },
           { "control": "Entity animations", "fn": "Per-entity ON/OFF icon + speed", "key": "device_styles[id].entity_animations[eid]", "scope": "device", "default": "none / 1", "advanced": true },
           { "control": "Hidden entities", "fn": "Remove entities from the detail sheet list", "key": "hidden_entities", "scope": "global", "default": "not hidden", "advanced": true },
           { "control": "Clear device style", "fn": "Delete the entire device-style block", "key": "device_styles[id] → del", "scope": "device", "default": "—", "advanced": false }
@@ -238,6 +241,7 @@
           { "control": "Header text", "fn": "Room header text colour", "key": "area_styles[name].textColor", "scope": "area", "default": "#f4601e", "advanced": true },
           { "control": "Header font size", "fn": "Room header font size", "key": "area_styles[name].fontSize", "scope": "area", "default": "12px", "advanced": true },
           { "control": "Sensor chips", "fn": "Whitelist of sensor chips for this room", "key": "area_styles[name].sensors", "scope": "area", "default": "inherit", "advanced": false },
+          { "control": "Energy shows", "fn": "Energy window for this room (Total / Today / Week / Month); the room-header Energy chip sums its devices over that window", "key": "area_styles[name].energy_period", "scope": "area", "default": "inherit", "advanced": false },
           { "control": "Button shape / variant / size", "fn": "ON/OFF button style for this room", "key": "area_styles[name].button*", "scope": "area", "default": "pill / fill / md", "advanced": true }
         ]}
       ]},
@@ -333,6 +337,7 @@
           { "control": "Show graphs on tiles", "fn": "Master sparkline switch", "key": "show_graphs", "scope": "global", "default": "on", "advanced": false },
           { "control": "Type", "fn": "Line / Area / Bar", "key": "graph_style.type", "scope": "global", "default": "line", "advanced": false },
           { "control": "History window", "fn": "History look-back (1–168h)", "key": "graph_hours", "scope": "global", "default": "24h", "advanced": false },
+          { "control": "Energy shows", "fn": "What every Energy chip reports: Total = lifetime meter reading; Today/Week/Month = consumption this period, from recorder statistics (bucketed in HA's timezone). Falls back to the lifetime total if statistics are unavailable.", "key": "energy_period", "scope": "global", "default": "total", "advanced": false },
           { "control": "Line thickness", "fn": "Sparkline stroke width", "key": "graph_style.line_width", "scope": "global", "default": "1.5px", "advanced": true },
           { "control": "Fill area under line", "fn": "Area fill beneath the line", "key": "graph_style.fill", "scope": "global", "default": "on", "advanced": true },
           { "control": "Graph height", "fn": "Sparkline pixel height", "key": "graph_style.height", "scope": "global", "default": "32px", "advanced": true },

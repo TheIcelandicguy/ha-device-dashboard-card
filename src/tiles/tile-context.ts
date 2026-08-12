@@ -43,6 +43,8 @@ export interface TileSensors {
   voltage: number | null;
   current: number | null;
   energy: number | null;
+  /** What `energy` represents: 'Energy' (lifetime) or 'Today'/'Week'/'Month'. */
+  energyLabel: string;
   temp: number | null;
   rssi: number | null;
   uptime: number | null;

@@ -277,7 +277,9 @@ export interface DeviceStyle {
   /** Per-device energy window override (total/today/week/month). */
   energy_period?: EnergyPeriod;
   /** Point the energy value at a specific entity (e.g. a Utility Meter) instead
-   *  of the device's auto-detected `_energy` sensor. */
+   *  of the device's auto-detected `_energy` sensors. Replaces them everywhere —
+   *  tile chip, room total and header chip — so the override never renders
+   *  alongside the raw sensors it stands in for. */
   energy_entity?: string;
   tile_layout?: TileLayout; // per-device block order/visibility
   /** Override the auto-detected device profile (categorisation). undefined = auto. */
@@ -534,7 +536,10 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
 
   /** What the Energy value shows: cumulative lifetime total (default) or the
    *  consumption over the current day/week/month, computed from recorder
-   *  statistics. Applies to every energy chip; overridable per room/device. */
+   *  statistics bucketed in HA's timezone. Applies to every energy chip — tiles,
+   *  room headers, the card header and the detail sheet — and is overridable per
+   *  room/device. Any chip whose statistics call fails degrades to the lifetime
+   *  total under the plain "Energy" label rather than reporting a wrong period. */
   energy_period?: EnergyPeriod;
 
   // ── Graphs ────────────────────────────────────────────────────
