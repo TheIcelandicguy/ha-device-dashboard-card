@@ -178,7 +178,7 @@ const DEFAULTS = { theme:'warm_dusk', title:'Shelly', columns:3, tile_size:'md',
   tile_style:null, power_monitor_variant:'big-number', smart_tile_styles:false, show_offline:true,
   show_graphs:true, graph_hours:24, effects:false, header_show_title:true, header_show_stats:true,
   header_show_cloud:false, header_show_orbs:false, header_chips:['online','offline','power','alerts'],
-  sensors:null, name_groups:null };
+  sensors:null };
 
 const THEMES = [
   ['warm_dusk','Warm Dusk',true,{accent_color:'#c98a63',card_bg:'#1e1a17',tile_bg:'rgba(255,244,232,0.035)',tile_border:'rgba(255,244,232,0.08)',tile_hover_bg:'rgba(255,244,232,0.06)',tile_hover_shadow:'rgba(0,0,0,0.35)',tile_sensor_bg:'rgba(255,244,232,0.045)',tile_exp_bg:'rgba(255,244,232,0.05)',text_primary:'#ece5dc',text_secondary:'#b3a596',text_muted:'#7e7265',header_bg:'#241f1b',header_bg2:'#33291f',header_text_color:'#f3ece3',header_orb_color:'#c98a63',online_color:'#93b384',offline_color:'#d47f62',power_color:'#dba25c',area_header_color:'#c98a63'}],
@@ -210,7 +210,7 @@ let S;
 function fresh(){ return { theme:'warm_dusk', title:'', columns:3, tile_size:'md', sort_by:'name',
   tile_style:'', power_monitor_variant:'big-number', smart_tile_styles:false, show_offline:true, show_graphs:true,
   graph_hours:24, effects:false, header_show_title:true, header_show_stats:true, header_show_cloud:false,
-  header_show_orbs:false, header_chips:['online','offline','power','alerts'], sensors:[...ALL_SENSORS], name_groups:'' }; }
+  header_show_orbs:false, header_chips:['online','offline','power','alerts'], sensors:[...ALL_SENSORS] }; }
 S = fresh();
 
 const panel = document.getElementById('panel');
@@ -283,8 +283,6 @@ function render(){
   rowEl(g,'Show offline devices','',toggle(S.show_offline,v=>{S.show_offline=v;sync();}));
   rowEl(g,'Sparkline graphs','',toggle(S.show_graphs,v=>{S.show_graphs=v;render();sync();}));
   if(S.show_graphs) rowEl(g,'History window','hours of look-back',slider(1,168,1,S.graph_hours,'h',v=>{S.graph_hours=v;sync();}));
-  const ng=el('input'); ng.type='text'; ng.placeholder='e.g. Gólfhiti, Garden'; ng.value=S.name_groups; ng.oninput=e=>{S.name_groups=e.target.value;sync();};
-  rowEl(g,'Name-based groups','comma-separated name prefixes',ng);
 
   // SENSOR CHIPS
   g=group('Default sensor chips');
@@ -323,8 +321,6 @@ function buildConfig(){
   const hcDef=DEFAULTS.header_chips;
   if(S.header_chips.length!==hcDef.length || S.header_chips.some((k,i)=>k!==hcDef[i])) c.header_chips=[...S.header_chips];
   if(S.sensors.length!==ALL_SENSORS.length) c.sensors=[...S.sensors];
-  const ng=S.name_groups.split(',').map(s=>s.trim()).filter(Boolean);
-  if(ng.length) c.name_groups=ng;
   if(S.theme!=='warm_dusk') c.style={...THEME_MAP[S.theme]};
   return c;
 }
@@ -386,7 +382,7 @@ document.getElementById('dl').onclick=()=>{const blob=new Blob([window._cfgYaml]
 document.getElementById('reset').onclick=()=>{S=fresh();render();sync();};
 
 /* ── import existing YAML ── */
-const MANAGED=['type','title','columns','tile_size','tile_style','power_monitor_variant','smart_tile_styles','sort_by','show_offline','show_graphs','graph_hours','effects','header_show_title','header_show_stats','header_show_cloud','header_show_orbs','header_chips','sensors','name_groups','style'];
+const MANAGED=['type','title','columns','tile_size','tile_style','power_monitor_variant','smart_tile_styles','sort_by','show_offline','show_graphs','graph_hours','effects','header_show_title','header_show_stats','header_show_cloud','header_show_orbs','header_chips','sensors','style'];
 function parseScalar(s){ if(s==='')return '';
   if((s[0]==='"'&&s.slice(-1)==='"')||(s[0]==="'"&&s.slice(-1)==="'"))return s.slice(1,-1);
   if(s==='true')return true; if(s==='false')return false;
@@ -430,8 +426,6 @@ function applyConfig(c){
   S.header_show_orbs=c.header_show_orbs===true;
   if(Array.isArray(c.header_chips)) S.header_chips=c.header_chips.filter(k=>HC_LABEL[k]);
   if(Array.isArray(c.sensors)) S.sensors=c.sensors.filter(k=>ALL_SENSORS.includes(k));
-  if(Array.isArray(c.name_groups)) S.name_groups=c.name_groups.join(', ');
-  else if(typeof c.name_groups==='string') S.name_groups=c.name_groups;
   if(c.style&&typeof c.style==='object'){ const t=matchTheme(c.style); if(t) S.theme=t; }
   render(); sync();
   return Object.keys(c).filter(k=>!MANAGED.includes(k));

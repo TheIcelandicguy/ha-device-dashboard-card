@@ -42,8 +42,7 @@
     "header_show_cloud": false,
     "header_show_orbs": false,
     "header_chips": ["online", "offline", "power", "alerts"],
-    "sensors": null,
-    "name_groups": null
+    "sensors": null
   },
 
   "firstRun": [
@@ -60,7 +59,6 @@
     { "setting": "Offline devices",      "value": "Shown",                                          "source": "hidden only if show_offline === false" },
     { "setting": "Header orbs / effects","value": "Off",                                            "source": "effects ?? false" },
     { "setting": "Buttons",              "value": "Pill · filled · medium",                         "source": "'pill' / 'fill' / 'md'" },
-    { "setting": "Name groups",          "value": "None",                                           "source": "name_groups unset" },
     { "setting": "Views",                "value": "Single implicit \"All devices\"",                "source": "—" }
   ],
 
@@ -198,8 +196,7 @@
           { "control": "Sort", "fn": "Device sort order for the whole card (Name / Power / Online)", "key": "sort_by", "scope": "global", "default": "'name'", "advanced": false },
           { "control": "Rooms — All", "fn": "Show all rooms (clears the include-list)", "key": "areas → undefined", "scope": "global", "default": "all shown", "advanced": false },
           { "control": "Rooms — None", "fn": "Hide all rooms (explicit empty list)", "key": "areas → []", "scope": "global", "default": "all shown", "advanced": false },
-          { "control": "Show offline devices", "fn": "Show or hide offline devices", "key": "show_offline", "scope": "global", "default": "true", "advanced": false },
-          { "control": "Name-based groups", "fn": "Comma-separated name prefixes; matches also appear under a synthetic section", "key": "name_groups", "scope": "global", "default": "none", "advanced": false }
+          { "control": "Show offline devices", "fn": "Show or hide offline devices", "key": "show_offline", "scope": "global", "default": "true", "advanced": false }
         ]},
         { "name": "Room row + device row", "controls": [
           { "control": "Room include", "fn": "Include / exclude this room (toggling all → undefined)", "key": "areas", "scope": "global", "default": "all on", "advanced": false },
