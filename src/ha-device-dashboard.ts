@@ -62,6 +62,9 @@ export class HADeviceDashboard extends LitElement {
   @state() private _periodEnergy = new Map<string, number>();
   private _periodEnergyFetching = new Set<string>();
   private _periodEnergyAt = new Map<string, number>();
+  /** When the last `statistics_during_period` call for a key failed. Gates retries
+   *  so a persistently failing entity doesn't re-fire on every render. */
+  @state() private _periodEnergyErrAt = new Map<string, number>();
   @state() private _valveDragPos: number | null = null;
   @state() private _trvDragTemp: number | null = null;
   private _trvBtnTimer: ReturnType<typeof setTimeout> | null = null;
@@ -145,6 +148,7 @@ export class HADeviceDashboard extends LitElement {
       changed.has('_entityListOpen') ||
       changed.has('_graphData') ||
       changed.has('_periodEnergy') ||
+      changed.has('_periodEnergyErrAt') ||
       changed.has('_valveDragPos') ||
       changed.has('_trvDragTemp') ||
       changed.has('_detailDevice') ||
@@ -984,11 +988,13 @@ export class HADeviceDashboard extends LitElement {
         else if (dc === 'frequency'       && show('frequency'))      push('frequency',      'Freq',   formatFrequency(v),     false, id);
         else if (dc === 'energy'          && show('energy')) {
           const period = this._energyPeriod(device);
-          if (period === 'total') { push('energy', 'Energy', formatEnergy(v), false, id); }
+          const pe = period === 'total' ? null : this._periodEnergyValue(id, period);
+          // A failed statistics call degrades to the lifetime total rather than
+          // pinning the chip at '…'.
+          if (!pe || pe.failed) { push('energy', 'Energy', formatEnergy(v), false, id); }
           else {
-            const pv = this._periodEnergyValue(id, period);
             const lbl = period === 'today' ? 'Today' : period === 'week' ? 'Week' : 'Month';
-            push('energy', lbl, pv == null ? '…' : formatEnergy(pv), false, id);
+            push('energy', lbl, pe.kwh == null ? '…' : formatEnergy(pe.kwh), false, id);
           }
         }
         else if (dc === 'voltage'         && show('voltage'))        push('voltage',        'Volt',   formatVoltage(v),       false, id);
@@ -1316,48 +1322,102 @@ export class HADeviceDashboard extends LitElement {
       ?? 'total';
   }
 
-  /** The entity whose energy value drives this device's Energy chip — a per-device
-   *  override (e.g. a Utility Meter) or the device's own `_energy` sensor. */
-  private _energyEntityFor(device: HADevice): string | undefined {
+  /** The entities whose energy values make up this device's consumption — the
+   *  per-device override (e.g. a Utility Meter) if set, otherwise **every** energy
+   *  sensor on the device. All of them: a Shelly Pro 4PM exposes one per channel,
+   *  and taking only the first under-counts the device fourfold. */
+  private _energyEntitiesFor(device: HADevice): string[] {
     const override = this._config.device_styles?.[device.device_id]?.energy_entity;
-    if (override) return override;
-    const ent = device.entities.find(e => e.domain === 'sensor' &&
-      (this.hass.states[e.entity_id]?.attributes as HassAttrs)?.device_class === 'energy');
-    return ent?.entity_id;
+    if (override) return [override];
+    return device.entities
+      .filter(e => e.domain === 'sensor' &&
+        (this.hass.states[e.entity_id]?.attributes as HassAttrs)?.device_class === 'energy')
+      .map(e => e.entity_id);
   }
 
-  /** Start of the current day/week(Mon)/month, local time. */
+  /** How long a fetched period value stays fresh, and how long a failed fetch is
+   *  left alone before we try again. Without the error backoff a broken entity
+   *  re-fires the WS call on every render (~every 2s, forever). */
+  private static readonly PERIOD_ENERGY_TTL = 5 * 60_000;
+  private static readonly PERIOD_ENERGY_RETRY = 60_000;
+
+  /** The timezone the recorder buckets statistics in — HA's, not the browser's. */
+  private _statsTimeZone(): string {
+    return (this.hass as any)?.config?.time_zone
+      || Intl.DateTimeFormat().resolvedOptions().timeZone
+      || 'UTC';
+  }
+
+  /** Offset (ms) of `tz` from UTC at instant `at`: format the instant as wall-clock
+   *  in `tz`, then read those digits back as if they were UTC. */
+  private _tzOffsetMs(tz: string, at: Date): number {
+    const parts: Record<string, string> = {};
+    for (const p of new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    }).formatToParts(at)) parts[p.type] = p.value;
+    const asUTC = Date.UTC(+parts.year, +parts.month - 1, +parts.day,
+      +parts.hour % 24, +parts.minute, +parts.second);
+    return asUTC - at.getTime() + (at.getTime() % 1000);
+  }
+
+  /** The instant at which midnight of `y-m-d` occurs in `tz`. Resolved twice: the
+   *  offset that applies *at* the boundary can differ from the one now (DST). */
+  private _zonedMidnight(tz: string, y: number, m: number, d: number): Date {
+    const wall = Date.UTC(y, m, d);
+    let ts = wall - this._tzOffsetMs(tz, new Date(wall));
+    ts = wall - this._tzOffsetMs(tz, new Date(ts));
+    return new Date(ts);
+  }
+
+  /** Start of the current day/week(Mon)/month **in HA's timezone**. Recorder
+   *  buckets align to that zone, and `statistics_during_period` drops any bucket
+   *  starting before `start_time` — so a browser-local boundary east of HA's
+   *  would silently exclude the current bucket (Today stuck at 0.000 kWh). */
   private _periodStart(period: EnergyPeriod): { start: Date; stat: 'day' | 'week' | 'month' } | null {
-    const now = new Date();
-    if (period === 'today') return { start: new Date(now.getFullYear(), now.getMonth(), now.getDate()), stat: 'day' };
-    if (period === 'month') return { start: new Date(now.getFullYear(), now.getMonth(), 1), stat: 'month' };
+    if (period === 'total') return null;
+    const tz = this._statsTimeZone();
+    // "Now" as wall-clock in HA's zone, so day/month arithmetic happens there.
+    const nowWall = new Date(Date.now() + this._tzOffsetMs(tz, new Date()));
+    const y = nowWall.getUTCFullYear(), m = nowWall.getUTCMonth(), d = nowWall.getUTCDate();
+    if (period === 'today') return { start: this._zonedMidnight(tz, y, m, d), stat: 'day' };
+    if (period === 'month') return { start: this._zonedMidnight(tz, y, m, 1), stat: 'month' };
     if (period === 'week') {
-      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const dow = (d.getDay() + 6) % 7; // 0 = Monday
-      d.setDate(d.getDate() - dow);
-      return { start: d, stat: 'week' };
+      const dow = (nowWall.getUTCDay() + 6) % 7; // 0 = Monday
+      return { start: this._zonedMidnight(tz, y, m, d - dow), stat: 'week' };
     }
     return null;
   }
 
-  /** Cached period-energy (kWh) for an entity, or null until fetched. Triggers a
-   *  fetch on miss. `total` is handled by the caller (uses the live state). */
-  private _periodEnergyValue(entityId: string, period: EnergyPeriod): number | null {
-    if (period === 'total') return null;
+  /** Cached period-energy for an entity. `kwh` is null until the first fetch
+   *  lands; `failed` means the statistics call errored and the caller should fall
+   *  back to the live lifetime total rather than showing a permanent '…'.
+   *  `total` is handled by the caller (uses the live state). */
+  private _periodEnergyValue(entityId: string, period: EnergyPeriod): { kwh: number | null; failed: boolean } {
+    if (period === 'total') return { kwh: null, failed: false };
     const key = `${entityId}|${period}`;
-    if (this._periodEnergy.has(key)) {
-      const age = Date.now() - (this._periodEnergyAt.get(key) ?? 0);
-      if (age < 5 * 60_000) return this._periodEnergy.get(key)!;
+    const cached = this._periodEnergy.get(key) ?? null;
+    if (cached != null && Date.now() - (this._periodEnergyAt.get(key) ?? 0) < HADeviceDashboard.PERIOD_ENERGY_TTL) {
+      return { kwh: cached, failed: false };
+    }
+    const errAge = Date.now() - (this._periodEnergyErrAt.get(key) ?? 0);
+    if (this._periodEnergyErrAt.has(key) && errAge < HADeviceDashboard.PERIOD_ENERGY_RETRY) {
+      // Backing off. Show the last good value if we have one, else tell the
+      // caller to fall back to the live total.
+      return { kwh: cached, failed: cached == null };
     }
     void this._fetchPeriodEnergy(entityId, period);
-    return this._periodEnergy.get(key) ?? null;
+    return { kwh: cached, failed: false };
   }
 
   private async _fetchPeriodEnergy(entityId: string, period: EnergyPeriod): Promise<void> {
     const key = `${entityId}|${period}`;
     if (this._periodEnergyFetching.has(key)) return;
     const age = Date.now() - (this._periodEnergyAt.get(key) ?? 0);
-    if (age < 5 * 60_000 && this._periodEnergy.has(key)) return;
+    if (age < HADeviceDashboard.PERIOD_ENERGY_TTL && this._periodEnergy.has(key)) return;
+    const errAge = Date.now() - (this._periodEnergyErrAt.get(key) ?? 0);
+    if (this._periodEnergyErrAt.has(key) && errAge < HADeviceDashboard.PERIOD_ENERGY_RETRY) return;
     const ps = this._periodStart(period);
     if (!ps) return;
     this._periodEnergyFetching.add(key);
@@ -1371,11 +1431,16 @@ export class HADeviceDashboard extends LitElement {
       }) as Record<string, Array<{ change?: number | null }>>;
       const change = (rows?.[entityId] ?? []).reduce((a, r) => a + (r.change ?? 0), 0);
       this._periodEnergyAt.set(key, Date.now());
+      if (this._periodEnergyErrAt.delete(key)) this._periodEnergyErrAt = new Map(this._periodEnergyErrAt);
       const next = new Map(this._periodEnergy);
       next.set(key, change);
       this._periodEnergy = next; // reassign → reactive re-render
     } catch {
-      // leave uncached; caller falls back to the live total
+      // Stamp the failure so we back off instead of re-firing every render; the
+      // caller falls back to the live total meanwhile.
+      const next = new Map(this._periodEnergyErrAt);
+      next.set(key, Date.now());
+      this._periodEnergyErrAt = next;
     } finally {
       this._periodEnergyFetching.delete(key);
     }
@@ -2752,12 +2817,20 @@ export class HADeviceDashboard extends LitElement {
     const chips: Array<{ label: string; value: string }> = [];
     for (const def of AREA_CHIP_DEFS) {
       if (def.key === 'energy' && show('energy') && areaPeriod !== 'total') {
-        let sum = 0, got = false;
+        let sum = 0, got = false, failed = false;
         for (const d of devices) {
-          const eid = this._energyEntityFor(d);
-          if (!eid) continue;
-          const pv = this._periodEnergyValue(eid, areaPeriod);
-          if (pv != null) { sum += pv; got = true; }
+          for (const eid of this._energyEntitiesFor(d)) {
+            const pv = this._periodEnergyValue(eid, areaPeriod);
+            if (pv.failed) { failed = true; continue; }
+            if (pv.kwh != null) { sum += pv.kwh; got = true; }
+          }
+        }
+        // A partial sum is worse than no sum — if any entity's statistics call
+        // failed, show the room's raw lifetime total instead of a short number
+        // wearing a "Today" label.
+        if (failed) {
+          if (acc['energy']) chips.push({ label: def.label, value: this._formatAreaChip('energy', acc['energy'].sum) });
+          continue;
         }
         if (got || acc['energy']) {
           const lbl = areaPeriod === 'today' ? 'Today' : areaPeriod === 'week' ? 'Week' : 'Month';

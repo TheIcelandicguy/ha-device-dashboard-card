@@ -38,21 +38,31 @@ visual (GUI) config editor.
 - **Package:** `ha-device-dashboard`, version **2.0.0**, MIT, author `TheIcelandicguy`.
 - **Stack:** Lit 3, TypeScript 5, bundled with Rollup to a single ES-module file
   `dist/ha-device-dashboard.js` (minified with terser for production).
-- **Focus:** Strongly Shelly-oriented — discovery is limited to the HA `shelly`
-  integration plus `bthome` (Shelly BLU sensors). The card understands all Shelly
-  device profiles and generations (Gen1/2/3/4 + BLE) and picks a sensible tile
-  layout per profile.
+- **Focus:** Strongly Shelly-oriented, but no longer Shelly-limited. Discovery runs
+  in one of two modes (`config.mode`): the default `shelly` mode covers the HA
+  `shelly` integration plus `bthome` (Shelly BLU sensors), while `universal` mode
+  discovers every HA device with scoping filters to tame the volume. In both modes
+  the card understands all Shelly device profiles and generations (Gen1/2/3/4 +
+  BLE) and picks a sensible tile layout per profile.
 
 The card is registered in the "Add card" picker via `window.customCards` with the
-name **"HA Device Dashboard"** and marketing description "Universal device fleet
-overview". (Note the discovery code today is Shelly/BTHome-only — see §7 and §9.)
+name **"HA Device Dashboard"** and description "Universal device fleet overview —
+Shelly, ZHA, Hue, ESPHome, Matter and more." That is accurate in universal mode;
+in the default Shelly mode only Shelly/BTHome devices appear (see §7).
 
 ---
 
 ## 2. Key features
 
 - **Auto-discovery** — finds Shelly (and Shelly BLU/BTHome) devices registered in
-  HA; no manual entity list required.
+  HA; no manual entity list required. Opt into `mode: universal` to discover every
+  HA device, scoped by `universal_scope` and integration/domain allow- and
+  deny-lists.
+- **Embedded Lovelace cards** — render your own cards above (`header_cards`),
+  below (`footer_cards`) or inside a specific room's section (`area_cards`).
+- **Delegated native controls** — `delegate_controls` renders HA's own control
+  elements for long-tail domains (lock, media, fan, vacuum …). Off by default
+  because each embeds a native tile element, a real render cost on large fleets.
 - **Device profiles** — 13 profiles (relay, plug, dimmer, rgb, climate/TRV, cover,
   valve, energy, sensor, input, uni, wall_display, generic), each with a badge, a
   default sensor-chip set, and a default tile block order.
@@ -169,17 +179,19 @@ device_styles:
     tile_icon: flame
 ```
 
-The **canonical, machine-readable model** of the whole config surface lives in
-`docs/card-reference.json` (defaults, first-run values, the 13 profiles, themes,
-tile blocks, header chips, and every editor control with its config key, scope,
-default and advanced flag). The offline HTML tools in `docs/tools/` all read from
-that model. The authoritative TypeScript definition is
-`HADeviceDashboardConfig` in `src/types.ts`.
+The **authoritative** definition is `HADeviceDashboardConfig` in `src/types.ts` —
+well commented, and the only file guaranteed to match the shipped behaviour.
+
+`docs/card-reference.json` is the machine-readable model that drives editor
+defaults and the offline HTML tools in `docs/tools/` (defaults, first-run values,
+the 13 profiles, themes, tile blocks, header chips, and every editor control with
+its config key, scope, default and advanced flag) — but it lags `types.ts`, so
+check it against the type rather than trusting it alone.
 
 > Note: the top-level option table in `README.md` lists a few legacy keys
 > (`include_all`, `hide_shelly`, `view_mode`, `tile_click`, `show_glow`) that are
-> **not** part of the v2 `HADeviceDashboardConfig` type. Treat `src/types.ts` /
-> `docs/card-reference.json` as the source of truth for current options.
+> **not** part of the v2 `HADeviceDashboardConfig` type. Don't use the README as an
+> option reference at all.
 
 ---
 
@@ -249,6 +261,9 @@ Each tile style is a standalone render function called by the main card:
 - `block-tile.ts` — the `default` adaptive block-grid tile (name_row, sensors,
   graph, dimmer, cover/valve/trv controls, relay/input channels, power_bar,
   virtual_controls, badges).
+- `delegated-control.ts` — native HA control elements for long-tail domains
+  (lock/media/fan/vacuum/…), used by the `delegated_controls` block when
+  `delegate_controls` is on. Imported directly from `src/index.ts`.
 - `tile-parts.ts` — shared sub-components used across tiles.
 - `tile-context.ts` — the `TileCtx` type and helper interfaces (SensorChip,
   TrvInfo, CoverInfo, GraphEntity, FirmwareInfo, VirtualControl, …) passed into
@@ -283,6 +298,16 @@ runtime defaults from `docs/card-reference.json` where applicable.
 |---|---|---|---|
 | `type` | string | — | Must be `custom:ha-device-dashboard`. |
 | `title` | string | `Shelly` | Header title text. |
+| `mode` | `shelly`\|`universal` | `shelly` | Discovery breadth. `shelly` = Shelly + BTHome only; `universal` = every HA device, with Shelly devices keeping full-fidelity Shelly detection. |
+| `universal_scope` | `all`\|`devices`\|`controllable` | `devices` | Universal only. `devices` = actuators + devices with a recognised sensor (drops routers, PCs, browsers, pure-diagnostic integrations); `controllable` = only devices with a controllable entity; `all` = raw firehose. |
+| `include_integrations` | string[] | — | Universal only. Force-include platforms the deny-list removed (e.g. `['mobile_app']`). |
+| `exclude_integrations` | string[] | — | Universal only. Added to the built-in deny-list (`mobile_app`, `browser_mod`, routers, `systemmonitor`, …). |
+| `include_domains` | string[] | — | Universal only. Entity-domain allow-list; when set, only these. |
+| `exclude_domains` | string[] | — | Universal only. Entity-domain deny-list (e.g. `['update','device_tracker']`). |
+| `header_cards` / `footer_cards` | LovelaceCardConfig[] | — | Your own Lovelace cards rendered above / below the device grid. |
+| `area_cards` | Record<area, LovelaceCardConfig[]> | — | Cards rendered inside a specific room's section, above its tiles. |
+| `delegate_controls` | boolean | `false` | Render native HA controls for long-tail domains via the `delegated_controls` block. |
+| `energy_period` | EnergyPeriod | lifetime total | What the Energy value shows: cumulative total, or current day/week/month from recorder statistics. Overridable per room/device. |
 | `areas` | string[] | all | Area-name filter (`[]` = none). |
 | `name_groups` | string[] | — | Extra sections built from device-name prefixes. |
 | `hidden_devices` | string[] | `[]` | Device IDs to hide. |
@@ -374,9 +399,16 @@ passes in. `getAllDevices(hass)` in `helpers.ts`:
    `vacuum`, `alarm_control_panel`, `humidifier`, `water_heater`, `update`,
    `button`, `number`, `select`, `text`, `camera`, `event`; `device_tracker` is
    deliberately excluded).
-2. **Filters to Shelly:** keeps only entities whose platform is `shelly` or
-   `bthome` (the latter for Shelly BLU BLE sensors that report through HA's BTHome
-   integration). Non-Shelly BTHome vendors are skipped.
+2. **Applies the discovery mode.** In **Shelly mode** (`mode` unset or `'shelly'`)
+   it keeps only entities whose platform is `shelly` or `bthome` — the latter for
+   Shelly BLU BLE sensors that report through HA's BTHome integration — and skips
+   non-Shelly BTHome vendors (Tuya, generic BLE) via a `manufacturer`/platform
+   check. In **universal mode** it keeps every platform, then filters by
+   `universal_scope`, the `DEFAULT_EXCLUDE_INTEGRATIONS` deny-list plus the user's
+   `exclude_integrations` (with `include_integrations` as a force-include escape
+   hatch), and `include_domains` / `exclude_domains`. Those scoping sets are `null`
+   in Shelly mode, so the filters are true no-ops there rather than a second code
+   path. Entities with `hidden_by` set are skipped in both modes.
 3. Groups entities under their device (`hass.devices`), resolving area name via
    `hass.areas`, and extracts the device IP from `configuration_url`.
 4. Attaches live state from `hass.states[entity_id]` (O(1) lookup).
@@ -475,14 +507,15 @@ reference/` contains Shelly API / HA-integration reference notes.
 
 ## 9. Known limitations / roadmap
 
-- **Shelly/BTHome-only discovery.** Despite the "universal device fleet" marketing
-  string in the card picker, `getAllDevices` currently filters to the `shelly` and
-  `bthome` platforms — other integrations (ZHA, Hue, ESPHome, Matter) are not
-  discovered yet.
-- **README vs. types drift.** The top-level option table in `README.md` still lists
-  a few legacy keys (`include_all`, `hide_shelly`, `view_mode`, `tile_click`,
-  `show_glow`) that are not in the v2 `HADeviceDashboardConfig`. Use
-  `src/types.ts` / `docs/card-reference.json` as the source of truth.
+- **Shelly-first defaults.** Universal mode exists and does discover ZHA / Hue /
+  ESPHome / Matter, but `mode` defaults to `shelly`, so out of the box only
+  Shelly/BTHome devices appear. Profile detection and tile styling remain far
+  richer for Shelly than for anything else.
+- **Doc drift.** `README.md`'s option table still lists legacy keys (`include_all`,
+  `hide_shelly`, `view_mode`, `tile_click`, `show_glow`) that are not in the v2
+  `HADeviceDashboardConfig`, and `docs/card-reference.json` lags `src/types.ts`.
+  **`src/types.ts` is the only always-current source** — check the JSON against it
+  rather than the other way round.
 - **Editor refactor in progress.** The editor is migrating to the data-driven
   `EDITOR_LAYOUT`; only the Graphs & Sensors tab is fully wired to it, with other
   tabs still rendered from bespoke methods (documented as future phases).

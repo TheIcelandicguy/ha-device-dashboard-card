@@ -2,8 +2,9 @@
 
 HA Device Dashboard — a Home Assistant **Lovelace custom card** (frontend only, no
 Python backend). TypeScript + Lit 3, bundled by Rollup to a single committed file
-`dist/ha-device-dashboard.js`. It auto-discovers Shelly/BTHome devices from the
-in-browser `hass` object and renders a device-centric fleet dashboard.
+`dist/ha-device-dashboard.js`. It auto-discovers devices from the in-browser
+`hass` object — Shelly/BTHome by default, or every HA device in universal mode —
+and renders a device-centric fleet dashboard.
 
 Full architecture tour lives in `OVERVIEW.md` (untracked, on-disk only). Read it
 when you need depth; this file is the fast orientation.
@@ -18,10 +19,18 @@ when you need depth; this file is the fast orientation.
 
 ## Source of truth
 
-- **`src/types.ts`** (`HADeviceDashboardConfig`) and **`docs/card-reference.json`**
-  are canonical for config options. README has legacy-key drift (`include_all`,
-  `hide_shelly`, `view_mode`, `tile_click`, `show_glow` are NOT real options) —
-  don't trust it for the option surface.
+- **`src/types.ts`** (`HADeviceDashboardConfig`) is the one file that is always
+  right, and it's well commented — the doc comment on an option usually gives the
+  default and the reasoning.
+- **`docs/card-reference.json`** drives the editor defaults and the offline
+  designers, but it lags `types.ts`. Check both; treat a mismatch as work to do.
+- README has legacy-key drift (`include_all`, `hide_shelly`, `view_mode`,
+  `tile_click`, `show_glow` are NOT real options) — don't trust it for the option
+  surface.
+- Options added after the last doc sweep, easy to miss: `mode`, `universal_scope`,
+  `include_integrations` / `exclude_integrations`, `include_domains` /
+  `exclude_domains`, `header_cards` / `footer_cards` / `area_cards`,
+  `delegate_controls`, `energy_period`.
 - The `docs/tools/*.html` designers inline their own copy of `card-reference.json`
   and are hand-synced.
 
@@ -36,16 +45,33 @@ when you need depth; this file is the fast orientation.
   `migrateConfig`.
 - `src/tiles/` — one render fn per tile style (`power-monitor`, `light-control`,
   `climate-control`, `cover-control`, `sensor-card`, `scene-button`, `block-tile`
-  for the `default` adaptive tile) + `tile-context.ts` (`TileCtx`) + `tile-parts.ts`.
+  for the `default` adaptive tile) + `delegated-control.ts` (native HA controls for
+  long-tail domains) + `tile-context.ts` (`TileCtx`) + `tile-parts.ts`.
 - `src/detail/detail-sheet.ts` — the expandable per-device panel.
 - `src/styles/` — Lit css blocks (`main.ts`, `tiles.ts`, `detail.ts`).
 - `themes.ts`, `anim-icons.ts`, `fonts.ts` (bundled offline @font-face).
 
 ## Load-bearing facts / gotchas
 
-- **Discovery is Shelly + BTHome ONLY** (`getAllDevices` filters platform to
-  `shelly` / `bthome`), despite the "universal device fleet" picker string. ZHA/
-  Hue/ESPHome/Matter are not discovered.
+- **Discovery has two modes, and the default is narrow.** `getAllDevices` keys off
+  `config.mode`: unset or `'shelly'` keeps only platform `shelly` / `bthome` (and
+  drops BTHome devices from other vendors). `'universal'` discovers every HA
+  device, scoped by `universal_scope` (`devices` default / `controllable` / `all`),
+  a built-in `DEFAULT_EXCLUDE_INTEGRATIONS` deny-list plus the user's
+  `exclude_integrations` (with `include_integrations` as force-include), and
+  `include_domains` / `exclude_domains`. All those scoping sets are `null` in
+  Shelly mode, so they're genuine no-ops rather than a second code path. Shelly
+  devices keep full-fidelity profile detection in universal mode via the
+  `ProfileProvider` registry. Most "device is missing" reports are just Shelly mode.
+- **A Shelly entity always wins the device's `integration` field.** In universal
+  mode several integrations (routers, `device_pulse`) can attach entities to the
+  same HA device; without that rule `integration` would keep whichever platform
+  was seen first.
+- **The card can embed other Lovelace cards** — `header_cards`, `footer_cards` and
+  per-room `area_cards`. `delegate_controls` additionally renders native HA
+  controls for long-tail domains (lock/media/fan/vacuum) via
+  `src/tiles/delegated-control.ts`; it's off by default because each embeds a
+  native tile element, which costs real render time on large media fleets.
 - **Resolution cascade** for style/layout: device → device-type (profile) → area/
   room → view → global → built-in default. Viewer-local "what to show" tweaks layer
   on top via `localStorage` (not saved to YAML).
