@@ -151,6 +151,64 @@ export function getAllDevices(
   }
   for (const id of toMerge) devices.delete(id);
 
+  // Some integrations register a SECOND registry row for hardware that is already
+  // known — device_pulse, for one, shadows every Shelly with a device carrying only
+  // its ping entities, using identical `identifiers` and the same MAC. Those rows are
+  // siblings (same via_device_id), so the parent/child merge above never sees them,
+  // and universal mode renders a tile for each. Collapse rows that describe the same
+  // physical unit: same MAC connection, or an identical registry identifier.
+  const hwKeys = (info: any): string[] => {
+    const keys: string[] = [];
+    for (const [type, value] of (info?.connections ?? []) as Array<[string, string]>) {
+      if (type === 'mac' && value) keys.push(`mac:${value.toLowerCase()}`);
+    }
+    for (const [domain, ident] of (info?.identifiers ?? []) as Array<[string, string]>) {
+      if (domain && ident) keys.push(`id:${domain}:${String(ident).toLowerCase()}`);
+    }
+    return keys;
+  };
+  const byHardware = new Map<string, string[]>();
+  for (const deviceId of devices.keys()) {
+    for (const key of hwKeys(deviceRegistry[deviceId])) {
+      if (!byHardware.has(key)) byHardware.set(key, []);
+      byHardware.get(key)!.push(deviceId);
+    }
+  }
+  // A device can match on both its MAC and its identifier, so a row merged by one
+  // key may still show up under another — follow the chain to the current survivor.
+  const hwMerged = new Map<string, string>();
+  const survivorOf = (id: string): string => {
+    let cur = id;
+    for (let hops = 0; hwMerged.has(cur) && hops < 8; hops++) cur = hwMerged.get(cur)!;
+    return cur;
+  };
+  // Which row wins: the one with a configuration URL (real integrations set it,
+  // sidecars don't), then a Shelly row over a non-Shelly one — same precedent as
+  // the `integration` rule above — then whichever carries more entities.
+  const rowScore = (d: HADevice) => (d.ip ? 4 : 0) + (d.integration === 'shelly' ? 2 : 0);
+  for (const group of byHardware.values()) {
+    if (group.length < 2) continue;
+    const rows = [...new Set(group.map(survivorOf))].filter(id => devices.has(id));
+    if (rows.length < 2) continue;
+    const survivor = rows.reduce((best, id) => {
+      const a = devices.get(id)!, b = devices.get(best)!;
+      if (rowScore(a) !== rowScore(b)) return rowScore(a) > rowScore(b) ? id : best;
+      return a.entities.length > b.entities.length ? id : best;
+    });
+    const keep = devices.get(survivor)!;
+    for (const id of rows) {
+      if (id === survivor) continue;
+      const dup = devices.get(id)!;
+      keep.entities.push(...dup.entities);
+      if (!keep.ip    && dup.ip)    keep.ip    = dup.ip;
+      if (!keep.model && dup.model) keep.model = dup.model;
+      if (!keep.area  && dup.area)  keep.area  = dup.area;
+      if (dup.isShelly) keep.isShelly = true;
+      hwMerged.set(id, survivor);
+      devices.delete(id);
+    }
+  }
+
   let out = Array.from(devices.values()).filter(d => d.entities.length > 0);
   // Universal-mode scope: tame the firehose (default 'devices').
   if (universal) {

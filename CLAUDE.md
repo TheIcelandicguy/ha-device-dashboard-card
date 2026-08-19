@@ -24,9 +24,9 @@ when you need depth; this file is the fast orientation.
   default and the reasoning.
 - **`docs/card-reference.json`** drives the editor defaults and the offline
   designers, but it lags `types.ts`. Check both; treat a mismatch as work to do.
-- README has legacy-key drift (`include_all`, `hide_shelly`, `view_mode`,
-  `tile_click`, `show_glow` are NOT real options) — don't trust it for the option
-  surface.
+- README was resynced with `types.ts` on 2026-08-19 (the old `include_all`,
+  `hide_shelly`, `view_mode`, `tile_click`, `show_glow` drift is gone), but it is
+  still a summary — `types.ts` remains the authority for the option surface.
 - Options added after the last doc sweep, easy to miss: `mode`, `universal_scope`,
   `include_integrations` / `exclude_integrations`, `include_domains` /
   `exclude_domains`, `header_cards` / `footer_cards` / `area_cards`,
@@ -67,6 +67,14 @@ when you need depth; this file is the fast orientation.
   mode several integrations (routers, `device_pulse`) can attach entities to the
   same HA device; without that rule `integration` would keep whichever platform
   was seen first.
+- **Two merge passes collapse duplicate registry rows.** First `via_device_id` +
+  same config-URL host folds per-channel sub-devices into their parent. Then a
+  hardware-identity pass folds *siblings* that describe one physical unit — same
+  MAC connection or an identical `identifiers` entry. That second pass exists
+  because some integrations (`device_pulse`) register a shadow device per real
+  device instead of attaching entities to it, which showed up as two tiles per
+  device in universal mode. Survivor = has a config URL, then Shelly, then most
+  entities.
 - **The card can embed other Lovelace cards** — `header_cards`, `footer_cards` and
   per-room `area_cards`. `delegate_controls` additionally renders native HA
   controls for long-tail domains (lock/media/fan/vacuum) via
