@@ -34,11 +34,13 @@ export const EDITOR_LAYOUT: EditorTab[] = [
   // ── Contextual tabs (not yet layout-driven; listed for completeness) ──
   { id: 'devices', label: 'Rooms & devices', icon: '⌂', sections: [
     { id: 'rooms-toolbar', label: 'Rooms toolbar' },
-    { id: 'device-panel',  label: 'Per-device style panel' },
-    { id: 'room-panel',    label: 'Per-room style panel' },
+    { id: 'discovery',     label: 'Discovery' },
+    { id: 'extra-cards',   label: 'Extra cards' },
   ] },
   // Redesign Phase 3 — everything for a device in one place (bespoke body).
-  { id: 'device-styling', label: 'Device styling', icon: '◆', sections: [] },
+  { id: 'device-styling', label: 'Device styling', icon: '◆', sections: [
+    { id: 'device-panel', label: 'Per-device style panel' },
+  ] },
   { id: 'views', label: 'Views', icon: '☰', sections: [
     { id: 'views-toolbar', label: 'Views toolbar' },
     { id: 'view-card',     label: 'Per-view card + filters' },
@@ -54,6 +56,9 @@ export const EDITOR_LAYOUT: EditorTab[] = [
     { id: 'card',       label: 'Card',       advanced: true },
     { id: 'colors',     label: 'Colours',    advanced: true },
     { id: 'typography', label: 'Typography', advanced: true },
+    // Appended by the bespoke body (_renderRoomStyleSection), not the registry —
+    // listed so the layout spec says where per-room styling actually lives.
+    { id: 'room-panel', label: 'Per-room style panel' },
   ] },
 
   // ── Graphs & Sensors — WIRED to this spec (phase 2 pilot). ──

@@ -142,7 +142,7 @@ const BLOCKS = [
   ['name_row','Name & toggle'],['sensors','Sensor chips'],['graph','Graph'],['dimmer','Brightness / colour'],
   ['cover_controls','Cover controls'],['trv_control','Temperature control'],['valve_controls','Valve controls'],
   ['input_channels','Input channels'],['relay_channels','Relay channels'],['power_bar','Power bar'],
-  ['virtual_controls','Virtual controls'],['badges','Type & gen badges'],
+  ['virtual_controls','Virtual controls'],['delegated_controls','Native controls'],['badges','Type & gen badges'],
 ];
 const BLABEL = Object.fromEntries(BLOCKS);
 
@@ -156,25 +156,29 @@ const PROFILES = [
   ['wall_display','Display','climate-control',['temperature','humidity','illuminance']],
   ['cover','Roller','cover-control',['power','energy','temperature']],
   ['valve','Valve','default',['temperature']],
+  ['lock','Lock','default',['battery']],
+  ['media','Media','default',[]],
   ['sensor','Sensor','sensor-card',['temperature','humidity','illuminance','co2','gas','battery','motion','door','flood','smoke','vibration']],
   ['input','Input','scene-button',['battery']],
   ['uni','UNI','default',['temperature','battery']],
   ['generic','—','default',[]],
 ];
 const BLOCK_ORDER = {
-  relay:['name_row','relay_channels','sensors','graph','power_bar','virtual_controls','badges'],
-  plug:['name_row','sensors','graph','power_bar','virtual_controls','badges'],
-  energy:['name_row','sensors','graph','virtual_controls','badges'],
-  dimmer:['name_row','dimmer','sensors','graph','virtual_controls','badges'],
-  rgb:['name_row','dimmer','sensors','graph','virtual_controls','badges'],
-  climate:['name_row','sensors','trv_control','virtual_controls','badges'],
-  wall_display:['name_row','sensors','trv_control','virtual_controls','badges'],
-  cover:['name_row','cover_controls','sensors','virtual_controls','badges'],
-  valve:['name_row','sensors','valve_controls','virtual_controls','badges'],
-  sensor:['name_row','sensors','graph','virtual_controls','badges'],
-  input:['name_row','sensors','input_channels','virtual_controls','badges'],
-  uni:['name_row','input_channels','sensors','virtual_controls','badges'],
-  generic:['name_row','sensors','virtual_controls','badges'],
+  relay:['name_row','relay_channels','sensors','graph','power_bar','virtual_controls','delegated_controls','badges'],
+  plug:['name_row','sensors','graph','power_bar','virtual_controls','delegated_controls','badges'],
+  dimmer:['name_row','dimmer','sensors','graph','virtual_controls','delegated_controls','badges'],
+  rgb:['name_row','dimmer','sensors','graph','virtual_controls','delegated_controls','badges'],
+  climate:['name_row','sensors','trv_control','virtual_controls','delegated_controls','badges'],
+  cover:['name_row','cover_controls','sensors','virtual_controls','delegated_controls','badges'],
+  valve:['name_row','sensors','valve_controls','virtual_controls','delegated_controls','badges'],
+  lock:['name_row','sensors','virtual_controls','delegated_controls','badges'],
+  media:['name_row','sensors','virtual_controls','delegated_controls','badges'],
+  energy:['name_row','sensors','graph','virtual_controls','delegated_controls','badges'],
+  sensor:['name_row','sensors','graph','virtual_controls','delegated_controls','badges'],
+  input:['name_row','sensors','input_channels','virtual_controls','delegated_controls','badges'],
+  uni:['name_row','input_channels','sensors','virtual_controls','delegated_controls','badges'],
+  wall_display:['name_row','sensors','graph','trv_control','virtual_controls','delegated_controls','badges'],
+  generic:['name_row','sensors','virtual_controls','delegated_controls','badges'],
 };
 const TILE_STYLES = [['default','Default (blocks)'],['power-monitor','Power monitor'],['light-control','Light control'],['climate-control','Climate control'],['cover-control','Cover control'],['sensor-card','Sensor card'],['scene-button','Scene button']];
 const SENSOR_GROUPS = {
@@ -186,7 +190,7 @@ const SENSOR_GROUPS = {
 
 /* ── state ── */
 const SHIPPED = {};
-PROFILES.forEach(([k,l,ss,ch])=>{ SHIPPED[k]={ blocks:[...BLOCK_ORDER[k]], smart:ss, mode:(k==='generic'?'all':'curated'), sensors:[...ch] }; });
+PROFILES.forEach(([k,l,ss,ch])=>{ SHIPPED[k]={ blocks:[...BLOCK_ORDER[k]], smart:ss, mode:(ch.length?'curated':'all'), sensors:[...ch] }; });
 const clone = o=>JSON.parse(JSON.stringify(o));
 let ST = clone(SHIPPED);
 let active='relay', drag=null;

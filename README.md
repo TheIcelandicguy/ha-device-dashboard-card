@@ -4,66 +4,85 @@
 ![Version](https://img.shields.io/badge/version-2.0.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-A Home Assistant Lovelace custom card that auto-discovers all your Shelly devices and displays them in a live, interactive fleet dashboard.
+A Home Assistant Lovelace custom card that auto-discovers your devices and renders
+them as a live, device-centric fleet dashboard — grouped by room, with real
+controls, sensor chips, sparkline graphs and an expandable detail panel per device.
 
-![Dashboard preview](docs/preview.png)
+Shelly and BTHome devices are discovered by default with full model-aware
+detection. Switch to **universal mode** and it discovers every device in Home
+Assistant — ZHA, Z-Wave, Hue, ESPHome, Matter, Tasmota, anything.
+
+Frontend only: no custom integration, no Python, no helper entities.
 
 ---
 
 ## Features
 
-- **Auto-discovery** — finds all Shelly devices registered in HA, no manual list required
-- **All device types** — relay, plug, dimmer, RGB/RGBW, roller/cover, valve, sensor, input (i3/i4), TRV, Wall Display, energy monitor
-- **All generations** — Gen1, Gen2, Gen3, BLE
-- **Area grouping** — devices grouped by HA area with collapsible sections
-- **Tile controls** — toggle switches, dimmers, covers, valves directly from the tile
-- **Sensor chips** — key sensor readings (temperature, power, humidity …) shown as compact chips at the top of every tile
-- **Expanded detail** — click a tile to open an inline panel directly below that tile row, showing all channels, sensors, firmware version, IP, RSSI, uptime and more
-- **Sparkline graphs** — per-metric labeled line graphs with time axis, peak/min markers, interactive hover tooltip and dotted tick grid
-- **Power bar** — mini wattage indicator at the bottom of each tile
-- **Bulk actions** — select multiple tiles and toggle them together
-- **Sensor filtering** — choose which electrical, environmental, and alert sensors are shown
-- **Tile style** — solid, semi-transparent, or fully transparent tile/card backgrounds
-- **Per-area styling** — custom colors, fonts, backgrounds, tile colors, column counts per room
-- **Sort & filter** — sort by name, power, or online status; filter by area
-- **HA Sections view** — fully responsive with CSS container queries
-- **Visual editor** — full GUI config editor with accordion sections, no YAML required
+- **Auto-discovery** — reads the HA device and entity registries; no manual entity list
+- **Two discovery modes** — Shelly/BTHome only (default), or every HA device with
+  scoping controls to tame the firehose
+- **Device profiles** — relay, plug, dimmer, RGB, cover/roller, valve, TRV, Wall
+  Display, energy monitor, sensor, input (i3/i4), UNI, lock, media player, generic
+- **Room grouping** — one collapsible section per HA area, with per-room summary chips
+- **Real controls on the tile** — toggles, per-channel relays, brightness and colour,
+  cover open/stop/close + position, TRV setpoint, valve position
+- **Tile styles** — an adaptive block tile plus six purpose-built layouts
+  (power monitor with five variants, light, climate, cover, sensor, scene button)
+- **Expandable detail sheet** — click a tile for all entities, history tabs,
+  diagnostics, firmware, IP, RSSI and uptime
+- **Sparkline graphs** — per-metric labelled graphs with time axis, peak/min markers,
+  hover tooltips and a tick grid; line, area or bar
+- **Energy windows** — every energy chip can show the lifetime total or consumption
+  today / this week / this month, computed from recorder statistics (no helpers)
+- **Views** — filtered tabs over the same fleet, each with its own layout overrides
+- **Deep styling cascade** — device → device-type → room → view → saved style →
+  style preset → global, with seven built-in themes
+- **Embed your own cards** — any Lovelace card above, below, or inside a room
+- **Visual editor** — full GUI editor with an Advanced toggle and a read-only YAML tab
 
 ---
 
 ## Installation
 
-### HACS (Recommended)
+### HACS
 
-1. Open HACS → Frontend
-2. Click the three-dot menu → **Custom repositories**
-3. Add: `https://github.com/TheIcelandicguy/ha-device-dashboard-card` — Category: **Lovelace**
-4. Install **HA Device Dashboard**
-5. Reload the browser
+1. HACS → **Custom repositories**
+2. Add `https://github.com/TheIcelandicguy/ha-device-dashboard-card` — category **Dashboard**
+3. Install **HA Device Dashboard**, then hard-refresh the browser
+
+HACS registers the resource for you. If you need it by hand, it is:
+
+- URL `/local/community/ha-device-dashboard/ha-device-dashboard.js`
+- Type **JavaScript Module**
 
 ### Manual
 
-1. Download `dist/ha-device-dashboard.js` from the latest release
-2. Copy to `/config/www/ha-device-dashboard.js`
-3. Go to **Dashboard → Edit → Manage Resources** and add:
-   - URL: `/local/ha-device-dashboard.js`
-   - Type: JavaScript Module
+1. Download `dist/ha-device-dashboard.js`
+2. Copy it to `/config/www/community/ha-device-dashboard/ha-device-dashboard.js`
+3. **Settings → Dashboards → Resources → Add**, using the URL and type above
+4. Hard-refresh
+
+The bundle prints a build tag to the browser console on load — use it to confirm
+which build HA actually has after an update.
 
 ---
 
-## Basic Configuration
+## Quick start
 
 ```yaml
 type: custom:ha-device-dashboard
 ```
 
-That's it — the card auto-discovers everything. Add options to customise:
+That is a complete config — everything else is optional:
 
 ```yaml
 type: custom:ha-device-dashboard
+title: Home
 columns: 3
-show_offline: true
-tile_style: semi
+tile_size: md
+sort_by: name
+smart_tile_styles: true      # per-profile tile layouts instead of the adaptive one
+energy_period: today         # energy chips show today's consumption
 areas:
   - Living Room
   - Kitchen
@@ -71,7 +90,6 @@ sensors:
   - power
   - temperature
   - battery
-sort_by: power
 graph_sensors:
   - power
   - temperature
@@ -80,156 +98,356 @@ graph_hours: 24
 
 ---
 
-## Configuration Reference
+## Discovery
 
-### Top-level options
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `columns` | number | `3` | Global tile columns per row (1–6) |
-| `show_offline` | boolean | `true` | Show offline devices (greyed out) |
-| `include_all` | boolean | `false` | Show all HA devices, not just Shelly |
-| `hide_shelly` | boolean | `false` | Hide Shelly devices (use with `include_all`) |
-| `areas` | string[] | all | Filter to specific HA area names |
-| `sensors` | string[] | all | Which sensor types to display (see below) |
-| `sort_by` | string | `name` | Sort tiles: `name`, `power`, `online` |
-| `view_mode` | string | `grid` | `grid` or `list` |
-| `tile_size` | string | `md` | Tile size: `sm`, `md`, `lg` |
-| `tile_click` | string | `expand` | Tile click action: `expand` or `toggle` |
-| `tile_style` | string | `semi` | Tile background: `solid`, `semi`, or `transparent` |
-| `show_power_bar` | boolean | `false` | Mini wattage bar at tile bottom |
-| `power_bar_max` | number | `2000` | Watts at 100% fill |
-| `show_glow` | boolean | `true` | Pulsing glow on active tiles |
-| `hidden_devices` | string[] | `[]` | Device IDs to hide |
-| `graph_sensors` | string[] | `[]` | Sensor types to show as sparkline graphs |
-| `graph_hours` | number | `24` | History window in hours (1–168) |
-| `area_styles` | object | — | Per-area visual overrides (see below) |
-| `device_styles` | object | — | Per-device accent colour (keyed by `device_id`) |
-
-### Sensor types
-
-Pass any combination of these in the `sensors` array:
-
-| Category | Keys |
-|----------|------|
-| Electrical | `power`, `apparent_power`, `reactive_power`, `power_factor`, `frequency`, `energy`, `voltage`, `current` |
-| Environmental | `temperature`, `humidity`, `illuminance`, `co2`, `gas` |
-| Device | `battery`, `rssi`, `uptime`, `ip`, `ssid`, `fw_version`, `mac`, `cloud`, `mqtt`, `eth` |
-| Alerts | `motion`, `door`, `flood`, `smoke`, `vibration`, `overpower`, `overtemp` |
-
-### Tile style (`tile_style`)
-
-Controls how tile and card backgrounds look:
-
-| Value | Description |
-|-------|-------------|
-| `solid` | Opaque tile panels — clearly distinct from the card background |
-| `semi` | Subtle glass/frosted effect (default) |
-| `transparent` | Fully transparent — card, header, and tiles all show through to the dashboard background |
-
-### Graphable types (`graph_sensors`)
+**This is the setting behind almost every "my device isn't showing" question.**
+The card ships in Shelly mode.
 
 ```yaml
-graph_sensors:
-  - temperature
-  - power
-  - current
-  - humidity
-  - voltage
-  - energy
-  - apparent_power
-  - illuminance
-  - carbon_dioxide
-  - battery
-graph_hours: 24
+mode: universal          # discover every HA device
+universal_scope: devices # devices | controllable | all
 ```
 
-Each selected type renders as its own labeled sparkline row. Features:
-- **Time axis** — HH:MM labels at start, midpoint, and now
-- **Dotted tick grid** — vertical guide lines at start/mid/end; horizontal dashed baseline where dash spacing = 1 minute (≤1 h), 2 minutes (1–5 h), or 5 minutes (>5 h)
-- **Peak/min markers** — orange dot at highest value, muted dot at lowest
-- **Interactive hover** — mouse over any point to see the exact value and timestamp
-- **Expanded view** — clicking a tile opens a taller, wider graph panel directly below the tile row
-- **Retry** — each graph row with no history shows a ↺ button; the expanded panel has a "Refresh graphs" button to re-fetch all at once
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `mode` | `shelly` \| `universal` | `shelly` | `shelly` keeps only Shelly + BTHome devices (and drops BTHome devices from other vendors). `universal` discovers everything; Shelly devices keep their full-fidelity detection either way. |
+| `universal_scope` | `devices` \| `controllable` \| `all` | `devices` | Universal only. `devices` = actuators plus devices with a recognised sensor (drops routers, PCs, phones); `controllable` = only devices you can control; `all` = every discovered device. |
+| `include_integrations` | string[] | — | Universal only. Force-include platforms that the deny-lists drop, e.g. `[mobile_app]`. |
+| `exclude_integrations` | string[] | — | Universal only. Added to a built-in deny-list (phones, browsers, routers, system monitors …). |
+| `include_domains` | string[] | all | Universal only. When set, only these entity domains are discovered. |
+| `exclude_domains` | string[] | — | Universal only. Domains to drop entirely, e.g. `[update, device_tracker]`. |
+| `delegate_controls` | boolean | `false` | Render Home Assistant's own tile controls for domains this card doesn't draw itself (lock, media_player, fan, vacuum …). Off by default: each one embeds a native element, which costs render time on large media fleets. |
 
-### Area styles (`area_styles`)
+---
+
+## Configuration reference
+
+`src/types.ts` is the authoritative, commented list; `docs/card-reference.json` is
+the machine-readable model that drives the editor defaults and the offline tools.
+
+### Content
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `title` | string | `Shelly` | Header title text |
+| `areas` | string[] | all | Room allow-list. `[]` means none |
+| `hidden_devices` | string[] | — | Device IDs to hide |
+| `hidden_entities` | string[] | — | Entity IDs to drop from the detail sheet |
+| `favorites` | string[] | — | Device IDs pinned to the Favourites section |
+| `show_offline` | boolean | `true` | Show devices whose entities are all unavailable |
+| `show_entity_list` | boolean | `true` | The All Entities section of the detail sheet |
+| `header_cards` | card[] | — | Lovelace cards rendered above the device grid |
+| `footer_cards` | card[] | — | Lovelace cards rendered below the device grid |
+| `area_cards` | map | — | Lovelace cards inside one room, keyed by area name |
+
+### Layout
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `columns` | number | `3` | Tile columns (1–6) |
+| `tile_size` | `sm` \| `md` \| `lg` | `md` | Tile size |
+| `sort_by` | `name` \| `power` \| `online` \| `area` | `name` | Device order. `area` groups by room name, then device name |
+| `tile_style` | TileStyle | `default` | Global default tile layout — see below |
+| `power_monitor_variant` | variant | `big-number` | Sub-variant when the style resolves to `power-monitor` |
+| `smart_tile_styles` | boolean | `false` | Tiles with no explicit style fall to a per-profile default (relay → power monitor, dimmer → light control, sensor → sensor card …) instead of the adaptive tile |
+| `tile_layout` | block[] | all visible | Order and visibility of tile blocks — see below |
+| `show_graphs` | boolean | `true` | Master switch for tile sparklines |
+| `show_power_bar` | boolean | `false` | Mini usage bar at the bottom of a tile |
+| `power_bar_max` | number | `2000` | Watts that read as 100% on that bar |
+| `tile_opacity` / `card_opacity` / `header_opacity` | number | `100` | Background opacity, 0–100 |
+| `card_bg_image` | string | — | Card background image (URL, `/local/…` or data URL) |
+| `card_bg_image_size` | `cover` \| `contain` \| `stretch` | `cover` | How it fits |
+
+### Header
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `header_show_title` | boolean | `true` | Show the title |
+| `header_show_stats` | boolean | `true` | Show the stats chip row |
+| `header_show_cloud` | boolean | `false` | Extra cloud-status row |
+| `header_show_orbs` | boolean | follows `effects` | Header glow orbs |
+| `effects` | boolean | `false` | Ambient effects — orbs, pulse/glow, backdrop blur, hover shadows |
+| `header_chips` | string[] | `[online, offline, power, alerts]` | Which stat chips appear, in order. Every chip is clickable and opens a high-to-low device list |
+
+Header chip keys: `online`, `offline`, `power`, `energy`, `temperature`, `humidity`,
+`illuminance`, `rssi`, `alerts`, `updates`.
+
+### Graphs
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `graph_sensors` | string[] | `[power, temperature, humidity, battery]` | Which device classes to plot. `[]` means none |
+| `graph_hours` | number | `24` | History window, 1–168 |
+| `graph_line_color` | string | per-sensor | Global fallback line colour |
+| `graph_sensor_colors` | map | per-sensor | Line colour per sensor key |
+| `graph_style` | object | — | See below |
+
+`graph_style` keys: `type` (`line` \| `area` \| `bar`, default `line`), `line_width`
+(`1.5`), `fill` (`true`), `height` (`32`), `show_dots` (`true`), `time_labels`
+(`true`), `tick_lines` (`true`), `bar_radius` (`1.5`), and `sensor_ranges`
+(`{ power: { min: 0, max: 3000 } }`) to pin a y-axis instead of auto-scaling.
+
+Graphable keys: `power`, `voltage`, `current`, `energy`, `apparent_power`,
+`reactive_power`, `frequency`, `power_factor`, `temperature`, `humidity`,
+`illuminance`, `carbon_dioxide`, `gas`, `battery`, `signal_strength`.
+
+### Energy
+
+```yaml
+energy_period: month     # total | today | week | month
+```
+
+`total` is the lifetime meter reading. `today` / `week` / `month` are consumption
+over the current period, computed from recorder **statistics** bucketed in Home
+Assistant's timezone — no utility-meter helpers required. It applies to every
+energy chip (tiles, room headers, card header, detail sheet) and is overridable per
+room and per device. A chip whose statistics call fails falls back to the lifetime
+total under the plain "Energy" label rather than reporting a wrong period.
+
+Point a device at a specific meter with `device_styles[id].energy_entity` — typically
+a Utility Meter helper. It replaces that device's own energy sensors everywhere, so
+the override never renders next to the raw values it stands in for.
+
+### Sensor chips
+
+`sensors` is a whitelist of chip keys; omit it to use each profile's curated set.
+`[]` means no chips at all.
+
+| Category | Keys |
+|---|---|
+| Electrical | `power`, `voltage`, `current`, `energy`, `frequency`, `apparent_power`, `reactive_power`, `power_factor` |
+| Environmental | `temperature`, `humidity`, `illuminance`, `co2`, `gas` |
+| Device info | `cloud`, `rssi`, `uptime`, `ip`, `ssid`, `battery`, `fw_version`, `mac` |
+| Alerts | `overtemp`, `overpower`, `motion`, `door`, `flood`, `smoke`, `vibration` |
+
+Device-info chips are hidden by default on every profile.
+
+---
+
+## Tile styles
+
+```yaml
+tile_style: power-monitor
+power_monitor_variant: gauge
+```
+
+| Style | Suits | Notes |
+|---|---|---|
+| `default` | anything | Adaptive block grid — the blocks below, chosen per profile |
+| `power-monitor` | relay, plug, energy | Variants: `big-number`, `gauge`, `graph`, `compact`, `table` |
+| `light-control` | dimmer, RGB | Colour wheel + brightness / temperature sliders |
+| `climate-control` | TRV, Wall Display | Thermostat dial front and centre |
+| `cover-control` | roller, blind | Shutter graphic + open/stop/close |
+| `sensor-card` | sensors | Big primary value + sparkline + trend badge |
+| `scene-button` | input, generic | Large tappable icon button |
+| `custom:<key>` | — | One of your saved styles from `custom_styles` |
+
+Legacy names (`hero`, `ring`, `hbar`, `spark`, `list`, `command`) still load and are
+remapped at render time.
+
+### Tile blocks (`tile_layout`)
+
+Only used by the `default` style. List blocks to reorder them; omit one to hide it.
+Nest arrays to put blocks side by side: `[[name_row], [sensors, graph]]`.
+
+`name_row`, `sensors`, `graph`, `dimmer`, `cover_controls`, `trv_control`,
+`valve_controls`, `input_channels`, `relay_channels`, `power_bar`,
+`virtual_controls`, `delegated_controls`, `badges`.
+
+---
+
+## Styling
+
+### Themes
+
+```yaml
+theme: nordic_warm
+```
+
+`warm_dusk` (default), `dark_industrial`, `teal_terminal`, `brutalist`,
+`frosted_light`, `nordic_warm`, `midnight_purple`, `custom`.
+
+The theme is a **palette base**: every colour `style` doesn't set comes from the
+preset, so YAML can pick a theme without listing twenty colours. The GUI editor
+takes the other route — it writes the palette into `style` (and records the name),
+which shadows the base. `custom` applies no base.
+
+### `style` — global tokens
+
+| Group | Keys |
+|---|---|
+| Brand | `accent_color`, `area_header_color` |
+| Text | `text_primary`, `text_secondary`, `text_muted`, `font_family`, `text_size_scale` |
+| Status | `online_color`, `offline_color`, `power_color` |
+| Card | `card_bg`, `card_radius` |
+| Tiles | `tile_bg`, `tile_border`, `tile_border_width`, `tile_radius`, `tile_gap`, `tile_box_shadow`, `tile_hover_bg`, `tile_hover_shadow`, `tile_sensor_bg`, `tile_exp_bg`, `tile_bg_image`, `tile_bg_image_size` |
+| Header | `header_bg`, `header_bg2`, `header_text_color`, `header_orb_color`, `header_icon`, `header_title_size`, `header_radius`, `header_padding`, `header_border_color`, `header_border_width`, `header_stat_online`, `header_stat_power`, `header_stat_offline` |
+| Buttons | `button_shape` (`pill`/`rect`/`square`/`circle`), `button_variant` (`fill`/`outline`/`ghost`), `button_size` (`sm`/`md`/`lg`) |
+
+### `area_styles` — per room
 
 ```yaml
 area_styles:
   Living Room:
-    bgColor: "#1a1a2e"
-    headerBgColor: "#e65c00"
-    headerBgColor2: "#f9d423"
-    headerBgDir: "to right"
-    headerTextColor: "#ffffff"
-    fontSize: 13
-    fontWeight: bold
-    borderColor: "#e65c00"
-    borderRadius: 12
-    boxShadow: medium
-    tileBgColor: "#16213e"
-    tileBorderColor: "#e65c00"
     columns: 4
-  Kitchen:
-    bgColor: "#0f3460"
-    columns: 2
+    tileGap: 12
+    headerBgColor: "#1a1a2e"
+    headerBgColor2: "#0f3460"
+    textColor: "#c98a63"
+    header_chips: [power, energy, temperature]
+    energy_period: today
+    bg_image: /local/rooms/living.jpg
+    bg_image_mode: ambient
 ```
 
-| Style option | Type | Description |
+| Key | Type | Description |
 |---|---|---|
-| `bgColor` | string | Area background colour |
-| `bgImage` | string | Image URL or base64 as background |
-| `bgImageSize` | string | `contain`, `cover`, or `stretch` |
-| `borderColor` | string | Area section border colour |
-| `borderWidth` | number | Border width in px |
-| `borderRadius` | number | Border radius in px (0–32) |
-| `borderStyle` | string | `solid`, `dashed`, or `dotted` |
-| `headerBgColor` | string | Area header background (or gradient start) |
-| `headerBgColor2` | string | Gradient end colour |
-| `headerBgDir` | string | CSS gradient direction, e.g. `to right`, `135deg` |
-| `headerTextColor` | string | Area name text colour |
-| `fontSize` | number | Area name font size in px |
-| `fontWeight` | string | `normal` or `bold` |
-| `fontStyle` | string | `normal` or `italic` |
-| `tileBgColor` | string | Override tile background colour in this area |
-| `tileBorderColor` | string | Override tile border colour in this area |
-| `columns` | number | Override column count for this area (1–6) |
-| `boxShadow` | string | `none`, `soft`, `medium`, or `strong` |
+| `columns` | number | Tile columns in this room |
+| `bgColor` | string | Room block background |
+| `bg_image` | string | Room backdrop photo (URL, `/local/…` or data URL) |
+| `bg_image_size` | `cover` \| `contain` \| `stretch` | How it fits |
+| `bg_image_mode` | `sharp` \| `ambient` | `ambient` blurs and darkens it so tiles stay readable |
+| `bg_image_pos` | `top` \| `center` \| `bottom` | Which band shows when cropped |
+| `borderColor`, `borderWidth`, `borderRadius`, `borderStyle` | | Room block border |
+| `headerBgColor`, `headerBgColor2`, `headerBgDir` | string | Room header gradient |
+| `headerTextColor`, `textColor` | string | Room header text |
+| `fontSize`, `fontWeight`, `fontStyle` | | Room header typography |
+| `tileBgColor`, `tileBorderColor`, `tileTextColor`, `tileOpacity`, `tileBorderRadius`, `tileGap` | | Tiles in this room |
+| `accentColor` | string | Accent for tiles in this room |
+| `boxShadow` | `none` \| `soft` \| `medium` \| `strong` | Room block shadow |
+| `tile_style`, `power_monitor_variant` | | Tile style for this room |
+| `buttonShape`, `buttonVariant`, `buttonSize` | | ON/OFF button style |
+| `sensors` | string[] | Chip whitelist for tiles in this room |
+| `header_chips` | string[] | Room header summary chips — `power`, `energy`, `voltage`, `current`, `temperature`, `humidity`, `co2`, `illuminance`, `battery`, `rssi`. Default: power, energy, voltage, current, temperature. Only chips whose sensor exists in the room render |
+| `show_graphs` | boolean | Sparkline override |
+| `elements` | map | Per-element visibility for the tile style |
+| `energy_period` | EnergyPeriod | Energy window for this room |
+
+### `device_styles` — per device, keyed by `device_id`
+
+| Key | Description |
+|---|---|
+| `profile` | Override the auto-detected device type |
+| `color` | Accent colour |
+| `tile_style`, `power_monitor_variant` | Tile layout for this device |
+| `tile_layout` | Block order/visibility (style `default`) |
+| `elements` | Per-element visibility for the chosen style |
+| `sensors` | Chip whitelist |
+| `show_graphs` | Sparkline override |
+| `bg_image`, `bg_image_size` | Per-tile backdrop photo |
+| `tile_icon`, `tile_icon_off`, `tile_icon_speed` | Animated tile icon per state |
+| `entity_animations` | Per-entity ON/OFF icon + speed, keyed by entity_id |
+| `energy_period`, `energy_entity` | Energy window / stand-in meter for this device |
+
+### The rest of the cascade
+
+- **`profile_styles`** — keyed by profile (`relay`, `dimmer`, …): "all relays", one
+  rung below `device_styles`.
+- **`style_presets`** — keyed by tile style: defaults for every tile rendered in
+  that style (`variant`, `sensors`, `tile_layout`, `elements`).
+- **`custom_styles`** — your saved named styles, assigned with `tile_style: custom:<key>`.
+
+Full order: `device_styles` → `profile_styles` → `area_styles` → `views[i]` →
+`custom_styles` → `style_presets` → top-level → built-in profile default. Views only
+override layout keys (`tile_style`, `power_monitor_variant`, `columns`, `tile_size`,
+`sort_by`).
 
 ---
 
-## Visual Editor
+## Views
 
-The card ships with a full GUI editor. Open it via **Edit Dashboard → Add Card → HA Device Dashboard → Configure**.
+Filtered tabs over the same fleet. Filters are ANDed; an omitted filter means "all".
 
-The editor is split into accordion sections:
+```yaml
+default_view: lights
+views:
+  - id: lights
+    name: Lights
+    icon: mdi:lightbulb
+    show_rooms: true
+    show_favourites: false
+    filter:
+      profiles: [dimmer, rgb]
+    columns: 4
+  - id: power
+    name: Power
+    icon: mdi:flash
+    filter:
+      domains: [switch]
+      areas: [Kitchen, Garage]
+      exclude_devices: [abc123…]
+      entity_id_pattern: "^switch\\..*pm$"
+    tile_style: power-monitor
+    power_monitor_variant: gauge
+```
 
-- **Rooms to display** — pick which HA areas to show
-- **Electrical** — toggle individual electrical sensors
-- **Environmental** — toggle environmental sensors
-- **Devices** — toggle device-level sensors
-- **Alerts** — toggle alert sensors
-- **Graphs** — pick which sensor types render as sparkline graphs + set the time window
-- **Room Styles** — tile style (solid/semi/transparent) + per-area colour, font, tile, and layout overrides
-- **Hidden Devices** — click devices to hide/unhide
-- **Layout** — columns, offline visibility, include-all toggle
+Filter keys: `profiles`, `domains`, `areas`, `devices`, `exclude_devices`,
+`entity_id_pattern`. Layout overrides: `tile_style`, `power_monitor_variant`,
+`columns`, `tile_size`, `sort_by`.
 
 ---
 
-## Device type support
+## Visual editor
 
-| Type | Tile shows | Controls |
-|------|-----------|----------|
-| Relay | Channel states, power | Toggle per channel |
-| Plug | Power, energy | Toggle |
-| Dimmer | Brightness % | Slider |
-| RGB / RGBW | Color mode, brightness | Toggle |
-| Cover / Roller | Position % | Open / Stop / Close + position slider |
-| Valve | Position % | Open / Stop / Close + position slider |
-| Energy monitor | Power, voltage, current, energy | — |
-| Sensor (H&T, Flood…) | Temperature, humidity, battery, alert states | — |
-| Input (i3, i4, BLU) | Per-channel state chips | — |
-| TRV | Temperature setpoint | — |
+**Edit dashboard → Add card → HA Device Dashboard → Configure.** Tabs:
+
+| Tab | What it holds |
+|---|---|
+| **Rooms & devices** ⌂ | Sort/visibility toolbar, room and device inclusion, Favourites, **Discovery** (mode, scope, integration and domain filters) and **Extra cards** (header/footer/room) |
+| **Device styling** ◆ | Pick a device, style just it or every device of its type, toggle style elements, and save the result as a reusable named style |
+| **Views** ☰ | Add, reorder and filter views |
+| **Header** ◈ | Title, chips, gradient, colours, orbs, effects |
+| **Card & Theme** 🎨 | Live preview, tiles, card, colours, typography, and per-room styling behind a room picker |
+| **Graphs & Sensors** ∿ | Graph type and window, energy window, per-sensor colours and ranges, sensor chip groups |
+| **YAML** `</>` | Read-only view of the whole config with a Copy button |
+
+The **◆ Defaults** overlay sets the first-run look (view, theme, tile style, smart
+styles, native controls, columns, tile size) and holds "Reset look" and "Reset
+everything". The **Advanced** toggle reveals the deeper controls in every tab and is
+remembered per browser.
+
+Not every option has a control — see the YAML-only list in
+[`docs/tools/reference.html`](docs/tools/reference.html).
+
+---
+
+## Device support
+
+| Profile | Tile shows | Controls |
+|---|---|---|
+| Relay | Per-channel state, power, energy | Toggle per channel |
+| Plug | Power, energy, voltage, current | Toggle |
+| Dimmer | Brightness, power | Slider + toggle |
+| RGB / RGBW | Colour, brightness | Colour wheel, sliders, effects |
+| Cover / Roller | Position | Open / stop / close + position |
+| Valve | Position, temperature | Open / stop / close + position |
+| TRV (climate) | Current + target temperature | Setpoint dial, ± , presets |
+| Wall Display | Temperature, humidity, illuminance | Relay + thermostat when configured |
+| Energy monitor | Power, voltage, current, energy, PF | — |
+| Sensor | Temperature, humidity, illuminance, CO₂, battery, alerts | — |
+| Input (i3/i4, BLU) | Per-channel state chips | — |
+| UNI | Input channels, temperature, battery | — |
+| Lock | State, battery | Native HA control with `delegate_controls` |
+| Media player | State | Native HA control with `delegate_controls` |
+| Generic | Whatever it exposes | Native HA control with `delegate_controls` |
+
+Shelly generations Gen1–Gen4 and BLE/BTHome are all detected, including per-channel
+sub-devices merged into their parent.
+
+---
+
+## Docs & tools
+
+- [`docs/card-reference.json`](docs/card-reference.json) — machine-readable model of
+  the whole config surface: defaults, profiles, themes, vocabularies, every editor
+  control, and the YAML-only keys
+- [`docs/tools/reference.html`](docs/tools/reference.html) — the same thing as a
+  filterable page (open it straight from disk)
+- [`docs/tools/config-builder.html`](docs/tools/config-builder.html) — build a
+  starting config and export minimal YAML
+- [`docs/tools/profile-tiles.html`](docs/tools/profile-tiles.html),
+  [`style-presets.html`](docs/tools/style-presets.html),
+  [`editor-layout.html`](docs/tools/editor-layout.html) — offline designers
 
 ---
 
