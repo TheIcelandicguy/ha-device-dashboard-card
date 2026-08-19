@@ -338,6 +338,33 @@ area_styles:
 | `tile_icon`, `tile_icon_off`, `tile_icon_speed` | Animated tile icon per state |
 | `entity_animations` | Per-entity ON/OFF icon + speed, keyed by entity_id |
 | `energy_period`, `energy_entity` | Energy window / stand-in meter for this device |
+| `input_actions` | What tapping an input channel runs — see below |
+
+#### `input_actions` — make i3/i4 channels do something
+
+Input-only hardware (Shelly i3, i4, UNI) has no output: nothing in HA can make it
+emit a press, so the card cannot "push" a channel for you. Instead, assign each
+channel the action its physical button is wired to and the tile row becomes a
+button that runs it. Keys are the channel's `entity_id` (what the editor writes);
+a bare channel number also works in hand-written YAML.
+
+```yaml
+device_styles:
+  0f8e1d034e5a6ad427427d561dad1dd4:
+    input_actions:
+      event.rofi_bilskur_stofa_channel_1:
+        action: perform-action        # runs a script, scene, or any service
+        perform_action: script.garage_lights
+      event.rofi_bilskur_stofa_channel_2:
+        action: toggle                # homeassistant.toggle on one entity
+        entity: light.bilskur_stofa
+        label: Ceiling                # optional — defaults to the target's name
+      event.rofi_bilskur_stofa_channel_3:
+        action: more-info             # open the HA dialog (defaults to the channel)
+```
+
+`action: none` (or no entry) leaves the row as a read-only status row: name, last
+event type, and how long ago it fired.
 
 ### The rest of the cascade
 

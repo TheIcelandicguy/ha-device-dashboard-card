@@ -348,6 +348,7 @@ const TABS = [
       ['Energy entity','Entity id whose energy value stands in for this device — typically a Utility Meter helper. Replaces the device\'s own energy sensors on the tile, in room totals and in the header chip.','device_styles[id].energy_entity','device','the device\'s own energy sensors',1],
       ['Show graphs','Per-device sparkline override (Inherit / On / Off)','device_styles[id].show_graphs','device','Inherit',0],
       ['Visible blocks','Show / hide + reorder each tile block (style = default)','device_styles[id].tile_layout','device','inherits global',0],
+      ['Input actions','Per input channel (i3/i4/UNI): run a script or service, toggle an entity, or open more-info. Input hardware has no output, so a channel row is a status row until it is given an action.','device_styles[id].input_actions[entity_id]','device','none — status only',0],
       ['Sensor chips','Whitelist of sensor chips for this device','device_styles[id].sensors','device','inherit',0],
       ['Style elements','Show / hide the parts of the chosen tile style (toggle, graph, secondary readings…). Options come from STYLE_ELEMENTS per style.','device_styles[id].elements','device','all visible',0],
       ['Entity animations','Per-entity ON/OFF icon + speed','device_styles[id].entity_animations[eid]','device','none / 1',1],

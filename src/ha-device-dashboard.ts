@@ -3,7 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { styleMap } from 'lit/directives/style-map.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
-import { HADeviceDashboardConfig, HADevice, TileBlockId, DeviceProfileResult, EntityAnimationType, TileStyle, PowerMonitorVariant, HassAttrs, ViewConfig, DeviceStyle, AreaStyle, CustomStyleDef, TileLayout, EnergyPeriod } from './types';
+import { HADeviceDashboardConfig, HADevice, TileBlockId, DeviceProfileResult, EntityAnimationType, TileStyle, PowerMonitorVariant, HassAttrs, ViewConfig, DeviceStyle, AreaStyle, CustomStyleDef, TileLayout, EnergyPeriod, InputActionConfig } from './types';
 import type { LovelaceCardConfig } from 'custom-card-helpers';
 import { BUNDLED_FONT_CSS } from './fonts';
 import { THEME_PRESETS } from './themes';
@@ -29,6 +29,7 @@ import {
   formatPower, formatEnergy, formatVoltage, formatCurrent, formatTemp,
   formatUptime, formatApparentPower, formatReactivePower,
   formatFrequency, formatHumidity, formatIlluminance, formatPpm, formatPercent,
+  detectInputChannels,
 } from './helpers';
 import { renderAnimSvg } from './anim-icons';
 
@@ -1079,69 +1080,52 @@ export class HADeviceDashboard extends LitElement {
   }
 
   private _getInputChannels(device: HADevice): InputChannel[] {
-    const bsInputs = device.entities.filter(e =>
-      e.domain === 'binary_sensor' && (
-        e.entity_id.includes('input') || e.entity_id.includes('button') ||
-        e.entity_id.includes('channel') ||
-        (e.attributes as HassAttrs)?.device_class == null
-      )
-    );
-    const eventInputs = device.entities.filter(e =>
-      e.domain === 'event' && (
-        (e.attributes as HassAttrs)?.device_class === 'button' ||
-        e.entity_id.includes('channel') || e.entity_id.includes('input')
-      )
-    );
+    return detectInputChannels(device, this.hass.states as any);
+  }
 
-    if (bsInputs.length > 0) {
-      return bsInputs.map(e => {
-        const s = this.hass.states[e.entity_id];
-        const friendly = (s?.attributes as HassAttrs)?.friendly_name ?? '';
-        const m = e.entity_id.match(/(?:input|channel|button)[_\s]*(\d+)/i) ?? friendly.match(/(\d+)\s*$/);
-        const ch = m ? parseInt(m[1]) : 0;
-        const base = e.entity_id.replace(/^binary_sensor\./, '');
-        const evEnt = device.entities.find(ev =>
-          ev.domain === 'event' && ev.entity_id.replace(/^event\./, '') === base
-        );
-        const evState = evEnt ? this.hass.states[evEnt.entity_id] : null;
-        const lastEvent: string | null =
-          (evState?.attributes as HassAttrs)?.event_type ??
-          (evState?.state && evState.state !== 'unknown' && evState.state !== 'unavailable' ? evState.state : null);
-        return {
-          entityId: e.entity_id,
-          label: m ? `Input ${+m[1] + 1}` : friendly || e.entity_id,
-          isOn: s?.state === 'on',
-          isButton: !!evEnt,
-          channel: ch,
-          lastEvent,
-          lastChanged: s?.last_changed ?? null,
-        };
-      }).sort((a, b) => a.channel - b.channel);
+  /** The action bound to an input channel, if any. Keyed by entity_id (what the
+   *  editor writes); a channel number is accepted for hand-written YAML. */
+  private _inputAction(device: HADevice, ch: InputChannel): InputActionConfig | null {
+    const map = this._config.device_styles?.[device.device_id]?.input_actions;
+    if (!map) return null;
+    const cfg = map[ch.entityId] ?? map[String(ch.channel)];
+    return cfg && cfg.action !== 'none' ? cfg : null;
+  }
+
+  /** Label for the channel's action button — the target's friendly name where we
+   *  can resolve one, so a row reads "Hall lights" rather than "script.turn_on". */
+  private _inputActionLabel(cfg: InputActionConfig): string {
+    if (cfg.label) return cfg.label;
+    const target = cfg.action === 'perform-action' && cfg.perform_action?.split('.').length === 2
+      && !cfg.perform_action.endsWith('.turn_on') && !cfg.perform_action.endsWith('.turn_off')
+      ? cfg.perform_action
+      : cfg.entity;
+    const friendly = target ? (this.hass.states[target]?.attributes as HassAttrs)?.friendly_name : undefined;
+    return (friendly as string) ?? target ?? cfg.perform_action ?? 'Run';
+  }
+
+  private _runInputAction(device: HADevice, ch: InputChannel, e: Event): void {
+    e.stopPropagation();
+    const cfg = this._inputAction(device, ch);
+    if (!cfg) return;
+
+    if (cfg.action === 'more-info') {
+      fireEvent(this as any, 'hass-more-info' as any, { entityId: cfg.entity ?? ch.entityId } as any);
+      return;
     }
-
-    // Event-only input device (e.g. Shelly i3 Gen1)
-    return eventInputs.map(e => {
-      const s = this.hass.states[e.entity_id];
-      const friendly = (s?.attributes as HassAttrs)?.friendly_name ?? '';
-      const m = e.entity_id.match(/(?:input|channel|button)[_\s]*(\d+)/i) ?? friendly.match(/(\d+)\s*$/);
-      const ch = m ? parseInt(m[1]) : 0;
-      const lastEvent: string | null =
-        (s?.attributes as HassAttrs)?.event_type ??
-        (s?.state && s.state !== 'unknown' && s.state !== 'unavailable' ? s.state : null);
-      // For event entities, the state IS the last-triggered timestamp
-      const lastChanged: string | null =
-        s?.last_changed ??
-        (s?.state && s.state !== 'unknown' && s.state !== 'unavailable' ? s.state : null);
-      return {
-        entityId: e.entity_id,
-        label: m ? `Input ${+m[1] + 1}` : friendly || e.entity_id,
-        isOn: false,
-        isButton: true,
-        channel: ch,
-        lastEvent,
-        lastChanged,
-      };
-    }).sort((a, b) => a.channel - b.channel);
+    if (cfg.action === 'toggle') {
+      const target = cfg.entity;
+      if (!target) return;
+      this.hass.callService('homeassistant', 'toggle', { entity_id: target });
+      return;
+    }
+    if (cfg.action === 'perform-action' && cfg.perform_action) {
+      const [domain, service] = cfg.perform_action.split('.');
+      if (!domain || !service) return;
+      const data: Record<string, unknown> = { ...(cfg.data ?? {}) };
+      if (cfg.entity) data.entity_id = cfg.entity;
+      this.hass.callService(domain, service, data);
+    }
   }
 
   // ── Actions ───────────────────────────────────────────────────────────────
@@ -2733,6 +2717,11 @@ export class HADeviceDashboard extends LitElement {
       selectOption: (id, opt) => this._selectOption(id, opt),
       timeAgo: (ts) => this._timeAgo(ts),
       getInputChannels: memo((d) => this._getInputChannels(d)),
+      getInputActionLabel: (d, ch) => {
+        const cfg = this._inputAction(d, ch);
+        return cfg ? this._inputActionLabel(cfg) : null;
+      },
+      runInputAction: (d, ch, e) => this._runInputAction(d, ch, e),
       handleScenePress: (d) => this._handleScenePress(d),
       adjustTrvTemp: (trv, dir) => this._adjustTrvTemp(trv, dir),
       requestGraphData: (id, h) => this._requestGraphData(id, h),

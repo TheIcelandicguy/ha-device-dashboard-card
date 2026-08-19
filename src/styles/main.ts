@@ -1088,6 +1088,16 @@ export const mainCss = css`
     .input-row-event { flex:1; font-size:12px; color:var(--sc-text-secondary); text-transform:capitalize; }
 
     .input-row-time { font-size:11px; color:var(--sc-text-muted); white-space:nowrap; }
+    /* Action button on an input row — i3/i4 inputs have no output of their own,
+       so this runs the action assigned to the channel. */
+    .input-act { max-width:40%; padding:3px 9px; border-radius:999px; cursor:pointer;
+      font:inherit; font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden;
+      text-overflow:ellipsis; flex-shrink:0;
+      color:var(--sc-accent); background:color-mix(in srgb,var(--sc-accent) 14%,transparent);
+      border:1px solid color-mix(in srgb,var(--sc-accent) 38%,transparent);
+      transition:background .15s, transform .1s; }
+    .input-act:hover { background:color-mix(in srgb,var(--sc-accent) 26%,transparent); }
+    .input-act:active { transform:scale(.94); }
 
     .input-chip { display:flex; align-items:center; gap:4px; padding:4px 10px 4px 8px; border-radius:14px; border:1px solid rgba(255,255,255,.08); background:rgba(255,255,255,.05); font-size:12px; color:var(--sc-text-muted); transition:all .15s; }
 

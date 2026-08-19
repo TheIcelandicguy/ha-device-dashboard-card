@@ -3,6 +3,7 @@ import {
   HADevice, HAEntity, DeviceProfileResult, DeviceProfile, DeviceGen,
   TileBlockId, TileStyle, TileLayout, TileRow, HADeviceDashboardConfig,
 } from './types';
+import type { InputChannel } from './tiles/tile-context';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -1170,4 +1171,110 @@ export const FACTORY_DEFAULTS: Readonly<Partial<HADeviceDashboardConfig>> = Obje
  */
 export function factoryLook(): Partial<HADeviceDashboardConfig> {
   return { ...FACTORY_DEFAULTS, header_chips: [...(FACTORY_DEFAULTS.header_chips ?? [])] };
+}
+
+
+// ─── Input channels ────────────────────────────────────────────────────────────
+
+/** Binary sensors that report an input's steady state. Gen2+ Shelly tags these
+ *  `power`; Gen1 leaves the device class unset. `external_power` on a battery
+ *  device is also `power` but is not an input, hence the exclusion. */
+function isInputBinarySensor(e: HAEntity): boolean {
+  if (e.domain !== 'binary_sensor') return false;
+  if (/external_power|power_supply|charging/.test(e.entity_id)) return false;
+  if (/(?:input|channel|button)/i.test(e.entity_id)) return true;
+  const dc = (e.attributes as Record<string, unknown>)?.device_class;
+  return dc == null || dc === 'power';
+}
+
+/** Event entities that fire on a press. */
+function isInputEvent(e: HAEntity): boolean {
+  if (e.domain !== 'event') return false;
+  return (e.attributes as Record<string, unknown>)?.device_class === 'button'
+    || /(?:input|channel|button)/i.test(e.entity_id);
+}
+
+/** Channel number as the integration names it — `channel_1` → 1, `input_2` → 2.
+ *  HA's own friendly name uses the same number, so it is NOT shifted by one. */
+function channelNumber(entityId: string): number | null {
+  const m = entityId.match(/(?:input|channel|button)[_\s]*(\d+)/i);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+/** Row label: whatever HA calls the entity, minus the device-name prefix, so a
+ *  renamed input ("Hjón ljós") keeps its name instead of being relabelled. */
+function channelLabel(friendly: string, deviceName: string, num: number | null, entityId: string): string {
+  let label = friendly.trim();
+  const prefix = deviceName.trim();
+  if (prefix && label.toLowerCase().startsWith(prefix.toLowerCase())) {
+    label = label.slice(prefix.length).trim();
+  }
+  if (label) return label;
+  return num != null ? `Input ${num}` : entityId.split('.')[1] ?? entityId;
+}
+
+/** Input channels for a device — the i3/i4/UNI button rows.
+ *
+ *  A Gen2+ input reports its steady state on a `binary_sensor` AND its presses on
+ *  a separate `event` entity; either can exist alone, and Gen1 devices only have
+ *  the event. Pair them by object-id base or channel number and keep whatever is
+ *  left over as its own row, so a renamed event entity — which no longer shares
+ *  its binary sensor's object id — still shows up instead of vanishing.
+ */
+export function detectInputChannels(
+  device: HADevice,
+  states: Record<string, { state?: string; attributes?: Record<string, unknown>; last_changed?: string }>,
+): InputChannel[] {
+  const bsInputs = device.entities.filter(isInputBinarySensor);
+  const evInputs = device.entities.filter(isInputEvent);
+  const usedEvents = new Set<string>();
+  const rows: Array<InputChannel & { _sort: number }> = [];
+
+  const eventFor = (bs: HAEntity, num: number | null): HAEntity | undefined => {
+    const base = bs.entity_id.replace(/^binary_sensor\./, '');
+    const byId = evInputs.find(ev => !usedEvents.has(ev.entity_id) && ev.entity_id.replace(/^event\./, '') === base);
+    if (byId) return byId;
+    if (num == null) return undefined;
+    return evInputs.find(ev => !usedEvents.has(ev.entity_id) && channelNumber(ev.entity_id) === num);
+  };
+
+  bsInputs.forEach((e, i) => {
+    const st = states[e.entity_id];
+    const num = channelNumber(e.entity_id);
+    const ev = eventFor(e, num);
+    if (ev) usedEvents.add(ev.entity_id);
+    const evSt = ev ? states[ev.entity_id] : null;
+    const evType = evSt?.attributes?.event_type as string | undefined;
+    rows.push({
+      entityId: e.entity_id,
+      label: channelLabel((st?.attributes?.friendly_name as string) ?? '', device.name, num, e.entity_id),
+      isOn: st?.state === 'on',
+      isButton: !!ev,
+      channel: num ?? 0,
+      lastEvent: evType ?? null,
+      lastChanged: st?.last_changed ?? null,
+      _sort: num ?? 50 + i,
+    });
+  });
+
+  evInputs.filter(e => !usedEvents.has(e.entity_id)).forEach((e, i) => {
+    const st = states[e.entity_id];
+    const num = channelNumber(e.entity_id);
+    const live = st?.state && st.state !== 'unknown' && st.state !== 'unavailable' ? st.state : null;
+    rows.push({
+      entityId: e.entity_id,
+      label: channelLabel((st?.attributes?.friendly_name as string) ?? '', device.name, num, e.entity_id),
+      isOn: false,
+      isButton: true,
+      channel: num ?? 0,
+      lastEvent: (st?.attributes?.event_type as string | undefined) ?? null,
+      // An event entity's state IS the timestamp of the last press.
+      lastChanged: st?.last_changed ?? live,
+      _sort: num ?? 50 + i,
+    });
+  });
+
+  return rows
+    .sort((a, b) => a._sort - b._sort)
+    .map(({ _sort, ...row }) => row);
 }

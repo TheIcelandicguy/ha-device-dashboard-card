@@ -304,6 +304,28 @@ export interface DeviceStyle {
   /** Per-element visibility override for this device's tile style. Element id →
    *  visible. Omitted ids inherit area → style preset → default (visible). */
   elements?: Record<string, boolean>;
+  /** What tapping an input channel row runs, keyed by the channel's entity_id
+   *  (what the editor writes) or its channel number. Input-only hardware — Shelly
+   *  i3/i4, UNI — has no output, so nothing in HA can make it emit a press; the
+   *  row runs the action you assign instead, mirroring what the physical button
+   *  is wired to do. Unmapped channels stay read-only status rows. */
+  input_actions?: Record<string, InputActionConfig>;
+}
+
+/** An action bound to one input channel. `perform-action` covers scripts and
+ *  scenes too — they are just `script.x` / `scene.turn_on` service calls. */
+export interface InputActionConfig {
+  action: 'perform-action' | 'toggle' | 'more-info' | 'none';
+  /** `perform-action`: the service to call, e.g. 'script.hall_lights' or
+   *  'light.turn_on'. A bare `script.foo` is called as-is (no `.turn_on`). */
+  perform_action?: string;
+  /** Target entity: what to toggle / show, or the service call's target. */
+  entity?: string;
+  /** Extra service data merged into the call. */
+  data?: Record<string, unknown>;
+  /** Row button label. Defaults to the script/scene's friendly name, then the
+   *  service or entity id. */
+  label?: string;
 }
 
 /** A user-defined, savable tile style. Renders as `base` with the saved config

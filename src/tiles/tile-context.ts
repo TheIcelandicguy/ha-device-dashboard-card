@@ -150,6 +150,10 @@ export interface TileCtx {
   // Tile-specific helpers
   timeAgo: (ts: string | null | undefined) => string;
   getInputChannels: (d: HADevice) => InputChannel[];
+  /** Label of the action bound to this input channel, or null when unmapped.
+   *  Input hardware has no output, so the row runs an assigned action instead. */
+  getInputActionLabel: (d: HADevice, ch: InputChannel) => string | null;
+  runInputAction: (d: HADevice, ch: InputChannel, e: Event) => void;
   handleScenePress: (d: HADevice) => void;
   adjustTrvTemp: (trv: TrvInfo, direction: -1 | 1) => void;
   requestGraphData: (entityId: string, hours?: number) => void;

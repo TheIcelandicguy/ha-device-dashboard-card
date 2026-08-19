@@ -4,8 +4,8 @@ import { ref } from 'lit/directives/ref.js';
 import { keyed } from 'lit/directives/keyed.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent, LovelaceCardConfig } from 'custom-card-helpers';
-import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout, EnergyPeriod } from './types';
-import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, setBlockInLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel } from './helpers';
+import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout, EnergyPeriod, InputActionConfig } from './types';
+import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, setBlockInLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, applyThemePalette, detectTheme, type ThemePalette } from './themes';
 import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons';
 import { EDITOR_LAYOUT } from './editor-layout';
@@ -1366,6 +1366,7 @@ export class HADeviceDashboardEditor extends LitElement {
     bg_image_size: 'cover' | 'contain' | 'stretch' | undefined;
     energy_period: EnergyPeriod | undefined;
     energy_entity: string | undefined;
+    input_actions: Record<string, InputActionConfig> | undefined;
   }>) {
     const current = this._config.device_styles?.[deviceId] ?? {};
     const next: Record<string, unknown> = { ...current, ...patch };
@@ -1382,6 +1383,7 @@ export class HADeviceDashboardEditor extends LitElement {
     if (next['tile_icon_off'] === undefined) delete next['tile_icon_off'];
     if (next['tile_icon_speed'] === undefined) delete next['tile_icon_speed'];
     if (next['entity_animations'] === undefined) delete next['entity_animations'];
+    if (next['input_actions'] === undefined) delete next['input_actions'];
     if (next['sensors'] === undefined) delete next['sensors'];
     if (next['show_graphs'] === undefined) delete next['show_graphs'];
     if (next['elements'] === undefined) delete next['elements'];
@@ -2072,6 +2074,69 @@ export class HADeviceDashboardEditor extends LitElement {
                     </span>`;
                   })}
                 </div>`)}`;
+        })()}
+        ${(() => {
+          // Input channels (i3/i4, UNI). The hardware has no output — nothing in
+          // HA can make it emit a press — so a channel's tile row becomes a
+          // button only once it has an action to run.
+          const chans = dev ? detectInputChannels(dev, this.hass.states as any) : [];
+          if (!chans.length) return nothing;
+          const acts: Record<string, InputActionConfig> = devStyle.input_actions ?? {};
+          const setAct = (key: string, patch: Partial<InputActionConfig> | null) => {
+            const next: Record<string, InputActionConfig> = { ...acts };
+            if (!patch) delete next[key];
+            else next[key] = { ...(next[key] ?? { action: 'none' }), ...patch } as InputActionConfig;
+            this._setDeviceStyle(deviceId, { input_actions: Object.keys(next).length ? next : undefined });
+          };
+          return html`
+            <div class="field-lbl" style="margin:8px 0 2px">Input actions</div>
+            <div class="hint" style="margin-bottom:6px">
+              An input device has no output of its own, so HA can't replay a press.
+              Give a channel an action and its tile row becomes a button that runs it.
+            </div>
+            ${chans.map(ch => {
+              const cur = acts[ch.entityId] ?? acts[String(ch.channel)];
+              const kind = cur?.action ?? 'none';
+              return html`
+                <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">
+                  <span style="flex:0 0 34%;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                    title=${ch.entityId}>${ch.label}</span>
+                  <select class="inline-text" style="flex:1"
+                    @change=${(e: Event) => {
+                      const v = (e.target as HTMLSelectElement).value as InputActionConfig['action'];
+                      setAct(ch.entityId, v === 'none' ? null : { action: v });
+                    }}>
+                    <option value="none" ?selected=${kind === 'none'}>— none (status only) —</option>
+                    <option value="perform-action" ?selected=${kind === 'perform-action'}>Run script / service</option>
+                    <option value="toggle" ?selected=${kind === 'toggle'}>Toggle entity</option>
+                    <option value="more-info" ?selected=${kind === 'more-info'}>Show more-info</option>
+                  </select>
+                </div>
+                ${kind === 'perform-action' ? html`
+                  <div style="display:flex;gap:6px;margin:0 0 6px 34%">
+                    <input type="text" class="inline-text" style="flex:1" placeholder="script.hall_lights"
+                      .value=${cur?.perform_action ?? ''}
+                      @change=${(e: Event) => setAct(ch.entityId, { perform_action: (e.target as HTMLInputElement).value.trim() || undefined })}/>
+                    <input type="text" class="inline-text" style="flex:1" placeholder="target entity — optional"
+                      .value=${cur?.entity ?? ''}
+                      @change=${(e: Event) => setAct(ch.entityId, { entity: (e.target as HTMLInputElement).value.trim() || undefined })}/>
+                  </div>` : nothing}
+                ${kind === 'toggle' ? html`
+                  <div style="margin:0 0 6px 34%">
+                    <input type="text" class="inline-text" style="width:100%" placeholder="light.hall"
+                      .value=${cur?.entity ?? ''}
+                      @change=${(e: Event) => setAct(ch.entityId, { entity: (e.target as HTMLInputElement).value.trim() || undefined })}/>
+                  </div>` : nothing}
+                ${kind === 'more-info' ? html`
+                  <div style="margin:0 0 6px 34%">
+                    <input type="text" class="inline-text" style="width:100%"
+                      placeholder=${ch.entityId}
+                      .value=${cur?.entity ?? ''}
+                      @change=${(e: Event) => setAct(ch.entityId, { entity: (e.target as HTMLInputElement).value.trim() || undefined })}/>
+                  </div>` : nothing}
+              `;
+            })}
+          `;
         })()}
         <div class="field-lbl" style="margin:6px 0 4px">Sensor chips</div>
         ${(() => {
