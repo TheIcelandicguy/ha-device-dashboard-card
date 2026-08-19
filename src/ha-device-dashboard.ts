@@ -3,7 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { styleMap } from 'lit/directives/style-map.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
-import { HADeviceDashboardConfig, HADevice, TileBlockId, DeviceProfileResult, EntityAnimationType, TileStyle, PowerMonitorVariant, HassAttrs, ViewConfig, DeviceStyle, AreaStyle, CustomStyleDef, TileLayout, EnergyPeriod, InputActionConfig } from './types';
+import { HADeviceDashboardConfig, HADevice, TileBlockId, DeviceProfileResult, EntityAnimationType, TileStyle, PowerMonitorVariant, HassAttrs, ViewConfig, DeviceStyle, AreaStyle, CustomStyleDef, TileLayout, EnergyPeriod, InputActionConfig, InputHoldConfig } from './types';
 import type { LovelaceCardConfig } from 'custom-card-helpers';
 import { BUNDLED_FONT_CSS } from './fonts';
 import { THEME_PRESETS } from './themes';
@@ -32,6 +32,9 @@ import {
   detectInputChannels,
 } from './helpers';
 import { renderAnimSvg } from './anim-icons';
+
+/** Floor for hold-to-dim: 0 would turn the light off mid-ramp. */
+const MIN_DIM = 3;
 
 // ─── Google Fonts CDN loader (for display fonts selected in editor) ──────────
 // Keep in sync with FONT_OPTIONS.cdn in editor.ts
@@ -245,6 +248,8 @@ export class HADeviceDashboard extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    // A hold in progress when the card is torn down would keep ramping.
+    this._endInputHold();
     this._graphFetching.clear();
     this._graphFetchedAt.clear();
     this._graphData = new Map();
@@ -1104,10 +1109,86 @@ export class HADeviceDashboard extends LitElement {
     return (friendly as string) ?? target ?? cfg.perform_action ?? 'Run';
   }
 
+  /** Hold-to-dim state. Brightness is tracked locally rather than re-read from
+   *  `hass.states` each tick: the state round-trip lags well behind a 200ms ramp,
+   *  so reading it back would stutter or reverse the ramp mid-hold. */
+  private _holdTimer: number | null = null;
+  private _dimTimer: number | null = null;
+  private _dimEntity: string | null = null;
+  private _dimLevel = 0;
+  /** Direction the NEXT hold ramps, per light — alternates on release. */
+  private _dimDirs = new Map<string, 1 | -1>();
+  /** Set once a hold has acted, so the click that follows it is swallowed. */
+  private _holdFired = false;
+
+  private _startInputHold(device: HADevice, ch: InputChannel, _e: Event): void {
+    const cfg = this._inputAction(device, ch);
+    const hold = cfg?.hold_action;
+    if (!cfg || !hold || hold.action === 'none') return;
+    this._holdFired = false;
+    if (this._holdTimer) clearTimeout(this._holdTimer);
+    this._holdTimer = window.setTimeout(() => this._beginInputHold(ch, cfg, hold), 400);
+  }
+
+  private _beginInputHold(ch: InputChannel, cfg: InputActionConfig, hold: InputHoldConfig): void {
+    this._holdTimer = null;
+    this._holdFired = true;
+
+    if (hold.action !== 'dim') {
+      this._performAction({
+        action: hold.action,
+        entity: hold.entity ?? cfg.entity,
+        perform_action: hold.perform_action,
+        data: hold.data,
+      }, ch);
+      return;
+    }
+
+    const target = hold.entity ?? cfg.entity;
+    if (!target) return;
+    const dir = this._dimDirs.get(target) ?? 1;
+    const lit = Number((this.hass.states[target]?.attributes as HassAttrs)?.brightness ?? 0);
+    // Ramping up from an off/unknown light starts at the bottom, down starts at full.
+    this._dimEntity = target;
+    this._dimLevel = lit > 0 ? lit : (dir > 0 ? MIN_DIM : 255);
+    const step = Math.max(1, Math.round((hold.step ?? 5) * 2.55));
+
+    const tick = () => {
+      if (!this._dimEntity) return;
+      this._dimLevel = Math.max(MIN_DIM, Math.min(255, this._dimLevel + dir * step));
+      this.hass.callService('light', 'turn_on', { entity_id: this._dimEntity, brightness: this._dimLevel });
+      // Hitting an end stops the ramp; the release still flips direction, so the
+      // next hold walks back the other way.
+      if (this._dimLevel >= 255 || this._dimLevel <= MIN_DIM) this._stopDim();
+    };
+    tick();
+    this._dimTimer = window.setInterval(tick, hold.interval ?? 200);
+  }
+
+  private _stopDim(): void {
+    if (this._dimTimer) { clearInterval(this._dimTimer); this._dimTimer = null; }
+  }
+
+  private _endInputHold(): void {
+    if (this._holdTimer) { clearTimeout(this._holdTimer); this._holdTimer = null; }
+    if (this._dimEntity) {
+      const dir = this._dimDirs.get(this._dimEntity) ?? 1;
+      this._dimDirs.set(this._dimEntity, dir > 0 ? -1 : 1);
+      this._dimEntity = null;
+    }
+    this._stopDim();
+  }
+
   private _runInputAction(device: HADevice, ch: InputChannel, e: Event): void {
     e.stopPropagation();
+    // A hold already acted — don't also fire the tap action on release.
+    if (this._holdFired) { this._holdFired = false; return; }
     const cfg = this._inputAction(device, ch);
     if (!cfg) return;
+    this._performAction(cfg, ch);
+  }
+
+  private _performAction(cfg: InputActionConfig | InputHoldConfig, ch: InputChannel): void {
 
     if (cfg.action === 'more-info') {
       fireEvent(this as any, 'hass-more-info' as any, { entityId: cfg.entity ?? ch.entityId } as any);
@@ -2721,7 +2802,13 @@ export class HADeviceDashboard extends LitElement {
         const cfg = this._inputAction(d, ch);
         return cfg ? this._inputActionLabel(cfg) : null;
       },
+      inputHasHold: (d, ch) => {
+        const hold = this._inputAction(d, ch)?.hold_action;
+        return !!hold && hold.action !== 'none';
+      },
       runInputAction: (d, ch, e) => this._runInputAction(d, ch, e),
+      startInputHold: (d, ch, e) => this._startInputHold(d, ch, e),
+      endInputHold: () => this._endInputHold(),
       handleScenePress: (d) => this._handleScenePress(d),
       adjustTrvTemp: (trv, dir) => this._adjustTrvTemp(trv, dir),
       requestGraphData: (id, h) => this._requestGraphData(id, h),

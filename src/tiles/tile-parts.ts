@@ -34,7 +34,13 @@ export function renderInputAction(
 ): TemplateResult | typeof nothing {
   const label = ctx.getInputActionLabel(device, ch);
   if (!label) return nothing;
+  const hold = ctx.inputHasHold(device, ch);
+  const end = () => ctx.endInputHold();
   return html`
-    <button class="input-act" title=${label}
-      @click=${(e: Event) => ctx.runInputAction(device, ch, e)}>${label}</button>`;
+    <button class="input-act ${hold ? 'holdable' : ''}"
+      title=${hold ? `${label} — hold to dim` : label}
+      @click=${(e: Event) => ctx.runInputAction(device, ch, e)}
+      @pointerdown=${(e: Event) => ctx.startInputHold(device, ch, e)}
+      @pointerup=${end} @pointerleave=${end} @pointercancel=${end}
+      >${label}</button>`;
 }

@@ -366,6 +366,22 @@ device_styles:
 `action: none` (or no entry) leaves the row as a read-only status row: name, last
 event type, and how long ago it fired.
 
+`hold_action` mirrors a wall switch's long press. `action: dim` ramps the target
+light while the row is held and alternates direction between holds — hold to
+brighten, release, hold again to darken — matching how a Shelly-linked dimmer
+behaves at the wall. `step` (% of full, default 5) and `interval` (ms, default
+200) tune the ramp; `entity` defaults to the tap action's target.
+
+```yaml
+      event.rofi_hjona_hjon_ljos:
+        action: toggle
+        entity: light.ljos_hjonaherbergi
+        label: Ljós
+        hold_action:
+          action: dim
+          entity: light.ljos_hjonaherbergi
+```
+
 ### The rest of the cascade
 
 - **`profile_styles`** — keyed by profile (`relay`, `dimmer`, …): "all relays", one

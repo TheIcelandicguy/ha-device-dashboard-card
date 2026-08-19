@@ -1098,6 +1098,9 @@ export const mainCss = css`
       transition:background .15s, transform .1s; }
     .input-act:hover { background:color-mix(in srgb,var(--sc-accent) 26%,transparent); }
     .input-act:active { transform:scale(.94); }
+    /* Holdable rows must not scroll or select the label while being held. */
+    .input-act.holdable { touch-action:none; user-select:none; -webkit-user-select:none;
+      border-style:dashed; }
 
     .input-chip { display:flex; align-items:center; gap:4px; padding:4px 10px 4px 8px; border-radius:14px; border:1px solid rgba(255,255,255,.08); background:rgba(255,255,255,.05); font-size:12px; color:var(--sc-text-muted); transition:all .15s; }
 

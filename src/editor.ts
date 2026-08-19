@@ -2134,6 +2134,30 @@ export class HADeviceDashboardEditor extends LitElement {
                       .value=${cur?.entity ?? ''}
                       @change=${(e: Event) => setAct(ch.entityId, { entity: (e.target as HTMLInputElement).value.trim() || undefined })}/>
                   </div>` : nothing}
+                ${kind !== 'none' ? html`
+                  <div style="display:flex;gap:6px;align-items:center;margin:0 0 8px 34%">
+                    <span style="font-size:11px;color:var(--secondary-text-color);flex:0 0 42px">On hold</span>
+                    <select class="inline-text" style="flex:1"
+                      @change=${(e: Event) => {
+                        const v = (e.target as HTMLSelectElement).value;
+                        setAct(ch.entityId, { hold_action: v === 'none' ? undefined : { action: 'dim' } });
+                      }}>
+                      <option value="none" ?selected=${(cur?.hold_action?.action ?? 'none') === 'none'}>— nothing —</option>
+                      <option value="dim" ?selected=${cur?.hold_action?.action === 'dim'}>Dim the light while held</option>
+                    </select>
+                    ${cur?.hold_action?.action === 'dim' ? html`
+                      <input type="text" class="inline-text" style="flex:1"
+                        placeholder=${cur?.entity ?? 'light.…'}
+                        .value=${cur?.hold_action?.entity ?? ''}
+                        @change=${(e: Event) => {
+                          const v = (e.target as HTMLInputElement).value.trim();
+                          setAct(ch.entityId, { hold_action: { ...(cur?.hold_action ?? { action: 'dim' }), entity: v || undefined } });
+                        }}/>` : nothing}
+                  </div>
+                  ${cur?.hold_action?.action === 'dim' ? html`
+                    <div class="hint" style="margin:-4px 0 8px 34%">
+                      Hold brightens, release, hold again darkens — it alternates each hold.
+                    </div>` : nothing}` : nothing}
               `;
             })}
           `;

@@ -326,6 +326,23 @@ export interface InputActionConfig {
   /** Row button label. Defaults to the script/scene's friendly name, then the
    *  service or entity id. */
   label?: string;
+  /** Press-and-hold behaviour, mirroring a wall switch's long press. */
+  hold_action?: InputHoldConfig;
+}
+
+/** What holding an input row does. `dim` ramps the target light while held and
+ *  alternates direction between holds — hold to brighten, release, hold again to
+ *  darken — which is how a Shelly-linked dimmer behaves at the wall. */
+export interface InputHoldConfig {
+  action: 'dim' | 'perform-action' | 'toggle' | 'more-info' | 'none';
+  /** Light to dim, or the action's target. Defaults to the tap action's entity. */
+  entity?: string;
+  perform_action?: string;
+  data?: Record<string, unknown>;
+  /** Brightness step per tick, in % of full. Default 5. */
+  step?: number;
+  /** Milliseconds between steps. Default 200. */
+  interval?: number;
 }
 
 /** A user-defined, savable tile style. Renders as `base` with the saved config

@@ -153,7 +153,11 @@ export interface TileCtx {
   /** Label of the action bound to this input channel, or null when unmapped.
    *  Input hardware has no output, so the row runs an assigned action instead. */
   getInputActionLabel: (d: HADevice, ch: InputChannel) => string | null;
+  /** True when the channel also has a press-and-hold action (e.g. hold to dim). */
+  inputHasHold: (d: HADevice, ch: InputChannel) => boolean;
   runInputAction: (d: HADevice, ch: InputChannel, e: Event) => void;
+  startInputHold: (d: HADevice, ch: InputChannel, e: Event) => void;
+  endInputHold: () => void;
   handleScenePress: (d: HADevice) => void;
   adjustTrvTemp: (trv: TrvInfo, direction: -1 | 1) => void;
   requestGraphData: (entityId: string, hours?: number) => void;
