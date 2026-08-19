@@ -110,6 +110,7 @@ const SENSOR_GROUPS: Array<{ group: string; icon: string; iconColor: string; ico
       { key: 'door',      label: 'Door / Window',unit: '', defaultColor: '#f87171' },
       { key: 'flood',     label: 'Flood',        unit: '', defaultColor: '#f87171' },
       { key: 'smoke',     label: 'Smoke',        unit: '', defaultColor: '#f87171' },
+      { key: 'vibration', label: 'Vibration',    unit: '', defaultColor: '#f87171' },
     ] },
 ];
 

@@ -199,7 +199,8 @@
       { "key": "motion",    "label": "Motion" },
       { "key": "door",      "label": "Door / Window" },
       { "key": "flood",     "label": "Flood" },
-      { "key": "smoke",     "label": "Smoke" }
+      { "key": "smoke",     "label": "Smoke" },
+      { "key": "vibration", "label": "Vibration" }
     ]
   },
 
@@ -469,7 +470,7 @@
         ]},
         { "name": "Sensor chips — Alerts", "controls": [
           { "control": "Select all / Deselect all", "fn": "Toggle all alert chips", "key": "sensors", "scope": "global", "default": "all shown", "advanced": true },
-          { "control": "Overtemp · Overpower · Motion · Door/Window · Flood · Smoke", "fn": "Toggle each alert chip", "key": "sensors", "scope": "global", "default": "all shown", "advanced": true }
+          { "control": "Overtemp · Overpower · Motion · Door/Window · Flood · Smoke · Vibration", "fn": "Toggle each alert chip", "key": "sensors", "scope": "global", "default": "all shown", "advanced": true }
         ]}
       ]},
     { "id": "yaml", "icon": "</>", "label": "YAML",
