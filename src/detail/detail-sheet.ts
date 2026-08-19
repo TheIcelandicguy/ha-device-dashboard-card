@@ -124,6 +124,8 @@ function renderSheetHistoryTabs(ctx: TileCtx): TemplateResult {
 function renderSheetEntityList(ctx: TileCtx): TemplateResult {
   const { device, hass } = ctx;
   if (!device.entities.length) return html``;
+  // Whole-section opt-out; `hidden_entities` trims it row by row instead.
+  if (ctx.config.show_entity_list === false) return html``;
   const domainIcon = (d: string) =>
     d === 'switch' ? '⏻' : d === 'light' ? '💡' : d === 'sensor' ? '📊' :
     d === 'binary_sensor' ? '◉' : d === 'climate' ? '🌡' : d === 'cover' ? '🪟' :

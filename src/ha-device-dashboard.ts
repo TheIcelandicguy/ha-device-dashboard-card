@@ -6,6 +6,7 @@ import { HomeAssistant, fireEvent } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, HADevice, TileBlockId, DeviceProfileResult, EntityAnimationType, TileStyle, PowerMonitorVariant, HassAttrs, ViewConfig, DeviceStyle, AreaStyle, CustomStyleDef, TileLayout, EnergyPeriod } from './types';
 import type { LovelaceCardConfig } from 'custom-card-helpers';
 import { BUNDLED_FONT_CSS } from './fonts';
+import { THEME_PRESETS } from './themes';
 import { mainCss } from './styles/main';
 import { tilesCss } from './styles/tiles';
 import { detailCss } from './styles/detail';
@@ -108,6 +109,8 @@ export class HADeviceDashboard extends LitElement {
   // (card_bg_image / tile_bg_image), which can be ~500 KB each.
   private _cachedCardStyles: Record<string, string> | null = null;
   private _cardStylesConfigRef: HADeviceDashboardConfig | null = null;
+  private _cachedStyleTokens: NonNullable<HADeviceDashboardConfig['style']> | null = null;
+  private _styleTokensConfigRef: HADeviceDashboardConfig | null = null;
 
   private static readonly BRIGHTNESS_MAX = 255;
 
@@ -571,6 +574,29 @@ export class HADeviceDashboard extends LitElement {
   }
 
   /**
+   * The style tokens the card actually renders with: a named `theme` supplies the
+   * base palette and `style` overrides it key-by-key, so hand-written YAML can say
+   * `theme: nordic_warm` and get the whole palette without listing 20 colours.
+   *
+   * The GUI editor takes the other route — it writes the palette straight into
+   * `style` (and derives the swatch back out with detectTheme), which fully
+   * shadows the base. Both paths therefore agree; the theme only shows through
+   * for keys the user never set. 'custom' means "these colours are the theme".
+   */
+  private _styleTokens(): NonNullable<HADeviceDashboardConfig['style']> {
+    if (this._styleTokensConfigRef === this._config && this._cachedStyleTokens) {
+      return this._cachedStyleTokens;
+    }
+    const explicit = this._config.style ?? {};
+    const theme = this._config.theme;
+    const preset = theme && theme !== 'custom' ? THEME_PRESETS[theme] : undefined;
+    const tokens = preset ? { ...preset, ...explicit } : explicit;
+    this._styleTokensConfigRef = this._config;
+    this._cachedStyleTokens = tokens;
+    return tokens;
+  }
+
+  /**
    * Build the card-level CSS variable map from `this._config`.
    * Memoized against config identity — recomputed only when config changes.
    */
@@ -578,7 +604,7 @@ export class HADeviceDashboard extends LitElement {
     if (this._cardStylesConfigRef === this._config && this._cachedCardStyles) {
       return this._cachedCardStyles;
     }
-    const st = this._config.style ?? {};
+    const st = this._styleTokens();
     const s: Record<string, string> = {};
 
     if (st.accent_color)  s['--sc-accent']       = st.accent_color;
@@ -691,6 +717,12 @@ export class HADeviceDashboard extends LitElement {
     if (sortBy === 'power') {
       const powerOf = new Map(devices.map(d => [d.device_id, this._getPower(d) ?? -1]));
       comparator = (a, b) => (powerOf.get(b.device_id)! - powerOf.get(a.device_id)!);
+    } else if (sortBy === 'area') {
+      // Room name A→Z, then device name inside the room. Devices with no area
+      // sort last rather than under an empty-string room.
+      const areaOf = new Map(devices.map(d => [d.device_id, d.area || '￿']));
+      comparator = (a, b) => areaOf.get(a.device_id)!.localeCompare(areaOf.get(b.device_id)!)
+        || a.name.localeCompare(b.name);
     } else if (sortBy === 'online') {
       const onlineOf = new Map(devices.map(d => [d.device_id, this._isOnline(d) ? 1 : 0]));
       comparator = (a, b) => (onlineOf.get(b.device_id)! - onlineOf.get(a.device_id)!) || a.name.localeCompare(b.name);
@@ -1574,6 +1606,7 @@ export class HADeviceDashboard extends LitElement {
     const showTicks = gs.tick_lines !== false;
     const showTimeLabels = gs.time_labels !== false;
     const graphType = gs.type ?? 'line';
+    const barRadius = gs.bar_radius ?? 1.5;
     // 'area' type always fills; 'line' type never fills; 'bar' type is separate
     const fill = graphType === 'area';
     const graphHours = hours ?? this._config.graph_hours ?? 24;
@@ -1708,7 +1741,7 @@ export class HADeviceDashboard extends LitElement {
                       const bx = ptX(p) - bw / 2;
                       const by = ptY(p);
                       const bh = H - pad - by;
-                      return svg`<rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0, bh).toFixed(1)}" rx="1.5" fill="${lineColor}" opacity="0.75"/>`;
+                      return svg`<rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0, bh).toFixed(1)}" rx="${barRadius}" fill="${lineColor}" opacity="0.75"/>`;
                     })
                   : svg`
                     <polyline points="${coords}" fill="none"
@@ -2389,7 +2422,7 @@ export class HADeviceDashboard extends LitElement {
     if (profClr) return profClr;
     const areaStyle = this._config.area_styles?.[areaLabel];
     if (areaStyle?.accentColor) return areaStyle.accentColor;
-    return this._config.style?.accent_color ?? 'var(--sc-accent)';
+    return this._styleTokens().accent_color ?? 'var(--sc-accent)';
   }
 
   // ── Alternative tile style renderers ─────────────────────────────────────

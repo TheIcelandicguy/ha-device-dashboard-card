@@ -50,7 +50,9 @@
     "universal_scope": "devices",
     "delegate_controls": false,
     "show_power_bar": false,
-    "power_bar_max": 2000
+    "power_bar_max": 2000,
+    "show_entity_list": true,
+    "graph_style.bar_radius": 1.5
   },
 
   "firstRun": [
@@ -226,6 +228,9 @@
       { "key": "show_power_bar", "type": "boolean", "default": "false", "fn": "Mini usage bar at the bottom of a tile (the power_bar block)." },
       { "key": "power_bar_max", "type": "number", "default": "2000", "fn": "Watts that read as 100% on the power bar." },
       { "key": "graph_line_color", "type": "string", "default": "per-sensor default", "fn": "Global fallback sparkline colour, under graph_sensor_colors[key]." },
+      { "key": "show_entity_list", "type": "boolean", "default": "true", "fn": "The All Entities section of the expanded detail sheet. false hides the whole section (hidden_entities trims it item by item)." },
+      { "key": "graph_style.bar_radius", "type": "number", "default": "1.5", "fn": "Corner radius of the bars when graph_style.type is 'bar'." },
+      { "key": "theme", "type": "ThemePreset", "default": "'warm_dusk' (seeded by getStubConfig)", "fn": "Palette base under `style` — every colour `style` omits comes from the preset. The editor sets it when you pick a theme, but also writes the full palette into `style`, so hand-written YAML is where it earns its keep. 'custom' applies no base." },
       { "key": "style_presets", "type": "Record<TileStyle, StylePreset>", "default": "none", "fn": "Per-tile-style presets (variant / sensors / tile_layout / elements) applied to every tile rendered in that style. Sits below device/area overrides in the cascade." },
       { "key": "style.button_shape / button_variant / button_size", "type": "ButtonShape / ButtonVariant / ButtonSize", "default": "pill / fill / md", "fn": "Global ON/OFF button styling. Only the per-room equivalents (area_styles[name].button*) have editor controls." }
     ],
@@ -255,7 +260,7 @@
       "note": "Auto-lists your HA areas as collapsible sections. The toolbar sets card-wide sort/visibility; rooms and devices are included or hidden here. Styling has moved out — per-device to the Device styling tab, per-room to Card & Theme.",
       "groups": [
         { "name": "Rooms toolbar", "controls": [
-          { "control": "Sort", "fn": "Device sort order for the whole card (Name / Power / Online)", "key": "sort_by", "scope": "global", "default": "'name'", "advanced": false },
+          { "control": "Sort", "fn": "Device sort order for the whole card (Name / Power / Online / Room)", "key": "sort_by", "scope": "global", "default": "'name'", "advanced": false },
           { "control": "Rooms — All", "fn": "Show all rooms (clears the include-list)", "key": "areas → undefined", "scope": "global", "default": "all shown", "advanced": false },
           { "control": "Rooms — None", "fn": "Hide all rooms (explicit empty list)", "key": "areas → []", "scope": "global", "default": "all shown", "advanced": false },
           { "control": "Show offline devices", "fn": "Show or hide offline devices", "key": "show_offline", "scope": "global", "default": "true", "advanced": false }
@@ -374,7 +379,7 @@
         ]}
       ]},
     { "id": "card-theme", "icon": "🎨", "label": "Card & Theme",
-      "note": "Card-wide look, with a live preview strip on top. Tiles is basic; Card, Colours and Typography are advanced-only. Per-room styling lives here too, behind a room picker. Theme presets write palette colours into style — the card never reads a theme key at render time; the editor derives the active theme from the colours (detectTheme).",
+      "note": "Card-wide look, with a live preview strip on top. Tiles is basic; Card, Colours and Typography are advanced-only. Per-room styling lives here too, behind a room picker. Theme presets write the palette into style AND record the name in `theme`; the picker highlights whatever detectTheme reads back out of the colours. The card uses `theme` as a palette base under style, so hand-written YAML can set a theme without listing colours.",
       "groups": [
         { "name": "Tiles", "controls": [
           { "control": "Columns", "fn": "Grid column count (1–6)", "key": "columns", "scope": "global", "default": "3", "advanced": false },
@@ -476,7 +481,7 @@
         ]}
       ]},
     { "id": "defaults", "icon": "◆", "label": "Defaults panel",
-      "note": "An overlay (◆ Defaults button) for the card's first-run look. All global. Theme presets write palette colours into style — there is no theme key; the active theme is derived from the colours.",
+      "note": "An overlay (◆ Defaults button) for the card's first-run look. All global. Theme presets write the palette into style and record the name in `theme` (which the card uses as a palette base under style).",
       "groups": [
         { "name": "Defaults panel", "controls": [
           { "control": "Default view", "fn": "Which view loads first", "key": "default_view", "scope": "global", "default": "first view", "advanced": false },

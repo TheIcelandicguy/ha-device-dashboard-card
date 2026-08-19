@@ -84,6 +84,7 @@ export type DetailHistoryRange = 24 | 168 | 720;
 export type TileSize      = 'sm' | 'md' | 'lg';
 /** Energy display window: lifetime total, or consumption this day/week/month. */
 export type EnergyPeriod  = 'total' | 'today' | 'week' | 'month';
+/** Device sort order. 'area' groups by room name, then by device name inside it. */
 export type SortBy        = 'name' | 'power' | 'online' | 'area';
 export type BoxShadow     = 'none' | 'soft' | 'medium' | 'strong';
 export type ThemePreset   = 'warm_dusk' | 'dark_industrial' | 'teal_terminal' | 'brutalist' | 'frosted_light' | 'nordic_warm' | 'midnight_purple' | 'custom';
@@ -102,7 +103,7 @@ export interface GraphStyle {
   show_dots?: boolean;        // peak/min dots, default true
   time_labels?: boolean;      // time axis labels, default true
   tick_lines?: boolean;       // vertical tick marks, default true
-  bar_radius?: number;        // bar corner radius px, default 2
+  bar_radius?: number;        // bar corner radius px, default 1.5
   /** Manual y-axis min/max per sensor device_class key */
   sensor_ranges?: Record<string, SensorRange>;
 }
@@ -460,7 +461,7 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   header_opacity?: number;             // 0-100, default 100 — header background only
   header_show_title?: boolean;         // default true
   header_show_stats?: boolean;         // default true
-  header_show_cloud?: boolean;         // default true
+  header_show_cloud?: boolean;         // default false (card tests === true)
   header_show_orbs?: boolean;          // default: follows `effects`
   /** Ambient visual effects: header orbs, pulse/glow animations, backdrop blur, hover shadows. Default: false */
   effects?: boolean;
@@ -476,6 +477,11 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   show_entity_list?: boolean;          // expanded: All Entities section, default true
 
   // ── Style ─────────────────────────────────────────────────────
+  /** Named palette used as the BASE for `style` — every colour `style` doesn't
+   *  set comes from the preset, so hand-written YAML can say `theme: nordic_warm`
+   *  instead of listing 20 colours. 'custom' means "the colours in `style` are the
+   *  theme" and applies no base. The GUI editor writes the full palette into
+   *  `style` (and records the name here), which shadows the base entirely. */
   theme?: ThemePreset;
   style?: {
     accent_color?: string;

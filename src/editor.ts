@@ -916,9 +916,9 @@ export class HADeviceDashboardEditor extends LitElement {
         <div class="toolbar-group">
           <span class="toolbar-lbl">Sort</span>
           <div class="pill-grp">
-            ${(['name','power','online'] as const).map(v => html`
+            ${([['name','Name'],['power','Power'],['online','Online'],['area','Room']] as const).map(([v,lbl]) => html`
               <span class="pill ${(c.sort_by ?? 'name') === v ? 'on' : ''}"
-                @click=${()=>this._set('sort_by',v)}>${v[0].toUpperCase()+v.slice(1)}</span>`)}
+                @click=${()=>this._set('sort_by',v)}>${lbl}</span>`)}
           </div>
         </div>
         <div class="toolbar-group">
@@ -3478,10 +3478,16 @@ export class HADeviceDashboardEditor extends LitElement {
   // ══════════════════════════════════════════════════════════════
 
   /** Apply a colour-theme preset — merges its palette over the current style.
-   *  Colours only; radius/font/sizes are left untouched. The active theme is
-   *  derived from the colours (detectTheme), so no separate flag is stored. */
+   *  Colours only; radius/font/sizes are left untouched.
+   *
+   *  The picker still highlights whatever detectTheme reads back out of the
+   *  colours; `theme` is recorded alongside so the YAML says what it is and the
+   *  card can use it as a palette base. It can never change what renders here —
+   *  applyThemePalette writes every palette key into `style`, which shadows the
+   *  base entirely — it only matters for configs written by hand. */
   private _applyTheme(name: Exclude<ThemePreset, 'custom'>) {
     this._set('style', applyThemePalette(this._config.style, name));
+    this._set('theme', name);
   }
 
   /** Pick a theme — warn first if the current colours are custom (would be lost).
@@ -3495,7 +3501,9 @@ export class HADeviceDashboardEditor extends LitElement {
 
   /** Restore the saved custom palette over the current style. */
   private _applySaved() {
-    if (this._savedTheme) this._set('style', { ...(this._config.style ?? {}), ...this._savedTheme });
+    if (!this._savedTheme) return;
+    this._set('style', { ...(this._config.style ?? {}), ...this._savedTheme });
+    this._set('theme', 'custom');   // these colours ARE the theme now
   }
 
   /** Config keys that describe *content* (what's shown), preserved by "Reset look". */

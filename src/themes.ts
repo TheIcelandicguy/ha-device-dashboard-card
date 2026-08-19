@@ -203,7 +203,7 @@ export function detectTheme(
   style: NonNullable<HADeviceDashboardConfig['style']> | undefined,
 ): ThemePreset {
   const s = style ?? {};
-  // A card with no style set renders on the CSS defaults, which ARE dark_industrial.
+  // A card with no style set renders on the CSS defaults, which ARE DEFAULT_THEME.
   if (Object.keys(s).length === 0) return DEFAULT_THEME;
   for (const name of THEME_ORDER) {
     const pal = THEME_PRESETS[name];
