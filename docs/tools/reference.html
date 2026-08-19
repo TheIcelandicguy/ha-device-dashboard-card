@@ -210,14 +210,17 @@ const SCOPES = {
 };
 
 const CASCADE = [
-  {n:'1', s:'Device',  scope:'device', d:'device_styles[id]'},
-  {n:'2', s:'Room',    scope:'area',   d:'area_styles[name]'},
-  {n:'3', s:'View',    scope:'view',   d:'views[i]'},
-  {n:'4', s:'Global',  scope:'global', d:'top-level config'},
-  {n:'5', s:'Profile', scope:'local',  d:'built-in default'},
+  {n:'1', s:'Device', scope:'device', d:'device_styles[id]'},
+  {n:'2', s:'Device', scope:'device', d:'profile_styles[type]'},
+  {n:'3', s:'Room', scope:'area', d:'area_styles[name]'},
+  {n:'4', s:'View', scope:'view', d:'views[i]'},
+  {n:'5', s:'Global', scope:'global', d:'custom_styles[key]'},
+  {n:'6', s:'Global', scope:'global', d:'style_presets[style]'},
+  {n:'7', s:'Global', scope:'global', d:'top-level config'},
+  {n:'8', s:'Profile', scope:'local', d:'built-in profile default'},
 ];
 
-/* First-run defaults — getStubConfig() writes only {type}; everything below is a runtime fallback */
+/* First-run defaults — getStubConfig() materialises FACTORY_DEFAULTS; the rest are runtime fallbacks */
 const FIRSTRUN = [
   ['Theme','Warm Dusk — muted terracotta on warm charcoal','DEFAULT_THEME'],
   ['Title','"Shelly"','title ?? \'Shelly\''],
@@ -235,7 +238,7 @@ const FIRSTRUN = [
   ['Views','Single implicit "All devices"','—'],
 ];
 
-/* 13 device profiles */
+/* 15 device profiles */
 const PROFILES = [
   ['relay','Relay','power-monitor','power, energy, voltage, current, temperature, overtemp, overpower'],
   ['plug','Plug','power-monitor','power, energy, voltage, current, overtemp, overpower'],
@@ -246,6 +249,8 @@ const PROFILES = [
   ['wall_display','Display','climate-control','temperature, humidity, illuminance'],
   ['cover','Roller','cover-control','power, energy, temperature'],
   ['valve','Valve','default','temperature'],
+  ['lock','Lock','default','battery'],
+  ['media','Media','default','(show all — no opinion)'],
   ['sensor','Sensor','sensor-card','temperature, humidity, illuminance, co2, gas, battery, motion, door, flood, smoke, vibration'],
   ['input','Input','scene-button','battery'],
   ['uni','UNI','default','temperature, battery'],
@@ -264,12 +269,39 @@ const THEMES = [
 ];
 
 /* Editor tabs. Each control: [name, function, key, scope, default, advanced] */
+/* Options the card honours with no editor control — [key, type, default, what] */
+const YAMLONLY = [
+  ['include_integrations','string[]','none','Universal mode: force-include platforms that the built-in or user deny-list drops (e.g. [\'mobile_app\'] to show phones again). The editor only exposes the exclude side.','global'],
+  ['include_domains','string[]','all','Universal mode: entity-domain allow-list. When set, only these domains are discovered. The editor only exposes the exclude side.','global'],
+  ['show_power_bar','boolean','false','Mini usage bar at the bottom of a tile (the power_bar block).','global'],
+  ['power_bar_max','number','2000','Watts that read as 100% on the power bar.','global'],
+  ['graph_line_color','string','per-sensor default','Global fallback sparkline colour, under graph_sensor_colors[key].','global'],
+  ['show_entity_list','boolean','true','The All Entities section of the expanded detail sheet. false hides the whole section (hidden_entities trims it item by item).','global'],
+  ['graph_style.bar_radius','number','1.5','Corner radius of the bars when graph_style.type is \'bar\'.','global'],
+  ['theme','ThemePreset','\'warm_dusk\' (seeded by getStubConfig)','Palette base under `style` — every colour `style` omits comes from the preset. The editor sets it when you pick a theme, but also writes the full palette into `style`, so hand-written YAML is where it earns its keep. \'custom\' applies no base.','global'],
+  ['style_presets','Record<TileStyle, StylePreset>','none','Per-tile-style presets (variant / sensors / tile_layout / elements) applied to every tile rendered in that style. Sits below device/area overrides in the cascade.','global'],
+  ['style.button_shape / button_variant / button_size','ButtonShape / ButtonVariant / ButtonSize','pill / fill / md','Global ON/OFF button styling. Only the per-room equivalents (area_styles[name].button*) have editor controls.','global'],
+  ['views[i].sort_by','SortBy','inherit','Per-view device sort order. The editor exposes sort_by globally only.','view'],
+  ['area_styles[name].bgColor','string','inherit','Room block background colour.','area'],
+  ['area_styles[name].borderColor','string','inherit','Room block border colour (the editor exposes only its width and radius).','area'],
+  ['area_styles[name].borderStyle','\'solid\' | \'dashed\' | \'dotted\'','solid','Room block border style.','area'],
+  ['area_styles[name].headerBgDir','string','135deg','Direction of the room-header gradient.','area'],
+  ['area_styles[name].headerTextColor','string','inherit','Room header text colour (distinct from textColor, which the editor writes).','area'],
+  ['area_styles[name].fontWeight / fontStyle','\'normal\' | \'bold\' / \'normal\' | \'italic\'','normal / normal','Room header typography.','area'],
+  ['area_styles[name].tileTextColor','string','inherit','Tile text colour inside this room.','area'],
+  ['area_styles[name].accentColor','string','inherit','Accent colour for tiles in this room.','area'],
+  ['area_styles[name].boxShadow','BoxShadow','none','Room block shadow preset.','area'],
+  ['area_styles[name].tile_style / power_monitor_variant','TileStyle / PowerMonitorVariant','inherit','Per-room tile style override — a real cascade rung (device → type → area → view → global), but only the device, view and global scopes have pickers.','area'],
+  ['area_styles[name].elements','Record<string, boolean>','all visible','Per-element visibility for tiles in this room. The editor exposes elements at device and profile scope only.','area'],
+  ['custom_styles[key].base / variant / elements / sensors / tile_layout','CustomStyleDef','—','The saved-style object itself. The editor writes it via 💾 Save style and can rename/delete it, but the individual fields are only editable by re-saving or by hand.','device'],
+];
+
 const TABS = [
   {id:'devices', icon:'⌂', label:'Rooms & devices',
-   note:'Auto-lists your HA areas as collapsible sections. Toolbar sets card-wide sort/visibility; the ✎ panels drill into per-room and per-device overrides.',
+   note:'Auto-lists your HA areas as collapsible sections. The toolbar sets card-wide sort/visibility; rooms and devices are included or hidden here. Styling has moved out — per-device to the Device styling tab, per-room to Card & Theme.',
    groups:[
     {name:'Rooms toolbar', rows:[
-      ['Sort','Device sort order for the whole card (Name / Power / Online)','sort_by','global','\'name\'',0],
+      ['Sort','Device sort order for the whole card (Name / Power / Online / Room)','sort_by','global','\'name\'',0],
       ['Rooms — All','Show all rooms (clears the include-list)','areas → undefined','global','all shown',0],
       ['Rooms — None','Hide all rooms (explicit empty list)','areas → []','global','all shown',0],
       ['Show offline devices','Show or hide offline devices','show_offline','global','true',0],
@@ -278,46 +310,65 @@ const TABS = [
       ['Room include','Include / exclude this room (toggling all → undefined)','areas','global','all on',0],
       ['Device visibility','Show / hide an individual device','hidden_devices','global','not hidden',0],
       ['★ Favourite','Add / remove device from the Favourites section','favorites','global','not fav',0],
-      ['Room reset ↺','Clear this room\'s style block','area_styles[name] → del','area','—',0],
-      ['Device reset ↺','Clear this device\'s style block','device_styles[id] → del','device','—',0],
-      ['Edit ✎ / expand ▼','Open a style panel or device list (editor UI state)','none','local','collapsed',0],
+      ['Edit ✎ / expand ▼','Open a device list or jump to the styling tabs (editor UI state)','none','local','collapsed',0],
+    ]},
+    {name:'Discovery', rows:[
+      ['Discovery mode','Shelly only (Shelly + BTHome, the original behaviour) vs Universal (every HA device; Shelly keeps full-fidelity detection)','mode','global','\'shelly\' (unset)',0],
+      ['Scope','Universal only. Real devices = actuators + real sensors; Controllable = only devices with controls; Everything = the raw firehose','universal_scope','global','\'devices\'',0],
+      ['Hide integrations','Universal only. Tick integrations to drop — ADDED to the built-in deny-list (phones, browsers, routers…)','exclude_integrations','global','built-in list only',0],
+      ['Hide entity types','Universal only. Tick entity domains to drop entirely (e.g. update, camera)','exclude_domains','global','none',0],
+    ]},
+    {name:'Extra cards', rows:[
+      ['Placement','Where the embedded Lovelace cards go — top, bottom, or inside one room','header_cards / footer_cards / area_cards[room]','global','none',0],
+      ['Room','Which room receives the card (placement = Room)','area_cards key','local','first room',0],
+      ['Edit / ✕','Edit or remove an already-added card','header_cards[i] / footer_cards[i] / area_cards[room][i]','global','—',0],
+      ['+ Add card','Start a new card — copy one from another dashboard, pick a type, or paste YAML','appends to the active list','global','—',0],
+      ['Copy from a dashboard','Read another Lovelace dashboard and clone one of its cards','populates the draft','local','—',0],
+      ['Card configuration (YAML)','Native ha-yaml-editor over the card object. The visual card editor is deliberately NOT embedded — nested, its events hijack HA\'s edit-card dialog.','the card config object','global','—',0],
+    ]},
+   ]},
+
+  {id:'device-styling', icon:'◆', label:'Device styling',
+   note:'Everything for one device in one place. Pick a device, then style just that device or every device of its detected type; either look can be saved as a reusable named style.',
+   groups:[
+    {name:'Scope', rows:[
+      ['Device to style','Device picker, grouped by room','none','local','none selected',0],
+      ['This device / All <type>s','Switch between the per-device and per-profile writer','none','local','this device',0],
     ]},
     {name:'Per-device style panel', rows:[
-      ['Type','Override auto-detected device profile','device_styles[id].profile','device','Auto',0],
       ['Tile layout style','Pick tile render style (Default clears override)','device_styles[id].tile_style','device','\'default\'',0],
       ['Power-monitor variant','Sub-variant when style = power-monitor','device_styles[id].power_monitor_variant','device','\'big-number\'',0],
+      ['Type','Override auto-detected device profile','device_styles[id].profile','device','Auto',0],
       ['Accent colour','Per-device accent colour','device_styles[id].color','device','#f4601e',0],
+      ['Tile background photo','Per-tile backdrop image + fit (data: URL or /local/… path)','device_styles[id].bg_image / .bg_image_size','device','none / cover',1],
       ['Tile icon ON','Animated icon shown while entity is ON','device_styles[id].tile_icon','device','none',1],
       ['Tile icon OFF','Animated icon shown while entity is OFF','device_styles[id].tile_icon_off','device','falls back to ON',1],
       ['Tile icon speed','Animation speed multiplier','device_styles[id].tile_icon_speed','device','1',1],
+      ['Energy shows','Energy window for this device only (Total / Today / Week / Month)','device_styles[id].energy_period','device','inherit',0],
+      ['Energy entity','Entity id whose energy value stands in for this device — typically a Utility Meter helper. Replaces the device\'s own energy sensors on the tile, in room totals and in the header chip.','device_styles[id].energy_entity','device','the device\'s own energy sensors',1],
       ['Show graphs','Per-device sparkline override (Inherit / On / Off)','device_styles[id].show_graphs','device','Inherit',0],
-      ['Visible blocks','Show / hide each tile block','device_styles[id].tile_layout','device','inherits global',0],
+      ['Visible blocks','Show / hide + reorder each tile block (style = default)','device_styles[id].tile_layout','device','inherits global',0],
       ['Sensor chips','Whitelist of sensor chips for this device','device_styles[id].sensors','device','inherit',0],
+      ['Style elements','Show / hide the parts of the chosen tile style (toggle, graph, secondary readings…). Options come from STYLE_ELEMENTS per style.','device_styles[id].elements','device','all visible',0],
       ['Entity animations','Per-entity ON/OFF icon + speed','device_styles[id].entity_animations[eid]','device','none / 1',1],
       ['Hidden entities','Remove entities from the detail sheet list','hidden_entities','global','not hidden',1],
       ['Clear device style','Delete the entire device-style block','device_styles[id] → del','device','—',0],
     ]},
-    {name:'Per-room style panel', rows:[
-      ['Columns','Tile columns in this room','area_styles[name].columns','area','3',0],
-      ['Tile gap','Gap between tiles','area_styles[name].tileGap','area','10px',0],
-      ['Show graphs','Per-room sparkline override','area_styles[name].show_graphs','area','Inherit',0],
-      ['Tile background','Tile background colour','area_styles[name].tileBgColor','area','#1c1c1e',0],
-      ['Tile border','Tile border colour','area_styles[name].tileBorderColor','area','rgba(255,255,255,.07)',1],
-      ['Tile corner radius','Tile corner radius','area_styles[name].tileBorderRadius','area','12px',1],
-      ['Tile opacity','Tile opacity','area_styles[name].tileOpacity','area','100%',1],
-      ['Room block border','Border width of the room block','area_styles[name].borderWidth','area','1px',1],
-      ['Room block radius','Corner radius of the room block','area_styles[name].borderRadius','area','10px',1],
-      ['Header gradient start','Room header gradient start','area_styles[name].headerBgColor','area','#1a1a2e',1],
-      ['Header gradient end','Room header gradient end','area_styles[name].headerBgColor2','area','#0f3460',1],
-      ['Header text','Room header text colour','area_styles[name].textColor','area','#f4601e',1],
-      ['Header font size','Room header font size','area_styles[name].fontSize','area','12px',1],
-      ['Sensor chips','Whitelist of sensor chips for this room','area_styles[name].sensors','area','inherit',0],
-      ['Button shape / variant / size','ON/OFF button style for this room','area_styles[name].button*','area','pill / fill / md',1],
+    {name:'Per-type panel (All <type>s)', rows:[
+      ['Tile layout style','Style for every device of this profile','profile_styles[type].tile_style','device','inherit',0],
+      ['Power-monitor variant','Sub-variant when style = power-monitor','profile_styles[type].power_monitor_variant','device','\'big-number\'',0],
+      ['Sparkline graphs','Per-profile sparkline override (inherit / on / off)','profile_styles[type].show_graphs','device','inherit',0],
+      ['Style elements','Element visibility for every device of this profile','profile_styles[type].elements','device','all visible',0],
+      ['Visible blocks','Block order / visibility for this profile (style = default)','profile_styles[type].tile_layout','device','profile default',0],
+    ]},
+    {name:'Save as a named style', rows:[
+      ['💾 Save style','Save the current device or profile look as a reusable style, then assign it with tile_style: \'custom:<key>\'','custom_styles[slug]','global','none',0],
+      ['Rename / delete','Rename or remove a saved style','custom_styles[slug].label / → del','global','—',0],
     ]},
    ]},
 
   {id:'views', icon:'☰', label:'Views',
-   note:'Views are filtered tabs over the same devices. Each stores at views[i]. Filters are ANDed; empty means "all". Layout overrides fall through to the global defaults.',
+   note:'Views are filtered tabs over the same devices. Each stores at views[i]. Filters are ANDed; empty means all. Layout overrides fall through to the global defaults.',
    groups:[
     {name:'Views toolbar', rows:[
       ['+ Add view','Append a new view (view_N / View N)','views[] append','global','—',0],
@@ -348,12 +399,12 @@ const TABS = [
     ]},
    ]},
 
-  {id:'layout', icon:'⊡', label:'Layout & Style',
-   note:'Card-wide look. Nearly everything writes into the global style object. Header & Tiles are basic; Card, Colours & Typography are advanced-only.',
+  {id:'header-styling', icon:'◈', label:'Header',
+   note:'The card header on its own tab. Renders from the global section registry — no bespoke body.',
    groups:[
     {name:'Header', rows:[
       ['Card title','Header title text','title','global','none',0],
-      ['Header icon / emoji','Icon before the title','style.header_icon','global','none',0],
+      ['Header icon / emoji','Icon before the title','style.header_icon','global','\'⚡\'',0],
       ['Show title','Show / hide the title','header_show_title','global','shown',0],
       ['Show stats','Show / hide the online·power stats row','header_show_stats','global','shown',0],
       ['Header chips (+ ↺)','Which stat chips appear','header_chips','global','online·offline·power·alerts',0],
@@ -367,9 +418,14 @@ const TABS = [
       ['Background gradient','Header gradient start & end','style.header_bg / _bg2','global','#1a1a2e / #0f3460',1],
       ['Text colour','Header text colour','style.header_text_color','global','#ffffff',1],
       ['Orb / glow colour','Header orb colour','style.header_orb_color','global','#3b82f6',1],
-      ['Stat chip colours','Online / power / offline chip colours','style.header_stat_*','global','#4ade80 / #fb923c / #9ca3af',1],
+      ['Stat chip colours','Online / power / offline chip colours','style.header_stat_online / _power / _offline','global','#4ade80 / #fb923c / #9ca3af',1],
       ['Background opacity','Header background opacity','header_opacity','global','100%',1],
     ]},
+   ]},
+
+  {id:'card-theme', icon:'🎨', label:'Card & Theme',
+   note:'Card-wide look, with a live preview strip on top. Tiles is basic; Card, Colours and Typography are advanced-only. Per-room styling lives here too, behind a room picker. Theme presets write the palette into style AND record the name in `theme`; the picker highlights whatever detectTheme reads back out of the colours. The card uses `theme` as a palette base under style, so hand-written YAML can set a theme without listing colours.',
+   groups:[
     {name:'Tiles', rows:[
       ['Columns','Grid column count (1–6)','columns','global','3',0],
       ['Tile size','Small / Medium / Large','tile_size','global','md',0],
@@ -398,6 +454,28 @@ const TABS = [
       ['Font family','System / Bundled / Display font','style.font_family','global','inherit',1],
       ['Text scale','Global text size scale (0.8–1.3×)','style.text_size_scale','global','1×',1],
     ]},
+    {name:'Per-room style panel', rows:[
+      ['Room picker','Which room the panel below edits','none','local','none selected',0],
+      ['Columns','Tile columns in this room','area_styles[name].columns','area','3',0],
+      ['Tile gap','Gap between tiles','area_styles[name].tileGap','area','10px',0],
+      ['Show graphs','Per-room sparkline override','area_styles[name].show_graphs','area','Inherit',0],
+      ['Room background photo','Room backdrop image + fit, plus Sharp/Ambient render mode and Top/Center/Bottom crop','area_styles[name].bg_image / .bg_image_size / .bg_image_mode / .bg_image_pos','area','none / cover / sharp / center',1],
+      ['Tile background','Tile background colour','area_styles[name].tileBgColor','area','#1c1c1e',0],
+      ['Tile border','Tile border colour','area_styles[name].tileBorderColor','area','rgba(255,255,255,.07)',1],
+      ['Tile corner radius','Tile corner radius','area_styles[name].tileBorderRadius','area','12px',1],
+      ['Tile opacity','Tile opacity','area_styles[name].tileOpacity','area','100%',1],
+      ['Room block border','Border width of the room block','area_styles[name].borderWidth','area','1px',1],
+      ['Room block radius','Corner radius of the room block','area_styles[name].borderRadius','area','10px',1],
+      ['Header gradient start','Room header gradient start','area_styles[name].headerBgColor','area','#1a1a2e',1],
+      ['Header gradient end','Room header gradient end','area_styles[name].headerBgColor2','area','#0f3460',1],
+      ['Header text','Room header text colour','area_styles[name].textColor','area','#f4601e',1],
+      ['Header font size','Room header font size','area_styles[name].fontSize','area','12px',1],
+      ['Room header chips','Which summary chips this room\'s HEADER row shows (keys in areaChips). Independent of the tile `sensors` list; only chips whose sensor exists in the room render.','area_styles[name].header_chips','area','power·energy·voltage·current·temperature',0],
+      ['Energy shows','Energy window for this room (Total / Today / Week / Month); the room-header Energy chip sums its devices over that window','area_styles[name].energy_period','area','inherit',0],
+      ['Sensor chips','Whitelist of sensor chips for this room','area_styles[name].sensors','area','inherit',0],
+      ['Button shape / variant / size','ON/OFF button style for this room','area_styles[name].buttonShape / buttonVariant / buttonSize','area','pill / fill / md',1],
+      ['Room reset ↺','Clear this room\'s style block','area_styles[name] → del','area','—',0],
+    ]},
    ]},
 
   {id:'graphs', icon:'∿', label:'Graphs & Sensors',
@@ -407,6 +485,7 @@ const TABS = [
       ['Show graphs on tiles','Master sparkline switch','show_graphs','global','on',0],
       ['Type','Line / Area / Bar','graph_style.type','global','line',0],
       ['History window','History look-back (1–168h)','graph_hours','global','24h',0],
+      ['Energy shows','What every Energy chip reports: Total = lifetime meter reading; Today/Week/Month = consumption this period, from recorder statistics (bucketed in HA\'s timezone). Falls back to the lifetime total if statistics are unavailable.','energy_period','global','total',0],
       ['Line thickness','Sparkline stroke width','graph_style.line_width','global','1.5px',1],
       ['Fill area under line','Area fill beneath the line','graph_style.fill','global','on',1],
       ['Graph height','Sparkline pixel height','graph_style.height','global','32px',1],
@@ -424,7 +503,7 @@ const TABS = [
     ]},
     {name:'Sensor chips — Electrical', rows:[
       ['Select all / Deselect all','Toggle all electrical chips','sensors','global','all shown',0],
-      ['Power · Voltage · Current · Energy · Frequency · App. / React. Power · Power Factor','Toggle each electrical chip on tiles','sensors','global','all shown',0],
+      ['Power · Voltage · Current · Energy · Frequency · App./React. Power · Power Factor','Toggle each electrical chip on tiles','sensors','global','all shown',0],
     ]},
     {name:'Sensor chips — Environmental', rows:[
       ['Select all / Deselect all','Toggle all environmental chips','sensors','global','all shown',0],
@@ -450,7 +529,7 @@ const TABS = [
    ]},
 
   {id:'defaults', icon:'◆', label:'Defaults panel',
-   note:'An overlay (◆ Defaults button) for the card\'s first-run look. All global. Theme presets write palette colours into style — there is no theme key; the active theme is derived from the colours.',
+   note:'An overlay (◆ Defaults button) for the card\'s first-run look. All global. Theme presets write the palette into style and record the name in `theme` (which the card uses as a palette base under style).',
    groups:[
     {name:'Defaults panel', rows:[
       ['Default view','Which view loads first','default_view','global','first view',0],
@@ -459,15 +538,19 @@ const TABS = [
       ['Default tile style (+ ↺)','Global default tile layout style','tile_style','global','adaptive',0],
       ['Power-monitor variant','Sub-variant for the default tile style','power_monitor_variant','global','big-number',0],
       ['Smart tile styles','Auto-pick a layout per device type where none is set','smart_tile_styles','global','off',0],
+      ['Native controls','Render HA\'s own tiles for media players, fans, vacuums, locks and other domains this card doesn\'t draw itself. Off by default — each embeds a native element, so it costs render time on big media fleets.','delegate_controls','global','off',0],
       ['Default columns','Default grid columns','columns','global','3',0],
       ['Default tile size','Default tile size','tile_size','global','md',0],
-      ['More tile settings →','Jump to the Layout tab','none','local','—',0],
+      ['More tile settings →','Jump to the Card & Theme tab','none','local','—',0],
+      ['Reset look','Restore the built-in default look (factoryLook), keeping rooms, devices, views, favourites and discovery settings','FACTORY_DEFAULTS keys','global','—',0],
+      ['Reset everything','Wipe the whole card back to factory (two-click armed)','whole config','global','—',0],
     ]},
     {name:'Section toolbar', rows:[
       ['Advanced toggle','Reveal advanced controls across tabs (localStorage, per card)','none (localStorage)','local','off',0],
       ['◆ Defaults button','Open / close the Defaults overlay','none','local','closed',0],
     ]},
    ]},
+
 ];
 
 /* ────────────────────────────────────────────────────────────────────────
@@ -511,7 +594,7 @@ navGroup('Reference');
 // First-run
 let s = el('section'); s.id='firstrun';
 s.appendChild(el('div','sec-h','<span class="icon">◱</span><h2>First-run defaults</h2>'));
-s.appendChild(el('p','sec-note','A brand-new card writes only <span class="key">{ type: \'custom:ha-device-dashboard\' }</span> — everything here comes from a runtime fallback, so the card is fully usable with zero config.'));
+s.appendChild(el('p','sec-note','A brand-new card writes <span class="key">{ type }</span> plus FACTORY_DEFAULTS (theme, tile_style, tile_size, columns, sort_by, smart_tile_styles, show_graphs, graph_hours, header_chips) so the look is explicit and revertible; everything else here is a runtime fallback, so the card is usable with zero config.'));
 let kv = el('div','kv');
 FIRSTRUN.forEach(([k,v,src])=>{
   const r=el('div','r'); r.innerHTML=`<div class="kk">${k}</div><div class="vv">${v}</div><div class="src">${src}</div>`; kv.appendChild(r);
@@ -521,7 +604,7 @@ s.appendChild(kv); content.appendChild(s); navLink('firstrun','First-run default
 // Profiles
 s = el('section'); s.id='profiles';
 s.appendChild(el('div','sec-h','<span class="icon">◆</span><h2>Device profiles</h2>'));
-s.appendChild(el('p','sec-note','Every device is auto-classified into one of 13 profiles (by its entities, refined by Shelly model). The profile drives the badge, default sensor chips, block layout, and — when Smart tile styles is on — the tile style. Diagnostics (rssi, IP, firmware, uptime, cloud) are hidden by default on all profiles.'));
+s.appendChild(el('p','sec-note','Every device is auto-classified into one of 15 profiles (by its entities, refined by Shelly model). The profile drives the badge, default sensor chips, block layout, and — when Smart tile styles is on — the tile style. Diagnostics (rssi, IP, firmware, uptime, cloud) are hidden by default on all profiles.'));
 let pg = el('div','prof-grid');
 PROFILES.forEach(([key,lbl,style,chips])=>{
   const c=el('div','card');
@@ -531,12 +614,12 @@ PROFILES.forEach(([key,lbl,style,chips])=>{
     <div class="row"><span class="k">chips</span><span class="chips">${chipHtml}</span></div>`;
   pg.appendChild(c);
 });
-s.appendChild(pg); content.appendChild(s); navLink('profiles','Device profiles','13');
+s.appendChild(pg); content.appendChild(s); navLink('profiles','Device profiles','15');
 
 // Themes
 s = el('section'); s.id='themes';
 s.appendChild(el('div','sec-h','<span class="icon">☾</span><h2>Themes</h2>'));
-s.appendChild(el('p','sec-note','Seven preset palettes. Applying one writes only colour keys into <span class="key">style</span> — there is no theme field; the active theme is derived from the colours. <b style="color:var(--tx2)">Warm Dusk</b> is the ship default (it matches the runtime CSS fallbacks).'));
+s.appendChild(el('p','sec-note','Seven preset palettes. Applying one writes the colour keys into <span class="key">style</span> and records the name in <span class="key">theme</span>; the picker highlights whatever those colours match. The card reads <span class="key">theme</span> as a palette base under <span class="key">style</span>, so hand-written YAML can pick a theme without listing colours. <b style="color:var(--tx2)">Warm Dusk</b> is the ship default (it matches the runtime CSS fallbacks).'));
 let tg = el('div','theme-grid');
 THEMES.forEach(([key,lbl,accent,bg,h1,h2,blurb,def])=>{
   const t=el('div','theme');
@@ -546,6 +629,25 @@ THEMES.forEach(([key,lbl,accent,bg,h1,h2,blurb,def])=>{
   tg.appendChild(t);
 });
 s.appendChild(tg); content.appendChild(s); navLink('themes','Themes','7');
+
+// YAML-only options
+s = el('section'); s.id='yamlonly'; s.dataset.tab='yamlonly';   // data-tab opts it into the search + scope filter
+s.appendChild(el('div','sec-h','<span class="icon">⌨</span><h2>YAML-only options</h2><span class="badge-cnt">'+YAMLONLY.length+' keys</span>'));
+s.appendChild(el('p','sec-note','Config the card honours that the GUI editor has no control for. Set these by hand in the YAML editor; everything else in this reference is reachable from the editor UI.'));
+{
+  const wrap = el('div','tbl-scroll');
+  const rows = YAMLONLY.map(([key,type,def,fn,scope])=>
+    `<tr data-scope="${scope}" data-text="${(key+' '+fn+' '+type+' '+def).toLowerCase()}">
+      <td><span class="key">${key}</span></td>
+      <td class="c-fn">${fn}</td>
+      <td class="c-def">${type}</td>
+      <td>${scopePill(scope)}</td>
+      <td class="c-def">${def}</td></tr>`).join('');
+  wrap.innerHTML = `<table><thead><tr><th>Config key</th><th>Function</th><th>Type</th><th>Scope</th><th>Default</th></tr></thead><tbody>${rows}</tbody></table>`;
+  s.appendChild(wrap);
+}
+s.appendChild(el('div','noresult','No YAML-only keys match your filter.'));
+content.appendChild(s); navLink('yamlonly','YAML-only options',YAMLONLY.length);
 
 /* ── Editor sections ── */
 navGroup('Editor tabs');
@@ -576,7 +678,7 @@ TABS.forEach(tab=>{
 });
 
 document.getElementById('foot').innerHTML =
-  `${grandTotal} editor controls across ${TABS.length} tabs · 13 profiles · 7 themes &nbsp;·&nbsp; generated from src/editor.ts, helpers.ts, themes.ts · branch smart-profiles`;
+  `${grandTotal} editor controls across ${TABS.length} tabs · ${YAMLONLY.length} YAML-only keys · ${PROFILES.length} profiles · ${THEMES.length} themes &nbsp;·&nbsp; generated from docs/card-reference.json (src/types.ts, editor.ts, editor-layout.ts, helpers.ts, themes.ts) · branch master`;
 
 /* ── Filter (search + scope toggles) ── */
 const q = document.getElementById('q');
