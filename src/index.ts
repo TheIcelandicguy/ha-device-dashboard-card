@@ -3,8 +3,8 @@ import './editor';
 import './tiles/delegated-control';
 
 // Build marker — lets you confirm in the browser console which bundle HA loaded.
-// Bump the tag on each deploy while iterating on the mobile editor layout.
-const BUILD_TAG = 'mobile-editor-2026-07-10f';
+// Bump the tag on each deploy so a stale cache is obvious at a glance.
+const BUILD_TAG = 'energy-2026-08-19a';
 // eslint-disable-next-line no-console
 console.info(
   `%c ha-device-dashboard %c ${BUILD_TAG} `,
