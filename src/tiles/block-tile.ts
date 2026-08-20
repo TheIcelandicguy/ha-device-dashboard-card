@@ -4,7 +4,7 @@ import { renderAnimSvg } from '../anim-icons';
 import { formatPower, getIntegrationLabel, isPrivateIp, delegatableEntities, DELEGATE_FEATURES } from '../helpers';
 import type { EntityAnimationType, TileBlockId, HassAttrs } from '../types';
 import type { TileCtx, SensorChip } from './tile-context';
-import { renderInputAction } from './tile-parts';
+import { renderInputRow } from './tile-parts';
 
 /** Default block-based tile renderer — dispatches to per-block sub-renderers. */
 export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateResult {
@@ -244,15 +244,7 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
     case 'input_channels':
       return inputs.length ? html`
         <div class="tile-inputs" @click=${(e: Event) => e.stopPropagation()}>
-          ${inputs.map(ch => html`
-            <div class="input-row ${ch.isButton ? 'btn-mode' : (ch.isOn ? 'active' : '')}">
-              <span class="${ch.isButton ? 'input-btn-dot' : 'input-row-dot'}"></span>
-              <span class="input-row-name">${ch.label}</span>
-              <span class="input-row-event">${ch.lastEvent ? ch.lastEvent.replace(/_/g, ' ') : '—'}</span>
-              <span class="input-row-time">${ctx.timeAgo(ch.lastChanged)}</span>
-              ${renderInputAction(ctx, device, ch)}
-            </div>
-          `)}
+          ${inputs.map(ch => renderInputRow(ctx, device, ch))}
         </div>
       ` : html``;
 

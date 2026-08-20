@@ -182,6 +182,7 @@ export type TileStyle =
   | 'cover-control'    // blind/shutter — shutter graphic + open/stop/close
   | 'sensor-card'      // sensor — big primary value + sparkline + trend badge
   | 'scene-button'     // input/generic — large tappable icon button
+  | 'input-control'    // i3/i4/UNI — keypad of channel buttons + status rows
   // Legacy aliases (remapped, not shown in picker)
   | 'hero' | 'ring' | 'hbar' | 'spark' | 'list' | 'command'
   // User-defined saved styles — `custom:<key>`, resolved to a base at render time
@@ -330,6 +331,11 @@ export interface InputActionConfig {
   label?: string;
   /** Press-and-hold behaviour, mirroring a wall switch's long press. */
   hold_action?: InputHoldConfig;
+  /** Double-tap behaviour, mirroring a wall switch's double push (Shelly's own
+   *  dimmer script uses double = on at 100%). Configuring this delays the single
+   *  tap by ~250ms so the card can tell the two apart; channels without one keep
+   *  firing instantly. `action: 'dim'` is meaningless here — hold only. */
+  double_tap_action?: InputGestureConfig;
   /** Optional second chip on the row: a dropdown of a `select` entity's options.
    *  A row only has tap and hold, so anything a third gesture used to do at the
    *  wall — cycling WLED presets, say — needs its own control. */
@@ -344,10 +350,11 @@ export interface InputSelectChipConfig {
   label?: string;
 }
 
-/** What holding an input row does. `dim` ramps the target light while held and
- *  alternates direction between holds — hold to brighten, release, hold again to
- *  darken — which is how a Shelly-linked dimmer behaves at the wall. */
-export interface InputHoldConfig {
+/** What a secondary gesture (hold, double tap) on an input row does. `dim` ramps
+ *  the target light while held and alternates direction between holds — hold to
+ *  brighten, release, hold again to darken, which is how a Shelly-linked dimmer
+ *  behaves at the wall — and so only applies to `hold_action`. */
+export interface InputGestureConfig {
   action: 'dim' | 'perform-action' | 'toggle' | 'more-info' | 'none';
   /** Light to dim, or the action's target. Defaults to the tap action's entity. */
   entity?: string | string[];
@@ -358,6 +365,9 @@ export interface InputHoldConfig {
   /** Milliseconds between steps. Default 200. */
   interval?: number;
 }
+
+/** Hold behaviour — the same shape as any other secondary gesture. */
+export type InputHoldConfig = InputGestureConfig;
 
 /** A user-defined, savable tile style. Renders as `base` with the saved config
  *  applied; assigned via `tile_style: 'custom:<key>'`. */

@@ -2,7 +2,7 @@ import { html, nothing, TemplateResult } from 'lit';
 import { renderAnimSvg } from '../anim-icons';
 import type { EntityAnimationType } from '../types';
 import type { TileCtx } from './tile-context';
-import { renderNameDot, renderInputAction } from './tile-parts';
+import { renderNameDot, renderInputRow } from './tile-parts';
 
 export function renderSceneButtonTile(ctx: TileCtx): TemplateResult {
   const { device, accent, online, config } = ctx;
@@ -24,14 +24,7 @@ export function renderSceneButtonTile(ctx: TileCtx): TemplateResult {
           ${renderNameDot(device, online)}
         </div>
         ${ctx.showEl('input_rows') ? html`<div class="tile-inputs">
-          ${inputs.map(ch => html`
-            <div class="input-row ${ch.isButton ? 'btn-mode' : ch.isOn ? 'active' : ''}">
-              <span class="${ch.isButton ? 'input-btn-dot' : 'input-row-dot'}"></span>
-              <span class="input-row-name">${ch.label}</span>
-              <span class="input-row-event">${ch.lastEvent ? ch.lastEvent.replace(/_/g, ' ') : '—'}</span>
-              <span class="input-row-time">${ctx.timeAgo(ch.lastChanged)}</span>
-              ${renderInputAction(ctx, device, ch)}
-            </div>`)}
+          ${inputs.map(ch => renderInputRow(ctx, device, ch))}
         </div>` : nothing}
       </div>`;
   }

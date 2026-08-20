@@ -397,22 +397,28 @@ function renderSheetSensor(ctx: TileCtx): TemplateResult {
 }
 
 function renderSheetInput(ctx: TileCtx): TemplateResult {
-  const { device, hass } = ctx;
-  const inputs = device.entities.filter(e => e.domain === 'binary_sensor' && (e.entity_id.includes('input') || e.entity_id.includes('channel')));
+  const { device } = ctx;
+  // Same detection as the tile. The old filter here looked only at binary_sensor
+  // entities, so a Gen1 i3 — whose channels are all `event.` — reported "No input
+  // channels" even while the tile listed them.
+  const inputs = ctx.getInputChannels(device);
   return html`
     <div class="ds-section">
       <div class="ds-section-title">Input Channels</div>
       ${inputs.length ? html`
         <div class="ds-channel-list">
           ${inputs.map(ch => {
-            const s = hass.states[ch.entity_id];
-            const isOn = s?.state === 'on';
-            const name = (s?.attributes as HassAttrs)?.friendly_name ?? ch.entity_id;
-            const lc = s?.last_changed ? ctx.timeAgo(s.last_changed) : '';
+            const action = ctx.getInputActionLabel(device, ch);
+            const state = ctx.getInputActionState(device, ch);
+            const lc = ch.lastChanged ? ctx.timeAgo(ch.lastChanged) : '';
             return html`
               <div class="ds-channel-row">
-                <span class="ds-channel-name">${name}</span>
-                <span class="ds-chip ${isOn ? 'ds-chip--on' : ''}">${isOn ? 'ON' : 'OFF'}</span>
+                <span class="ds-channel-name">${ch.label}</span>
+                ${action
+                  ? html`<span class="ds-chip ${state === 'on' ? 'ds-chip--on' : ''}">${action}</span>`
+                  : html`<span class="ds-chip ${ch.isOn ? 'ds-chip--on' : ''}">
+                      ${ch.isButton ? (ch.lastEvent ? ch.lastEvent.replace(/_/g, ' ') : '—') : (ch.isOn ? 'ON' : 'OFF')}
+                    </span>`}
                 ${lc ? html`<span class="ds-ent-age">${lc}</span>` : nothing}
               </div>`;
           })}

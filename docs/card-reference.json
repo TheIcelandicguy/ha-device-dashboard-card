@@ -85,7 +85,7 @@
     { "key": "lock",         "label": "Lock",    "smartStyle": "default",         "chips": ["battery"] },
     { "key": "media",        "label": "Media",   "smartStyle": "default",         "chips": [] },
     { "key": "sensor",       "label": "Sensor",  "smartStyle": "sensor-card",     "chips": ["temperature","humidity","illuminance","co2","gas","battery","motion","door","flood","smoke","vibration"] },
-    { "key": "input",        "label": "Input",   "smartStyle": "scene-button",    "chips": ["battery"] },
+    { "key": "input",        "label": "Input",   "smartStyle": "input-control",   "chips": ["battery"] },
     { "key": "uni",          "label": "UNI",     "smartStyle": "default",         "chips": ["temperature","battery"] },
     { "key": "generic",      "label": "",        "smartStyle": "default",         "chips": [] }
   ],
@@ -131,6 +131,7 @@
     { "key": "climate-control", "label": "Climate control" },
     { "key": "cover-control",   "label": "Cover control" },
     { "key": "sensor-card",     "label": "Sensor card" },
+    { "key": "input-control",   "label": "Input keypad (i3/i4/UNI)" },
     { "key": "scene-button",    "label": "Scene button" }
   ],
   "powerMonitorVariants": ["big-number", "gauge", "graph", "compact", "table"],

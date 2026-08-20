@@ -139,6 +139,7 @@ const TILE_STYLE_OPTIONS: Array<{ v: TileStyle; label: string; icon: string; des
   { v: 'climate-control', label: 'Climate',   icon: '🌡', desc: 'Thermostat dial' },
   { v: 'cover-control',   label: 'Cover',     icon: '▤',  desc: 'Blind + buttons' },
   { v: 'sensor-card',     label: 'Sensor',    icon: '◎',  desc: 'Big value + trend' },
+  { v: 'input-control',   label: 'Inputs',    icon: '⌨',  desc: 'Channel keypad' },
   { v: 'scene-button',    label: 'Scene',     icon: '▶',  desc: 'Tappable icon' },
 ];
 
@@ -1967,7 +1968,7 @@ export class HADeviceDashboardEditor extends LitElement {
       climate: 'climate-control', wall_display: 'climate-control',
       cover: 'cover-control',
       sensor: 'sensor-card',
-      input: 'scene-button', generic: 'scene-button',
+      input: 'input-control', generic: 'scene-button',
     };
     const recommended: TileStyle | undefined = profile ? profileStyleMap[profile.type] : undefined;
     const curDevStyle: TileStyle | undefined = devStyle.tile_style;
@@ -2204,6 +2205,35 @@ export class HADeviceDashboardEditor extends LitElement {
                   ${cur?.hold_action?.action === 'dim' ? html`
                     <div class="hint" style="margin:-4px 0 8px 34%">
                       Hold brightens, release, hold again darkens — it alternates each hold.
+                    </div>` : nothing}
+                  <div style="display:flex;gap:6px;align-items:center;margin:0 0 8px 34%">
+                    <span style="font-size:11px;color:var(--secondary-text-color);flex:0 0 42px">Double</span>
+                    <select class="inline-text" style="flex:1"
+                      @change=${(e: Event) => {
+                        const v = (e.target as HTMLSelectElement).value as InputActionConfig['action'];
+                        setAct(ch.entityId, { double_tap_action: v === 'none' ? undefined : { action: v } });
+                      }}>
+                      <option value="none" ?selected=${(cur?.double_tap_action?.action ?? 'none') === 'none'}>— nothing —</option>
+                      <option value="perform-action" ?selected=${cur?.double_tap_action?.action === 'perform-action'}>Run script / service</option>
+                      <option value="toggle" ?selected=${cur?.double_tap_action?.action === 'toggle'}>Toggle entity</option>
+                    </select>
+                    ${cur?.double_tap_action && cur.double_tap_action.action !== 'none' ? html`
+                      <input type="text" class="inline-text" style="flex:1"
+                        placeholder=${cur.double_tap_action.action === 'perform-action' ? 'light.turn_on' : entText(cur?.entity) || 'light.…'}
+                        .value=${cur.double_tap_action.action === 'perform-action'
+                          ? (cur.double_tap_action.perform_action ?? '')
+                          : entText(cur.double_tap_action.entity)}
+                        @change=${(e: Event) => {
+                          const raw = (e.target as HTMLInputElement).value;
+                          const patch = cur!.double_tap_action!.action === 'perform-action'
+                            ? { perform_action: raw.trim() || undefined }
+                            : { entity: parseEnt(raw) };
+                          setAct(ch.entityId, { double_tap_action: { ...cur!.double_tap_action!, ...patch } });
+                        }}/>` : nothing}
+                  </div>
+                  ${cur?.double_tap_action && cur.double_tap_action.action !== 'none' ? html`
+                    <div class="hint" style="margin:-4px 0 8px 34%">
+                      A double tap delays the single tap by ~250ms on this channel so the two can be told apart.
                     </div>` : nothing}
                   ${this._adv(html`
                     <div style="display:flex;gap:6px;align-items:center;margin:0 0 8px 34%">

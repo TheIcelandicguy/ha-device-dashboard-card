@@ -159,7 +159,7 @@ const PROFILES = [
   ['lock','Lock','default',['battery']],
   ['media','Media','default',[]],
   ['sensor','Sensor','sensor-card',['temperature','humidity','illuminance','co2','gas','battery','motion','door','flood','smoke','vibration']],
-  ['input','Input','scene-button',['battery']],
+  ['input','Input','input-control',['battery']],
   ['uni','UNI','default',['temperature','battery']],
   ['generic','—','default',[]],
 ];
@@ -180,7 +180,7 @@ const BLOCK_ORDER = {
   wall_display:['name_row','sensors','graph','trv_control','virtual_controls','delegated_controls','badges'],
   generic:['name_row','sensors','virtual_controls','delegated_controls','badges'],
 };
-const TILE_STYLES = [['default','Default (blocks)'],['power-monitor','Power monitor'],['light-control','Light control'],['climate-control','Climate control'],['cover-control','Cover control'],['sensor-card','Sensor card'],['scene-button','Scene button']];
+const TILE_STYLES = [['default','Default (blocks)'],['power-monitor','Power monitor'],['light-control','Light control'],['climate-control','Climate control'],['cover-control','Cover control'],['sensor-card','Sensor card'],['input-control','Input keypad'],['scene-button','Scene button']];
 const SENSOR_GROUPS = {
   Electrical:[['power','Power'],['voltage','Voltage'],['current','Current'],['energy','Energy'],['frequency','Frequency'],['apparent_power','App. Power'],['reactive_power','React. Power'],['power_factor','Power Factor']],
   Environmental:[['temperature','Temp'],['humidity','Humidity'],['illuminance','Illum'],['co2','CO₂'],['gas','Gas']],

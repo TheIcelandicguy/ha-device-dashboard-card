@@ -344,7 +344,7 @@ export const PROFILE_DEFAULT_TILE_STYLE: Partial<Record<DeviceProfile, TileStyle
   wall_display: 'climate-control',
   cover:        'cover-control',
   sensor:       'sensor-card',
-  input:        'scene-button',
+  input:        'input-control',
   // wall_display is intentionally NOT here — its default is entity-aware, see
   // profileDefaultTileStyle. valve, uni, generic → 'default'.
 };
@@ -411,6 +411,13 @@ export const STYLE_ELEMENTS: Partial<Record<TileStyle, Array<{ id: string; label
     { id: 'trend',         label: 'Trend arrow' },
     { id: 'graph',         label: 'Sparkline graph' },
     { id: 'secondary',     label: 'Secondary chips' },
+  ],
+  'input-control': [
+    { id: 'name',         label: 'Name' },
+    { id: 'keypad',       label: 'Channel keys' },
+    { id: 'input_rows',   label: 'Unassigned channel rows' },
+    { id: 'target_state', label: 'Channel name under the key' },
+    { id: 'last_event',   label: 'Last-pressed time' },
   ],
   'scene-button': [
     { id: 'icon',       label: 'Icon' },

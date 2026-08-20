@@ -17,6 +17,7 @@ import type {
 import { renderClimateControlTile } from './tiles/climate-control';
 import { renderCoverControlTile } from './tiles/cover-control';
 import { renderSceneButtonTile } from './tiles/scene-button';
+import { renderInputControlTile } from './tiles/input-control';
 import { renderSensorCardTile } from './tiles/sensor-card';
 import { renderPowerMonitorTile } from './tiles/power-monitor';
 import { renderLightControlTile } from './tiles/light-control';
@@ -35,6 +36,10 @@ import { renderAnimSvg } from './anim-icons';
 
 /** Floor for hold-to-dim: 0 would turn the light off mid-ramp. */
 const MIN_DIM = 3;
+
+/** How long a single tap waits to see if a second one follows. Only applied to
+ *  channels that actually have a double_tap_action to disambiguate against. */
+const DOUBLE_TAP_MS = 250;
 
 /** An input action's target(s), normalised — one entity or a list, always a list. */
 const entityList = (e: string | string[] | undefined): string[] =>
@@ -185,6 +190,14 @@ export class HADeviceDashboard extends LitElement {
     // coalesced to at most one render per THROTTLE_MS — otherwise a large
     // fleet re-renders the whole card near-continuously.
     const THROTTLE_MS = 2000;
+
+    // Input-action targets first: a keypad key's lit state reads an entity that
+    // usually belongs to ANOTHER device — or to none the card discovered — so the
+    // per-device loop below would never see it change and the key would go stale.
+    for (const id of this._inputTargets()) {
+      if (oldHass.states[id] !== this.hass.states[id]) return true;
+    }
+
     let sensorChanged = false;
     for (const dev of devices) {
       const ents = dev.entities;
@@ -216,6 +229,27 @@ export class HADeviceDashboard extends LitElement {
 
   private _lastSensorRender = 0;
   private _sensorRenderTimer: number | null = null;
+
+  /** Every entity an input action points at — toggle/service targets, dim targets
+   *  and select chips. Cached per config object, like the CSS-var map, because
+   *  shouldUpdate runs on every hass push. */
+  private _inputTargetsRef: HADeviceDashboardConfig | null = null;
+  private _cachedInputTargets = new Set<string>();
+  private _inputTargets(): Set<string> {
+    if (this._inputTargetsRef === this._config) return this._cachedInputTargets;
+    const out = new Set<string>();
+    for (const ds of Object.values(this._config?.device_styles ?? {})) {
+      for (const act of Object.values(ds.input_actions ?? {})) {
+        for (const id of entityList(act.entity)) out.add(id);
+        for (const id of entityList(act.hold_action?.entity)) out.add(id);
+        for (const id of entityList(act.double_tap_action?.entity)) out.add(id);
+        if (act.select_chip?.entity) out.add(act.select_chip.entity);
+      }
+    }
+    this._inputTargetsRef = this._config;
+    this._cachedInputTargets = out;
+    return out;
+  }
 
   getCardSize() { return 6; }
 
@@ -252,8 +286,10 @@ export class HADeviceDashboard extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
-    // A hold in progress when the card is torn down would keep ramping.
+    // A hold in progress when the card is torn down would keep ramping, and a
+    // pending single tap would fire into a dead element.
     this._endInputHold();
+    this._clearTapTimers();
     this._graphFetching.clear();
     this._graphFetchedAt.clear();
     this._graphData = new Map();
@@ -1208,13 +1244,61 @@ export class HADeviceDashboard extends LitElement {
     this._stopDim();
   }
 
+  /** Live state of a channel's toggle target, for the keypad's lit/off styling.
+   *  `null` means "unknowable": only a toggle has a state the card can read, so a
+   *  script- or more-info-backed key stays neutral rather than claiming one. */
+  private _inputActionState(device: HADevice, ch: InputChannel): 'on' | 'off' | 'unavailable' | null {
+    const cfg = this._inputAction(device, ch);
+    if (!cfg || cfg.action !== 'toggle') return null;
+    const targets = entityList(cfg.entity);
+    if (!targets.length) return null;
+    let anyKnown = false;
+    for (const t of targets) {
+      const st = this.hass.states[t];
+      if (!st || st.state === 'unavailable' || st.state === 'unknown') continue;
+      anyKnown = true;
+      // Any target on lights the key — a two-light channel reads as on when
+      // either half is lit, which is what the next tap will act on.
+      if (st.state === 'on') return 'on';
+    }
+    return anyKnown ? 'off' : 'unavailable';
+  }
+
+  /** Single taps held pending a possible second one, keyed by channel entity id. */
+  private _tapTimers = new Map<string, number>();
+
   private _runInputAction(device: HADevice, ch: InputChannel, e: Event): void {
     e.stopPropagation();
     // A hold already acted — don't also fire the tap action on release.
     if (this._holdFired) { this._holdFired = false; return; }
     const cfg = this._inputAction(device, ch);
     if (!cfg) return;
-    this._performAction(cfg, ch);
+
+    const dbl = cfg.double_tap_action;
+    // No double action to disambiguate against: fire now, no added latency.
+    if (!dbl || dbl.action === 'none') { this._performAction(cfg, ch); return; }
+
+    const pending = this._tapTimers.get(ch.entityId);
+    if (pending != null) {
+      clearTimeout(pending);
+      this._tapTimers.delete(ch.entityId);
+      this._performAction({
+        action: dbl.action,
+        entity: dbl.entity ?? cfg.entity,
+        perform_action: dbl.perform_action,
+        data: dbl.data,
+      }, ch);
+      return;
+    }
+    this._tapTimers.set(ch.entityId, window.setTimeout(() => {
+      this._tapTimers.delete(ch.entityId);
+      this._performAction(cfg, ch);
+    }, DOUBLE_TAP_MS));
+  }
+
+  private _clearTapTimers(): void {
+    for (const t of this._tapTimers.values()) clearTimeout(t);
+    this._tapTimers.clear();
   }
 
   private _performAction(cfg: InputActionConfig | InputHoldConfig, ch: InputChannel): void {
@@ -2837,6 +2921,7 @@ export class HADeviceDashboard extends LitElement {
         const hold = this._inputAction(d, ch)?.hold_action;
         return !!hold && hold.action !== 'none';
       },
+      getInputActionState: (d, ch) => this._inputActionState(d, ch),
       getInputSelectChip: (d, ch) => this._inputSelectChip(d, ch),
       setInputSelectOption: (entityId, option) =>
         this.hass.callService('select', 'select_option', { entity_id: entityId, option }),
@@ -2951,6 +3036,7 @@ export class HADeviceDashboard extends LitElement {
       : style === 'climate-control' ? renderClimateControlTile(this._buildTileCtx(device, profile, accent))
       : style === 'cover-control'   ? renderCoverControlTile(this._buildTileCtx(device, profile, accent))
       : style === 'sensor-card'     ? renderSensorCardTile(this._buildTileCtx(device, profile, accent))
+      : style === 'input-control'   ? renderInputControlTile(this._buildTileCtx(device, profile, accent))
       : style === 'scene-button'    ? renderSceneButtonTile(this._buildTileCtx(device, profile, accent))
       : nothing}
     </div>`;

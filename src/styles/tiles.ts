@@ -223,6 +223,43 @@ export const tilesCss = css`
 
 
     /* ── SCENE BUTTON ── */
+    /* ── input-control: the i3/i4 keypad ── */
+    .ts-inputs { display:flex;flex-direction:column;gap:8px;width:100% }
+    .ts-inputs-top { display:flex;align-items:center;justify-content:space-between }
+    .ts-inputs-empty { font-size:var(--fs-sm);color:var(--sc-text-muted) }
+    /* Rows for unassigned channels sit under the keys, visually demoted. */
+    .ts-inputs-rest { padding-top:6px;border-top:1px solid rgba(255,255,255,.07);opacity:.85 }
+    .ts-keys { display:grid;grid-template-columns:repeat(var(--keys,2),1fr);gap:6px }
+    .ts-key-wrap { display:flex;flex-direction:column;gap:4px;min-width:0 }
+    .ts-key { position:relative;display:flex;flex-direction:column;align-items:flex-start;
+      gap:2px;width:100%;min-height:54px;padding:8px 10px;border-radius:12px;cursor:pointer;
+      font:inherit;text-align:left;overflow:hidden;
+      background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);
+      color:var(--sc-text-primary);transition:background .15s,border-color .15s,transform .08s }
+    .ts-key:hover { background:rgba(255,255,255,.10) }
+    .ts-key:active { transform:scale(.97) }
+    /* Holding must not scroll the dashboard or select the label. */
+    .ts-key.holdable { touch-action:none;user-select:none;-webkit-user-select:none }
+    .ts-key-label { font-size:13px;font-weight:700;line-height:1.15;
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100% }
+    .ts-key-sub { font-size:11px;color:var(--sc-text-secondary);
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100% }
+    .ts-key-age { font-size:10px;color:var(--sc-text-muted) }
+    .ts-key-pip { position:absolute;top:8px;right:8px;width:7px;height:7px;border-radius:50%;
+      background:var(--sc-text-muted);opacity:.5;transition:background .15s,opacity .15s }
+    /* Lit: the key's toggle target is on. */
+    .ts-key.is-on { background:color-mix(in srgb,var(--ts-accent) 20%,transparent);
+      border-color:color-mix(in srgb,var(--ts-accent) 45%,transparent) }
+    .ts-key.is-on .ts-key-pip { background:var(--ts-accent);opacity:1;
+      box-shadow:0 0 6px var(--ts-accent) }
+    .ts-key.is-on:hover { background:color-mix(in srgb,var(--ts-accent) 30%,transparent) }
+    /* Target offline — say so rather than showing a confident "off". */
+    .ts-key.is-unavailable { opacity:.55;border-style:dashed }
+    .ts-key.is-unavailable .ts-key-pip { background:var(--sc-offline-color,#f87171);opacity:.8 }
+    /* Neutral: the action isn't a toggle, so there is no state to claim. */
+    .ts-key.is-neutral .ts-key-pip { display:none }
+    .ts-key-wrap .input-sel { max-width:100% }
+
     .ts-scene { display:flex;flex-direction:column;gap:6px;width:100% }
 
     .ts-scene-top { display:flex;align-items:center;justify-content:space-between }

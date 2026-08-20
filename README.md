@@ -239,11 +239,24 @@ power_monitor_variant: gauge
 | `climate-control` | TRV, Wall Display | Thermostat dial front and centre |
 | `cover-control` | roller, blind | Shutter graphic + open/stop/close |
 | `sensor-card` | sensors | Big primary value + sparkline + trend badge |
-| `scene-button` | input, generic | Large tappable icon button |
+| `input-control` | i3 / i4 / UNI | Keypad of channel keys (default for `input`) — see below |
+| `scene-button` | generic, scenes | Large tappable icon button |
 | `custom:<key>` | — | One of your saved styles from `custom_styles` |
 
 Legacy names (`hero`, `ring`, `hbar`, `spark`, `list`, `command`) still load and are
 remapped at render time.
+
+#### `input-control` — the i3/i4 keypad
+
+Input hardware has no output of its own, so a channel becomes a key only once it
+has an action bound (see `input_actions` below). Channels without one stay
+compact status rows beneath the keys, which is why a half-configured device shows
+both. A key that toggles an entity lights up while that entity is on, dims when
+it is off, and goes dashed when the target is unavailable; a key that runs a
+script stays neutral, since the card can't know a script's "state".
+
+Elements (`elements:`): `name`, `keypad`, `input_rows`, `target_state`,
+`last_event`.
 
 ### Tile blocks (`tile_layout`)
 
@@ -384,6 +397,11 @@ tile row only has tap and hold:
         select_chip:
           entity: select.wled_preset
 ```
+
+`double_tap_action` mirrors a double push — Shelly's own dimmer script uses
+double = on at 100%. It takes the same shape as `hold_action` minus `dim`.
+Configuring one delays that channel's single tap by ~250ms so the card can tell
+the two apart; channels without one keep firing instantly.
 
 `hold_action` mirrors a wall switch's long press. `action: dim` ramps the target
 light while the row is held and alternates direction between holds — hold to

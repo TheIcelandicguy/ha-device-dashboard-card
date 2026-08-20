@@ -155,6 +155,9 @@ export interface TileCtx {
   getInputActionLabel: (d: HADevice, ch: InputChannel) => string | null;
   /** True when the channel also has a press-and-hold action (e.g. hold to dim). */
   inputHasHold: (d: HADevice, ch: InputChannel) => boolean;
+  /** Live state of the channel's toggle target, for keypad lit/off styling.
+   *  `null` = unknowable (the action isn't a toggle), so the key stays neutral. */
+  getInputActionState: (d: HADevice, ch: InputChannel) => 'on' | 'off' | 'unavailable' | null;
   /** Dropdown chip on the row — a `select` entity's options (WLED presets, …),
    *  for what a third gesture used to do at the wall. Null when unconfigured. */
   getInputSelectChip: (d: HADevice, ch: InputChannel) => {

@@ -95,7 +95,7 @@
 /* ── data (mirrors src/helpers.ts STYLE_ELEMENTS + types) ── */
 const STYLES = [
   ['default','Default'],['power-monitor','Power'],['light-control','Light'],
-  ['climate-control','Climate'],['cover-control','Cover'],['sensor-card','Sensor'],['scene-button','Scene'],
+  ['climate-control','Climate'],['cover-control','Cover'],['sensor-card','Sensor'],['input-control','Inputs'],['scene-button','Scene'],
 ];
 const ELEMENTS = {
   'power-monitor':  [['toggle','On/off button'],['graph','Sparkline graph'],['secondary','Secondary readings (V/A/kWh)'],['uptime','Uptime badge'],['lower_body','Lower body (blocks)']],
@@ -103,6 +103,7 @@ const ELEMENTS = {
   'climate-control':[['heating_badge','Heating badge'],['dial','Temperature dial'],['adjust_buttons','+/− buttons'],['stats','Stats row'],['presets','Preset buttons']],
   'cover-control':  [['position_pct','Position %'],['shutter_graphic','Shutter graphic'],['moving_label','Moving label'],['buttons','Open / stop / close']],
   'sensor-card':    [['primary_value','Primary value'],['trend','Trend arrow'],['graph','Sparkline graph'],['secondary','Secondary chips']],
+  'input-control':  [['name','Name'],['keypad','Channel keys'],['input_rows','Unassigned channel rows'],['target_state','Channel name under the key'],['last_event','Last-pressed time']],
   'scene-button':   [['icon','Icon'],['name','Name'],['timestamp','Last-triggered time'],['input_rows','Input channel rows']],
 };
 const PM_VARIANTS = ['big-number','gauge','graph','compact','table'];
