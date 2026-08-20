@@ -235,7 +235,7 @@ power_monitor_variant: gauge
 |---|---|---|
 | `default` | anything | Adaptive block grid — the blocks below, chosen per profile |
 | `power-monitor` | relay, plug, energy | Variants: `big-number`, `gauge`, `graph`, `compact`, `table` |
-| `light-control` | dimmer, RGB | Colour wheel + brightness / temperature sliders |
+| `light-control` | dimmer, RGB | Colour wheel + brightness / temperature sliders, effect dropdown |
 | `climate-control` | TRV, Wall Display | Thermostat dial front and centre |
 | `cover-control` | roller, blind | Shutter graphic + open/stop/close |
 | `sensor-card` | sensors | Big primary value + sparkline + trend badge |
@@ -245,6 +245,14 @@ power_monitor_variant: gauge
 
 Legacy names (`hero`, `ring`, `hbar`, `spark`, `list`, `command`) still load and are
 remapped at render time.
+
+#### Light effects
+
+Lights that report an `effect_list` get a dropdown, not a button per effect — a
+WLED node exposes ~220 of them and a chip wall buried the rest of the tile.
+Audio-reactive effects are grouped first: WLED's own `♪`/`♫` prefixes are honoured
+where a build keeps them, and since HA's WLED integration strips them, the known
+audio-reactive set is matched by name as well. Hidden with the `effects` element.
 
 #### `input-control` — the i3/i4 keypad
 

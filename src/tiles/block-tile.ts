@@ -4,7 +4,7 @@ import { renderAnimSvg } from '../anim-icons';
 import { formatPower, getIntegrationLabel, isPrivateIp, delegatableEntities, DELEGATE_FEATURES } from '../helpers';
 import type { EntityAnimationType, TileBlockId, HassAttrs } from '../types';
 import type { TileCtx, SensorChip } from './tile-context';
-import { renderInputRow } from './tile-parts';
+import { renderInputRow, renderEffectPicker } from './tile-parts';
 
 /** Default block-based tile renderer — dispatches to per-block sub-renderers. */
 export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateResult {
@@ -182,19 +182,8 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
             <span class="white-pct dim-pct">${whiteVal}</span>
           </div>
         ` : nothing}
-        ${effectList.length > 1 ? html`
-          <div class="tile-effects" @click=${(e: Event) => e.stopPropagation()}>
-            ${effectList.filter(fx => fx !== 'Off').map(fx => html`
-              <button class="effect-btn ${currentEffect === fx ? 'active' : ''}"
-                @click=${(e: Event) => {
-                  e.stopPropagation();
-                  const isActive = currentEffect === fx;
-                  hass.callService('light', 'turn_on', { entity_id: sw.entityId, effect: isActive ? 'Off' : fx });
-                }}>
-                ${fx}
-              </button>`)}
-          </div>
-        ` : nothing}
+        ${renderEffectPicker(effectList, currentEffect,
+          fx => hass.callService('light', 'turn_on', { entity_id: sw.entityId, effect: fx }))}
       ` : html``;
     }
 

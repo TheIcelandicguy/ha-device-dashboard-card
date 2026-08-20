@@ -1281,13 +1281,18 @@ export const mainCss = css`
 
     .white-slider { accent-color:#e5e7eb; }
 
-    .tile-effects { display:flex; flex-wrap:wrap; gap:4px; padding:4px 8px 2px; }
+    .tile-effects { display:flex; gap:4px; padding:4px 8px 2px; }
 
-    .effect-btn { padding:4px 11px; border-radius:12px; border:1px solid rgba(255,255,255,.12); background:rgba(255,255,255,.05); color:var(--sc-text-secondary); font-size:10px; cursor:pointer; transition:all .15s; white-space:nowrap; min-height:24px; }
+    /* WLED reports ~190 effects; a chip per effect buried the tile, so this is a
+       grouped dropdown (sound-reactive first) rather than a wall of buttons. */
+    .effect-sel { flex:1; min-width:0; padding:5px 8px; border-radius:10px; cursor:pointer;
+      font:inherit; font-size:11px; font-weight:600; appearance:none; -webkit-appearance:none;
+      color:var(--sc-text-secondary); background:rgba(255,255,255,.05);
+      border:1px solid rgba(255,255,255,.12); transition:background .15s,color .15s; }
+    .effect-sel:hover { background:var(--sc-hover-bg); color:var(--sc-text-primary); }
+    .effect-sel option, .effect-sel optgroup { background:var(--sc-tile-bg,#241f1b); color:var(--sc-text-primary); }
 
-    .effect-btn:hover { background:var(--sc-hover-bg); color:var(--sc-text-primary); }
 
-    .effect-btn.active { background:color-mix(in srgb,var(--sc-accent) 25%,transparent); border-color:color-mix(in srgb,var(--sc-accent) 50%,transparent); color:var(--sc-accent); }
 
 
     .spark-row-clickable { cursor:pointer; border-radius:6px; transition:background .15s; }

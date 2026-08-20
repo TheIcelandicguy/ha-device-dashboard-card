@@ -2,6 +2,7 @@ import { html, svg, nothing, TemplateResult } from 'lit';
 import type { HassAttrs } from '../types';
 import { formatPower } from '../helpers';
 import type { TileCtx } from './tile-context';
+import { renderEffectPicker } from './tile-parts';
 
 const WHEEL_SIZE = 140;
 const WHEEL_R = WHEEL_SIZE / 2;
@@ -145,12 +146,10 @@ export function renderLightControlTile(ctx: TileCtx): TemplateResult {
             <span class="ts-light-pct">${whiteVal}</span>
           </div>
         </div>` : nothing}
-      ${effectList.length > 1 && ctx.showEl('effects') ? html`
-        <div class="tile-effects">
-          ${effectList.filter(fx => fx !== 'Off').map(fx => html`
-            <button class="effect-btn ${currentEffect === fx ? 'active' : ''}"
-              @click=${() => hass.callService('light', 'turn_on', { entity_id: sw.entityId, effect: currentEffect === fx ? 'Off' : fx })}>${fx}</button>`)}
-        </div>` : nothing}
+      ${ctx.showEl('effects')
+        ? renderEffectPicker(effectList, currentEffect,
+            fx => hass.callService('light', 'turn_on', { entity_id: sw.entityId, effect: fx }))
+        : nothing}
       ${s.power != null && ctx.showEl('power') ? html`<div style="font-size:.72em;color:var(--sc-text-muted);margin-top:6px">${formatPower(s.power)}</div>` : nothing}
     </div>`;
 }

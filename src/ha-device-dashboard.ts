@@ -18,6 +18,7 @@ import { renderClimateControlTile } from './tiles/climate-control';
 import { renderCoverControlTile } from './tiles/cover-control';
 import { renderSceneButtonTile } from './tiles/scene-button';
 import { renderInputControlTile } from './tiles/input-control';
+import { renderEffectPicker } from './tiles/tile-parts';
 import { renderSensorCardTile } from './tiles/sensor-card';
 import { renderPowerMonitorTile } from './tiles/power-monitor';
 import { renderLightControlTile } from './tiles/light-control';
@@ -2684,15 +2685,8 @@ export class HADeviceDashboard extends LitElement {
             <span class="white-pct dim-pct">${whiteVal}</span>
           </div>
         ` : nothing}
-        ${effectList.length > 1 ? html`
-          <div class="tile-effects">
-            ${effectList.filter(fx => fx !== 'Off').map(fx => html`
-              <button class="effect-btn ${currentEffect === fx ? 'active' : ''}"
-                @click=${(e: Event) => { e.stopPropagation(); this.hass.callService('light', 'turn_on', { entity_id: sw!.entityId, effect: currentEffect === fx ? 'Off' : fx }); }}>
-                ${fx}
-              </button>`)}
-          </div>
-        ` : nothing}
+        ${renderEffectPicker(effectList, currentEffect,
+          fx => this.hass.callService('light', 'turn_on', { entity_id: sw!.entityId, effect: fx }))}
       </div>
     ` : nothing;
 
