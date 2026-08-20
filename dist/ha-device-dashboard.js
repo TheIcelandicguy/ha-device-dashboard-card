@@ -1607,8 +1607,12 @@ function e(e,t,i,s){var o,r=arguments.length,a=r<3?t:null===s?s=Object.getOwnPro
     /* Rows for unassigned channels sit under the keys, visually demoted. */
     .ts-inputs-rest { padding-top:6px;border-top:1px solid rgba(255,255,255,.07);opacity:.85 }
     .ts-keys { display:grid;grid-template-columns:repeat(var(--keys,2),1fr);gap:6px }
-    .ts-key-wrap { display:flex;flex-direction:column;gap:4px;min-width:0 }
-    .ts-key { position:relative;display:flex;flex-direction:column;align-items:flex-start;
+    /* Chips sit under the keypad so a key's grid cell never grows taller than
+       its neighbour's and drags the following row out of alignment. */
+    .ts-key-chips { display:flex;flex-wrap:wrap;align-items:center;gap:6px }
+    .ts-key-chip-lbl { font-size:11px;font-weight:600;color:var(--sc-text-secondary) }
+    .ts-key-chips .input-sel { flex:1;min-width:0;max-width:none }
+    .ts-key { position:relative;min-width:0;display:flex;flex-direction:column;align-items:flex-start;
       gap:2px;width:100%;min-height:54px;padding:8px 10px;border-radius:12px;cursor:pointer;
       font:inherit;text-align:left;overflow:hidden;
       background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);
@@ -1635,7 +1639,6 @@ function e(e,t,i,s){var o,r=arguments.length,a=r<3?t:null===s?s=Object.getOwnPro
     .ts-key.is-unavailable .ts-key-pip { background:var(--sc-offline-color,#f87171);opacity:.8 }
     /* Neutral: the action isn't a toggle, so there is no state to claim. */
     .ts-key.is-neutral .ts-key-pip { display:none }
-    .ts-key-wrap .input-sel { max-width:100% }
 
     .ts-scene { display:flex;flex-direction:column;gap:6px;width:100% }
 
@@ -2293,7 +2296,7 @@ function e(e,t,i,s){var o,r=arguments.length,a=r<3?t:null===s?s=Object.getOwnPro
   .ent-icon-star.on  { animation:star-pulse calc(2s   / var(--ent-spd,1)) ease-in-out infinite; transform-origin:10px 10px; }
   .ent-icon-star2.on .star-body { animation:fan-spin calc(3s / var(--ent-spd,1)) linear infinite; transform-origin:10px 10px; }
   .ent-icon-star3.on { animation:star-shoot calc(1.5s / var(--ent-spd,1)) ease-in-out infinite alternate; }
-`,et=[{value:"none",label:"None",group:""},{value:"flame",label:"Flame",group:"🔥"},{value:"flame2",label:"Double",group:"🔥"},{value:"flame3",label:"Campfire",group:"🔥"},{value:"snowflake",label:"Snow",group:"❄️"},{value:"snowflake2",label:"6-arm",group:"❄️"},{value:"snowflake3",label:"Drifting",group:"❄️"},{value:"fan",label:"Fan 3",group:"🌀"},{value:"fan2",label:"Fan 4",group:"🌀"},{value:"fan3",label:"Vortex",group:"🌀"},{value:"lightning",label:"Bolt",group:"⚡"},{value:"lightning2",label:"Double",group:"⚡"},{value:"lightning3",label:"Arc",group:"⚡"},{value:"bulb",label:"Bulb",group:"💡"},{value:"bulb2",label:"Edison",group:"💡"},{value:"bulb3",label:"LED",group:"💡"},{value:"water",label:"Drop",group:"💧"},{value:"water2",label:"Waves",group:"💧"},{value:"water3",label:"Ripple",group:"💧"},{value:"sun",label:"Sun",group:"☀️"},{value:"sun2",label:"Sunrise",group:"☀️"},{value:"sun3",label:"Burst",group:"☀️"},{value:"moon",label:"Crescent",group:"🌙"},{value:"moon2",label:"Full",group:"🌙"},{value:"moon3",label:"Stars",group:"🌙"},{value:"pulse",label:"Pulse",group:"◉"},{value:"pulse2",label:"Double",group:"◉"},{value:"pulse3",label:"EKG",group:"◉"},{value:"wave",label:"Wave",group:"〜"},{value:"wave2",label:"Equalizer",group:"〜"},{value:"wave3",label:"Signal",group:"〜"},{value:"wave4",label:"WiFi",group:"〜"},{value:"heart",label:"Heart",group:"❤️"},{value:"heart2",label:"Outline",group:"❤️"},{value:"leaf",label:"Leaf",group:"🌿"},{value:"leaf2",label:"Sprout",group:"🌿"},{value:"lock",label:"Lock",group:"🔒"},{value:"lock2",label:"Unlocked",group:"🔒"},{value:"wind",label:"Flow",group:"💨"},{value:"wind2",label:"Gusts",group:"💨"},{value:"wind3",label:"Spiral",group:"💨"},{value:"bell",label:"Bell",group:"🔔"},{value:"bell2",label:"Ring",group:"🔔"},{value:"bell3",label:"Alarm",group:"🔔"},{value:"thermometer",label:"Therm",group:"🌡️"},{value:"thermometer2",label:"Hot",group:"🌡️"},{value:"thermometer3",label:"Cold/Hot",group:"🌡️"},{value:"battery",label:"Battery",group:"🔋"},{value:"battery2",label:"Charging",group:"🔋"},{value:"battery3",label:"Low",group:"🔋"},{value:"star",label:"Star",group:"⭐"},{value:"star2",label:"Sparkle",group:"⭐"},{value:"star3",label:"Shoot",group:"⭐"}];function tt(e){const{device:t,accent:i,online:s}=e,o=e.getInputChannels(t),r=o.filter(i=>null!=e.getInputActionLabel(t,i)),a=o.filter(i=>null==e.getInputActionLabel(t,i)),n=r.length<=1?1:r.length<=4?2:3;return q`
+`,et=[{value:"none",label:"None",group:""},{value:"flame",label:"Flame",group:"🔥"},{value:"flame2",label:"Double",group:"🔥"},{value:"flame3",label:"Campfire",group:"🔥"},{value:"snowflake",label:"Snow",group:"❄️"},{value:"snowflake2",label:"6-arm",group:"❄️"},{value:"snowflake3",label:"Drifting",group:"❄️"},{value:"fan",label:"Fan 3",group:"🌀"},{value:"fan2",label:"Fan 4",group:"🌀"},{value:"fan3",label:"Vortex",group:"🌀"},{value:"lightning",label:"Bolt",group:"⚡"},{value:"lightning2",label:"Double",group:"⚡"},{value:"lightning3",label:"Arc",group:"⚡"},{value:"bulb",label:"Bulb",group:"💡"},{value:"bulb2",label:"Edison",group:"💡"},{value:"bulb3",label:"LED",group:"💡"},{value:"water",label:"Drop",group:"💧"},{value:"water2",label:"Waves",group:"💧"},{value:"water3",label:"Ripple",group:"💧"},{value:"sun",label:"Sun",group:"☀️"},{value:"sun2",label:"Sunrise",group:"☀️"},{value:"sun3",label:"Burst",group:"☀️"},{value:"moon",label:"Crescent",group:"🌙"},{value:"moon2",label:"Full",group:"🌙"},{value:"moon3",label:"Stars",group:"🌙"},{value:"pulse",label:"Pulse",group:"◉"},{value:"pulse2",label:"Double",group:"◉"},{value:"pulse3",label:"EKG",group:"◉"},{value:"wave",label:"Wave",group:"〜"},{value:"wave2",label:"Equalizer",group:"〜"},{value:"wave3",label:"Signal",group:"〜"},{value:"wave4",label:"WiFi",group:"〜"},{value:"heart",label:"Heart",group:"❤️"},{value:"heart2",label:"Outline",group:"❤️"},{value:"leaf",label:"Leaf",group:"🌿"},{value:"leaf2",label:"Sprout",group:"🌿"},{value:"lock",label:"Lock",group:"🔒"},{value:"lock2",label:"Unlocked",group:"🔒"},{value:"wind",label:"Flow",group:"💨"},{value:"wind2",label:"Gusts",group:"💨"},{value:"wind3",label:"Spiral",group:"💨"},{value:"bell",label:"Bell",group:"🔔"},{value:"bell2",label:"Ring",group:"🔔"},{value:"bell3",label:"Alarm",group:"🔔"},{value:"thermometer",label:"Therm",group:"🌡️"},{value:"thermometer2",label:"Hot",group:"🌡️"},{value:"thermometer3",label:"Cold/Hot",group:"🌡️"},{value:"battery",label:"Battery",group:"🔋"},{value:"battery2",label:"Charging",group:"🔋"},{value:"battery3",label:"Low",group:"🔋"},{value:"star",label:"Star",group:"⭐"},{value:"star2",label:"Sparkle",group:"⭐"},{value:"star3",label:"Shoot",group:"⭐"}];function tt(e){const{device:t,accent:i,online:s}=e,o=e.getInputChannels(t),r=o.filter(i=>null!=e.getInputActionLabel(t,i)),a=o.filter(i=>null==e.getInputActionLabel(t,i)),n=r.length<=1?1:r.length<=4?2:3,l=r.map(i=>({ch:i,chip:e.getInputSelectChip(t,i)})).filter(e=>null!=e.chip);return q`
     <div class="ts-inputs" style="--ts-accent:${i}">
       ${e.showEl("name")?q`
         <div class="ts-inputs-top">${qe(t,s)}</div>`:Z}
@@ -2301,21 +2304,25 @@ function e(e,t,i,s){var o,r=arguments.length,a=r<3?t:null===s?s=Object.getOwnPro
       ${r.length&&e.showEl("keypad")?q`
         <div class="ts-keys" style="--keys:${n}"
           @click=${e=>e.stopPropagation()}>
-          ${r.map(i=>function(e,t,i){const s=e.getInputActionLabel(t,i),o=e.getInputActionState(t,i),r=e.getInputSelectChip(t,i),a=e.inputHasHold(t,i),n=()=>e.endInputHold(),l=i.label&&i.label.toLowerCase()!==s.toLowerCase()?i.label:"";return q`
-    <div class="ts-key-wrap">
-      <button
-        class="ts-key ${o?`is-${o}`:"is-neutral"} ${a?"holdable":""}"
-        title=${a?`${s} — hold to dim`:s}
-        @click=${s=>e.runInputAction(t,i,s)}
-        @pointerdown=${s=>e.startInputHold(t,i,s)}
-        @pointerup=${n} @pointerleave=${n} @pointercancel=${n}>
-        <span class="ts-key-pip"></span>
-        <span class="ts-key-label">${s}</span>
-        ${l&&e.showEl("target_state")?q`<span class="ts-key-sub">${l}</span>`:Z}
-        ${e.showEl("last_event")&&i.lastChanged?q`<span class="ts-key-age">${e.timeAgo(i.lastChanged)}</span>`:Z}
-      </button>
-      ${r?Ze(e,r):Z}
-    </div>`}(e,t,i))}
+          ${r.map(i=>function(e,t,i){const s=e.getInputActionLabel(t,i),o=e.getInputActionState(t,i),r=e.inputHasHold(t,i),a=()=>e.endInputHold(),n=i.label&&i.label.toLowerCase()!==s.toLowerCase()?i.label:"";return q`
+    <button
+      class="ts-key ${o?`is-${o}`:"is-neutral"} ${r?"holdable":""}"
+      title=${r?`${s} — hold to dim`:s}
+      @click=${s=>e.runInputAction(t,i,s)}
+      @pointerdown=${s=>e.startInputHold(t,i,s)}
+      @pointerup=${a} @pointerleave=${a} @pointercancel=${a}>
+      <span class="ts-key-pip"></span>
+      <span class="ts-key-label">${s}</span>
+      ${n&&e.showEl("target_state")?q`<span class="ts-key-sub">${n}</span>`:Z}
+      ${e.showEl("last_event")&&i.lastChanged?q`<span class="ts-key-age">${e.timeAgo(i.lastChanged)}</span>`:Z}
+    </button>`}(e,t,i))}
+        </div>`:Z}
+
+      ${l.length&&e.showEl("keypad")?q`
+        <div class="ts-key-chips" @click=${e=>e.stopPropagation()}>
+          ${l.map(({ch:i,chip:s})=>q`
+            ${l.length>1?q`<span class="ts-key-chip-lbl">${e.getInputActionLabel(t,i)}</span>`:Z}
+            ${Ze(e,s)}`)}
         </div>`:Z}
 
       ${a.length&&e.showEl("input_rows")?q`
@@ -5408,4 +5415,4 @@ function e(e,t,i,s){var o,r=arguments.length,a=r<3?t:null===s?s=Object.getOwnPro
   `,e([ve({attribute:!1})],Zi.prototype,"hass",void 0),e([ve()],Zi.prototype,"entity",void 0),e([ve({attribute:!1})],Zi.prototype,"features",void 0),e([fe()],Zi.prototype,"_el",void 0),Zi=e([he("hdd-delegated")],Zi);let Xi=class extends de{constructor(){super(...arguments),this._builtKey=""}willUpdate(e){const t=this.config?JSON.stringify(this.config):"";t&&t!==this._builtKey&&this._build(t)}updated(){this._el&&this.hass&&(this._el.hass=this.hass)}async _build(e){this._builtKey=e;try{const t=window.loadCardHelpers,i=t?await t():void 0;if(!i||JSON.stringify(this.config)!==e)return;const s=i.createCardElement(this.config);this.hass&&(s.hass=this.hass),this._el=s}catch{this._el=void 0}}render(){return this._el??Z}};Xi.styles=n`
     :host { display: block; }
     :host > * { width: 100%; }
-  `,e([ve({attribute:!1})],Xi.prototype,"hass",void 0),e([ve({attribute:!1})],Xi.prototype,"config",void 0),e([fe()],Xi.prototype,"_el",void 0),Xi=e([he("hdd-card")],Xi);console.info("%c ha-device-dashboard %c keypad-2026-08-20d ","background:#c98a63;color:#1e1a17;font-weight:700;border-radius:3px 0 0 3px","background:#241f1b;color:#f3ece3;border-radius:0 3px 3px 0"),window.customCards=window.customCards||[],window.customCards.push({type:"ha-device-dashboard",name:"HA Device Dashboard",description:"Universal device fleet overview — Shelly, ZHA, Hue, ESPHome, Matter and more.",preview:!0,documentationURL:"https://github.com/TheIcelandicguy/ha-device-dashboard"});
+  `,e([ve({attribute:!1})],Xi.prototype,"hass",void 0),e([ve({attribute:!1})],Xi.prototype,"config",void 0),e([fe()],Xi.prototype,"_el",void 0),Xi=e([he("hdd-card")],Xi);console.info("%c ha-device-dashboard %c keypad-2026-08-20e ","background:#c98a63;color:#1e1a17;font-weight:700;border-radius:3px 0 0 3px","background:#241f1b;color:#f3ece3;border-radius:0 3px 3px 0"),window.customCards=window.customCards||[],window.customCards.push({type:"ha-device-dashboard",name:"HA Device Dashboard",description:"Universal device fleet overview — Shelly, ZHA, Hue, ESPHome, Matter and more.",preview:!0,documentationURL:"https://github.com/TheIcelandicguy/ha-device-dashboard"});

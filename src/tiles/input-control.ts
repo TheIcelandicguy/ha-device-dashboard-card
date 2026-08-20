@@ -21,6 +21,13 @@ export function renderInputControlTile(ctx: TileCtx): TemplateResult {
   // wall plate); 5+ go 3-up before the labels get too cramped to read.
   const cols = wired.length <= 1 ? 1 : wired.length <= 4 ? 2 : 3;
 
+  // Dropdown chips live under the keypad, not inside a key. Nesting one made its
+  // grid cell taller than its neighbour's, so the whole row stretched and the
+  // keys below it fell out of alignment.
+  const chips = wired
+    .map(ch => ({ ch, chip: ctx.getInputSelectChip(device, ch) }))
+    .filter((x): x is { ch: InputChannel; chip: NonNullable<typeof x.chip> } => x.chip != null);
+
   return html`
     <div class="ts-inputs" style="--ts-accent:${accent}">
       ${ctx.showEl('name') ? html`
@@ -30,6 +37,15 @@ export function renderInputControlTile(ctx: TileCtx): TemplateResult {
         <div class="ts-keys" style="--keys:${cols}"
           @click=${(e: Event) => e.stopPropagation()}>
           ${wired.map(ch => renderKey(ctx, device, ch))}
+        </div>` : nothing}
+
+      ${chips.length && ctx.showEl('keypad') ? html`
+        <div class="ts-key-chips" @click=${(e: Event) => e.stopPropagation()}>
+          ${chips.map(({ ch, chip }) => html`
+            ${chips.length > 1
+              ? html`<span class="ts-key-chip-lbl">${ctx.getInputActionLabel(device, ch)}</span>`
+              : nothing}
+            ${renderInputSelectChip(ctx, chip)}`)}
         </div>` : nothing}
 
       ${bare.length && ctx.showEl('input_rows') ? html`
@@ -48,7 +64,6 @@ export function renderInputControlTile(ctx: TileCtx): TemplateResult {
 function renderKey(ctx: TileCtx, device: HADevice, ch: InputChannel): TemplateResult {
   const label = ctx.getInputActionLabel(device, ch)!;
   const state = ctx.getInputActionState(device, ch);
-  const chip = ctx.getInputSelectChip(device, ch);
   const holdable = ctx.inputHasHold(device, ch);
   const end = () => ctx.endInputHold();
 
@@ -57,19 +72,16 @@ function renderKey(ctx: TileCtx, device: HADevice, ch: InputChannel): TemplateRe
   const sub = ch.label && ch.label.toLowerCase() !== label.toLowerCase() ? ch.label : '';
 
   return html`
-    <div class="ts-key-wrap">
-      <button
-        class="ts-key ${state ? `is-${state}` : 'is-neutral'} ${holdable ? 'holdable' : ''}"
-        title=${holdable ? `${label} — hold to dim` : label}
-        @click=${(e: Event) => ctx.runInputAction(device, ch, e)}
-        @pointerdown=${(e: Event) => ctx.startInputHold(device, ch, e)}
-        @pointerup=${end} @pointerleave=${end} @pointercancel=${end}>
-        <span class="ts-key-pip"></span>
-        <span class="ts-key-label">${label}</span>
-        ${sub && ctx.showEl('target_state') ? html`<span class="ts-key-sub">${sub}</span>` : nothing}
-        ${ctx.showEl('last_event') && ch.lastChanged
-          ? html`<span class="ts-key-age">${ctx.timeAgo(ch.lastChanged)}</span>` : nothing}
-      </button>
-      ${chip ? renderInputSelectChip(ctx, chip) : nothing}
-    </div>`;
+    <button
+      class="ts-key ${state ? `is-${state}` : 'is-neutral'} ${holdable ? 'holdable' : ''}"
+      title=${holdable ? `${label} — hold to dim` : label}
+      @click=${(e: Event) => ctx.runInputAction(device, ch, e)}
+      @pointerdown=${(e: Event) => ctx.startInputHold(device, ch, e)}
+      @pointerup=${end} @pointerleave=${end} @pointercancel=${end}>
+      <span class="ts-key-pip"></span>
+      <span class="ts-key-label">${label}</span>
+      ${sub && ctx.showEl('target_state') ? html`<span class="ts-key-sub">${sub}</span>` : nothing}
+      ${ctx.showEl('last_event') && ch.lastChanged
+        ? html`<span class="ts-key-age">${ctx.timeAgo(ch.lastChanged)}</span>` : nothing}
+    </button>`;
 }

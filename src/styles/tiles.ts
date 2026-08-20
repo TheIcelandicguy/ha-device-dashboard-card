@@ -230,8 +230,12 @@ export const tilesCss = css`
     /* Rows for unassigned channels sit under the keys, visually demoted. */
     .ts-inputs-rest { padding-top:6px;border-top:1px solid rgba(255,255,255,.07);opacity:.85 }
     .ts-keys { display:grid;grid-template-columns:repeat(var(--keys,2),1fr);gap:6px }
-    .ts-key-wrap { display:flex;flex-direction:column;gap:4px;min-width:0 }
-    .ts-key { position:relative;display:flex;flex-direction:column;align-items:flex-start;
+    /* Chips sit under the keypad so a key's grid cell never grows taller than
+       its neighbour's and drags the following row out of alignment. */
+    .ts-key-chips { display:flex;flex-wrap:wrap;align-items:center;gap:6px }
+    .ts-key-chip-lbl { font-size:11px;font-weight:600;color:var(--sc-text-secondary) }
+    .ts-key-chips .input-sel { flex:1;min-width:0;max-width:none }
+    .ts-key { position:relative;min-width:0;display:flex;flex-direction:column;align-items:flex-start;
       gap:2px;width:100%;min-height:54px;padding:8px 10px;border-radius:12px;cursor:pointer;
       font:inherit;text-align:left;overflow:hidden;
       background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);
@@ -258,7 +262,6 @@ export const tilesCss = css`
     .ts-key.is-unavailable .ts-key-pip { background:var(--sc-offline-color,#f87171);opacity:.8 }
     /* Neutral: the action isn't a toggle, so there is no state to claim. */
     .ts-key.is-neutral .ts-key-pip { display:none }
-    .ts-key-wrap .input-sel { max-width:100% }
 
     .ts-scene { display:flex;flex-direction:column;gap:6px;width:100% }
 
