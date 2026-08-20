@@ -126,6 +126,7 @@ const TILE_BLOCKS: Array<{ id: TileBlockId; label: string; sub: string }> = [
   { id: 'relay_channels',  label: 'Relay channels',     sub: 'Per-channel toggles for multi-relay devices' },
   { id: 'power_bar',       label: 'Power bar',          sub: 'Mini usage bar at tile bottom' },
   { id: 'virtual_controls',label: 'Virtual controls',   sub: 'Script-defined switches, selectors & actions' },
+  { id: 'delegated_controls', label: 'Native controls', sub: 'HA’s own controls for locks, media, fans, vacuums — needs Native controls on' },
   { id: 'badges',          label: 'Type & gen badges',  sub: 'Dimmer · G3 · Relay labels' },
 ];
 
@@ -1699,6 +1700,7 @@ export class HADeviceDashboardEditor extends LitElement {
       case 'relay_channels':  return html`<div class="tp-row tp-chips"><span class="tp-chip" style="background:${accent}20;color:${accent}">CH1 ON</span><span class="tp-chip">CH2 OFF</span></div>`;
       case 'power_bar':       return html`<div class="tp-row" style="gap:8px"><div class="tp-strack" style="flex:1"><div class="tp-sfill" style="width:22%;background:${accent}"></div></div><span class="tp-val">4.1 W</span></div>`;
       case 'virtual_controls':return html`<div class="tp-row tp-chips"><span class="tp-chip">Mode ▾</span><span class="tp-chip" style="background:${accent}20;color:${accent}">Script</span></div>`;
+      case 'delegated_controls': return html`<div class="tp-row" style="gap:6px"><span class="tp-lbl">🔒 Front door</span><div class="tp-strack" style="flex:1"><div class="tp-sfill" style="width:100%;background:${accent}20"></div></div><span class="tp-val">Locked</span></div>`;
       case 'badges':          return html`<div class="tp-row tp-chips"><span class="tp-chip" style="background:rgba(234,179,8,.18);color:#fde047">Dimmer</span><span class="tp-chip" style="background:rgba(34,197,94,.18);color:#86efac">G3</span></div>`;
       default: return nothing;
     }

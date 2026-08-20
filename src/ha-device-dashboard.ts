@@ -2878,7 +2878,7 @@ export class HADeviceDashboard extends LitElement {
 
     if (style === 'default' || !style) {
       // Original block-based layout
-      const _defaultBlocks: TileBlockId[] = ['name_row', 'sensors', 'graph', 'dimmer', 'cover_controls', 'trv_control', 'valve_controls', 'input_channels', 'relay_channels', 'power_bar', 'badges'];
+      const _defaultBlocks: TileBlockId[] = ['name_row', 'sensors', 'graph', 'dimmer', 'cover_controls', 'trv_control', 'valve_controls', 'input_channels', 'relay_channels', 'power_bar', 'virtual_controls', 'delegated_controls', 'badges'];
       const blockLayout: TileLayout =
         // The viewer's own Customize choices win over config. Always flat — the
         // panel is a visibility list, so toggling a block there flattens any rows.
