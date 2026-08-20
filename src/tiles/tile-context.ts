@@ -155,6 +155,12 @@ export interface TileCtx {
   getInputActionLabel: (d: HADevice, ch: InputChannel) => string | null;
   /** True when the channel also has a press-and-hold action (e.g. hold to dim). */
   inputHasHold: (d: HADevice, ch: InputChannel) => boolean;
+  /** Dropdown chip on the row — a `select` entity's options (WLED presets, …),
+   *  for what a third gesture used to do at the wall. Null when unconfigured. */
+  getInputSelectChip: (d: HADevice, ch: InputChannel) => {
+    entity: string; label?: string; options: string[]; current: string;
+  } | null;
+  setInputSelectOption: (entityId: string, option: string) => void;
   runInputAction: (d: HADevice, ch: InputChannel, e: Event) => void;
   startInputHold: (d: HADevice, ch: InputChannel, e: Event) => void;
   endInputHold: () => void;

@@ -2120,6 +2120,14 @@ export class HADeviceDashboardEditor extends LitElement {
           const chans = dev ? detectInputChannels(dev, this.hass.states as any) : [];
           if (!chans.length) return nothing;
           const acts: Record<string, InputActionConfig> = devStyle.input_actions ?? {};
+          // A channel can drive several entities — the field takes a comma-separated
+          // list and stores a bare string when there is only one, so simple configs
+          // stay simple.
+          const entText = (e?: string | string[]) => Array.isArray(e) ? e.join(', ') : (e ?? '');
+          const parseEnt = (v: string): string | string[] | undefined => {
+            const parts = v.split(',').map(x => x.trim()).filter(Boolean);
+            return parts.length > 1 ? parts : (parts[0] || undefined);
+          };
           const setAct = (key: string, patch: Partial<InputActionConfig> | null) => {
             const next: Record<string, InputActionConfig> = { ...acts };
             if (!patch) delete next[key];
@@ -2156,21 +2164,22 @@ export class HADeviceDashboardEditor extends LitElement {
                       .value=${cur?.perform_action ?? ''}
                       @change=${(e: Event) => setAct(ch.entityId, { perform_action: (e.target as HTMLInputElement).value.trim() || undefined })}/>
                     <input type="text" class="inline-text" style="flex:1" placeholder="target entity — optional"
-                      .value=${cur?.entity ?? ''}
-                      @change=${(e: Event) => setAct(ch.entityId, { entity: (e.target as HTMLInputElement).value.trim() || undefined })}/>
+                      .value=${entText(cur?.entity)}
+                      @change=${(e: Event) => setAct(ch.entityId, { entity: parseEnt((e.target as HTMLInputElement).value) })}/>
                   </div>` : nothing}
                 ${kind === 'toggle' ? html`
                   <div style="margin:0 0 6px 34%">
-                    <input type="text" class="inline-text" style="width:100%" placeholder="light.hall"
-                      .value=${cur?.entity ?? ''}
-                      @change=${(e: Event) => setAct(ch.entityId, { entity: (e.target as HTMLInputElement).value.trim() || undefined })}/>
+                    <input type="text" class="inline-text" style="width:100%"
+                      placeholder="light.hall — or several, comma separated"
+                      .value=${entText(cur?.entity)}
+                      @change=${(e: Event) => setAct(ch.entityId, { entity: parseEnt((e.target as HTMLInputElement).value) })}/>
                   </div>` : nothing}
                 ${kind === 'more-info' ? html`
                   <div style="margin:0 0 6px 34%">
                     <input type="text" class="inline-text" style="width:100%"
                       placeholder=${ch.entityId}
-                      .value=${cur?.entity ?? ''}
-                      @change=${(e: Event) => setAct(ch.entityId, { entity: (e.target as HTMLInputElement).value.trim() || undefined })}/>
+                      .value=${entText(cur?.entity)}
+                      @change=${(e: Event) => setAct(ch.entityId, { entity: parseEnt((e.target as HTMLInputElement).value) })}/>
                   </div>` : nothing}
                 ${kind !== 'none' ? html`
                   <div style="display:flex;gap:6px;align-items:center;margin:0 0 8px 34%">
@@ -2185,17 +2194,28 @@ export class HADeviceDashboardEditor extends LitElement {
                     </select>
                     ${cur?.hold_action?.action === 'dim' ? html`
                       <input type="text" class="inline-text" style="flex:1"
-                        placeholder=${cur?.entity ?? 'light.…'}
-                        .value=${cur?.hold_action?.entity ?? ''}
+                        placeholder=${entText(cur?.entity) || 'light.…'}
+                        .value=${entText(cur?.hold_action?.entity)}
                         @change=${(e: Event) => {
-                          const v = (e.target as HTMLInputElement).value.trim();
-                          setAct(ch.entityId, { hold_action: { ...(cur?.hold_action ?? { action: 'dim' }), entity: v || undefined } });
+                          const v = parseEnt((e.target as HTMLInputElement).value);
+                          setAct(ch.entityId, { hold_action: { ...(cur?.hold_action ?? { action: 'dim' }), entity: v } });
                         }}/>` : nothing}
                   </div>
                   ${cur?.hold_action?.action === 'dim' ? html`
                     <div class="hint" style="margin:-4px 0 8px 34%">
                       Hold brightens, release, hold again darkens — it alternates each hold.
-                    </div>` : nothing}` : nothing}
+                    </div>` : nothing}
+                  ${this._adv(html`
+                    <div style="display:flex;gap:6px;align-items:center;margin:0 0 8px 34%">
+                      <span style="font-size:11px;color:var(--secondary-text-color);flex:0 0 42px">Dropdown</span>
+                      <input type="text" class="inline-text" style="flex:1"
+                        placeholder="select.wled_preset — optional"
+                        .value=${cur?.select_chip?.entity ?? ''}
+                        @change=${(e: Event) => {
+                          const v = (e.target as HTMLInputElement).value.trim();
+                          setAct(ch.entityId, { select_chip: v ? { entity: v } : undefined });
+                        }}/>
+                    </div>`)}` : nothing}
               `;
             })}
           `;

@@ -366,6 +366,25 @@ device_styles:
 `action: none` (or no entry) leaves the row as a read-only status row: name, last
 event type, and how long ago it fired.
 
+`entity` also takes a list, so one channel can drive several targets:
+`entity: [light.wled_segment_1, light.wled]`. A `dim` hold seeds its ramp from
+the first entity's brightness, so multiple lights converge to a common level on
+the first hold rather than each ramping from its own.
+
+`select_chip` puts a second, dropdown chip on the row listing a `select`
+entity's options — for whatever a third gesture used to do at the wall, since a
+tile row only has tap and hold:
+
+```yaml
+      event.shellyplusi4_083af2009ec0_input_3:
+        action: toggle
+        entity: [light.wled_segment_1, light.wled]
+        label: TV Room
+        hold_action: { action: dim }
+        select_chip:
+          entity: select.wled_preset
+```
+
 `hold_action` mirrors a wall switch's long press. `action: dim` ramps the target
 light while the row is held and alternates direction between holds — hold to
 brighten, release, hold again to darken — matching how a Shelly-linked dimmer

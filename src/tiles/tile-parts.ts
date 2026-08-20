@@ -33,7 +33,8 @@ export function renderInputAction(
   ch: InputChannel,
 ): TemplateResult | typeof nothing {
   const label = ctx.getInputActionLabel(device, ch);
-  if (!label) return nothing;
+  const chip = ctx.getInputSelectChip(device, ch);
+  if (!label) return chip ? renderSelectChip(ctx, chip) : nothing;
   const hold = ctx.inputHasHold(device, ch);
   const end = () => ctx.endInputHold();
   return html`
@@ -42,5 +43,26 @@ export function renderInputAction(
       @click=${(e: Event) => ctx.runInputAction(device, ch, e)}
       @pointerdown=${(e: Event) => ctx.startInputHold(device, ch, e)}
       @pointerup=${end} @pointerleave=${end} @pointercancel=${end}
-      >${label}</button>`;
+      >${label}</button>
+    ${chip ? renderSelectChip(ctx, chip) : nothing}`;
+}
+
+/** The row's dropdown chip. A native <select> so it works with touch and
+ *  keyboard; clicks are kept off the tile so picking an option doesn't also
+ *  open the detail sheet. */
+function renderSelectChip(
+  ctx: TileCtx,
+  chip: { entity: string; label?: string; options: string[]; current: string },
+): TemplateResult {
+  return html`
+    <select class="input-sel" title=${chip.label ?? chip.entity}
+      @click=${(e: Event) => e.stopPropagation()}
+      @pointerdown=${(e: Event) => e.stopPropagation()}
+      @change=${(e: Event) => {
+        e.stopPropagation();
+        ctx.setInputSelectOption(chip.entity, (e.target as HTMLSelectElement).value);
+      }}>
+      ${chip.options.map(o => html`
+        <option value=${o} ?selected=${o === chip.current}>${chip.label ? `${chip.label} ${o}` : o}</option>`)}
+    </select>`;
 }

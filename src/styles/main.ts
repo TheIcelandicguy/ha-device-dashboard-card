@@ -1101,6 +1101,14 @@ export const mainCss = css`
     /* Holdable rows must not scroll or select the label while being held. */
     .input-act.holdable { touch-action:none; user-select:none; -webkit-user-select:none;
       border-style:dashed; }
+    /* Dropdown chip on an input row — a select entity's options (WLED presets…). */
+    .input-sel { max-width:38%; padding:3px 4px 3px 8px; border-radius:999px; cursor:pointer;
+      font:inherit; font-size:11px; font-weight:600; flex-shrink:0;
+      color:var(--sc-text-secondary); background:rgba(255,255,255,.06);
+      border:1px solid rgba(255,255,255,.14); appearance:none;
+      -webkit-appearance:none; text-overflow:ellipsis; }
+    .input-sel:hover { background:rgba(255,255,255,.12); color:var(--sc-text-primary); }
+    .input-sel option { background:var(--sc-tile-bg,#241f1b); color:var(--sc-text-primary); }
 
     .input-chip { display:flex; align-items:center; gap:4px; padding:4px 10px 4px 8px; border-radius:14px; border:1px solid rgba(255,255,255,.08); background:rgba(255,255,255,.05); font-size:12px; color:var(--sc-text-muted); transition:all .15s; }
 

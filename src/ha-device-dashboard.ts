@@ -36,6 +36,10 @@ import { renderAnimSvg } from './anim-icons';
 /** Floor for hold-to-dim: 0 would turn the light off mid-ramp. */
 const MIN_DIM = 3;
 
+/** An input action's target(s), normalised — one entity or a list, always a list. */
+const entityList = (e: string | string[] | undefined): string[] =>
+  e == null ? [] : Array.isArray(e) ? e.filter(Boolean) : [e];
+
 // ─── Google Fonts CDN loader (for display fonts selected in editor) ──────────
 // Keep in sync with FONT_OPTIONS.cdn in editor.ts
 const CDN_FONT_FAMILIES = [
@@ -1101,12 +1105,28 @@ export class HADeviceDashboard extends LitElement {
    *  can resolve one, so a row reads "Hall lights" rather than "script.turn_on". */
   private _inputActionLabel(cfg: InputActionConfig): string {
     if (cfg.label) return cfg.label;
+    const entities = entityList(cfg.entity);
     const target = cfg.action === 'perform-action' && cfg.perform_action?.split('.').length === 2
       && !cfg.perform_action.endsWith('.turn_on') && !cfg.perform_action.endsWith('.turn_off')
       ? cfg.perform_action
-      : cfg.entity;
+      : entities[0];
     const friendly = target ? (this.hass.states[target]?.attributes as HassAttrs)?.friendly_name : undefined;
-    return (friendly as string) ?? target ?? cfg.perform_action ?? 'Run';
+    const base = (friendly as string) ?? target ?? cfg.perform_action ?? 'Run';
+    // Several targets on one channel: name the first, count the rest.
+    return entities.length > 1 ? `${base} +${entities.length - 1}` : base;
+  }
+
+  /** The select-entity dropdown chip on a channel row, if configured. */
+  private _inputSelectChip(device: HADevice, ch: InputChannel): {
+    entity: string; label?: string; options: string[]; current: string;
+  } | null {
+    const cfg = this._inputAction(device, ch)?.select_chip;
+    if (!cfg?.entity) return null;
+    const st = this.hass.states[cfg.entity];
+    if (!st) return null;
+    const options = ((st.attributes as HassAttrs)?.options as string[] | undefined) ?? [];
+    if (!options.length) return null;
+    return { entity: cfg.entity, label: cfg.label, options, current: st.state };
   }
 
   /** Hold-to-dim state. Brightness is tracked locally rather than re-read from
@@ -1114,7 +1134,10 @@ export class HADeviceDashboard extends LitElement {
    *  so reading it back would stutter or reverse the ramp mid-hold. */
   private _holdTimer: number | null = null;
   private _dimTimer: number | null = null;
+  /** Key for the direction map — the joined target list, so a channel driving two
+   *  lights alternates as one unit. */
   private _dimEntity: string | null = null;
+  private _dimTargets: string[] = [];
   private _dimLevel = 0;
   /** Direction the NEXT hold ramps, per light — alternates on release. */
   private _dimDirs = new Map<string, 1 | -1>();
@@ -1144,19 +1167,24 @@ export class HADeviceDashboard extends LitElement {
       return;
     }
 
-    const target = hold.entity ?? cfg.entity;
-    if (!target) return;
-    const dir = this._dimDirs.get(target) ?? 1;
-    const lit = Number((this.hass.states[target]?.attributes as HassAttrs)?.brightness ?? 0);
+    const targets = entityList(hold.entity ?? cfg.entity);
+    if (!targets.length) return;
+    // Direction and seed brightness both key off the first target: with several
+    // lights on one channel they converge to a common level rather than each
+    // ramping from its own.
+    const key = targets.join(',');
+    const dir = this._dimDirs.get(key) ?? 1;
+    const lit = Number((this.hass.states[targets[0]]?.attributes as HassAttrs)?.brightness ?? 0);
     // Ramping up from an off/unknown light starts at the bottom, down starts at full.
-    this._dimEntity = target;
+    this._dimEntity = key;
+    this._dimTargets = targets;
     this._dimLevel = lit > 0 ? lit : (dir > 0 ? MIN_DIM : 255);
     const step = Math.max(1, Math.round((hold.step ?? 5) * 2.55));
 
     const tick = () => {
       if (!this._dimEntity) return;
       this._dimLevel = Math.max(MIN_DIM, Math.min(255, this._dimLevel + dir * step));
-      this.hass.callService('light', 'turn_on', { entity_id: this._dimEntity, brightness: this._dimLevel });
+      this.hass.callService('light', 'turn_on', { entity_id: this._dimTargets, brightness: this._dimLevel });
       // Hitting an end stops the ramp; the release still flips direction, so the
       // next hold walks back the other way.
       if (this._dimLevel >= 255 || this._dimLevel <= MIN_DIM) this._stopDim();
@@ -1175,6 +1203,7 @@ export class HADeviceDashboard extends LitElement {
       const dir = this._dimDirs.get(this._dimEntity) ?? 1;
       this._dimDirs.set(this._dimEntity, dir > 0 ? -1 : 1);
       this._dimEntity = null;
+      this._dimTargets = [];
     }
     this._stopDim();
   }
@@ -1191,20 +1220,22 @@ export class HADeviceDashboard extends LitElement {
   private _performAction(cfg: InputActionConfig | InputHoldConfig, ch: InputChannel): void {
 
     if (cfg.action === 'more-info') {
-      fireEvent(this as any, 'hass-more-info' as any, { entityId: cfg.entity ?? ch.entityId } as any);
+      fireEvent(this as any, 'hass-more-info' as any,
+        { entityId: entityList(cfg.entity)[0] ?? ch.entityId } as any);
       return;
     }
     if (cfg.action === 'toggle') {
-      const target = cfg.entity;
-      if (!target) return;
-      this.hass.callService('homeassistant', 'toggle', { entity_id: target });
+      const targets = entityList(cfg.entity);
+      if (!targets.length) return;
+      this.hass.callService('homeassistant', 'toggle', { entity_id: targets });
       return;
     }
     if (cfg.action === 'perform-action' && cfg.perform_action) {
       const [domain, service] = cfg.perform_action.split('.');
       if (!domain || !service) return;
       const data: Record<string, unknown> = { ...(cfg.data ?? {}) };
-      if (cfg.entity) data.entity_id = cfg.entity;
+      const targets = entityList(cfg.entity);
+      if (targets.length) data.entity_id = targets;
       this.hass.callService(domain, service, data);
     }
   }
@@ -2806,6 +2837,9 @@ export class HADeviceDashboard extends LitElement {
         const hold = this._inputAction(d, ch)?.hold_action;
         return !!hold && hold.action !== 'none';
       },
+      getInputSelectChip: (d, ch) => this._inputSelectChip(d, ch),
+      setInputSelectOption: (entityId, option) =>
+        this.hass.callService('select', 'select_option', { entity_id: entityId, option }),
       runInputAction: (d, ch, e) => this._runInputAction(d, ch, e),
       startInputHold: (d, ch, e) => this._startInputHold(d, ch, e),
       endInputHold: () => this._endInputHold(),

@@ -319,8 +319,10 @@ export interface InputActionConfig {
   /** `perform-action`: the service to call, e.g. 'script.hall_lights' or
    *  'light.turn_on'. A bare `script.foo` is called as-is (no `.turn_on`). */
   perform_action?: string;
-  /** Target entity: what to toggle / show, or the service call's target. */
-  entity?: string;
+  /** Target entity: what to toggle / show, or the service call's target. A list
+   *  drives several entities from one channel (e.g. two WLED segments on one
+   *  physical button); `dim` seeds its ramp from the first one's brightness. */
+  entity?: string | string[];
   /** Extra service data merged into the call. */
   data?: Record<string, unknown>;
   /** Row button label. Defaults to the script/scene's friendly name, then the
@@ -328,6 +330,18 @@ export interface InputActionConfig {
   label?: string;
   /** Press-and-hold behaviour, mirroring a wall switch's long press. */
   hold_action?: InputHoldConfig;
+  /** Optional second chip on the row: a dropdown of a `select` entity's options.
+   *  A row only has tap and hold, so anything a third gesture used to do at the
+   *  wall — cycling WLED presets, say — needs its own control. */
+  select_chip?: InputSelectChipConfig;
+}
+
+/** Dropdown chip on an input row, listing a `select` entity's options. Picking
+ *  one calls `select.select_option`. */
+export interface InputSelectChipConfig {
+  entity: string;
+  /** Chip label prefix. Default: just the current option. */
+  label?: string;
 }
 
 /** What holding an input row does. `dim` ramps the target light while held and
@@ -336,7 +350,7 @@ export interface InputActionConfig {
 export interface InputHoldConfig {
   action: 'dim' | 'perform-action' | 'toggle' | 'more-info' | 'none';
   /** Light to dim, or the action's target. Defaults to the tap action's entity. */
-  entity?: string;
+  entity?: string | string[];
   perform_action?: string;
   data?: Record<string, unknown>;
   /** Brightness step per tick, in % of full. Default 5. */
