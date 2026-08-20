@@ -1278,3 +1278,109 @@ export function detectInputChannels(
     .sort((a, b) => a._sort - b._sort)
     .map(({ _sort, ...row }) => row);
 }
+
+
+// ─── Device relevance (editor scoping) ─────────────────────────────────────────
+
+/** Which controls actually do something for one device. The device-styling panel
+ *  uses this to offer that device's own options instead of every option the card
+ *  has — an i4 has no energy window, a smoke sensor has no dimmer block. */
+export interface DeviceRelevance {
+  /** Sensor-chip keys this device can produce. */
+  chips: Set<string>;
+  /** Tile blocks that can render something for this device. */
+  blocks: Set<TileBlockId>;
+  /** Has an energy or power sensor, so the energy window / meter override apply. */
+  hasEnergy: boolean;
+  /** Has at least one graphable sensor. */
+  hasGraphs: boolean;
+  /** Has an entity with an on/off state, so ON vs OFF styling is meaningful. */
+  hasOnOff: boolean;
+}
+
+/** Chip keys that can be drawn as a sparkline. */
+const GRAPHABLE_CHIPS = new Set([
+  'power', 'voltage', 'current', 'energy', 'apparent_power', 'reactive_power',
+  'frequency', 'power_factor', 'temperature', 'humidity', 'illuminance', 'co2',
+  'battery', 'rssi',
+]);
+
+/** Shelly virtual components — `_enum_1`, `_number_2`, … — as matched by the
+ *  card's `_getVirtualControls`. */
+const VIRTUAL_SUFFIX: Record<string, RegExp> = {
+  select: /_enum_\d+$/i,
+  number: /_number_\d+$/i,
+  button: /_button_\d+$/i,
+  text:   /_text_\d+$/i,
+  switch: /_boolean_\d+$/i,
+};
+
+/** Sensor-chip keys a device can produce. Mirrors the device_class → chip-key
+ *  mapping in the card's `_getSensors`; keep the two in step when adding a chip. */
+export function deviceChipKeys(device: HADevice): Set<string> {
+  const keys = new Set<string>();
+  for (const e of device.entities) {
+    const dc = ((e.attributes as Record<string, unknown>)?.device_class as string) ?? '';
+    const id = e.entity_id;
+    if (e.domain === 'sensor') {
+      if (!dc && (id.endsWith('_ip') || id.endsWith('_ip_address'))) { keys.add('ip'); continue; }
+      if (!dc && id.endsWith('_ssid'))                               { keys.add('ssid'); continue; }
+      if (!dc && (id.endsWith('_firmware') || id.endsWith('_fw')))   { keys.add('fw_version'); continue; }
+      if (!dc && id.endsWith('_mac'))                                { keys.add('mac'); continue; }
+      if (dc === 'carbon_dioxide') keys.add('co2');
+      else if (dc === 'signal_strength' || id.includes('rssi')) keys.add('rssi');
+      else if (id.includes('uptime')) keys.add('uptime');
+      else if ([
+        'power', 'apparent_power', 'reactive_power', 'power_factor', 'frequency',
+        'energy', 'voltage', 'current', 'temperature', 'humidity', 'illuminance',
+        'gas', 'battery',
+      ].includes(dc)) keys.add(dc);
+    } else if (e.domain === 'binary_sensor') {
+      if (dc === 'door' || dc === 'window' || dc === 'opening') keys.add('door');
+      else if (dc === 'moisture') keys.add('flood');
+      else if (dc === 'heat' || id.includes('overtemp')) keys.add('overtemp');
+      else if (dc === 'safety' || id.includes('overpower')) keys.add('overpower');
+      else if (dc === 'connectivity') {
+        if (id.includes('cloud')) keys.add('cloud');
+        else if (id.includes('mqtt')) keys.add('mqtt');
+        else if (id.includes('eth')) keys.add('eth');
+      }
+      else if (['motion', 'smoke', 'gas', 'vibration'].includes(dc)) keys.add(dc);
+    }
+  }
+  return keys;
+}
+
+export function deviceRelevance(
+  device: HADevice,
+  states: Record<string, { state?: string; attributes?: Record<string, unknown>; last_changed?: string }>,
+): DeviceRelevance {
+  const chips = deviceChipKeys(device);
+  const has = (domain: string) => device.entities.some(e => e.domain === domain);
+  const countOf = (domain: string) => device.entities.filter(e => e.domain === domain).length;
+
+  const blocks = new Set<TileBlockId>(['name_row', 'badges']);
+  if (chips.size) blocks.add('sensors');
+  const hasGraphs = [...chips].some(k => GRAPHABLE_CHIPS.has(k));
+  if (hasGraphs) blocks.add('graph');
+  if (has('light')) blocks.add('dimmer');
+  if (has('cover')) blocks.add('cover_controls');
+  if (has('climate')) blocks.add('trv_control');
+  if (has('valve')) blocks.add('valve_controls');
+  if (detectInputChannels(device, states).length) blocks.add('input_channels');
+  // A single relay is the tile's own toggle; per-channel rows only earn their
+  // space once there is more than one.
+  if (countOf('switch') + countOf('light') > 1) blocks.add('relay_channels');
+  if (chips.has('power')) blocks.add('power_bar');
+  if (device.entities.some(e => VIRTUAL_SUFFIX[e.domain]?.test(e.entity_id))) blocks.add('virtual_controls');
+  if (['lock', 'media_player', 'fan', 'vacuum'].some(has)) blocks.add('delegated_controls');
+
+  return {
+    chips,
+    blocks,
+    hasEnergy: chips.has('energy') || chips.has('power'),
+    hasGraphs,
+    hasOnOff: ['switch', 'light', 'cover', 'valve', 'fan', 'lock', 'climate', 'binary_sensor']
+      .some(has),
+  };
+}

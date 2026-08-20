@@ -5,7 +5,7 @@ import { keyed } from 'lit/directives/keyed.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent, LovelaceCardConfig } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout, EnergyPeriod, InputActionConfig } from './types';
-import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, setBlockInLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels } from './helpers';
+import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, setBlockInLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels, deviceRelevance } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, applyThemePalette, detectTheme, type ThemePalette } from './themes';
 import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons';
 import { EDITOR_LAYOUT } from './editor-layout';
@@ -207,6 +207,9 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _expandedRooms: Set<string> = new Set();
   @state() private _expandedRoomStyle: Set<string> = new Set();
   @state() private _selectedDeviceId: string | null = null;
+  /** Device-styling panel: false = only this device's own options, true = every
+   *  option the card has. Viewer-local, never written to the config. */
+  @state() private _devPanelAll = false;
   @state() private _deviceSearch = '';
   @state() private _styleClipFeedback = '';   // transient feedback for image-upload errors
   @state() private _openDiscDropdown: string | null = null;  // Discovery: which hide-checklist dropdown is expanded
@@ -690,11 +693,18 @@ export class HADeviceDashboardEditor extends LitElement {
     inheritedSel: string[] | undefined,
     inheritedFrom: string,
     onChange: (next: string[] | undefined) => void,
+    /** When set, only offer these chip keys — the ones the device can actually
+     *  produce. Keys already selected stay visible so nothing becomes unreachable. */
+    only?: Set<string>,
   ): TemplateResult {
     const inherited = inheritedSel ?? [];
     const isOverride = selected !== undefined;
+    const offered = (key: string) => !only || only.has(key) || (selected ?? []).includes(key);
+    const groups = SENSOR_GROUPS
+      .map(g => ({ ...g, items: g.items.filter(i => offered(i.key)) }))
+      .filter(g => g.items.length);
     // Effective set shown: override, else inherited global (empty = all keys on)
-    const allKeys = SENSOR_GROUPS.flatMap(g => g.items.map(i => i.key));
+    const allKeys = SENSOR_GROUPS.flatMap(g => g.items.map(i => i.key)).filter(offered);
     const effective = new Set(isOverride ? selected : (inherited.length ? inherited : allKeys));
     const toggle = (key: string) => {
       const base = isOverride ? [...selected] : [...effective];
@@ -712,7 +722,7 @@ export class HADeviceDashboardEditor extends LitElement {
             ? html`<button class="color-reset" @click=${() => onChange(undefined)}>↺ Inherit</button>`
             : html`<button class="color-reset" @click=${() => onChange([...effective])}>Customize</button>`}
         </div>
-        ${SENSOR_GROUPS.map(grp => html`
+        ${groups.map(grp => html`
           <div class="chip-picker-grp">
             <span class="chip-picker-grp-lbl" style="color:${grp.iconColor}">${grp.icon} ${grp.group}</span>
             <div class="pill-grp">
@@ -1794,10 +1804,14 @@ export class HADeviceDashboardEditor extends LitElement {
     current: TileLayout | undefined,
     inherited: TileLayout,
     apply: (layout: TileLayout | undefined) => void,
+    /** When set, the palette only offers blocks that can render for this device.
+     *  Blocks already placed on the tile always stay draggable. */
+    only?: Set<TileBlockId>,
   ): TemplateResult {
     const rows = normalizeTileLayout(current ?? inherited)!;
     const used = new Set(rows.flat());
-    const hidden = TILE_BLOCKS.map(b => b.id).filter(id => !used.has(id));
+    const hidden = TILE_BLOCKS.map(b => b.id)
+      .filter(id => !used.has(id) && (!only || only.has(id)));
     const label = (id: TileBlockId) => TILE_BLOCKS.find(b => b.id === id)?.label ?? id;
 
     const move = (from: { r: number; i: number }, to: { r: number } | 'new' | 'hide') => {
@@ -1903,6 +1917,12 @@ export class HADeviceDashboardEditor extends LitElement {
 
   private _renderDeviceStylePanel(deviceId: string): TemplateResult {
     const devStyle: DeviceStyle = this._config.device_styles?.[deviceId] ?? {};
+    // Scope the panel to what this device can actually do. Every gate below is
+    // `!narrow || <device has it>`, so "All options" restores the full surface
+    // and nothing a user already configured can become unreachable.
+    const relDev = this._allDevices().find(d => d.device_id === deviceId);
+    const rel = relDev ? deviceRelevance(relDev, (this.hass?.states ?? {}) as any) : null;
+    const narrow = !!rel && !this._devPanelAll;
     const canonical = TILE_BLOCKS.map(b => b.id);
     const globalRaw: TileLayout = this._config.tile_layout ?? canonical;
     const globalLayout: TileBlockId[] = flattenTileLayout(globalRaw)!;
@@ -1969,6 +1989,16 @@ export class HADeviceDashboardEditor extends LitElement {
 
     return html`
       <div class="dev-style-panel">
+        ${rel ? html`
+          <div class="chip-picker-hdr" style="margin-bottom:6px">
+            <span class="chip-picker-state">
+              ${narrow ? 'Showing this device’s options' : 'Showing every option'}
+            </span>
+            <div class="pill-grp">
+              <span class="pill ${narrow ? 'on' : ''}" @click=${() => { this._devPanelAll = false; }}>This device</span>
+              <span class="pill ${narrow ? '' : 'on'}" @click=${() => { this._devPanelAll = true; }}>All options</span>
+            </div>
+          </div>` : nothing}
         <div class="field" style="margin-bottom:6px">
           <div class="field-lbl" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
             Type
@@ -1998,18 +2028,20 @@ export class HADeviceDashboardEditor extends LitElement {
           (url) => this._setDeviceStyle(deviceId, { bg_image: url }),
           (v) => this._setDeviceStyle(deviceId, { bg_image_size: v }),
           () => this._setDeviceStyle(deviceId, { bg_image: undefined, bg_image_size: undefined }))}
+        ${!narrow || rel!.hasEnergy ? html`
         <div class="field" style="margin-top:6px">
           <div class="field-lbl">Energy shows</div>
           ${this._renderEnergyPeriodPicker(devStyle.energy_period, (v) => this._setDeviceStyle(deviceId, { energy_period: v }), true)}
-        </div>
+        </div>` : nothing}
         ${this._adv(html`
+        ${!narrow || rel!.hasEnergy ? html`
         <div class="field" style="margin-top:6px">
           <div class="field-lbl">Energy entity — optional</div>
           <input type="text" class="inline-text" placeholder="sensor.…_energy_daily (Utility Meter)"
             .value=${devStyle.energy_entity ?? ''}
             @change=${(e:Event)=>{ const v=(e.target as HTMLInputElement).value.trim(); this._setDeviceStyle(deviceId, { energy_entity: v || undefined }); }}/>
           <div class="hint" style="margin-top:2px">Point the Energy value at a specific entity (e.g. a Utility Meter). Empty = the device's own energy sensor.</div>
-        </div>
+        </div>` : nothing}
         <div class="tile-icon-row">
           <span class="color-key">Tile icon</span>
           <div class="tile-icon-pickers">
@@ -2042,12 +2074,13 @@ export class HADeviceDashboardEditor extends LitElement {
             <option value="5"    ?selected=${(devStyle.tile_icon_speed ?? 1) === 5}>5× Frantic</option>
           </select>
         </div>`)}
+        ${!narrow || rel!.hasGraphs ? html`
         <div class="field-lbl" style="margin-bottom:4px">Show graphs</div>
         <div class="pill-grp" style="margin-bottom:8px">
           ${([['Inherit', undefined], ['On', true], ['Off', false]] as Array<[string, boolean | undefined]>).map(([lbl, val]) => html`
             <span class="pill ${devStyle.show_graphs === val ? 'on' : ''}"
               @click=${() => this._setDeviceStyle(deviceId, { show_graphs: val })}>${lbl}</span>`)}
-        </div>
+        </div>` : nothing}
         ${(() => {
           // Blocks compose the 'default' style only. Showing this grid on a
           // power-monitor tile would offer toggles that change nothing.
@@ -2059,7 +2092,8 @@ export class HADeviceDashboardEditor extends LitElement {
           if (base && base !== 'default') return nothing;
           return html`
             ${this._renderLayoutCanvas(devStyle.tile_layout, globalRaw,
-              (l) => this._setDeviceStyle(deviceId, { tile_layout: l }))}
+              (l) => this._setDeviceStyle(deviceId, { tile_layout: l }),
+              narrow ? rel!.blocks : undefined)}
             ${/* The canvas supersedes this flat grid — it hides a block by dragging
                   it to the palette. Kept behind Advanced as a no-drag fallback
                   (touch, accessibility) and in case the canvas doesn't stick. It is
@@ -2067,7 +2101,9 @@ export class HADeviceDashboardEditor extends LitElement {
               this._adv(html`
                 <div class="field-lbl" style="margin:6px 0 4px">Visible blocks</div>
                 <div class="block-toggles">
-                  ${TILE_BLOCKS.filter(b => b.id !== 'graph').map(b => {
+                  ${TILE_BLOCKS.filter(b => b.id !== 'graph')
+                    .filter(b => !narrow || rel!.blocks.has(b.id) || (devLayout ?? globalLayout).includes(b.id))
+                    .map(b => {
                     const on = devLayout === null ? globalLayout.includes(b.id) : devLayout.includes(b.id);
                     return html`<span class="block-tog ${on ? 'on' : ''}" @click=${() => toggleBlock(b.id)}>
                       ${on ? '👁' : '○'} ${b.label}
@@ -2162,6 +2198,7 @@ export class HADeviceDashboardEditor extends LitElement {
             })}
           `;
         })()}
+        ${!narrow || rel!.chips.size ? html`
         <div class="field-lbl" style="margin:6px 0 4px">Sensor chips</div>
         ${(() => {
           const areaSel = dev?.area ? this._config.area_styles?.[dev.area]?.sensors : undefined;
@@ -2170,8 +2207,9 @@ export class HADeviceDashboardEditor extends LitElement {
             areaSel?.length ? areaSel : this._config.sensors,
             areaSel?.length ? `area (${dev?.area})` : 'global',
             (next) => this._setDeviceStyle(deviceId, { sensors: next }),
+            narrow ? rel!.chips : undefined,
           );
-        })()}
+        })()}` : nothing}
         ${this._adv(switchEnts.length ? html`
           <div class="field-lbl" style="margin:6px 0 4px">Entity animations</div>
           <div class="ent-anim-header">

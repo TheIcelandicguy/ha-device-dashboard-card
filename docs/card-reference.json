@@ -295,6 +295,7 @@
           { "control": "This device / All <type>s", "fn": "Switch between the per-device and per-profile writer", "key": "none", "scope": "local", "default": "this device", "advanced": false }
         ]},
         { "name": "Per-device style panel", "controls": [
+          { "control": "This device / All options", "fn": "Scope the panel to the controls that do something for this device (its own sensor chips, the blocks it can render, energy only when it meters energy) or show the card's full option surface. Viewer-local, never written to YAML.", "key": "—", "scope": "local", "default": "This device", "advanced": false },
           { "control": "Tile layout style", "fn": "Pick tile render style (Default clears override)", "key": "device_styles[id].tile_style", "scope": "device", "default": "'default'", "advanced": false },
           { "control": "Power-monitor variant", "fn": "Sub-variant when style = power-monitor", "key": "device_styles[id].power_monitor_variant", "scope": "device", "default": "'big-number'", "advanced": false },
           { "control": "Type", "fn": "Override auto-detected device profile", "key": "device_styles[id].profile", "scope": "device", "default": "Auto", "advanced": false },

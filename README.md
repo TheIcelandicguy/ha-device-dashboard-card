@@ -437,7 +437,7 @@ Filter keys: `profiles`, `domains`, `areas`, `devices`, `exclude_devices`,
 | Tab | What it holds |
 |---|---|
 | **Rooms & devices** ⌂ | Sort/visibility toolbar, room and device inclusion, Favourites, **Discovery** (mode, scope, integration and domain filters) and **Extra cards** (header/footer/room) |
-| **Device styling** ◆ | Pick a device, style just it or every device of its type, toggle style elements, and save the result as a reusable named style |
+| **Device styling** ◆ | Pick a device, style just it or every device of its type, toggle style elements, and save the result as a reusable named style. The panel scopes itself to the selected device — its own sensor chips, the blocks it can render, energy controls only when it meters energy — with a **This device / All options** switch to fall back to the full surface |
 | **Views** ☰ | Add, reorder and filter views |
 | **Header** ◈ | Title, chips, gradient, colours, orbs, effects |
 | **Card & Theme** 🎨 | Live preview, tiles, card, colours, typography, and per-room styling behind a room picker |
