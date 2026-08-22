@@ -498,10 +498,16 @@ Filter keys: `profiles`, `domains`, `areas`, `devices`, `exclude_devices`,
 | **Graphs & Sensors** ∿ | Graph type and window, energy window, per-sensor colours and ranges, sensor chip groups |
 | **YAML** `</>` | Read-only view of the whole config with a Copy button |
 
-The **◆ Defaults** overlay sets the first-run look (view, theme, tile style, smart
-styles, native controls, columns, tile size) and holds "Reset look" and "Reset
-everything". The **Advanced** toggle reveals the deeper controls in every tab and is
-remembered per browser.
+The **◆ Defaults** overlay sets the first-run look (view, theme, tile style,
+columns, tile size) and holds "Reset look", "Reset everything" and "Clear local
+tweaks". *Smart tile styles* and *Native controls* live in **Card & Theme →
+Tiles**, with the rest of the tile settings. The **Advanced** toggle reveals the
+deeper controls in every tab and is remembered per browser.
+
+The toolbar row also carries **‹ ›** tab arrows (the tab strip scrolls but hides
+its scrollbar, so a mouse can't reach off-screen tabs) and **💾 Save / 📂 Load**:
+a named snapshot of the whole card config, kept in this browser, plus export and
+import as a JSON file so a setup can move between devices or survive a reset.
 
 Not every option has a control — see the YAML-only list in
 [`docs/tools/reference.html`](docs/tools/reference.html).

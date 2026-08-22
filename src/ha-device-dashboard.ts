@@ -3527,11 +3527,23 @@ export class HADeviceDashboard extends LitElement {
     if (this._config.delegate_controls || this._delegateNoticeDismissed) return html``;
     const n = devices.filter(d => delegatableEntities(d).length > 0).length;
     if (!n) return html``;
+    // Only the edit-dialog preview can act on this: a card on a dashboard has no
+    // way to open its own editor, so there the setting name stays plain text
+    // rather than a link that goes nowhere.
+    const inEditor = this.preview || this.hasAttribute('data-edit-preview');
+    const setting = inEditor
+      ? html`<button class="dn-link" @click=${(e: Event) => {
+          e.stopPropagation();
+          window.dispatchEvent(new CustomEvent('hdd-editor-goto', {
+            detail: { tab: 'card-theme', section: 'tiles', flash: 'delegate_controls' },
+          }));
+        }}>Native controls</button>`
+      : html`<b>Native controls</b>`;
     return html`
       <div class="delegate-notice">
         <span class="dn-icon">◈</span>
         <span class="dn-text">${n} ${n === 1 ? 'device has' : 'devices have'} extra controls
-          (media, fan, vacuum…). Turn on <b>Native controls</b> in the editor to show them.</span>
+          (media, fan, vacuum…). Turn on ${setting} ${inEditor ? 'to show them.' : 'in the editor to show them.'}</span>
         <button class="dn-dismiss" title="Dismiss"
           @click=${(e: Event) => { e.stopPropagation(); this._dismissDelegateNotice(); }}>×</button>
       </div>`;

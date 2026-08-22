@@ -429,6 +429,8 @@ const TABS = [
    note:'Card-wide look, with a live preview strip on top. Tiles is basic; Card, Colours and Typography are advanced-only. Per-room styling lives here too, behind a room picker. Theme presets write the palette into style AND record the name in `theme`; the picker highlights whatever detectTheme reads back out of the colours. The card uses `theme` as a palette base under style, so hand-written YAML can set a theme without listing colours.',
    groups:[
     {name:'Tiles', rows:[
+      ['Smart tile styles','Auto-pick a layout per device type where none is set','smart_tile_styles','global','off',0],
+      ['Native controls','Render HA\'s own tiles for media players, fans, vacuums, locks and other domains this card doesn\'t draw itself. Off by default — each embeds a native element, so it costs render time on big media fleets.','delegate_controls','global','off',0],
       ['Columns','Grid column count (1–6)','columns','global','3',0],
       ['Tile size','Small / Medium / Large','tile_size','global','md',0],
       ['Tile gap','Gap between tiles','style.tile_gap','global','10px',0],
@@ -539,8 +541,7 @@ const TABS = [
       ['Saved theme ★','Restore your saved custom palette','style.* + localStorage','global','none',0],
       ['Default tile style (+ ↺)','Global default tile layout style','tile_style','global','adaptive',0],
       ['Power-monitor variant','Sub-variant for the default tile style','power_monitor_variant','global','big-number',0],
-      ['Smart tile styles','Auto-pick a layout per device type where none is set','smart_tile_styles','global','off',0],
-      ['Native controls','Render HA\'s own tiles for media players, fans, vacuums, locks and other domains this card doesn\'t draw itself. Off by default — each embeds a native element, so it costs render time on big media fleets.','delegate_controls','global','off',0],
+      ['Open Tiles →','Jump to Card & Theme → Tiles, where Smart tile styles and Native controls now live','none','local','—',0],
       ['Default columns','Default grid columns','columns','global','3',0],
       ['Default tile size','Default tile size','tile_size','global','md',0],
       ['More tile settings →','Jump to the Card & Theme tab','none','local','—',0],
@@ -550,6 +551,9 @@ const TABS = [
     {name:'Section toolbar', rows:[
       ['Advanced toggle','Reveal advanced controls across tabs (localStorage, per card)','none (localStorage)','local','off',0],
       ['◆ Defaults button','Open / close the Defaults overlay','none','local','closed',0],
+      ['‹ › tab arrows','Step to the previous / next tab and scroll it into view — the tab strip scrolls but hides its scrollbar, so a mouse cannot reach off-screen tabs','none','local','—',0],
+      ['💾 Save','Save the whole card config as a named snapshot in this browser, or export it to a JSON file','none (localStorage)','local','—',0],
+      ['📂 Load','Restore a saved snapshot, export or delete one, or load a config from a JSON file','whole config','local','—',0],
     ]},
    ]},
 

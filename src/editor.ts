@@ -216,6 +216,14 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _conflictsOpen = false;
   /** How many local tweaks the last clear removed — feedback for that button. */
   @state() private _localTweaksCleared: number | null = null;
+  /** Control id to highlight after a jump, cleared on a timer. */
+  @state() private _flashControl: string | null = null;
+  private _flashTimer: number | null = null;
+  /** Saved whole-card snapshots for this card, from this browser. */
+  @state() private _snapshots: Record<string, { saved: string; config: HADeviceDashboardConfig }> = {};
+  @state() private _snapMenu: 'save' | 'load' | null = null;
+  @state() private _snapName = '';
+  @state() private _snapMsg: string | null = null;
   @state() private _deviceSearch = '';
   @state() private _styleClipFeedback = '';   // transient feedback for image-upload errors
   @state() private _openDiscDropdown: string | null = null;  // Discovery: which hide-checklist dropdown is expanded
@@ -230,6 +238,182 @@ export class HADeviceDashboardEditor extends LitElement {
     this._config = migrateConfig(config);
     this._loadAdvanced();
     this._loadSavedTheme();
+  }
+
+  /** Move one tab left/right and scroll it into view. The tab strip is a
+   *  horizontal scroller with a hidden scrollbar: fine to drag on a touchscreen,
+   *  but with a mouse there is nothing to grab, so off-screen tabs were simply
+   *  unreachable. */
+  private _stepTab(delta: number): void {
+    const ids = EDITOR_LAYOUT.map(t => t.id);
+    const i = ids.indexOf(this._tab);
+    const next = ids[Math.min(ids.length - 1, Math.max(0, (i < 0 ? 0 : i) + delta))];
+    if (!next || next === this._tab) return;
+    this._tab = next;
+    this.updateComplete.then(() => this._scrollTabIntoView(next));
+  }
+
+  private _scrollTabIntoView(id: string): void {
+    const el = this.renderRoot?.querySelector(`.tab[data-tab="${id}"]`);
+    el?.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
+  }
+
+  /** Jump to a control anywhere in the editor and flash it. Used by the card's
+   *  delegate notice, which names a setting it cannot itself reach. */
+  private _gotoControl(tab: string, section: string, ctl: string): void {
+    this._tab = tab;
+    this._defaultsOpen = false;
+    this._openSections = { ...this._openSections, [section]: true };
+    this._flashControl = ctl;
+    if (this._flashTimer) clearTimeout(this._flashTimer);
+    this._flashTimer = window.setTimeout(() => { this._flashControl = null; this._flashTimer = null; }, 2400);
+    this.updateComplete.then(() => {
+      this._scrollTabIntoView(tab);
+      this.renderRoot?.querySelector(`[data-ctl="${ctl}"]`)
+        ?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+  }
+
+  private _onEditorGoto = (e: Event): void => {
+    const d = (e as CustomEvent).detail as { tab?: string; section?: string; flash?: string } | undefined;
+    if (!d?.tab || !d.section || !d.flash) return;
+    this._gotoControl(d.tab, d.section, d.flash);
+  };
+
+  // ── Card snapshots ──────────────────────────────────────────────
+  // A named copy of the whole card config, so a look can be restored after an
+  // experiment or a reset. Browser-local like the saved theme; the file export is
+  // what carries one between devices.
+
+  private _snapshotKey(): string {
+    return `shelly-dashboard:cardSnapshots:${this._config?.title ?? 'default'}`;
+  }
+
+  private _loadSnapshots(): void {
+    try {
+      const raw = localStorage.getItem(this._snapshotKey());
+      this._snapshots = raw ? JSON.parse(raw) as typeof this._snapshots : {};
+    } catch { this._snapshots = {}; }
+  }
+
+  private _writeSnapshots(next: typeof this._snapshots): void {
+    this._snapshots = next;
+    try {
+      localStorage.setItem(this._snapshotKey(), JSON.stringify(next));
+    } catch {
+      // Quota — a config carrying bg_image data URLs can be megabytes.
+      this._snapMsg = 'Too large for browser storage — use Export instead.';
+    }
+  }
+
+  private _saveSnapshot(): void {
+    const name = this._snapName.trim();
+    if (!name) return;
+    const config = JSON.parse(JSON.stringify(this._config)) as HADeviceDashboardConfig;
+    const size = JSON.stringify(config).length;
+    this._writeSnapshots({ ...this._snapshots, [name]: { saved: new Date().toISOString(), config } });
+    this._snapName = '';
+    this._snapMenu = null;
+    this._snapMsg = size > 1_000_000
+      ? `Saved "${name}" — it is large (${Math.round(size / 1024)} KB); export it to a file to be safe.`
+      : `Saved "${name}".`;
+    this._clearSnapMsgSoon();
+  }
+
+  private _applySnapshot(config: HADeviceDashboardConfig): void {
+    // Same path as Reset — one atomic config swap, so a restore can't half-apply.
+    this._emitNow(migrateConfig(config) as HADeviceDashboardConfig);
+    this._snapMenu = null;
+  }
+
+  private _deleteSnapshot(name: string): void {
+    const next = { ...this._snapshots };
+    delete next[name];
+    this._writeSnapshots(next);
+  }
+
+  private _exportSnapshot(name?: string): void {
+    const config = name ? this._snapshots[name]?.config : this._config;
+    if (!config) return;
+    const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(name ?? this._config?.title ?? 'ha-device-dashboard').replace(/[^\w.-]+/g, '-')}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    this._snapMenu = null;
+  }
+
+  private async _importSnapshot(file: File): Promise<void> {
+    try {
+      const parsed = JSON.parse(await file.text()) as Record<string, unknown>;
+      // Files exported from here are the card config; the manual backups written
+      // during the reset wrap it in { card: … }. Accept both.
+      const config = (parsed.type === 'custom:ha-device-dashboard' ? parsed
+        : (parsed.card as Record<string, unknown> | undefined)) as HADeviceDashboardConfig | undefined;
+      if (config?.type !== 'custom:ha-device-dashboard') {
+        this._snapMsg = 'That file is not a config for this card.';
+        this._clearSnapMsgSoon();
+        return;
+      }
+      this._applySnapshot(config);
+      this._snapMsg = `Loaded ${file.name}.`;
+      this._clearSnapMsgSoon();
+    } catch {
+      this._snapMsg = 'Could not read that file.';
+      this._clearSnapMsgSoon();
+    }
+  }
+
+  private _clearSnapMsgSoon(): void {
+    window.setTimeout(() => { this._snapMsg = null; }, 4000);
+  }
+
+  private _renderSnapshotControls(): TemplateResult {
+    const names = Object.keys(this._snapshots).sort((a, b) => a.localeCompare(b));
+    return html`
+      <div class="snap-wrap">
+        <button class="sec-toolbar-btn ${this._snapMenu === 'save' ? 'active' : ''}"
+          title="Save this card's whole configuration"
+          @click=${() => { this._snapMenu = this._snapMenu === 'save' ? null : 'save'; }}>💾 Save</button>
+        <button class="sec-toolbar-btn ${this._snapMenu === 'load' ? 'active' : ''}"
+          title="Restore a saved configuration"
+          @click=${() => { this._loadSnapshots(); this._snapMenu = this._snapMenu === 'load' ? null : 'load'; }}>📂 Load ▾</button>
+
+        ${this._snapMenu === 'save' ? html`
+          <div class="snap-menu">
+            <div class="snap-row">
+              <input type="text" class="inline-text" style="flex:1" placeholder="Name this setup…"
+                .value=${this._snapName}
+                @input=${(e: Event) => { this._snapName = (e.target as HTMLInputElement).value; }}
+                @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') this._saveSnapshot(); }}/>
+              <button class="sec-toolbar-btn" @click=${() => this._saveSnapshot()}>Save</button>
+            </div>
+            <button class="snap-item" @click=${() => this._exportSnapshot()}>⭳ Export current to file…</button>
+          </div>` : nothing}
+
+        ${this._snapMenu === 'load' ? html`
+          <div class="snap-menu">
+            ${names.length ? names.map(n => html`
+              <div class="snap-row">
+                <button class="snap-item" style="flex:1" @click=${() => this._applySnapshot(this._snapshots[n].config)}>
+                  <span class="snap-name">${n}</span>
+                  <span class="snap-date">${new Date(this._snapshots[n].saved).toLocaleDateString()}</span>
+                </button>
+                <button class="snap-x" title="Export" @click=${() => this._exportSnapshot(n)}>⭳</button>
+                <button class="snap-x" title="Delete" @click=${() => this._deleteSnapshot(n)}>✕</button>
+              </div>`)
+              : html`<div class="snap-empty">No saved setups on this browser yet.</div>`}
+            <label class="snap-item">⭱ Load from file…
+              <input type="file" accept="application/json" style="display:none"
+                @change=${(e: Event) => {
+                  const f = (e.target as HTMLInputElement).files?.[0];
+                  if (f) this._importSnapshot(f);
+                }}/>
+            </label>
+          </div>` : nothing}
+      </div>`;
   }
 
   private _savedThemeKey(): string {
@@ -277,6 +461,10 @@ export class HADeviceDashboardEditor extends LitElement {
     super.connectedCallback();
     ensureCdnFontsLoaded();
     window.addEventListener('mousedown', this._onIconPickerOutsideClick, true);
+    // The card can't reach the editor directly — in HA's edit dialog the two are
+    // siblings — so a window event is the channel. Fired by the delegate notice.
+    window.addEventListener('hdd-editor-goto', this._onEditorGoto);
+    this._loadSnapshots();
     this._editorRAF = requestAnimationFrame(() => {
       const root1 = this.getRootNode() as ShadowRoot;
       const cardElementEditor = root1?.host as HTMLElement | null;
@@ -398,6 +586,8 @@ export class HADeviceDashboardEditor extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     window.removeEventListener('mousedown', this._onIconPickerOutsideClick, true);
+    window.removeEventListener('hdd-editor-goto', this._onEditorGoto);
+    if (this._flashTimer) { clearTimeout(this._flashTimer); this._flashTimer = null; }
     // Tear down the dialog-sizing plumbing so it doesn't leak across editor opens.
     if (this._editorRAF != null) { cancelAnimationFrame(this._editorRAF); this._editorRAF = undefined; }
     this._editorLayoutTimers.forEach(t => clearTimeout(t));
@@ -3098,6 +3288,22 @@ export class HADeviceDashboardEditor extends LitElement {
     const tileTranspPct  = c.tile_opacity  ?? 100;
     const tilesBody = html`
       ${this._gridBody()}
+      <div class="tog-row" data-ctl="smart_tile_styles">
+        <div class="tog-lbl">Smart tile styles
+          <div class="hint">Auto-pick a layout per device type where you haven't set one — relay→power monitor, light→colour wheel, sensor→card.</div>
+        </div>
+        <label class="sw"><input type="checkbox" .checked=${c.smart_tile_styles === true}
+          @change=${(e: Event) => this._set('smart_tile_styles', (e.target as HTMLInputElement).checked || undefined)}>
+          <span class="sw-t"></span><span class="sw-b"></span></label>
+      </div>
+      <div class="tog-row ${this._flashControl === 'delegate_controls' ? 'ctl-flash' : ''}" data-ctl="delegate_controls">
+        <div class="tog-lbl">Native controls
+          <div class="hint">Show controls for media players, fans, vacuums, locks and other devices this card doesn't draw itself, using Home Assistant's own tiles. Off by default — each one embeds a native element, so it costs a little render time on big media fleets.</div>
+        </div>
+        <label class="sw"><input type="checkbox" .checked=${c.delegate_controls === true}
+          @change=${(e: Event) => this._set('delegate_controls', (e.target as HTMLInputElement).checked || undefined)}>
+          <span class="sw-t"></span><span class="sw-b"></span></label>
+      </div>
       <div class="field">
         <div class="field-lbl">Tile size</div>
         <div class="pill-grp">
@@ -3954,23 +4160,10 @@ export class HADeviceDashboardEditor extends LitElement {
           </div>
 
           <div class="dp-group">
-            <div class="dp-title" style="display:flex;align-items:center;justify-content:space-between">
-              <span>Smart tile styles</span>
-              <label class="sw"><input type="checkbox" .checked=${c.smart_tile_styles === true}
-                @change=${(e:Event)=>this._set('smart_tile_styles',(e.target as HTMLInputElement).checked || undefined)}>
-                <span class="sw-t"></span><span class="sw-b"></span></label>
-            </div>
-            <div class="dp-hint-inline">Auto-pick a layout per device type where you haven't set one — relay→power monitor, light→colour wheel, sensor→card.</div>
-          </div>
-
-          <div class="dp-group">
-            <div class="dp-title" style="display:flex;align-items:center;justify-content:space-between">
-              <span>Native controls</span>
-              <label class="sw"><input type="checkbox" .checked=${c.delegate_controls === true}
-                @change=${(e:Event)=>this._set('delegate_controls',(e.target as HTMLInputElement).checked || undefined)}>
-                <span class="sw-t"></span><span class="sw-b"></span></label>
-            </div>
-            <div class="dp-hint-inline">Show controls for media players, fans, vacuums, locks and other devices this card doesn't draw itself, using Home Assistant's own tiles. Off by default — each one embeds a native element, so it costs a little render time on big media fleets.</div>
+            <div class="dp-title">Tile behaviour</div>
+            <div class="dp-hint-inline">Smart tile styles and Native controls moved to Card &amp; Theme → Tiles, next to the rest of the tile settings.</div>
+            <button class="sec-toolbar-btn" style="align-self:flex-start"
+              @click=${() => { this._gotoControl('card-theme', 'tiles', 'delegate_controls'); this._defaultsOpen = false; }}>Open Tiles →</button>
           </div>
 
           <div class="dp-group">
@@ -4042,13 +4235,20 @@ export class HADeviceDashboardEditor extends LitElement {
       this._openSections = next;
     };
     const showSectionToggle = curKeys.length > 1;
+    const tabIdx = tabs.findIndex(t => t.id === this._tab);
     return html`
       <div class="shell">
-        <div class="tab-nav">
-          ${tabs.map(t => html`
-            <div class="tab ${this._tab===t.id?'active':''}" @click=${()=>{this._tab=t.id;}}>
-              <span class="tab-icon">${t.icon}</span>${t.label}
-            </div>`)}
+        <div class="tab-nav-wrap">
+          <button class="tab-arrow" title="Previous tab" ?disabled=${tabIdx <= 0}
+            @click=${() => this._stepTab(-1)}>‹</button>
+          <div class="tab-nav">
+            ${tabs.map(t => html`
+              <div class="tab ${this._tab===t.id?'active':''}" data-tab=${t.id} @click=${()=>{this._tab=t.id;}}>
+                <span class="tab-icon">${t.icon}</span>${t.label}
+              </div>`)}
+          </div>
+          <button class="tab-arrow" title="Next tab" ?disabled=${tabIdx >= tabs.length - 1}
+            @click=${() => this._stepTab(1)}>›</button>
         </div>
         <div class="sec-toolbar">
           <label class="adv-toggle" title="Show advanced, power-user controls">
@@ -4067,7 +4267,9 @@ export class HADeviceDashboardEditor extends LitElement {
             <button class="sec-toolbar-btn" title="Expand all sections" @click=${() => setAllSections(true)}>▾ Expand all</button>
             <button class="sec-toolbar-btn" title="Collapse all sections" @click=${() => setAllSections(false)}>▸ Collapse all</button>
           ` : nothing}
+          ${this._renderSnapshotControls()}
         </div>
+        ${this._snapMsg ? html`<div class="snap-msg">${this._snapMsg}</div>` : nothing}
         ${this._defaultsOpen ? this._renderDefaultsPanel() : nothing}
         ${this._renderConflicts()}
         <div class="tab-body">
@@ -4109,14 +4311,41 @@ export class HADeviceDashboardEditor extends LitElement {
       display:flex; flex-direction:column;
       min-height:400px;
     }
-    .tab-nav { display:flex; gap:2px; padding:10px 16px 0; border-bottom:1px solid var(--border); background:var(--s1); overflow-x:auto; flex-shrink:0; }
+    /* Arrows flank the strip: it scrolls, but its scrollbar is hidden and a mouse
+       has nothing to drag, so off-screen tabs were unreachable on a tablet. */
+    .tab-nav-wrap { display:flex; align-items:stretch; background:var(--s1);
+      border-bottom:1px solid var(--border); flex-shrink:0; }
+    .tab-arrow { flex:0 0 auto; padding:10px 8px 0; background:none; border:none; cursor:pointer;
+      color:var(--t2); font-size:18px; line-height:1; font-family:inherit; }
+    .tab-arrow:hover:not(:disabled) { color:var(--accent); }
+    .tab-arrow:disabled { opacity:.25; cursor:default; }
+    .tab-nav { display:flex; gap:2px; padding:10px 4px 0; background:var(--s1); overflow-x:auto; flex:1; min-width:0; scroll-behavior:smooth; }
     .tab-nav::-webkit-scrollbar { height:0; }
     .tab { font-size:11px; font-weight:500; letter-spacing:0.05em; text-transform:uppercase; padding:8px 14px; color:var(--t3); cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap; transition:all .15s; border-radius:5px 5px 0 0; user-select:none; display:flex; align-items:center; }
     .tab:hover { color:var(--t2); }
     .tab.active { color:var(--accent); border-bottom-color:var(--accent); }
     .tab-icon { margin-right:5px; font-size:10px; opacity:0.7; }
     .sec-toolbar { display:flex; align-items:center; gap:6px; padding:8px 16px 0; background:var(--s1); flex-shrink:0; }
+    /* Brief pulse on a control someone was sent to, so the jump lands visibly. */
+    @keyframes ctl-flash { 0%,100% { background:transparent; } 30% { background:var(--accentbg); } }
+    .ctl-flash { animation:ctl-flash 1.1s ease-in-out 2; border-radius:8px; }
     .sec-toolbar-spacer { flex:1; }
+    .snap-wrap { position:relative; display:flex; gap:6px; }
+    .snap-menu { position:absolute; top:calc(100% + 6px); right:0; z-index:30; min-width:250px;
+      display:flex; flex-direction:column; gap:4px; padding:8px;
+      background:var(--s2,var(--s1)); border:1px solid var(--border); border-radius:10px;
+      box-shadow:0 8px 24px rgba(0,0,0,.35); }
+    .snap-row { display:flex; align-items:center; gap:4px; }
+    .snap-item { display:flex; align-items:center; justify-content:space-between; gap:8px;
+      padding:6px 8px; border-radius:7px; border:1px solid transparent; background:none;
+      color:var(--text); font:inherit; font-size:12px; cursor:pointer; text-align:left; }
+    .snap-item:hover { background:var(--s1); border-color:var(--border); }
+    .snap-name { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .snap-date { font-size:10.5px; color:var(--t3); white-space:nowrap; }
+    .snap-x { background:none; border:none; color:var(--t3); cursor:pointer; font-size:12px; padding:4px; }
+    .snap-x:hover { color:var(--accent); }
+    .snap-empty { font-size:11.5px; color:var(--t3); padding:4px 8px; }
+    .snap-msg { margin:6px 16px 0; font-size:11.5px; color:var(--accent); }
     .adv-toggle { display:inline-flex; align-items:center; gap:7px; cursor:pointer; user-select:none; }
     .adv-lbl { font-size:11px; font-weight:600; letter-spacing:.02em; color:var(--t2); }
     .adv-toggle:hover .adv-lbl { color:var(--text); }

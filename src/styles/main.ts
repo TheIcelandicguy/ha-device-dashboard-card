@@ -1088,6 +1088,11 @@ export const mainCss = css`
     .input-row-event { flex:1; font-size:12px; color:var(--sc-text-secondary); text-transform:capitalize; }
 
     .input-row-time { font-size:11px; color:var(--sc-text-muted); white-space:nowrap; }
+    /* Delegate notice: the setting name is a link only inside the editor preview. */
+    .dn-link { font:inherit; font-weight:700; color:var(--sc-accent); background:none;
+      border:none; padding:0; cursor:pointer; text-decoration:underline;
+      text-underline-offset:2px; }
+    .dn-link:hover { filter:brightness(1.15); }
     /* Action button on an input row — i3/i4 inputs have no output of their own,
        so this runs the action assigned to the channel. */
     .input-act { max-width:40%; padding:3px 9px; border-radius:999px; cursor:pointer;

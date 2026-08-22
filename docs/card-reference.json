@@ -386,6 +386,8 @@
       "note": "Card-wide look, with a live preview strip on top. Tiles is basic; Card, Colours and Typography are advanced-only. Per-room styling lives here too, behind a room picker. Theme presets write the palette into style AND record the name in `theme`; the picker highlights whatever detectTheme reads back out of the colours. The card uses `theme` as a palette base under style, so hand-written YAML can set a theme without listing colours.",
       "groups": [
         { "name": "Tiles", "controls": [
+          { "control": "Smart tile styles", "fn": "Auto-pick a layout per device type where none is set", "key": "smart_tile_styles", "scope": "global", "default": "off", "advanced": false },
+          { "control": "Native controls", "fn": "Render HA's own tiles for media players, fans, vacuums, locks and other domains this card doesn't draw itself. Off by default — each embeds a native element, so it costs render time on big media fleets.", "key": "delegate_controls", "scope": "global", "default": "off", "advanced": false },
           { "control": "Columns", "fn": "Grid column count (1–6)", "key": "columns", "scope": "global", "default": "3", "advanced": false },
           { "control": "Tile size", "fn": "Small / Medium / Large", "key": "tile_size", "scope": "global", "default": "md", "advanced": false },
           { "control": "Tile gap", "fn": "Gap between tiles", "key": "style.tile_gap", "scope": "global", "default": "10px", "advanced": false },
@@ -493,8 +495,7 @@
           { "control": "Saved theme ★", "fn": "Restore your saved custom palette", "key": "style.* + localStorage", "scope": "global", "default": "none", "advanced": false },
           { "control": "Default tile style (+ ↺)", "fn": "Global default tile layout style", "key": "tile_style", "scope": "global", "default": "adaptive", "advanced": false },
           { "control": "Power-monitor variant", "fn": "Sub-variant for the default tile style", "key": "power_monitor_variant", "scope": "global", "default": "big-number", "advanced": false },
-          { "control": "Smart tile styles", "fn": "Auto-pick a layout per device type where none is set", "key": "smart_tile_styles", "scope": "global", "default": "off", "advanced": false },
-          { "control": "Native controls", "fn": "Render HA's own tiles for media players, fans, vacuums, locks and other domains this card doesn't draw itself. Off by default — each embeds a native element, so it costs render time on big media fleets.", "key": "delegate_controls", "scope": "global", "default": "off", "advanced": false },
+          { "control": "Open Tiles →", "fn": "Jump to Card & Theme → Tiles, where Smart tile styles and Native controls now live", "key": "none", "scope": "local", "default": "—", "advanced": false },
           { "control": "Default columns", "fn": "Default grid columns", "key": "columns", "scope": "global", "default": "3", "advanced": false },
           { "control": "Default tile size", "fn": "Default tile size", "key": "tile_size", "scope": "global", "default": "md", "advanced": false },
           { "control": "More tile settings →", "fn": "Jump to the Card & Theme tab", "key": "none", "scope": "local", "default": "—", "advanced": false },
@@ -503,7 +504,10 @@
         ]},
         { "name": "Section toolbar", "controls": [
           { "control": "Advanced toggle", "fn": "Reveal advanced controls across tabs (localStorage, per card)", "key": "none (localStorage)", "scope": "local", "default": "off", "advanced": false },
-          { "control": "◆ Defaults button", "fn": "Open / close the Defaults overlay", "key": "none", "scope": "local", "default": "closed", "advanced": false }
+          { "control": "◆ Defaults button", "fn": "Open / close the Defaults overlay", "key": "none", "scope": "local", "default": "closed", "advanced": false },
+          { "control": "‹ › tab arrows", "fn": "Step to the previous / next tab and scroll it into view — the tab strip scrolls but hides its scrollbar, so a mouse cannot reach off-screen tabs", "key": "none", "scope": "local", "default": "—", "advanced": false },
+          { "control": "💾 Save", "fn": "Save the whole card config as a named snapshot in this browser, or export it to a JSON file", "key": "none (localStorage)", "scope": "local", "default": "—", "advanced": false },
+          { "control": "📂 Load", "fn": "Restore a saved snapshot, export or delete one, or load a config from a JSON file", "key": "whole config", "scope": "local", "default": "—", "advanced": false }
         ]}
       ]}
   ]
