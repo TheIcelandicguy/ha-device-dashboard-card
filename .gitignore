@@ -9,3 +9,6 @@ Thumbs.db
 
 # personal HA config snapshots — never commit
 backups/
+
+# scratch patch scripts
+.tmp-*

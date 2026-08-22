@@ -1212,6 +1212,29 @@ export function factoryLook(): Partial<HADeviceDashboardConfig> {
 }
 
 
+/** Every key `HADeviceDashboardConfig` accepts, at runtime.
+ *  A TypeScript interface vanishes at compile time, so the editor cannot reflect
+ *  over it to spot a typo'd or obsolete key — hence this list. It is not allowed
+ *  to drift: `npm run check:docs` compares it against the interface. */
+export const CONFIG_KEYS: readonly string[] = [
+  'type', 'views', 'default_view', 'mode', 'universal_scope', 'include_integrations',
+  'exclude_integrations', 'include_domains', 'exclude_domains', 'delegate_controls',
+  'header_cards', 'footer_cards', 'area_cards', 'areas', 'hidden_devices', 'favorites',
+  'hidden_entities', 'show_offline', 'title', 'columns', 'tile_size', 'sort_by', 'tile_style',
+  'smart_tile_styles', 'power_monitor_variant', 'show_graphs', 'tile_layout', 'tile_opacity',
+  'card_opacity', 'header_opacity', 'header_show_title', 'header_show_stats',
+  'header_show_cloud', 'header_show_orbs', 'effects', 'header_chips', 'card_bg_image',
+  'card_bg_image_size', 'show_power_bar', 'power_bar_max', 'show_entity_list', 'theme',
+  'style', 'area_styles', 'device_styles', 'profile_styles', 'style_presets', 'custom_styles',
+  'energy_period', 'graph_sensors', 'graph_hours', 'graph_style', 'graph_line_color',
+  'graph_sensor_colors', 'sensors'
+];
+
+/** Keys Home Assistant itself writes onto a card config — not ours, not typos. */
+export const LOVELACE_KEYS: readonly string[] = [
+  'grid_options', 'view_layout', 'layout_options', 'visibility', 'card_mod',
+];
+
 // ─── Input channels ────────────────────────────────────────────────────────────
 
 /** Binary sensors that report an input's steady state. Gen2+ Shelly tags these

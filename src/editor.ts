@@ -5,7 +5,8 @@ import { keyed } from 'lit/directives/keyed.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent, LovelaceCardConfig } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout, EnergyPeriod, InputActionConfig } from './types';
-import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, setBlockInLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels, deviceRelevance } from './helpers';
+import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, setBlockInLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels, deviceRelevance,
+  CONFIG_KEYS, LOVELACE_KEYS } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, detectTheme, type ThemePalette } from './themes';
 import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons';
 import { EDITOR_LAYOUT } from './editor-layout';
@@ -4141,6 +4142,43 @@ export class HADeviceDashboardEditor extends LitElement {
       out.push({
         title: `Room styling for rooms with no devices: ${staleAreas.join(', ')}`,
         detail: 'Usually a renamed area — room styles are keyed by name, so a rename orphans them.',
+      });
+    }
+
+    // Keys the card does not read. This is how the README's fictional options
+    // (include_all, hide_shelly, view_mode…) went unnoticed for months: a card
+    // silently ignores anything it does not understand.
+    const unknown = Object.keys(c).filter(k =>
+      !CONFIG_KEYS.includes(k) && !LOVELACE_KEYS.includes(k) && !k.startsWith('_'));
+    if (unknown.length) {
+      out.push({
+        title: `The card does not read: ${unknown.join(', ')}`,
+        detail: 'Unknown keys are ignored in silence — usually a typo, an option from another card, or one this card has dropped.',
+      });
+    }
+
+    // input_actions are keyed by the channel's entity_id, so renaming that
+    // entity orphans the action: the key stops matching a channel and quietly
+    // disappears from the tile.
+    const orphaned: string[] = [];
+    for (const [devId, ds] of Object.entries(c.device_styles ?? {})) {
+      const keys = Object.keys(ds.input_actions ?? {});
+      if (!keys.length || !this.hass) continue;
+      const dev = devices.find(d => d.device_id === devId);
+      if (!dev) continue;   // a missing device is already reported above
+      const channels = detectInputChannels(dev, this.hass.states as never);
+      for (const k of keys) {
+        // A bare number is the hand-written form, matched by channel number.
+        const matched = /^\d+$/.test(k)
+          ? channels.some(ch => String(ch.channel) === k)
+          : channels.some(ch => ch.entityId === k);
+        if (!matched) orphaned.push(`${dev.name} → ${k}`);
+      }
+    }
+    if (orphaned.length) {
+      out.push({
+        title: `Input action for a channel that is not there: ${orphaned.join('; ')}`,
+        detail: 'That channel entity was renamed or removed, so the key never renders. Re-add the action against the current channel.',
       });
     }
 

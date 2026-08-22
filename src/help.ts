@@ -98,7 +98,7 @@ export const HELP_CONCEPTS: HelpTopic[] = [
     title: 'The Conflicts panel',
     body: [
       'When a setting is overridden or ignored, a badge appears above the editor tabs. It exists because the failure is otherwise silent — the option is valid, it just never applies.',
-      'It watches for: a theme its `style` block contradicts, smart tile styles masked by a card-wide style, discovery filters set while in Shelly mode, an integration or domain in both the include and exclude lists, the Native controls block with the feature switched off, a saved style that no longer exists, styling attached to a device or room that is gone, input actions pointing at missing entities, and hide lists that hide absolutely everything.',
+      'It watches for: a theme its `style` block contradicts, smart tile styles masked by a card-wide style, discovery filters set while in Shelly mode, an integration or domain in both the include and exclude lists, the Native controls block with the feature switched off, a saved style that no longer exists, styling attached to a device or room that is gone, input actions pointing at missing entities, hide lists that hide absolutely everything, keys the card does not read at all, and an input action whose channel has been renamed out from under it.',
       'Nothing there is an error — a stale block is harmless. It is a list of things that are not doing what they look like they are doing.',
     ],
   },

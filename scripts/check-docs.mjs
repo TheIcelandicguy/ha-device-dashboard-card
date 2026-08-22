@@ -134,11 +134,27 @@ if (fd && ref.firstRun) {
   }
 }
 
+// `[^{]*` because the interface extends LovelaceCardConfig. Without it this
+// matched nothing, and every check depending on it skipped in silence.
+const cfg = types.match(/interface HADeviceDashboardConfig[^{]*\{([\s\S]*?)\n\}/);
+const cfgKeys = cfg ? [...new Set([...cfg[1].matchAll(/^\s{2}(\w+)\??:/gm)].map((m) => m[1]))] : [];
+
+// ── the runtime key list vs the interface ──
+// CONFIG_KEYS drives the editor's "the card does not read this" warning, so a
+// key missing from it would be reported to the user as unknown.
+const keyList = helpers.match(/CONFIG_KEYS[^=]*=\s*\[([\s\S]*?)\];/);
+if (keyList && cfgKeys.length) {
+  const listed = [...keyList[1].matchAll(/'(\w+)'/g)].map((m) => m[1]);
+  const gone = missing(cfgKeys, listed);
+  const extra = missing(listed, cfgKeys);
+  if (gone.length) note('helpers.CONFIG_KEYS', `missing ${gone.join(', ')} — the editor would call them unknown`);
+  if (extra.length) note('helpers.CONFIG_KEYS', `lists keys the interface no longer has: ${extra.join(', ')}`);
+}
+
 // ── config keys the README never mentions ──
-const cfg = types.match(/interface HADeviceDashboardConfig \{([\s\S]*?)\n\}/);
 const readme = read('README.md');
 if (cfg) {
-  const keys = [...cfg[1].matchAll(/^\s{2}(\w+)\?:/gm)].map((m) => m[1]);
+  const keys = cfgKeys;
   const undocumented = keys.filter((k) => !readme.includes(k) && !['type'].includes(k));
   if (undocumented.length) note('README.md', `config keys never mentioned: ${undocumented.join(', ')}`);
 }
