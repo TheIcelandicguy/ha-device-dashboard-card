@@ -10,7 +10,8 @@
     "build":     "rollup -c rollup.config.mjs",
     "watch":     "rollup -c rollup.config.mjs --watch",
     "typecheck": "tsc --noEmit",
-    "lint":      "eslint src --ext .ts"
+    "lint":      "eslint src --ext .ts",
+    "docs:guide": "node scripts/gen-guide.mjs"
   },
   "devDependencies": {
     "@rollup/plugin-node-resolve": "^15.2.3",

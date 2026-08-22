@@ -321,7 +321,9 @@ function buildConfig(){
   const hcDef=DEFAULTS.header_chips;
   if(S.header_chips.length!==hcDef.length || S.header_chips.some((k,i)=>k!==hcDef[i])) c.header_chips=[...S.header_chips];
   if(S.sensors.length!==ALL_SENSORS.length) c.sensors=[...S.sensors];
-  if(S.theme!=='warm_dusk') c.style={...THEME_MAP[S.theme]};
+  /* theme is authoritative — writing its palette into style would shadow it,
+     which is exactly the drift the card now migrates away from. */
+  if(S.theme!=='warm_dusk') c.theme=S.theme;
   return c;
 }
 
@@ -426,7 +428,9 @@ function applyConfig(c){
   S.header_show_orbs=c.header_show_orbs===true;
   if(Array.isArray(c.header_chips)) S.header_chips=c.header_chips.filter(k=>HC_LABEL[k]);
   if(Array.isArray(c.sensors)) S.sensors=c.sensors.filter(k=>ALL_SENSORS.includes(k));
-  if(c.style&&typeof c.style==='object'){ const t=matchTheme(c.style); if(t) S.theme=t; }
+  if(typeof c.theme==='string'&&THEME_MAP[c.theme]) S.theme=c.theme;
+  /* older configs carried the palette in style: instead */
+  else if(c.style&&typeof c.style==='object'){ const t=matchTheme(c.style); if(t) S.theme=t; }
   render(); sync();
   return Object.keys(c).filter(k=>!MANAGED.includes(k));
 }

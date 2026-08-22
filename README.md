@@ -541,6 +541,11 @@ sub-devices merged into their parent.
 
 ## Docs & tools
 
+**New here? Read [`docs/GUIDE.md`](docs/GUIDE.md)** — the concepts (why a setting
+sometimes does nothing, discovery, profiles vs styles vs blocks, input devices,
+themes) and short recipes. The editor shows the same text under **? Help**.
+
+
 - [`docs/card-reference.json`](docs/card-reference.json) — machine-readable model of
   the whole config surface: defaults, profiles, themes, vocabularies, every editor
   control, and the YAML-only keys

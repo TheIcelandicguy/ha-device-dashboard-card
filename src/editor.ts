@@ -9,6 +9,7 @@ import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, D
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, detectTheme, type ThemePalette } from './themes';
 import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons';
 import { EDITOR_LAYOUT } from './editor-layout';
+import { HELP_CONCEPTS, HELP_RECIPES, HELP_INTRO, type HelpTopic } from './help';
 
 /** The global `style` sub-object — typed so key access catches typos. */
 type StyleCfg = NonNullable<HADeviceDashboardConfig['style']>;
@@ -224,6 +225,10 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _snapMenu: 'save' | 'load' | null = null;
   @state() private _snapName = '';
   @state() private _snapMsg: string | null = null;
+  /** ? Help overlay — open flag, free-text filter, and which topic is expanded. */
+  @state() private _helpOpen = false;
+  @state() private _helpFilter = '';
+  @state() private _helpTopic: string | null = null;
   @state() private _deviceSearch = '';
   @state() private _styleClipFeedback = '';   // transient feedback for image-upload errors
   @state() private _openDiscDropdown: string | null = null;  // Discovery: which hide-checklist dropdown is expanded
@@ -413,6 +418,60 @@ export class HADeviceDashboardEditor extends LitElement {
                 }}/>
             </label>
           </div>` : nothing}
+      </div>`;
+  }
+
+  /** Inline `code` spans and **bold** in help prose, kept to those two so the
+   *  same source renders as markdown in docs/GUIDE.md without a parser. */
+  private _helpText(line: string): TemplateResult {
+    const parts = line.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
+    return html`${parts.map(t =>
+      t.startsWith('`') && t.endsWith('`') ? html`<code class="help-code">${t.slice(1, -1)}</code>`
+      : t.startsWith('**') && t.endsWith('**') ? html`<b>${t.slice(2, -2)}</b>`
+      : t)}`;
+  }
+
+  private _renderHelpTopic(t: HelpTopic): TemplateResult {
+    const open = this._helpTopic === t.id;
+    return html`
+      <div class="help-topic ${open ? 'open' : ''}">
+        <button class="help-topic-hdr" @click=${() => { this._helpTopic = open ? null : t.id; }}>
+          <span class="help-caret">${open ? '▾' : '▸'}</span>${t.title}
+        </button>
+        ${open ? html`
+          <div class="help-topic-body">
+            ${t.body.map(pgh => html`<p>${this._helpText(pgh)}</p>`)}
+            ${t.steps ? html`<ol>${t.steps.map(st => html`<li>${this._helpText(st)}</li>`)}</ol>` : nothing}
+          </div>` : nothing}
+      </div>`;
+  }
+
+  private _renderHelpPanel(): TemplateResult {
+    const q = this._helpFilter.trim().toLowerCase();
+    const match = (t: HelpTopic) => !q
+      || t.title.toLowerCase().includes(q)
+      || t.body.some(b => b.toLowerCase().includes(q))
+      || (t.steps ?? []).some(b => b.toLowerCase().includes(q));
+    const concepts = HELP_CONCEPTS.filter(match);
+    const recipes = HELP_RECIPES.filter(match);
+    return html`
+      <div class="help-panel">
+        <div class="help-hdr">
+          <span class="help-title">Help</span>
+          <input type="text" class="inline-text help-search" placeholder="Search help…"
+            .value=${this._helpFilter}
+            @input=${(e: Event) => { this._helpFilter = (e.target as HTMLInputElement).value; }}/>
+          <button class="snap-x" title="Close" @click=${() => { this._helpOpen = false; }}>✕</button>
+        </div>
+        <div class="help-intro">${HELP_INTRO}</div>
+        ${concepts.length ? html`
+          <div class="help-group">How it works</div>
+          ${concepts.map(t => this._renderHelpTopic(t))}` : nothing}
+        ${recipes.length ? html`
+          <div class="help-group">Recipes</div>
+          ${recipes.map(t => this._renderHelpTopic(t))}` : nothing}
+        ${!concepts.length && !recipes.length
+          ? html`<div class="snap-empty">Nothing matches “${this._helpFilter}”.</div>` : nothing}
       </div>`;
   }
 
@@ -4293,6 +4352,9 @@ export class HADeviceDashboardEditor extends LitElement {
           <button class="sec-toolbar-btn defaults-btn ${this._defaultsOpen ? 'active' : ''}"
             title="Set the card's default look — view, theme, tile style & layout"
             @click=${() => { this._defaultsOpen = !this._defaultsOpen; }}>◆ Defaults</button>
+          <button class="sec-toolbar-btn ${this._helpOpen ? 'active' : ''}"
+            title="How the card fits together"
+            @click=${() => { this._helpOpen = !this._helpOpen; }}>? Help</button>
           <span class="sec-toolbar-spacer"></span>
           ${showSectionToggle ? html`
             <button class="sec-toolbar-btn" title="Expand all sections" @click=${() => setAllSections(true)}>▾ Expand all</button>
@@ -4302,6 +4364,7 @@ export class HADeviceDashboardEditor extends LitElement {
         </div>
         ${this._snapMsg ? html`<div class="snap-msg">${this._snapMsg}</div>` : nothing}
         ${this._defaultsOpen ? this._renderDefaultsPanel() : nothing}
+        ${this._helpOpen ? this._renderHelpPanel() : nothing}
         ${this._renderConflicts()}
         <div class="tab-body">
           ${(() => {
@@ -4377,6 +4440,29 @@ export class HADeviceDashboardEditor extends LitElement {
     .snap-x:hover { color:var(--accent); }
     .snap-empty { font-size:11.5px; color:var(--t3); padding:4px 8px; }
     .snap-msg { margin:6px 16px 0; font-size:11.5px; color:var(--accent); }
+
+    /* ? Help — concepts then recipes, one topic open at a time. */
+    .help-panel { margin:8px 16px 0; padding:10px; border:1px solid var(--border); border-radius:10px;
+      background:var(--s2,var(--s1)); max-height:52vh; overflow-y:auto; }
+    .help-hdr { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+    .help-title { font-size:12.5px; font-weight:700; color:var(--accent); }
+    .help-search { flex:1; }
+    .help-intro { font-size:11.5px; color:var(--t2); line-height:1.5; margin-bottom:8px; }
+    .help-group { font-size:10.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
+      color:var(--t3); margin:10px 0 4px; }
+    .help-topic { border-top:1px solid var(--border); }
+    .help-topic-hdr { display:flex; align-items:center; gap:6px; width:100%; padding:7px 2px;
+      background:none; border:none; color:var(--text); font:inherit; font-size:12px; font-weight:600;
+      text-align:left; cursor:pointer; }
+    .help-topic-hdr:hover { color:var(--accent); }
+    .help-caret { color:var(--t3); font-size:10px; }
+    .help-topic-body { padding:0 2px 8px 16px; font-size:11.5px; color:var(--t2); line-height:1.6; }
+    .help-topic-body p { margin:0 0 7px; }
+    .help-topic-body ol { margin:6px 0 0; padding-left:18px; }
+    .help-topic-body li { margin-bottom:5px; }
+    .help-topic-body b { color:var(--text); }
+    .help-code { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:10.5px;
+      background:var(--s1); border:1px solid var(--border); border-radius:4px; padding:1px 4px; }
     .adv-toggle { display:inline-flex; align-items:center; gap:7px; cursor:pointer; user-select:none; }
     .adv-lbl { font-size:11px; font-weight:600; letter-spacing:.02em; color:var(--t2); }
     .adv-toggle:hover .adv-lbl { color:var(--text); }
