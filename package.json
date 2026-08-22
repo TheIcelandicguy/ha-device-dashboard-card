@@ -13,7 +13,9 @@
     "lint":      "eslint src --ext .ts",
     "docs:guide": "node scripts/gen-guide.mjs",
     "test:builder": "node scripts/test-config-builder.mjs",
-    "check:docs": "node scripts/check-docs.mjs"
+    "check:docs": "node scripts/check-docs.mjs",
+    "test:create": "node scripts/test-card-builder.mjs",
+    "test": "npm run check:docs && npm run test:builder && npm run test:create"
   },
   "devDependencies": {
     "@rollup/plugin-node-resolve": "^15.2.3",

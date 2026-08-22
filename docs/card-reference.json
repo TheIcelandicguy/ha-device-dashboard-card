@@ -508,6 +508,7 @@
           { "control": "Advanced toggle", "fn": "Reveal advanced controls across tabs (localStorage, per card)", "key": "none (localStorage)", "scope": "local", "default": "off", "advanced": false },
           { "control": "◆ Defaults button", "fn": "Open / close the Defaults overlay", "key": "none", "scope": "local", "default": "closed", "advanced": false },
           { "control": "‹ › tab arrows", "fn": "Step to the previous / next tab and scroll it into view — the tab strip scrolls but hides its scrollbar, so a mouse cannot reach off-screen tabs", "key": "none", "scope": "local", "default": "—", "advanced": false },
+          { "control": "✨ Create", "fn": "Build a whole card from a checklist (what to show, tiles, colours), with 🎲 Random to roll the choices from the card's own vocabularies and ✨ Surprise me to generate a contrast-checked palette. Replaces the whole config; the outgoing one is kept as a snapshot.", "key": "whole config", "scope": "global", "default": "—", "advanced": false },
           { "control": "💾 Save", "fn": "Save the whole card config as a named snapshot in this browser, or export it to a JSON file", "key": "none (localStorage)", "scope": "local", "default": "—", "advanced": false },
           { "control": "📂 Load", "fn": "Restore a saved snapshot, export or delete one, or load a config from a JSON file", "key": "whole config", "scope": "local", "default": "—", "advanced": false }
         ]}

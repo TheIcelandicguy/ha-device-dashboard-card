@@ -504,6 +504,14 @@ tweaks". *Smart tile styles* and *Native controls* live in **Card & Theme →
 Tiles**, with the rest of the tile settings. The **Advanced** toggle reveals the
 deeper controls in every tab and is remembered per browser.
 
+**✨ Create** builds a whole card from a checklist — what to show, tile style and
+density, colours — and applies it in one go. **🎲 Random** fills that checklist
+from the card's own vocabularies, so every roll is a combination that works;
+**✨ Surprise me** additionally generates a palette from a random hue, with every
+text colour contrast-checked against the surface behind it (primary ≥ 7:1,
+secondary ≥ 4.5:1, WCAG). Create replaces the entire config, so it warns first
+and keeps the outgoing one as a snapshot named "Before ✨ Create".
+
 The toolbar row also carries **‹ ›** tab arrows (the tab strip scrolls but hides
 its scrollbar, so a mouse can't reach off-screen tabs) and **💾 Save / 📂 Load**:
 a named snapshot of the whole card config, kept in this browser, plus export and

@@ -124,6 +124,16 @@ This mirrors the physical button rather than driving it — both paths keep work
 4. Optionally set a double-tap action, or point the Dropdown field at a select entity such as select.wled_preset.
 5. If the switch does not show a keypad, its tile style is set elsewhere — set Device type "Input" to the Inputs style, or use the per-type panel.
 
+### Generate a card from a checklist
+
+✨ Create builds a whole card from what you tick — and rolls one for you if you would rather be surprised. It replaces the entire config, so it saves your outgoing setup first.
+
+1. Toolbar → ✨ Create.
+2. Tick what the card should show, pick tile style, size and columns, pick a theme.
+3. 🎲 Random fills the checklist from the card's own vocabularies — every roll is a combination that works.
+4. ✨ Surprise me does the same but generates a palette from a random hue, contrast-checked so text stays readable.
+5. Press Create card. Your previous config is kept in 📂 Load as “Before ✨ Create” if you want it back.
+
 ### Save a setup you can get back
 
 Snapshots capture the whole card config. Slots live in this browser; the file export is what moves between devices.
