@@ -375,7 +375,8 @@ export type InputHoldConfig = InputGestureConfig;
  *  entity_animations, input_actions — that no cascade ever reads at profile level.
  *  Widening this means teaching the matching resolver to look here too. */
 export type ProfileStyle = Pick<DeviceStyle,
-  'tile_style' | 'power_monitor_variant' | 'tile_layout' | 'sensors' | 'show_graphs' | 'elements' | 'color'>;
+  'tile_style' | 'power_monitor_variant' | 'tile_layout' | 'sensors' | 'show_graphs' | 'elements'
+  | 'color' | 'energy_period'>;
 
 /** A user-defined, savable tile style. Renders as `base` with the saved config
  *  applied; assigned via `tile_style: 'custom:<key>'`. */
@@ -444,6 +445,11 @@ export interface ViewConfig {
   columns?: number;
   tile_size?: TileSize;
   sort_by?: SortBy;
+  /** Element visibility for tiles in this view. A view can switch tile style, so
+   *  it needs to be able to adjust that style's parts too. */
+  elements?: Record<string, boolean>;
+  /** Energy window for this view (total / today / week / month). */
+  energy_period?: EnergyPeriod;
 }
 
 /** Full card config */

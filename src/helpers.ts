@@ -4,6 +4,7 @@ import {
   TileBlockId, TileStyle, TileLayout, TileRow, HADeviceDashboardConfig,
 } from './types';
 import type { InputChannel } from './tiles/tile-context';
+import { THEME_KEYS, detectTheme } from './themes';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -1050,7 +1051,12 @@ export function normalizeGraphKey(key: string): string {
  * rewriting the stored value in place would risk promoting that variant above an
  * explicit one and changing the rendered output. Leave them to the runtime.
  */
-export function migrateConfig<T extends { graph_sensors?: string[]; graph_sensor_colors?: Record<string, string> }>(config: T): T {
+export function migrateConfig<T extends {
+  graph_sensors?: string[];
+  graph_sensor_colors?: Record<string, string>;
+  theme?: string;
+  style?: Record<string, unknown>;
+}>(config: T): T {
   if (!config) return config;
   let changed = false;
 
@@ -1079,8 +1085,33 @@ export function migrateConfig<T extends { graph_sensors?: string[]; graph_sensor
     if (colorsChanged) { graphColors = next; changed = true; }
   }
 
+  // The editor used to write a theme's whole palette into `style`, which then
+  // shadowed `theme` on every key — so the theme label was decorative and editing
+  // it by hand did nothing. Where `style` still matches a preset exactly, drop the
+  // palette and let `theme` carry it. Renders identically; `style` is left holding
+  // only genuine overrides, so switching theme now works.
+  let style = config.style;
+  let theme = config.theme;
+  if (style && typeof style === 'object') {
+    const matched = detectTheme(style as never);
+    if (matched !== 'custom' && (theme === undefined || theme === matched)) {
+      const stripped: Record<string, unknown> = { ...style };
+      for (const k of THEME_KEYS) delete stripped[k];
+      if (Object.keys(stripped).length !== Object.keys(style).length) {
+        style = Object.keys(stripped).length ? stripped : undefined;
+        theme = matched;
+        changed = true;
+      }
+    }
+  }
+
   if (!changed) return config;
   const out: T = { ...config };
+  if (style !== config.style) {
+    if (style === undefined) delete (out as { style?: unknown }).style;
+    else (out as { style?: unknown }).style = style;
+  }
+  if (theme !== config.theme) (out as { theme?: unknown }).theme = theme;
   if (graphSensors) out.graph_sensors = graphSensors;
   if (graphColors)  out.graph_sensor_colors = graphColors;
   return out;

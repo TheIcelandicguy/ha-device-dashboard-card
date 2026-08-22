@@ -6,7 +6,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent, LovelaceCardConfig } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout, EnergyPeriod, InputActionConfig } from './types';
 import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, setBlockInLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels, deviceRelevance } from './helpers';
-import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, applyThemePalette, detectTheme, type ThemePalette } from './themes';
+import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, detectTheme, type ThemePalette } from './themes';
 import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons';
 import { EDITOR_LAYOUT } from './editor-layout';
 
@@ -214,6 +214,8 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _devPanelAll = false;
   /** Conflict panel expanded — collapsed by default so it stays a hint, not a wall. */
   @state() private _conflictsOpen = false;
+  /** How many local tweaks the last clear removed — feedback for that button. */
+  @state() private _localTweaksCleared: number | null = null;
   @state() private _deviceSearch = '';
   @state() private _styleClipFeedback = '';   // transient feedback for image-upload errors
   @state() private _openDiscDropdown: string | null = null;  // Discovery: which hide-checklist dropdown is expanded
@@ -3812,25 +3814,27 @@ export class HADeviceDashboardEditor extends LitElement {
   //  MAIN RENDER
   // ══════════════════════════════════════════════════════════════
 
-  /** Apply a colour-theme preset — merges its palette over the current style.
-   *  Colours only; radius/font/sizes are left untouched.
-   *
-   *  The picker still highlights whatever detectTheme reads back out of the
-   *  colours; `theme` is recorded alongside so the YAML says what it is and the
-   *  card can use it as a palette base. It can never change what renders here —
-   *  applyThemePalette writes every palette key into `style`, which shadows the
-   *  base entirely — it only matters for configs written by hand. */
+  /** Apply a colour-theme preset. `theme` is authoritative: the card reads the
+   *  preset, and `style` is cleared of palette keys so it holds only colours the
+   *  user deliberately overrode. Writing the palette into `style` (what this used
+   *  to do) shadowed the theme on every key, which made the theme label decorative
+   *  and editing it by hand a no-op. Non-colour style keys — radius, fonts, sizes
+   *  — are untouched. */
   private _applyTheme(name: Exclude<ThemePreset, 'custom'>) {
-    this._set('style', applyThemePalette(this._config.style, name));
+    const style: Record<string, unknown> = { ...(this._config.style ?? {}) };
+    for (const k of THEME_KEYS) delete style[k];
+    this._set('style', Object.keys(style).length ? style as NonNullable<HADeviceDashboardConfig['style']> : undefined);
     this._set('theme', name);
   }
 
-  /** Pick a theme — warn first if the current colours are custom (would be lost).
-   *  Switching between presets is lossless, so it applies immediately. */
+  /** Pick a theme — offer to save the current colours first, because applying one
+   *  now clears every palette key from `style`. Any colour set there is a
+   *  deliberate override, so there is always something to lose; with none set,
+   *  switching is lossless and applies immediately. */
   private _onPickTheme(name: Exclude<ThemePreset, 'custom'>) {
     const sty = this._config.style ?? {};
     const hasColours = THEME_KEYS.some(k => sty[k] !== undefined);
-    if (hasColours && detectTheme(sty) === 'custom') this._pendingTheme = name;
+    if (hasColours) this._pendingTheme = name;
     else this._applyTheme(name);
   }
 
@@ -3839,6 +3843,22 @@ export class HADeviceDashboardEditor extends LitElement {
     if (!this._savedTheme) return;
     this._set('style', { ...(this._config.style ?? {}), ...this._savedTheme });
     this._set('theme', 'custom');   // these colours ARE the theme now
+  }
+
+  /** Wipe this browser's viewer-local tweaks — the per-tile block/chip/graph
+   *  choices and pinned area chips the CARD stores in localStorage. They sit
+   *  above config in every cascade, so a stale one makes a YAML edit look
+   *  ignored, and nothing else in the editor can reach them. */
+  private _clearLocalTweaks(): void {
+    try {
+      const doomed: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('shelly-dashboard:')) doomed.push(k);
+      }
+      for (const k of doomed) localStorage.removeItem(k);
+      this._localTweaksCleared = doomed.length;
+    } catch { /* private mode — nothing to clear */ }
   }
 
   /** Config keys that describe *content* (what's shown), preserved by "Reset look". */
@@ -3976,6 +3996,11 @@ export class HADeviceDashboardEditor extends LitElement {
             <div class="dp-hint-inline">Restore the built-in default look. “Reset look” keeps your rooms, devices, views, favourites and discovery settings; “Reset everything” clears the whole card back to factory.</div>
             <div class="pill-grp" style="gap:8px">
               <button class="sec-toolbar-btn" @click=${() => { this._resetArmed = false; this._resetLook(); }}>Reset look</button>
+              <button class="sec-toolbar-btn" title="Clear the per-tile tweaks this browser stored locally"
+                @click=${() => this._clearLocalTweaks()}>
+                ${this._localTweaksCleared == null
+                  ? 'Clear local tweaks'
+                  : `Cleared ${this._localTweaksCleared}`}</button>
               <button class="sec-toolbar-btn" style=${this._resetArmed ? 'color:#f4601e;border-color:#f4601e' : ''}
                 @click=${() => this._onResetEverything()}>
                 ${this._resetArmed ? 'Click again to wipe everything' : 'Reset everything'}</button>

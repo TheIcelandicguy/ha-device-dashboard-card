@@ -288,10 +288,16 @@ theme: nordic_warm
 `warm_dusk` (default), `dark_industrial`, `teal_terminal`, `brutalist`,
 `frosted_light`, `nordic_warm`, `midnight_purple`, `custom`.
 
-The theme is a **palette base**: every colour `style` doesn't set comes from the
-preset, so YAML can pick a theme without listing twenty colours. The GUI editor
-takes the other route — it writes the palette into `style` (and records the name),
-which shadows the base. `custom` applies no base.
+The theme is **authoritative**: every colour comes from the preset, and `style`
+holds only the colours you deliberately override. Picking a theme in the editor
+clears the palette out of `style` (offering to save your current colours first),
+so switching themes works whether you use the GUI or edit YAML. `custom` applies
+no base — those colours *are* the theme.
+
+Configs written by an older version materialised the whole palette into `style`,
+which shadowed the theme and made it decorative. Those are migrated on load: a
+`style` that matches a preset exactly is replaced by the `theme` name. A partial
+palette is left alone, since it is a genuine override.
 
 ### `style` — global tokens
 
@@ -353,6 +359,7 @@ area_styles:
 | `tile_style`, `power_monitor_variant` | Tile layout for this device |
 | `tile_layout` | Block order/visibility (style `default`) |
 | `elements` | Per-element visibility for the chosen style |
+| `energy_period` | Energy window for this device |
 | `sensors` | Chip whitelist |
 | `show_graphs` | Sparkline override |
 | `bg_image`, `bg_image_size` | Per-tile backdrop photo |

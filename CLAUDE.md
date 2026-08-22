@@ -92,6 +92,12 @@ when you need depth; this file is the fast orientation.
 - **`profile_styles` is `ProfileStyle`, not `DeviceStyle`** — only tile_style,
   power_monitor_variant, tile_layout, sensors, show_graphs, elements and color are
   read at the per-type layer. Widening it means teaching the matching resolver first.
+- **`theme` is authoritative; `style` holds only deliberate overrides.** The editor
+  used to write the whole palette into `style`, which shadowed the theme on every
+  key — so the theme label was decorative and hand-editing it did nothing.
+  `migrateConfig` strips a palette that matches a preset exactly and keeps the
+  `theme` name; a partial palette is left alone. `_applyTheme` clears palette keys
+  rather than writing them, and prompts to save the current colours first.
 - **The editor flags config conflicts** (`_configConflicts` in `editor.ts`): settings
   another setting silently overrides — a `theme` that `style` contradicts, smart tile
   styles masked by a global `tile_style`, universal-only filters in Shelly mode,

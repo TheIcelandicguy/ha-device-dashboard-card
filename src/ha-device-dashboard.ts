@@ -1540,9 +1540,13 @@ export class HADeviceDashboard extends LitElement {
   // ── Period energy (today/week/month consumption from recorder statistics) ──
 
   /** Resolve the energy window for a device: device → area → global → 'total'. */
+  /** device → type → room → view → global → lifetime total. Carries the same
+   *  layers as every other per-device setting; it used to skip type and view. */
   private _energyPeriod(device: HADevice): EnergyPeriod {
     return this._config.device_styles?.[device.device_id]?.energy_period
+      ?? this._profileStyle(device)?.energy_period
       ?? (device.area ? this._config.area_styles?.[device.area]?.energy_period : undefined)
+      ?? this._getActiveView()?.energy_period
       ?? this._config.energy_period
       ?? 'total';
   }
@@ -2884,9 +2888,13 @@ export class HADeviceDashboard extends LitElement {
     const _devEl  = this._config.device_styles?.[device.device_id]?.elements;
     const _profEl = this._profileStyle(device)?.elements;
     const _areaEl = device.area ? this._config.area_styles?.[device.area]?.elements : undefined;
+    const _viewEl = this._getActiveView()?.elements;
     const _customEl = this._customDef(device)?.elements;
     const _presetEl = this._config.style_presets?.[_effStyle]?.elements;
-    const showEl = (id: string): boolean => _devEl?.[id] ?? _profEl?.[id] ?? _areaEl?.[id] ?? _customEl?.[id] ?? _presetEl?.[id] ?? true;
+    // device → type → room → view → saved style → that style's preset → shown.
+    // Mirrors the tile_style cascade, so a view that switches style can adjust it.
+    const showEl = (id: string): boolean =>
+      _devEl?.[id] ?? _profEl?.[id] ?? _areaEl?.[id] ?? _viewEl?.[id] ?? _customEl?.[id] ?? _presetEl?.[id] ?? true;
     return {
       showEl,
       hass: this.hass,
