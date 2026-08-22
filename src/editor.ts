@@ -1482,6 +1482,16 @@ export class HADeviceDashboardEditor extends LitElement {
         </button>
         ${open ? html`
           <div class="check-dd-panel">
+            ${options.length ? html`
+              <div class="check-dd-head">
+                <span class="check-dd-count">${n} of ${options.length} hidden</span>
+                <span class="sel-allnone">
+                  <button type="button" class="sel-mini" title="Hide every one of these"
+                    @click=${() => onChange(options.map(o => o.value))}>Hide all</button>
+                  <button type="button" class="sel-mini" title="Hide none of these"
+                    @click=${() => onChange(undefined)}>Clear</button>
+                </span>
+              </div>` : nothing}
             ${options.length ? options.map(o => html`
               <label class="check-dd-row">
                 <input type="checkbox" .checked=${hidSet.has(o.value)}
@@ -3910,6 +3920,27 @@ export class HADeviceDashboardEditor extends LitElement {
       }
     }
 
+    // "Hide all" makes it easy to hide everything there is, which renders an
+    // empty card with no clue why. Only priced when something is actually hidden.
+    if ((c.mode ?? 'shelly') === 'universal' && this.hass
+        && ((c.exclude_integrations?.length ?? 0) || (c.exclude_domains?.length ?? 0))) {
+      const src = getDiscoverySources(this.hass);
+      const allHidden = (found: string[], hidden?: string[]) =>
+        found.length > 0 && found.every(v => (hidden ?? []).includes(v));
+      if (allHidden(src.integrations, c.exclude_integrations) && !(c.include_integrations ?? []).length) {
+        out.push({
+          title: 'Every discovered integration is hidden',
+          detail: 'Nothing is left to discover, so the card renders empty. Clear some in Discovery, or force one back with include_integrations.',
+        });
+      }
+      if (allHidden(src.domains, c.exclude_domains)) {
+        out.push({
+          title: 'Every entity type is hidden',
+          detail: 'No entity domain is left, so no device has anything to show. Clear some in Discovery.',
+        });
+      }
+    }
+
     const overlap = (a?: string[], b?: string[]) => (a ?? []).filter(x => (b ?? []).includes(x));
     const domClash = overlap(c.include_domains, c.exclude_domains);
     if (domClash.length) {
@@ -4368,6 +4399,11 @@ export class HADeviceDashboardEditor extends LitElement {
       padding:5px 7px; border-radius:4px; cursor:pointer; }
     .check-dd-row:hover { background:var(--s3); }
     .check-dd-empty { font-size:11px; color:var(--t3); padding:6px 7px; }
+    /* Sticky so Hide all / Clear stay reachable in a long list. */
+    .check-dd-head { position:sticky; top:0; z-index:1; display:flex; align-items:center;
+      justify-content:space-between; gap:8px; padding:5px 7px; background:var(--s2,var(--s1));
+      border-bottom:1px solid var(--border); }
+    .check-dd-count { font-size:10.5px; font-weight:600; color:var(--t3); }
     .theme-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
     .theme-swatch { display:flex; flex-direction:column; align-items:center; gap:4px; padding:5px 3px; border:1px solid var(--border2); border-radius:6px; background:transparent; cursor:pointer; transition:all .15s; }
     .theme-swatch:hover { border-color:var(--accent); }

@@ -277,7 +277,8 @@
           { "control": "Discovery mode", "fn": "Shelly only (Shelly + BTHome, the original behaviour) vs Universal (every HA device; Shelly keeps full-fidelity detection)", "key": "mode", "scope": "global", "default": "'shelly' (unset)", "advanced": false },
           { "control": "Scope", "fn": "Universal only. Real devices = actuators + real sensors; Controllable = only devices with controls; Everything = the raw firehose", "key": "universal_scope", "scope": "global", "default": "'devices'", "advanced": false },
           { "control": "Hide integrations", "fn": "Universal only. Tick integrations to drop — ADDED to the built-in deny-list (phones, browsers, routers…)", "key": "exclude_integrations", "scope": "global", "default": "built-in list only", "advanced": false },
-          { "control": "Hide entity types", "fn": "Universal only. Tick entity domains to drop entirely (e.g. update, camera)", "key": "exclude_domains", "scope": "global", "default": "none", "advanced": false }
+          { "control": "Hide entity types", "fn": "Universal only. Tick entity domains to drop entirely (e.g. update, camera)", "key": "exclude_domains", "scope": "global", "default": "none", "advanced": false },
+          { "control": "Hide all / Clear", "fn": "Bulk-set either hide list from inside its dropdown. Hiding everything is flagged by the conflict panel, since it leaves the card empty.", "key": "exclude_integrations / exclude_domains", "scope": "global", "default": "—", "advanced": false }
         ]},
         { "name": "Extra cards", "controls": [
           { "control": "Placement", "fn": "Where the embedded Lovelace cards go — top, bottom, or inside one room", "key": "header_cards / footer_cards / area_cards[room]", "scope": "global", "default": "none", "advanced": false },
