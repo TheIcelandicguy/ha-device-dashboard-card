@@ -622,13 +622,15 @@ export class HADeviceDashboard extends LitElement {
 
   /**
    * The style tokens the card actually renders with: a named `theme` supplies the
-   * base palette and `style` overrides it key-by-key, so hand-written YAML can say
-   * `theme: nordic_warm` and get the whole palette without listing 20 colours.
+   * base palette and `style` overrides it key-by-key, so `theme: nordic_warm` gets
+   * the whole palette without listing 20 colours.
    *
-   * The GUI editor takes the other route — it writes the palette straight into
-   * `style` (and derives the swatch back out with detectTheme), which fully
-   * shadows the base. Both paths therefore agree; the theme only shows through
-   * for keys the user never set. 'custom' means "these colours are the theme".
+   * `theme` is authoritative and the editor takes the same route as YAML — picking
+   * one CLEARS the palette keys from `style`, leaving only colours the user
+   * deliberately changed. It used to write the palette in instead, which shadowed
+   * the theme on every key and made editing `theme:` by hand do nothing; configs
+   * written that way are folded back by `migrateConfig`. 'custom' means "these
+   * colours are the theme" and applies no base.
    */
   private _styleTokens(): NonNullable<HADeviceDashboardConfig['style']> {
     if (this._styleTokensConfigRef === this._config && this._cachedStyleTokens) {

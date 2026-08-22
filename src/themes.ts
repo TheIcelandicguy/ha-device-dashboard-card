@@ -189,13 +189,10 @@ export const DEFAULT_THEME: Exclude<ThemePreset, 'custom'> = 'warm_dusk';
  *  snapshot the current colours when saving a custom theme before overwriting. */
 export const THEME_KEYS = Object.keys(THEME_PRESETS.dark_industrial) as Array<keyof ThemePalette>;
 
-/** Merge a preset's palette over the current style object. */
-export function applyThemePalette(
-  style: NonNullable<HADeviceDashboardConfig['style']> | undefined,
-  name: Exclude<ThemePreset, 'custom'>,
-): NonNullable<HADeviceDashboardConfig['style']> {
-  return { ...(style ?? {}), ...THEME_PRESETS[name] };
-}
+// applyThemePalette (merge a preset into `style`) lived here. It is gone on
+// purpose: writing the palette into `style` shadowed `theme` on every key, which
+// is the drift migrateConfig now undoes. Applying a theme CLEARS those keys —
+// see _applyTheme in editor.ts.
 
 /** Which preset the given style currently matches exactly on every palette key,
  *  or 'custom' if none. Used to highlight the active theme in the picker. */
