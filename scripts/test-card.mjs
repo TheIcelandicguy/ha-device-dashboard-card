@@ -148,13 +148,15 @@ mkdirSync(OUT, { recursive: true });
 try {
   execFileSync(process.execPath, [
     join('node_modules', 'typescript', 'bin', 'tsc'),
-    'src/helpers.ts', '--outDir', OUT,
+    'src/helpers.ts', 'src/cascade.ts', '--outDir', OUT,
     '--module', 'commonjs', '--target', 'es2020', '--skipLibCheck', '--moduleResolution', 'node',
   ], { stdio: 'inherit' });
   // The project is "type": "module", which would make these .js files ESM.
   writeFileSync(join(OUT, 'package.json'), '{"type":"commonjs"}');
 
-  const h = createRequire(import.meta.url)(join(process.cwd(), OUT, 'helpers.js'));
+  const req = createRequire(import.meta.url);
+  const h = req(join(process.cwd(), OUT, 'helpers.js'));
+  const cas = req(join(process.cwd(), OUT, 'cascade.js'));
   const hass = fleet();
   const byName = (list, name) => list.find(d => d.name === name);
 
@@ -294,6 +296,91 @@ try {
   eq('i4 produces exactly its diagnostics', keysI4, ['cloud', 'uptime']);
   const keysDim = [...h.deviceChipKeys(byName(all, 'Ljós hjónaherbergi'))].sort();
   ok('a dimmer produces power and energy', keysDim.includes('power') && keysDim.includes('energy'));
+
+  // ── cascades ───────────────────────────────────────────────────────────────
+  // These used to be methods on the card element, untestable without a DOM —
+  // which is how the renderer and the Customize panel came to resolve blocks
+  // differently without anyone noticing.
+  const dev = byName(all, 'Ljós hjónaherbergi');
+  const cin = (config, view) => ({ config, device: dev, profile: 'dimmer', view });
+
+  console.log('\ncascade — tile style precedence');
+  eq('card-wide is the floor', cas.rawTileStyle(cin({ tile_style: 'sensor-card' })), 'sensor-card');
+  eq('a view beats the card', cas.rawTileStyle(cin(
+    { tile_style: 'sensor-card' }, { id: 'v', name: 'V', tile_style: 'cover-control' })), 'cover-control');
+  eq('a room beats a view', cas.rawTileStyle(cin(
+    { tile_style: 'sensor-card', area_styles: { Bedroom: { tile_style: 'power-monitor' } } },
+    { id: 'v', name: 'V', tile_style: 'cover-control' })), 'power-monitor');
+  eq('a device type beats a room', cas.rawTileStyle(cin(
+    { area_styles: { Bedroom: { tile_style: 'power-monitor' } }, profile_styles: { dimmer: { tile_style: 'light-control' } } })),
+    'light-control');
+  eq('the device itself wins', cas.rawTileStyle(cin({
+    profile_styles: { dimmer: { tile_style: 'light-control' } },
+    device_styles: { dimmer: { tile_style: 'scene-button' } },
+  })), 'scene-button');
+  eq('smart styles apply when nothing is set',
+    cas.rawTileStyle(cin({ smart_tile_styles: true })), 'light-control');
+  eq('but a card-wide style masks them (documented, and the trap people hit)',
+    cas.rawTileStyle(cin({ smart_tile_styles: true, tile_style: 'default' })), 'default');
+
+  console.log('\ncascade — blocks');
+  const blocksOf = (config) => JSON.stringify(cas.blockLayout(cin(config)));
+  ok('falls back to the profile default',
+    blocksOf({}) === JSON.stringify(h.PROFILE_DEFAULT_BLOCKS.dimmer));
+  eq('a card-wide layout applies', cas.blockLayout(cin({ tile_layout: ['name_row'] })), ['name_row']);
+  eq('a saved style outranks the card-wide layout — the bug that made custom styles do nothing',
+    cas.blockLayout(cin({
+      tile_layout: ['name_row'],
+      tile_style: 'custom:mine',
+      custom_styles: { mine: { base: 'default', tile_layout: ['sensors'] } },
+    })), ['sensors']);
+  eq('a style preset outranks it too', cas.blockLayout(cin({
+    tile_layout: ['name_row'], style_presets: { default: { tile_layout: ['graph'] } },
+  })), ['graph']);
+  eq('the device still wins', cas.blockLayout(cin({
+    tile_layout: ['name_row'], device_styles: { dimmer: { tile_layout: ['badges'] } },
+  })), ['badges']);
+
+  console.log('\ncascade — chips, graphs, energy, columns');
+  eq('an explicit [] means no chips and stops the cascade',
+    cas.sensorSelection(cin({ sensors: ['power'], device_styles: { dimmer: { sensors: [] } } })), []);
+  eq('unset falls through to the profile default',
+    cas.sensorSelection(cin({})), h.PROFILE_DEFAULT_SENSORS.dimmer);
+  eq('graphs default on', cas.showGraphs(cin({})), true);
+  eq('a room can turn graphs off', cas.showGraphs(cin({ area_styles: { Bedroom: { show_graphs: false } } })), false);
+  eq('a device overrides its room', cas.showGraphs(cin({
+    area_styles: { Bedroom: { show_graphs: false } }, device_styles: { dimmer: { show_graphs: true } },
+  })), true);
+  eq('energy defaults to lifetime total', cas.energyPeriod(cin({})), 'total');
+  eq('a view sets the energy window',
+    cas.energyPeriod(cin({}, { id: 'v', name: 'V', energy_period: 'week' })), 'week');
+  eq('a device type sets it too',
+    cas.energyPeriod(cin({ profile_styles: { dimmer: { energy_period: 'today' } } })), 'today');
+  eq('columns: room beats view beats card',
+    [cas.columnsFor({ columns: 3 }, undefined, undefined),
+      cas.columnsFor({ columns: 3 }, { columns: 4 }, undefined),
+      cas.columnsFor({ columns: 3 }, { columns: 4 }, { columns: 5 })], [3, 4, 5]);
+
+  console.log('\ncascade — elements');
+  eq('unset elements are shown', cas.elementVisible(cin({}), 'toggle'), true);
+  eq('a preset can hide one', cas.elementVisible(cin({
+    tile_style: 'power-monitor', style_presets: { 'power-monitor': { elements: { toggle: false } } },
+  }), 'toggle'), false);
+  eq('a view overrides the preset', cas.elementVisible(cin({
+    tile_style: 'power-monitor', style_presets: { 'power-monitor': { elements: { toggle: false } } },
+  }, { id: 'v', name: 'V', elements: { toggle: true } }), 'toggle'), true);
+  eq('the device overrides everything', cas.elementVisible(cin({
+    tile_style: 'power-monitor',
+    style_presets: { 'power-monitor': { elements: { toggle: true } } },
+    device_styles: { dimmer: { elements: { toggle: false } } },
+  }, { id: 'v', name: 'V', elements: { toggle: true } }), 'toggle'), false);
+
+  console.log('\ncascade — legacy aliases');
+  eq('hero remaps to a power-monitor variant', cas.resolveStyle('hero'), { style: 'power-monitor', variant: 'big-number' });
+  eq('ring remaps to the gauge', cas.resolveStyle('ring'), { style: 'power-monitor', variant: 'gauge' });
+  eq('command remaps to the scene button', cas.resolveStyle('command'), { style: 'scene-button', variant: 'big-number' });
+  eq('a missing custom style falls back to default',
+    cas.resolveCustomStyle({}, 'custom:gone').base, 'default');
 
 } finally {
   rmSync(OUT, { recursive: true, force: true });

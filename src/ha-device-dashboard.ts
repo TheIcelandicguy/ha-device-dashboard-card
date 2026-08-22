@@ -19,6 +19,7 @@ import { renderCoverControlTile } from './tiles/cover-control';
 import { renderSceneButtonTile } from './tiles/scene-button';
 import { renderInputControlTile } from './tiles/input-control';
 import { renderEffectPicker } from './tiles/tile-parts';
+import * as cascade from './cascade';
 import { renderSensorCardTile } from './tiles/sensor-card';
 import { renderPowerMonitorTile } from './tiles/power-monitor';
 import { renderLightControlTile } from './tiles/light-control';
@@ -26,7 +27,7 @@ import { renderBlockTile } from './tiles/block-tile';
 import { renderDetailSheet } from './detail/detail-sheet';
 import {
   getAllDevices, getDeviceProfile, migrateConfig, factoryLook, delegatableEntities,
-  PROFILE_DEFAULT_BLOCKS, normalizeTileLayout, flattenTileLayout, PROFILE_DEFAULT_SENSORS, DEFAULT_GRAPH_SENSORS, profileDefaultTileStyle, PROFILE_LABELS, BLOCK_LABELS, GRAPH_DC_LABELS, GRAPH_SENSOR_DEFS,
+  PROFILE_DEFAULT_BLOCKS, normalizeTileLayout, flattenTileLayout, DEFAULT_GRAPH_SENSORS, profileDefaultTileStyle, PROFILE_LABELS, BLOCK_LABELS, GRAPH_DC_LABELS, GRAPH_SENSOR_DEFS,
   HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, downsamplePoints, normalizeGraphKey,
   formatPower, formatEnergy, formatVoltage, formatCurrent, formatTemp,
   formatUptime, formatApparentPower, formatReactivePower,
@@ -987,23 +988,7 @@ export class HADeviceDashboard extends LitElement {
 
   /** Chip visibility cascade: device override → area override → global filter. */
   private _sensorSelection(device: HADevice): string[] | undefined {
-    // `[]` is an explicit "no chips" (Deselect-all) and stops the cascade;
-    // `undefined` means "inherit from the next scope".
-    const devSel = this._config.device_styles?.[device.device_id]?.sensors;
-    if (devSel !== undefined) return devSel;
-    const profSel = this._profileStyle(device)?.sensors;
-    if (profSel !== undefined) return profSel;
-    const areaSel = device.area ? this._config.area_styles?.[device.area]?.sensors : undefined;
-    if (areaSel !== undefined) return areaSel;
-    // Saved custom style, then the per-tile-style preset — more specific than global.
-    const customSel = this._customDef(device)?.sensors;
-    if (customSel !== undefined) return customSel;
-    const presetSel = this._config.style_presets?.[this._effectiveStyle(device)]?.sensors;
-    if (presetSel !== undefined) return presetSel;
-    if (this._config.sensors !== undefined) return this._config.sensors;
-    // Lowest priority: curated per-profile default chips. Undefined here (e.g.
-    // 'generic') means "show all", preserving the previous behaviour.
-    return PROFILE_DEFAULT_SENSORS[this._profile(device).type];
+    return cascade.sensorSelection(this._cascade(device));
   }
 
   private _getSensors(device: HADevice, ignoreSelection = false): SensorChip[] {
@@ -1409,15 +1394,10 @@ export class HADeviceDashboard extends LitElement {
   /** Whether tile sparkline graphs are shown for this device — the single gate
    *  every graph path flows through. device → area → global → default (on). */
   private _showGraphs(device: HADevice): boolean {
+    // The viewer's own Customize toggle sits above every config layer.
     const ov = this._tileShowGraphsOverride.get(device.device_id);
     if (ov !== undefined) return ov;
-    const dev = this._config.device_styles?.[device.device_id]?.show_graphs;
-    if (dev !== undefined) return dev;
-    const prof = this._profileStyle(device)?.show_graphs;
-    if (prof !== undefined) return prof;
-    const area = device.area ? this._config.area_styles?.[device.area]?.show_graphs : undefined;
-    if (area !== undefined) return area;
-    return this._config.show_graphs ?? true;
+    return cascade.showGraphs(this._cascade(device));
   }
 
   private _getGraphEntities(device: HADevice): GraphEntity[] {
@@ -1545,12 +1525,7 @@ export class HADeviceDashboard extends LitElement {
   /** device → type → room → view → global → lifetime total. Carries the same
    *  layers as every other per-device setting; it used to skip type and view. */
   private _energyPeriod(device: HADevice): EnergyPeriod {
-    return this._config.device_styles?.[device.device_id]?.energy_period
-      ?? this._profileStyle(device)?.energy_period
-      ?? (device.area ? this._config.area_styles?.[device.area]?.energy_period : undefined)
-      ?? this._getActiveView()?.energy_period
-      ?? this._config.energy_period
-      ?? 'total';
+    return cascade.energyPeriod(this._cascade(device));
   }
 
   /** The entities whose energy values make up this device's consumption — the
@@ -1990,12 +1965,7 @@ export class HADeviceDashboard extends LitElement {
    *  preset → global → the profile's built-in blocks. Areas have no tile_layout.
    *  The viewer's own Customize choices sit above all of it, applied by callers. */
   private _blockLayout(device: HADevice, profile: DeviceProfileResult): TileLayout {
-    return this._config.device_styles?.[device.device_id]?.tile_layout
-      ?? this._profileStyle(device)?.tile_layout
-      ?? this._customDef(device)?.tile_layout
-      ?? this._config.style_presets?.['default']?.tile_layout
-      ?? this._config.tile_layout
-      ?? PROFILE_DEFAULT_BLOCKS[profile.type] ?? PROFILE_DEFAULT_BLOCKS.generic;
+    return cascade.blockLayout(this._cascade(device, profile));
   }
 
   private _getBlockOrder(device: HADevice, profile: DeviceProfileResult): TileBlockId[] {
@@ -2794,14 +2764,7 @@ export class HADeviceDashboard extends LitElement {
 
   /** Remap legacy style names to new purposeful names */
   private _resolveStyle(raw: TileStyle | undefined, _profile: DeviceProfileResult): { style: TileStyle; variant: PowerMonitorVariant } {
-    const legacyVariantMap: Partial<Record<TileStyle, PowerMonitorVariant>> = {
-      hero: 'big-number', ring: 'gauge', spark: 'graph', hbar: 'compact', list: 'table',
-    };
-    if (raw && raw in legacyVariantMap) {
-      return { style: 'power-monitor', variant: legacyVariantMap[raw]! };
-    }
-    if (raw === 'command') return { style: 'scene-button', variant: 'big-number' };
-    return { style: raw ?? 'default', variant: 'big-number' };
+    return cascade.resolveStyle(raw);
   }
 
   /** Per-device-TYPE style overrides for this device's profile (the "all relays"
@@ -2810,26 +2773,27 @@ export class HADeviceDashboard extends LitElement {
     return this._config.profile_styles?.[this._profile(device).type];
   }
 
+  /** Inputs for the pure cascade resolvers in `cascade.ts`. The viewer's own
+   *  localStorage tweaks are applied by the callers, not there. */
+  private _cascade(device: HADevice, profile?: DeviceProfileResult): cascade.CascadeInput {
+    return {
+      config: this._config,
+      device,
+      profile: (profile ?? this._profile(device)).type,
+      view: this._getActiveView() ?? undefined,
+    };
+  }
+
   /** The raw chosen tile style (may be a legacy alias or a `custom:<key>`), from
    *  the cascade device → type → area → view → global → smart/profile default. */
   private _rawStyle(device: HADevice): TileStyle | undefined {
-    const profile = this._profile(device);
-    const devStyle = this._config.device_styles?.[device.device_id];
-    const areaStyle = device.area ? this._config.area_styles?.[device.area] : undefined;
-    const activeView = this._getActiveView();
-    return devStyle?.tile_style ?? this._profileStyle(device)?.tile_style ?? areaStyle?.tile_style
-      ?? activeView?.tile_style ?? this._config.tile_style
-      ?? (this._config.smart_tile_styles ? profileDefaultTileStyle(profile.type, device) : undefined);
+    return cascade.rawTileStyle(this._cascade(device));
   }
 
   /** Resolve a raw style to its base built-in style + the custom def if it was a
    *  `custom:<key>`. */
   private _resolveCustomStyle(raw: TileStyle | undefined): { base: TileStyle | undefined; custom?: CustomStyleDef } {
-    if (typeof raw === 'string' && raw.startsWith('custom:')) {
-      const def = this._config.custom_styles?.[raw.slice(7)];
-      return { base: def?.base ?? 'default', custom: def };
-    }
-    return { base: raw };
+    return cascade.resolveCustomStyle(this._config, raw);
   }
 
   /** The saved custom style config active for this device, if any. */
@@ -2886,17 +2850,8 @@ export class HADeviceDashboard extends LitElement {
     const isOn = sw?.isOn ?? false;
     // Per-element visibility for this tile's style: device → area → style preset →
     // visible. Renderers call showEl(id); an unset id defaults to shown.
-    const _effStyle = this._effectiveStyle(device);
-    const _devEl  = this._config.device_styles?.[device.device_id]?.elements;
-    const _profEl = this._profileStyle(device)?.elements;
-    const _areaEl = device.area ? this._config.area_styles?.[device.area]?.elements : undefined;
-    const _viewEl = this._getActiveView()?.elements;
-    const _customEl = this._customDef(device)?.elements;
-    const _presetEl = this._config.style_presets?.[_effStyle]?.elements;
-    // device → type → room → view → saved style → that style's preset → shown.
-    // Mirrors the tile_style cascade, so a view that switches style can adjust it.
-    const showEl = (id: string): boolean =>
-      _devEl?.[id] ?? _profEl?.[id] ?? _areaEl?.[id] ?? _viewEl?.[id] ?? _customEl?.[id] ?? _presetEl?.[id] ?? true;
+    const _cin = this._cascade(device, profile);
+    const showEl = (id: string): boolean => cascade.elementVisible(_cin, id);
     return {
       showEl,
       hass: this.hass,
@@ -2998,20 +2953,12 @@ export class HADeviceDashboard extends LitElement {
     const rawStyle = devStyle?.tile_style ?? profStyle?.tile_style ?? areaTileStyle ?? activeView?.tile_style ?? this._config.tile_style
       ?? (this._config.smart_tile_styles ? profileDefaultTileStyle(profile.type, device) : undefined);
     // Saved custom style → its base built-in style + config layer.
-    const { base: baseStyle, custom: customDef } = this._resolveCustomStyle(rawStyle);
+    const { base: baseStyle } = this._resolveCustomStyle(rawStyle);
 
     // Resolve variant — device → type → area → view → global → custom → preset → legacy
-    const areaVariant = this._config.area_styles?.[device.area ?? '']?.power_monitor_variant;
     const { style, variant: legacyVariant } = this._resolveStyle(baseStyle, profile);
     const variant: PowerMonitorVariant =
-      devStyle?.power_monitor_variant
-      ?? profStyle?.power_monitor_variant
-      ?? areaVariant
-      ?? activeView?.power_monitor_variant
-      ?? this._config.power_monitor_variant
-      ?? customDef?.variant
-      ?? this._config.style_presets?.['power-monitor']?.variant
-      ?? legacyVariant;
+      cascade.powerMonitorVariant(this._cascade(device, profile), legacyVariant);
 
     if (style === 'default' || !style) {
       // The viewer's own Customize choices win over config. Always flat — the
@@ -3109,9 +3056,8 @@ export class HADeviceDashboard extends LitElement {
 
     const totalPower  = favDevices.reduce((s, d) => s + (this._getPower(d) ?? 0), 0);
     const onlineCount = favDevices.filter(d => this._isOnline(d)).length;
-    // Favourites spans rooms, so there is no area layer — but a view's columns
-    // must still apply, or setting them does nothing in the default layout.
-    const cols        = this._getActiveView()?.columns ?? this._config.columns ?? 3;
+    // Favourites spans rooms, so there is no area layer.
+    const cols        = cascade.columnsFor(this._config, this._getActiveView() ?? undefined);
     const tileStyle   = this._config.area_styles?.['Favourites']?.tile_style;
 
     return html`
@@ -3288,7 +3234,7 @@ export class HADeviceDashboard extends LitElement {
     const isClosed = this._closedAreas.has(area);
     const onlineCount = devices.filter(d => this._isOnline(d)).length;
     const areaStyle = this._config.area_styles?.[label];
-    const cols = areaStyle?.columns ?? this._getActiveView()?.columns ?? this._config.columns ?? 3;
+    const cols = cascade.columnsFor(this._config, this._getActiveView() ?? undefined, areaStyle);
 
     const styleObj: Record<string, string> = {};
     if (areaStyle) {

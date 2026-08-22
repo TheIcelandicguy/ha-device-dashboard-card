@@ -103,7 +103,14 @@ when you need depth; this file is the fast orientation.
 - **Resolution cascade** for style/layout: device → device-type (profile) → area/
   room → view → global → built-in default. Viewer-local "what to show" tweaks layer
   on top via `localStorage` (not saved to YAML).
-- **Blocks resolve in exactly one place — `_blockLayout()`.** The renderer and the
+- **Every cascade lives in `src/cascade.ts`, as pure functions.** The card's
+  `_rawStyle` / `_blockLayout` / `_sensorSelection` / `_showGraphs` / `showEl` /
+  `_energyPeriod` are thin wrappers that add the viewer's localStorage overrides
+  and memoisation. They were methods until the renderer and the Customize panel
+  drifted apart unnoticed; pure functions are testable (`npm run test:card`).
+  The layer sets differ per option on purpose — `sensors` has no view layer,
+  `tile_style` puts the room before the view — and each function says so.
+- **Blocks resolve in exactly one place — `cascade.blockLayout()`.** The renderer and the
   Customize panel used to each have their own cascade; they disagreed whenever
   `profile_styles` / `custom_styles` / `style_presets` set a layout, so the panel
   rebased a toggle onto a layout that wasn't in force. Order is device → profile →
