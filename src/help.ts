@@ -152,12 +152,13 @@ export const HELP_RECIPES: HelpTopic[] = [
   {
     id: 'colours',
     title: 'Roll a colour scheme',
-    body: ['The theme picker has two dice next to it, for when you want a look but not a decision.'],
+    body: ['The theme picker can roll a look for you, and keep the ones you like as named palettes.'],
     steps: [
       '◆ Defaults → Colour theme.',
       '🎲 Random lands on one of the built-in presets.',
       '✨ Surprise me generates a palette from a random hue instead. Every text colour is contrast-checked against the surface behind it, so a roll is never unreadable.',
-      'Both stash your current colours under ★ Saved first — one click puts them back.',
+      '💾 Save keeps the colours you are looking at under a name — including a preset you have tweaked. Saved palettes appear as ★ swatches in the picker; ✕ on a swatch forgets it.',
+      'Rolling always stashes the current colours as “Before roll” first, so an unwanted roll is one click from being undone.',
     ],
   },
   {

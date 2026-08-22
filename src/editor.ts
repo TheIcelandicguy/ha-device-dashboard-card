@@ -200,7 +200,10 @@ export class HADeviceDashboardEditor extends LitElement {
   /** Theme awaiting a "replace custom colours?" confirmation, and the last
    *  saved custom palette (a restorable swatch). */
   @state() private _pendingTheme: Exclude<ThemePreset, 'custom'> | null = null;
-  @state() private _savedTheme: ThemePalette | null = null;
+  /** Named colour palettes saved in this browser, for this card. */
+  @state() private _palettes: Record<string, ThemePalette> = {};
+  @state() private _paletteNaming = false;
+  @state() private _paletteName = '';
   @state() private _expandedViewId: string | null = null;
   @state() private _openSections: Record<string, boolean> = {
     rooms: true,
@@ -245,7 +248,7 @@ export class HADeviceDashboardEditor extends LitElement {
   setConfig(config: HADeviceDashboardConfig) {
     this._config = migrateConfig(config);
     this._loadAdvanced();
-    this._loadSavedTheme();
+    this._loadPalettes();
   }
 
   /** Move one tab left/right and scroll it into view. The tab strip is a
@@ -484,8 +487,10 @@ export class HADeviceDashboardEditor extends LitElement {
   // slot first, so a roll you dislike is one click from being undone.
 
   private _stashColours(): void {
-    const sty = this._config.style ?? {};
-    if (THEME_KEYS.some(k => sty[k] !== undefined)) this._saveCurrentTheme();
+    this._writePalettes({
+      ...this._palettes,
+      [HADeviceDashboardEditor.ROLL_SLOT]: this._effectivePalette(),
+    });
   }
 
   private _rollTheme(): void {
@@ -511,22 +516,61 @@ export class HADeviceDashboardEditor extends LitElement {
     window.setTimeout(() => { this._rolled = null; }, 5000);
   }
 
-  private _savedThemeKey(): string {
-    return `shelly-dashboard:savedTheme:${this._config?.title ?? 'default'}`;
+  private _palettesKey(): string {
+    return `shelly-dashboard:palettes:${this._config?.title ?? 'default'}`;
   }
-  private _loadSavedTheme(): void {
+
+  /** Name the roll-stash slot uses, so repeated rolls overwrite one entry
+   *  instead of burying the list. */
+  private static readonly ROLL_SLOT = 'Before roll';
+
+  private _loadPalettes(): void {
     try {
-      const raw = localStorage.getItem(this._savedThemeKey());
-      this._savedTheme = raw ? JSON.parse(raw) as ThemePalette : null;
+      const raw = localStorage.getItem(this._palettesKey());
+      if (raw) { this._palettes = JSON.parse(raw) as Record<string, ThemePalette>; return; }
+      // Migrate the single "★ Saved" slot this replaced, then drop it so a
+      // deleted palette cannot come back on the next load.
+      const legacyKey = `shelly-dashboard:savedTheme:${this._config?.title ?? 'default'}`;
+      const legacy = localStorage.getItem(legacyKey);
+      if (legacy) {
+        this._palettes = { Saved: JSON.parse(legacy) as ThemePalette };
+        localStorage.setItem(this._palettesKey(), JSON.stringify(this._palettes));
+        localStorage.removeItem(legacyKey);
+      }
     } catch { /* privacy mode / bad JSON */ }
   }
-  /** Snapshot the current style colours as a restorable "Saved" theme. */
-  private _saveCurrentTheme(): void {
-    const sty = this._config.style ?? {};
-    const pal: ThemePalette = {};
-    for (const k of THEME_KEYS) if (sty[k] !== undefined) (pal as Record<string, unknown>)[k] = sty[k];
-    this._savedTheme = pal;
-    try { localStorage.setItem(this._savedThemeKey(), JSON.stringify(pal)); } catch { /* ignore */ }
+
+  private _writePalettes(next: Record<string, ThemePalette>): void {
+    this._palettes = next;
+    try { localStorage.setItem(this._palettesKey(), JSON.stringify(next)); } catch { /* ignore */ }
+  }
+
+  /** The colours the card is actually rendering — the preset behind `theme`
+   *  with any `style` overrides on top. Saving while on a plain preset should
+   *  capture that preset, not an empty object. */
+  private _effectivePalette(): ThemePalette {
+    const sty = (this._config.style ?? {}) as Record<string, unknown>;
+    const theme = this._config.theme;
+    const base = theme && theme !== 'custom' ? THEME_PRESETS[theme] : undefined;
+    const pal: Record<string, unknown> = { ...(base ?? {}) };
+    for (const k of THEME_KEYS) if (sty[k] !== undefined) pal[k] = sty[k];
+    return pal as ThemePalette;
+  }
+
+  private _savePalette(name: string): void {
+    const clean = name.trim();
+    if (!clean) return;
+    this._writePalettes({ ...this._palettes, [clean]: this._effectivePalette() });
+    this._paletteNaming = false;
+    this._paletteName = '';
+    this._rolled = `Saved “${clean}”.`;
+    this._clearRolledSoon();
+  }
+
+  private _deletePalette(name: string): void {
+    const next = { ...this._palettes };
+    delete next[name];
+    this._writePalettes(next);
   }
 
   /** Advanced-mode is an editor UI preference keyed per card, kept out of config. */
@@ -4170,11 +4214,13 @@ export class HADeviceDashboardEditor extends LitElement {
     else this._applyTheme(name);
   }
 
-  /** Restore the saved custom palette over the current style. */
-  private _applySaved() {
-    if (!this._savedTheme) return;
-    this._set('style', { ...(this._config.style ?? {}), ...this._savedTheme });
-    this._set('theme', 'custom');   // these colours ARE the theme now
+  /** Restore a saved palette. It becomes the theme: 'custom' means "these
+   *  colours ARE the theme", so nothing underneath shows through. */
+  private _applyPalette(name: string) {
+    const pal = this._palettes[name];
+    if (!pal) return;
+    this._set('style', { ...(this._config.style ?? {}), ...pal });
+    this._set('theme', 'custom');
   }
 
   /** Wipe this browser's viewer-local tweaks — the per-tile block/chip/graph
@@ -4221,7 +4267,8 @@ export class HADeviceDashboardEditor extends LitElement {
     const sty = c.style ?? {};
     const views = c.views ?? [];
     const activeTheme = detectTheme(sty);
-    const savedActive = !!this._savedTheme && Object.entries(this._savedTheme).every(([k, v]) => (sty as Record<string, unknown>)[k] === v);
+    const paletteActive = (pal: ThemePalette) =>
+      Object.entries(pal).every(([k, v]) => (sty as Record<string, unknown>)[k] === v);
     return html`
       <div class="defaults-panel">
         <div class="dp-grid">
@@ -4243,18 +4290,32 @@ export class HADeviceDashboardEditor extends LitElement {
                 @click=${() => this._rollTheme()}>🎲 Random</button>
               <button class="sec-toolbar-btn" title="Generate a palette from a random hue, contrast-checked"
                 @click=${() => this._rollPalette()}>✨ Surprise me</button>
+              <button class="sec-toolbar-btn" title="Save the colours you are looking at"
+                @click=${() => { this._paletteNaming = !this._paletteNaming; }}>💾 Save</button>
             </div>
+            ${this._paletteNaming ? html`
+              <div class="snap-row" style="margin-bottom:6px">
+                <input type="text" class="inline-text" style="flex:1" placeholder="Name these colours…"
+                  .value=${this._paletteName}
+                  @input=${(e: Event) => { this._paletteName = (e.target as HTMLInputElement).value; }}
+                  @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') this._savePalette(this._paletteName); }}/>
+                <button class="sec-toolbar-btn" @click=${() => this._savePalette(this._paletteName)}>Save</button>
+              </div>` : nothing}
             ${this._rolled ? html`<div class="cr-rolled">${this._rolled} — previous colours are under ★ Saved</div>` : nothing}
             <div class="theme-grid">
-              ${this._savedTheme ? html`
-                <button class="theme-swatch saved ${savedActive ? 'on' : ''}" title="Your saved colours — click to restore"
-                  @click=${() => this._applySaved()}>
-                  <span class="ts-preview" style="background:${this._savedTheme.card_bg ?? '#1e1a17'}">
-                    <span class="ts-tile" style="background:${this._savedTheme.tile_bg ?? 'rgba(255,255,255,.04)'};border:1px solid ${this._savedTheme.tile_border ?? 'rgba(255,255,255,.08)'}"></span>
-                    <span class="ts-accent" style="background:${this._savedTheme.accent_color ?? '#c98a63'}"></span>
-                  </span>
-                  <span class="ts-name">★ Saved</span>
-                </button>` : nothing}
+              ${Object.entries(this._palettes).map(([name, pal]) => html`
+                <div class="saved-wrap">
+                  <button class="theme-swatch saved ${paletteActive(pal) ? 'on' : ''}"
+                    title="Restore “${name}”" @click=${() => this._applyPalette(name)}>
+                    <span class="ts-preview" style="background:${pal.card_bg ?? '#1e1a17'}">
+                      <span class="ts-tile" style="background:${pal.tile_bg ?? 'rgba(255,255,255,.04)'};border:1px solid ${pal.tile_border ?? 'rgba(255,255,255,.08)'}"></span>
+                      <span class="ts-accent" style="background:${pal.accent_color ?? '#c98a63'}"></span>
+                    </span>
+                    <span class="ts-name">★ ${name}</span>
+                  </button>
+                  <button class="saved-x" title="Forget “${name}”"
+                    @click=${(e: Event) => { e.stopPropagation(); this._deletePalette(name); }}>✕</button>
+                </div>`)}
               ${THEME_ORDER.map(name => {
                 const pal = THEME_PRESETS[name];
                 return html`
@@ -4272,12 +4333,12 @@ export class HADeviceDashboardEditor extends LitElement {
               <div class="theme-warn">
                 <div class="tw-msg">Replace your current custom colours with <b>${THEME_LABELS[this._pendingTheme]}</b>?</div>
                 <div class="tw-btns">
-                  <button class="tw-save" @click=${() => { this._saveCurrentTheme(); if (this._pendingTheme) this._applyTheme(this._pendingTheme); this._pendingTheme = null; }}>💾 Save current &amp; apply</button>
+                  <button class="tw-save" @click=${() => { this._savePalette(`Colours ${Object.keys(this._palettes).length + 1}`); if (this._pendingTheme) this._applyTheme(this._pendingTheme); this._pendingTheme = null; }}>💾 Save current &amp; apply</button>
                   <button class="tw-apply" @click=${() => { if (this._pendingTheme) this._applyTheme(this._pendingTheme); this._pendingTheme = null; }}>Apply anyway</button>
                   <button class="tw-cancel" @click=${() => { this._pendingTheme = null; }}>Cancel</button>
                 </div>
               </div>`
-              : (activeTheme === 'custom' ? html`<div class="hint">Custom — your colours don't match a preset.${this._savedTheme ? '' : ' Applying one will offer to save these first.'}</div>` : nothing)}
+              : (activeTheme === 'custom' ? html`<div class="hint">Custom — your colours don't match a preset.${Object.keys(this._palettes).length ? '' : ' 💾 Save keeps them, or applying a preset will offer to.'}</div>` : nothing)}
           </div>
 
           <div class="dp-group">
@@ -4507,6 +4568,11 @@ export class HADeviceDashboardEditor extends LitElement {
     .help-topic-body li { margin-bottom:5px; }
     .help-topic-body b { color:var(--text); }
     .cr-rolled { margin:2px 0 6px; font-size:11.5px; color:var(--accent); }
+    .saved-wrap { position:relative; display:inline-flex; }
+    .saved-x { position:absolute; top:-4px; right:-4px; width:16px; height:16px; border-radius:50%;
+      display:grid; place-items:center; cursor:pointer; font-size:9px; line-height:1;
+      color:var(--t2); background:var(--s1); border:1px solid var(--border); }
+    .saved-wrap:hover .saved-x { color:var(--accent); border-color:var(--accent); }
     .help-code { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:10.5px;
       background:var(--s1); border:1px solid var(--border); border-radius:4px; padding:1px 4px; }
     .adv-toggle { display:inline-flex; align-items:center; gap:7px; cursor:pointer; user-select:none; }

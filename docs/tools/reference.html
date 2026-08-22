@@ -540,7 +540,8 @@ const TABS = [
     {name:'Defaults panel', rows:[
       ['Default view','Which view loads first','default_view','global','first view',0],
       ['Colour theme','Apply one of 7 preset palettes over style','style.* (palette keys)','global','warm_dusk',0],
-      ['Saved theme ★','Restore your saved custom palette','style.* + localStorage','global','none',0],
+      ['★ Saved palettes','One swatch per palette saved in this browser — click to restore, ✕ to forget. Restoring writes the colours to style and sets theme: custom.','style.* + localStorage','global','none',0],
+      ['💾 Save (colours)','Save the colours currently rendering — the preset behind `theme` plus any style overrides — as a named palette in this browser','localStorage','local','—',0],
       ['🎲 Random / ✨ Surprise me','Roll a colour scheme — a random built-in preset, or a palette generated from a random hue with every text colour contrast-checked (WCAG 7:1 primary, 4.5:1 secondary). Current colours are stashed under ★ Saved first.','theme / style.*','global','—',0],
       ['Default tile style (+ ↺)','Global default tile layout style','tile_style','global','adaptive',0],
       ['Power-monitor variant','Sub-variant for the default tile style','power_monitor_variant','global','big-number',0],

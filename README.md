@@ -507,8 +507,13 @@ deeper controls in every tab and is remembered per browser.
 The theme picker carries two rolls: **🎲 Random** lands on a built-in preset, and
 **✨ Surprise me** generates a palette from a random hue — every text colour
 nudged until it clears a WCAG floor against the surface behind it (primary ≥ 7:1,
-secondary ≥ 4.5:1). Both stash your current colours under ★ Saved first, so a
-roll you dislike is one click from being undone.
+secondary ≥ 4.5:1). **💾 Save** keeps the colours you are looking at as a named
+palette — presets you have tweaked included — and saved palettes show up as ★
+swatches you can restore or forget. Rolling stashes the current colours as
+"Before roll" first, so a roll you dislike is one click from being undone.
+
+Palettes live in the browser you saved them in (`shelly-dashboard:palettes:<card
+title>`), not in the dashboard config.
 
 The toolbar row also carries **‹ ›** tab arrows (the tab strip scrolls but hides
 its scrollbar, so a mouse can't reach off-screen tabs) and **💾 Save / 📂 Load**:

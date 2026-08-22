@@ -494,7 +494,8 @@
         { "name": "Defaults panel", "controls": [
           { "control": "Default view", "fn": "Which view loads first", "key": "default_view", "scope": "global", "default": "first view", "advanced": false },
           { "control": "Colour theme", "fn": "Apply one of 7 preset palettes over style", "key": "style.* (palette keys)", "scope": "global", "default": "warm_dusk", "advanced": false },
-          { "control": "Saved theme ★", "fn": "Restore your saved custom palette", "key": "style.* + localStorage", "scope": "global", "default": "none", "advanced": false },
+          { "control": "★ Saved palettes", "fn": "One swatch per palette saved in this browser — click to restore, ✕ to forget. Restoring writes the colours to style and sets theme: custom.", "key": "style.* + localStorage", "scope": "global", "default": "none", "advanced": false },
+          { "control": "💾 Save (colours)", "fn": "Save the colours currently rendering — the preset behind `theme` plus any style overrides — as a named palette in this browser", "key": "localStorage", "scope": "local", "default": "—", "advanced": false },
           { "control": "🎲 Random / ✨ Surprise me", "fn": "Roll a colour scheme — a random built-in preset, or a palette generated from a random hue with every text colour contrast-checked (WCAG 7:1 primary, 4.5:1 secondary). Current colours are stashed under ★ Saved first.", "key": "theme / style.*", "scope": "global", "default": "—", "advanced": false },
           { "control": "Default tile style (+ ↺)", "fn": "Global default tile layout style", "key": "tile_style", "scope": "global", "default": "adaptive", "advanced": false },
           { "control": "Power-monitor variant", "fn": "Sub-variant for the default tile style", "key": "power_monitor_variant", "scope": "global", "default": "big-number", "advanced": false },
