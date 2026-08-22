@@ -1135,6 +1135,42 @@ export const mainCss = css`
     .extra-cards:empty { display:none; }
 
     /* One-time notice: native controls available but off by default */
+    /* Needs attention — fleet summary above the rooms. */
+    .attention { margin:0 0 10px; border:1px solid color-mix(in srgb,var(--sc-offline-color) 30%,transparent);
+      border-radius:12px; background:color-mix(in srgb,var(--sc-offline-color) 7%,transparent); overflow:hidden; }
+    .att-hdr { display:flex; align-items:center; gap:8px; padding:9px 12px; cursor:pointer; user-select:none; }
+    .att-hdr:hover { background:color-mix(in srgb,var(--sc-offline-color) 10%,transparent); }
+    .att-caret { color:var(--sc-text-muted); font-size:11px; }
+    .att-title { font-size:13px; font-weight:700; color:var(--sc-text-primary); }
+    .att-count { min-width:20px; height:20px; padding:0 6px; border-radius:10px; display:inline-flex;
+      align-items:center; justify-content:center; font-size:11px; font-weight:800;
+      background:var(--sc-offline-color); color:#1e1a17; }
+    .att-fw-chip { margin-left:auto; font-size:11px; color:var(--sc-text-secondary); }
+    .att-body { display:flex; flex-direction:column; gap:3px; padding:0 8px 8px; }
+    .att-row { display:flex; align-items:center; gap:8px; width:100%; padding:6px 8px; border-radius:8px;
+      cursor:pointer; font:inherit; text-align:left; border:1px solid transparent;
+      background:rgba(255,255,255,.03); color:var(--sc-text-primary); }
+    .att-row:hover { background:rgba(255,255,255,.07); border-color:rgba(255,255,255,.10); }
+    .att-icon { width:14px; text-align:center; font-size:11px; }
+    .att-offline .att-icon { color:var(--sc-offline-color); }
+    .att-alert .att-icon, .att-battery .att-icon { color:var(--sc-power-color); }
+    .att-update .att-icon { color:var(--sc-accent); }
+    .att-name { font-size:12.5px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .att-why { flex:1; font-size:11px; color:var(--sc-text-secondary); text-transform:capitalize;
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .att-area { font-size:10.5px; color:var(--sc-text-muted); white-space:nowrap; }
+    .att-fw { margin-top:6px; padding-top:7px; border-top:1px solid rgba(255,255,255,.07); }
+    .att-fw-title { font-size:10.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
+      color:var(--sc-text-muted); margin:0 8px 5px; }
+    .att-fw-row { display:flex; align-items:center; gap:8px; padding:2px 8px; font-size:11.5px; }
+    .att-fw-ver { min-width:58px; color:var(--sc-text-secondary); font-variant-numeric:tabular-nums; }
+    .att-fw-row.current .att-fw-ver { color:var(--sc-online-color); font-weight:700; }
+    .att-fw-bar { flex:1; height:6px; border-radius:3px; background:rgba(255,255,255,.06); overflow:hidden; }
+    .att-fw-bar i { display:block; height:100%; background:var(--sc-text-muted); }
+    .att-fw-row.current .att-fw-bar i { background:var(--sc-online-color); }
+    .att-fw-n { min-width:22px; text-align:right; color:var(--sc-text-primary); font-variant-numeric:tabular-nums; }
+    .att-fw-tag { font-size:9.5px; color:var(--sc-online-color); text-transform:uppercase; letter-spacing:.06em; }
+
     .delegate-notice {
       display:flex; align-items:center; gap:10px; margin:0 12px 10px;
       padding:8px 12px; border-radius:10px;

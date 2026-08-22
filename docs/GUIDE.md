@@ -78,6 +78,16 @@ A device with several energy sensors (a Pro 4PM has one per channel) is summed, 
 
 If you already keep a Utility Meter for a device, point `energy_entity` at it. That replaces the device's own energy chips everywhere — tile, room total and header — so the override never sits next to the raw numbers it stands in for.
 
+### Needs attention
+
+A fifty-device dashboard hides its own problems — three offline devices among fifty tiles is something you scroll past. The summary above the rooms answers the question the tiles cannot: which ones.
+
+It lists offline devices, firing alerts, flat batteries and pending updates, worst first. Each row opens that device. It is invisible when nothing qualifies, so it costs nothing on a good day.
+
+An offline device is reported as offline and nothing else — its last alert reading is stale, not news.
+
+The firmware block groups the fleet by version and marks the newest, so a device left behind on an old build is obvious. It appears only when more than one version is running.
+
 ### The Conflicts panel
 
 When a setting is overridden or ignored, a badge appears above the editor tabs. It exists because the failure is otherwise silent — the option is valid, it just never applies.

@@ -3523,6 +3523,28 @@ export class HADeviceDashboardEditor extends LitElement {
     `;
 
     const cardBody = html`
+      <div class="tog-row">
+        <div class="tog-lbl">Needs attention
+          <div class="hint">A summary above the rooms listing offline devices, firing alerts, flat batteries and pending updates. It only appears when something qualifies.</div>
+        </div>
+        <label class="sw"><input type="checkbox" .checked=${c.show_attention !== false}
+          @change=${(e: Event) => this._set('show_attention', (e.target as HTMLInputElement).checked ? undefined : false)}>
+          <span class="sw-t"></span><span class="sw-b"></span></label>
+      </div>
+      ${c.show_attention !== false ? html`
+        <div class="field">
+          <div class="field-lbl">Flag a battery at or below — <span style="color:#f4601e">${c.attention_battery ?? 20}%</span>${this._resetBtn(c.attention_battery !== undefined, () => this._clearCfg('attention_battery'))}</div>
+          <input type="range" min="5" max="50" step="5" .value=${String(c.attention_battery ?? 20)}
+            @input=${(e: Event) => { const v = parseInt((e.target as HTMLInputElement).value, 10); this._set('attention_battery', v === 20 ? undefined : v); }}/>
+        </div>
+        <div class="tog-row">
+          <div class="tog-lbl">Firmware spread
+            <div class="hint">Inside that summary, group the fleet by firmware version so you can see what is lagging. Hidden when everything is on one version.</div>
+          </div>
+          <label class="sw"><input type="checkbox" .checked=${c.show_firmware_summary !== false}
+            @change=${(e: Event) => this._set('show_firmware_summary', (e.target as HTMLInputElement).checked ? undefined : false)}>
+            <span class="sw-t"></span><span class="sw-b"></span></label>
+        </div>` : nothing}
       ${colorRow('Dashboard background', 'card_bg', '#1e1a17')}
       <div class="field">
         <div class="field-lbl">Card corner radius — <span style="color:#f4601e">${sty.card_radius ?? 12}px</span>${this._resetBtn(sty.card_radius !== undefined, () => this._clearStyle('card_radius'))}</div>

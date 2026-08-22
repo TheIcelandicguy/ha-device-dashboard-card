@@ -389,6 +389,11 @@
     { "id": "card-theme", "icon": "🎨", "label": "Card & Theme",
       "note": "Card-wide look, with a live preview strip on top. Tiles is basic; Card, Colours and Typography are advanced-only. Per-room styling lives here too, behind a room picker. Theme presets write the palette into style AND record the name in `theme`; the picker highlights whatever detectTheme reads back out of the colours. The card uses `theme` as a palette base under style, so hand-written YAML can set a theme without listing colours.",
       "groups": [
+        { "name": "Card", "controls": [
+          { "control": "Needs attention", "fn": "Summary above the rooms: offline devices, firing alerts, flat batteries, pending updates. Renders only when something qualifies.", "key": "show_attention", "scope": "global", "default": "on", "advanced": false },
+          { "control": "Flag a battery at or below", "fn": "Battery percentage that counts as needing attention", "key": "attention_battery", "scope": "global", "default": "20", "advanced": false },
+          { "control": "Firmware spread", "fn": "Group the fleet by firmware version inside that summary; hidden when everything runs one version", "key": "show_firmware_summary", "scope": "global", "default": "on", "advanced": false }
+        ]},
         { "name": "Tiles", "controls": [
           { "control": "Smart tile styles", "fn": "Auto-pick a layout per device type where none is set", "key": "smart_tile_styles", "scope": "global", "default": "off", "advanced": false },
           { "control": "Native controls", "fn": "Render HA's own tiles for media players, fans, vacuums, locks and other domains this card doesn't draw itself. Off by default — each embeds a native element, so it costs render time on big media fleets.", "key": "delegate_controls", "scope": "global", "default": "off", "advanced": false },

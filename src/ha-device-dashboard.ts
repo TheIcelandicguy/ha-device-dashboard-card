@@ -20,6 +20,7 @@ import { renderSceneButtonTile } from './tiles/scene-button';
 import { renderInputControlTile } from './tiles/input-control';
 import { renderEffectPicker } from './tiles/tile-parts';
 import * as cascade from './cascade';
+import { attentionItems, firmwareGroups, type AttentionItem, type AttentionKind } from './attention';
 import { renderSensorCardTile } from './tiles/sensor-card';
 import { renderPowerMonitorTile } from './tiles/power-monitor';
 import { renderLightControlTile } from './tiles/light-control';
@@ -97,6 +98,9 @@ export class HADeviceDashboard extends LitElement {
   @state() private _tileBlockOverride = new Map<string, TileBlockId[]>();
   @state() private _tileChipOverride = new Map<string, string[]>();
   @state() private _areaHeaderOverride = new Map<string, string[]>();
+  /** Needs-attention summary expanded. Collapsed by default: the count is the
+   *  signal, the list is the follow-up. */
+  @state() private _attentionOpen = false;
   @state() private _tileShowGraphsOverride = new Map<string, boolean>();
   /** Which area's header-customise popover is open. */
   @state() private _areaCustomizeOpen: string | null = null;
@@ -3445,6 +3449,7 @@ export class HADeviceDashboard extends LitElement {
         ${this._renderDelegateNotice(devices)}
         ${this._renderExtraCards(this._config.header_cards)}
         <div class="dash-body">
+          ${this._renderAttention(viewDevices)}
           ${showFavourites ? this._renderFavoritesSection(devices) : nothing}
           ${showRooms
             ? repeat([...grouped.entries()], ([area]) => area, ([area, areaDevices]) => this._renderAreaSection(area, areaDevices))
@@ -3457,6 +3462,56 @@ export class HADeviceDashboard extends LitElement {
     `;
 
     return dashboard;
+  }
+
+  /**
+   * "Needs attention" — the fleet-level answer to a question a wall of tiles
+   * cannot answer: which devices, out of all of them. Silent when everything is
+   * healthy, so it costs nothing on a good day.
+   */
+  private _renderAttention(devices: HADevice[]): TemplateResult {
+    if (this._config.show_attention === false) return html``;
+    const items = attentionItems(devices, this.hass.states as never, {
+      batteryBelow: this._config.attention_battery,
+    });
+    const fw = this._config.show_firmware_summary === false ? [] : firmwareGroups(devices);
+    const drifting = fw.length > 1;
+    if (!items.length && !drifting) return html``;
+
+    const ICON: Record<AttentionKind, string> = { offline: '○', alert: '▲', battery: '▮', update: '↑' };
+    const worst = (i: AttentionItem): AttentionKind =>
+      (['offline', 'alert', 'battery', 'update'] as AttentionKind[]).find(k => i.kinds.includes(k))!;
+
+    return html`
+      <div class="attention">
+        <div class="att-hdr" @click=${() => { this._attentionOpen = !this._attentionOpen; }}>
+          <span class="att-caret">${this._attentionOpen ? '▾' : '▸'}</span>
+          <span class="att-title">Needs attention</span>
+          ${items.length ? html`<span class="att-count">${items.length}</span>` : nothing}
+          ${drifting ? html`<span class="att-fw-chip">${fw.length} firmware versions</span>` : nothing}
+        </div>
+        ${this._attentionOpen ? html`
+          <div class="att-body">
+            ${items.map(i => html`
+              <button class="att-row att-${worst(i)}" @click=${() => { this._detailDevice = i.device.device_id; }}>
+                <span class="att-icon">${ICON[worst(i)]}</span>
+                <span class="att-name">${i.device.name}</span>
+                <span class="att-why">${i.detail.join(' · ')}</span>
+                ${i.device.area ? html`<span class="att-area">${i.device.area}</span>` : nothing}
+              </button>`)}
+            ${drifting ? html`
+              <div class="att-fw">
+                <div class="att-fw-title">Firmware</div>
+                ${fw.map(g => html`
+                  <div class="att-fw-row ${g.current ? 'current' : ''}">
+                    <span class="att-fw-ver">${g.version}</span>
+                    <span class="att-fw-bar"><i style="width:${Math.round((g.devices.length / devices.length) * 100)}%"></i></span>
+                    <span class="att-fw-n">${g.devices.length}</span>
+                    ${g.current ? html`<span class="att-fw-tag">newest</span>` : nothing}
+                  </div>`)}
+              </div>` : nothing}
+          </div>` : nothing}
+      </div>`;
   }
 
   /** Embed the user's own Lovelace cards (built-in or HACS) across the dashboard. */

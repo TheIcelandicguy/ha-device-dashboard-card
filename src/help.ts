@@ -94,6 +94,16 @@ export const HELP_CONCEPTS: HelpTopic[] = [
     ],
   },
   {
+    id: 'attention',
+    title: 'Needs attention',
+    body: [
+      'A fifty-device dashboard hides its own problems — three offline devices among fifty tiles is something you scroll past. The summary above the rooms answers the question the tiles cannot: which ones.',
+      'It lists offline devices, firing alerts, flat batteries and pending updates, worst first. Each row opens that device. It is invisible when nothing qualifies, so it costs nothing on a good day.',
+      'An offline device is reported as offline and nothing else — its last alert reading is stale, not news.',
+      'The firmware block groups the fleet by version and marks the newest, so a device left behind on an old build is obvious. It appears only when more than one version is running.',
+    ],
+  },
+  {
     id: 'conflicts',
     title: 'The Conflicts panel',
     body: [

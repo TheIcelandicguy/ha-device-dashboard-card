@@ -224,6 +224,26 @@ Device-info chips are hidden by default on every profile.
 
 ---
 
+## Needs attention
+
+```yaml
+show_attention: true        # default — the section hides itself when all is well
+attention_battery: 20       # flag a battery at or below this %
+show_firmware_summary: true # group the fleet by firmware version
+```
+
+A summary above the rooms answering what a wall of tiles cannot: *which* devices,
+out of all of them. It lists offline devices, firing alerts (overtemp, overpower,
+smoke, water, gas), flat batteries and pending updates — worst first, each row
+opening that device's detail sheet. It renders only when something qualifies.
+
+An offline device is reported as offline and nothing else: its last-known alert
+is a stale reading, not news.
+
+The firmware block groups the fleet by version — Shelly's
+`20260311-095847/1.7.5-g9979d16` reduces to `1.7.5` — marks the newest one, and
+only appears when more than one version is present.
+
 ## Tile styles
 
 ```yaml

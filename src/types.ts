@@ -604,6 +604,16 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   };
   /** Per-area style overrides */
   area_styles?: Record<string, AreaStyle>;
+  /** Show the "Needs attention" summary above the rooms — offline devices,
+   *  firing alerts, flat batteries, pending updates. It renders only when
+   *  something qualifies, so it is invisible on a healthy fleet. Default on. */
+  show_attention?: boolean;
+  /** Battery percentage at or below which a device is flagged. Default 20. */
+  attention_battery?: number;
+  /** Show the firmware spread inside that summary. Default on, and only visible
+   *  when the fleet is running more than one version. */
+  show_firmware_summary?: boolean;
+
   /** Per-device overrides, keyed by device_id */
   device_styles?: Record<string, DeviceStyle>;
   /** Per-device-TYPE overrides, keyed by profile (relay/dimmer/climate/…). Applies

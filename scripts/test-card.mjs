@@ -148,7 +148,7 @@ mkdirSync(OUT, { recursive: true });
 try {
   execFileSync(process.execPath, [
     join('node_modules', 'typescript', 'bin', 'tsc'),
-    'src/helpers.ts', 'src/cascade.ts', '--outDir', OUT,
+    'src/helpers.ts', 'src/cascade.ts', 'src/attention.ts', '--outDir', OUT,
     '--module', 'commonjs', '--target', 'es2020', '--skipLibCheck', '--moduleResolution', 'node',
   ], { stdio: 'inherit' });
   // The project is "type": "module", which would make these .js files ESM.
@@ -157,6 +157,7 @@ try {
   const req = createRequire(import.meta.url);
   const h = req(join(process.cwd(), OUT, 'helpers.js'));
   const cas = req(join(process.cwd(), OUT, 'cascade.js'));
+  const att = req(join(process.cwd(), OUT, 'attention.js'));
   const hass = fleet();
   const byName = (list, name) => list.find(d => d.name === name);
 
@@ -381,6 +382,53 @@ try {
   eq('command remaps to the scene button', cas.resolveStyle('command'), { style: 'scene-button', variant: 'big-number' });
   eq('a missing custom style falls back to default',
     cas.resolveCustomStyle({}, 'custom:gone').base, 'default');
+
+  // ── needs attention ────────────────────────────────────────────────────────
+  console.log('\nattention — what gets flagged');
+  const D = (name, entities, sw) => ({ device_id: name, name, area: 'Hall', sw_version: sw, entities });
+  const E = (entity_id, domain) => ({ entity_id, domain });
+  const S = {
+    'sensor.a_batt': { state: '9', attributes: { device_class: 'battery' } },
+    'sensor.b_batt': { state: '80', attributes: { device_class: 'battery' } },
+    'binary_sensor.c_overtemp': { state: 'on', attributes: { device_class: 'heat' } },
+    'sensor.c_power': { state: '5', attributes: { device_class: 'power' } },
+    'update.d_fw': { state: 'on', attributes: { installed_version: '1.7.5', latest_version: '2.0.0' } },
+    'sensor.d_power': { state: '1', attributes: {} },
+    'sensor.e_power': { state: 'unavailable', attributes: {} },
+    // an offline device that also has a stale alert reading
+    'binary_sensor.e_overtemp': { state: 'on', attributes: { device_class: 'heat' } },
+  };
+  S['binary_sensor.e_overtemp'].state = 'unavailable';
+
+  const lowBatt = D('Flat battery', [E('sensor.a_batt', 'sensor')], '1.7.5');
+  const fine = D('Healthy', [E('sensor.b_batt', 'sensor')], '1.7.5');
+  const hot = D('Overheating', [E('binary_sensor.c_overtemp', 'binary_sensor'), E('sensor.c_power', 'sensor')], '2.0.0');
+  const old_fw = D('Needs update', [E('update.d_fw', 'update'), E('sensor.d_power', 'sensor')], '1.7.5');
+  const gone = D('Offline', [E('sensor.e_power', 'sensor'), E('binary_sensor.e_overtemp', 'binary_sensor')], '1.6.0');
+  const fleetD = [fine, lowBatt, hot, old_fw, gone];
+
+  const items = att.attentionItems(fleetD, S);
+  eq('a healthy device is not listed', items.some(i => i.device.name === 'Healthy'), false);
+  eq('flags the right devices', items.map(i => i.device.name),
+    ['Offline', 'Overheating', 'Flat battery', 'Needs update']);
+  eq('worst first: offline, alert, battery, update', items.map(i => i.kinds[0]),
+    ['offline', 'alert', 'battery', 'update']);
+  ok('an offline device is not also reported for its stale alert',
+    items.find(i => i.device.name === 'Offline').kinds.join() === 'offline');
+  ok('the update detail names the version', items.find(i => i.device.name === 'Needs update').detail.join().includes('2.0.0'));
+  eq('the battery threshold is configurable',
+    att.attentionItems([lowBatt], S, { batteryBelow: 5 }).length, 0);
+
+  console.log('\nattention — firmware spread');
+  const groups = att.firmwareGroups(fleetD);
+  eq('groups by semantic version', groups.map(g => g.version), ['2.0.0', '1.7.5', '1.6.0']);
+  eq('counts each', groups.map(g => g.devices.length), [1, 3, 1]);
+  ok('the highest version is marked current', groups[0].current && !groups[1].current);
+  eq('a Shelly build string reduces to its version',
+    att.shortVersion('20260311-095847/1.7.5-g9979d16'), '1.7.5');
+  eq('1.10 sorts above 1.9, not below', att.compareVersions('1.10.0', '1.9.9') > 0, true);
+  eq('devices with no version are skipped',
+    att.firmwareGroups([D('No version', [], undefined)]).length, 0);
 
 } finally {
   rmSync(OUT, { recursive: true, force: true });
