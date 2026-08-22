@@ -15,6 +15,11 @@ when you need depth; this file is the fast orientation.
 - `npm run watch` — rebuild + auto-deploy on change.
 - `npm run typecheck` — `tsc --noEmit`.
 - `npm run lint` — ESLint over `src`.
+- `npm run check:docs` — cross-check `docs/` against `src/` (vocabularies, per-profile
+  defaults, first-run rows, guide freshness, whether `dist` carries the current
+  BUILD_TAG). Most of `docs/` is hand-synced, so run this before claiming docs are current.
+- `npm run docs:guide` — regenerate `docs/GUIDE.md` from `src/help.ts`.
+- `npm run test:builder` — smoke-test `docs/tools/config-builder.html`'s YAML output.
 - `.\update.ps1` — git-sync (`reset --hard origin/<branch>`) + build + report build tag.
 
 ## Source of truth
@@ -36,17 +41,21 @@ when you need depth; this file is the fast orientation.
 
 ## Layout
 
-- `src/ha-device-dashboard.ts` (~3k lines) — main card: config, hass wiring, device
+- `src/ha-device-dashboard.ts` (~3.6k lines) — main card: config, hass wiring, device
   grouping, header, graph fetch, CSS-var building.
-- `src/editor.ts` (~3.8k lines) — GUI editor. Mid-refactor toward the data-driven
+- `src/editor.ts` (~4.9k lines) — GUI editor. Mid-refactor toward the data-driven
   `EDITOR_LAYOUT` spec in `src/editor-layout.ts`; only the Graphs & Sensors tab is
   fully wired to it, other tabs still render from bespoke methods.
 - `src/helpers.ts` — discovery (`getAllDevices`), `getDeviceProfile`, defaults,
   `migrateConfig`.
 - `src/tiles/` — one render fn per tile style (`power-monitor`, `light-control`,
-  `climate-control`, `cover-control`, `sensor-card`, `scene-button`, `block-tile`
-  for the `default` adaptive tile) + `delegated-control.ts` (native HA controls for
-  long-tail domains) + `tile-context.ts` (`TileCtx`) + `tile-parts.ts`.
+  `climate-control`, `cover-control`, `sensor-card`, `input-control` for the i3/i4
+  keypad, `scene-button`, `block-tile` for the `default` adaptive tile) +
+  `delegated-control.ts` (native HA controls for long-tail domains) +
+  `tile-context.ts` (`TileCtx`) + `tile-parts.ts` (shared fragments: name row,
+  input channel row, input action button, effect picker).
+- `src/help.ts` — the ? Help content, and the source `docs/GUIDE.md` is generated
+  from. Edit here, never the markdown.
 - `src/detail/detail-sheet.ts` — the expandable per-device panel.
 - `src/styles/` — Lit css blocks (`main.ts`, `tiles.ts`, `detail.ts`).
 - `themes.ts`, `anim-icons.ts`, `fonts.ts` (bundled offline @font-face).

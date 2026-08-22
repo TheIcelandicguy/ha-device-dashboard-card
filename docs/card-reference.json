@@ -66,6 +66,7 @@
     { "setting": "Smart tile styles",    "value": "Off",                                            "source": "smart_tile_styles unset" },
     { "setting": "Header chips",         "value": "Online · Offline · Power · Alerts",              "source": "DEFAULT_HEADER_CHIPS" },
     { "setting": "Graphs (sparklines)",  "value": "On",                                             "source": "show_graphs ?? true" },
+    { "setting": "History window",       "value": "24 h",                                           "source": "graph_hours ?? 24" },
     { "setting": "Offline devices",      "value": "Shown",                                          "source": "hidden only if show_offline === false" },
     { "setting": "Header orbs / effects","value": "Off",                                            "source": "effects ?? false" },
     { "setting": "Buttons",              "value": "Pill · filled · medium",                         "source": "'pill' / 'fill' / 'md'" },
