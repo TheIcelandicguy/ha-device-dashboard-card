@@ -212,6 +212,8 @@ export class HADeviceDashboardEditor extends LitElement {
   /** Device-styling panel: false = only this device's own options, true = every
    *  option the card has. Viewer-local, never written to the config. */
   @state() private _devPanelAll = false;
+  /** Conflict panel expanded — collapsed by default so it stays a hint, not a wall. */
+  @state() private _conflictsOpen = false;
   @state() private _deviceSearch = '';
   @state() private _styleClipFeedback = '';   // transient feedback for image-upload errors
   @state() private _openDiscDropdown: string | null = null;  // Discovery: which hide-checklist dropdown is expanded
@@ -3653,6 +3655,159 @@ export class HADeviceDashboardEditor extends LitElement {
   }
 
 
+
+  // ══════════════════════════════════════════════════════════════
+  //  CONFIG CONFLICTS
+  // ══════════════════════════════════════════════════════════════
+
+  /** Settings that contradict each other, or that this config sets but nothing
+   *  reads. The card resolves every option through a specificity cascade, so a
+   *  key can be perfectly valid and still never apply — the failure is silent,
+   *  which is exactly what this surfaces. */
+  private _configConflicts(): Array<{ title: string; detail: string }> {
+    const c = this._config;
+    const out: Array<{ title: string; detail: string }> = [];
+    if (!c) return out;
+
+    // A palette written into `style` shadows the theme on every key it sets, so
+    // `theme` only still describes the card while the two agree.
+    const styleKeys = c.style ?? {};
+    if (c.theme && c.theme !== 'custom' && Object.keys(styleKeys).length) {
+      const actual = detectTheme(styleKeys);
+      if (actual !== c.theme) {
+        out.push({
+          title: `Theme is set to "${THEME_LABELS[c.theme] ?? c.theme}" but the colours do not match it`,
+          detail: `style: overrides the theme on every palette key it sets, so the card renders ${
+            actual === 'custom' ? 'your custom colours' : `"${THEME_LABELS[actual] ?? actual}"`
+          } instead. Re-pick a theme here to bring the two back in step.`,
+        });
+      }
+    }
+
+    if (c.smart_tile_styles && c.tile_style) {
+      out.push({
+        title: 'Smart tile styles never apply',
+        detail: `A global tile style (${c.tile_style}) outranks the per-profile defaults that smart tile styles turns on. Clear the global style, or set styles per device type instead.`,
+      });
+    }
+
+    if ((c.mode ?? 'shelly') !== 'universal') {
+      const universalOnly = ['universal_scope', 'include_integrations', 'exclude_integrations', 'include_domains', 'exclude_domains']
+        .filter(k => (c as unknown as Record<string, unknown>)[k] != null);
+      if (universalOnly.length) {
+        out.push({
+          title: 'Discovery filters are set but do nothing in Shelly mode',
+          detail: `${universalOnly.join(', ')} only apply when mode is universal. Shelly mode already keeps just Shelly and BTHome devices.`,
+        });
+      }
+    }
+
+    const overlap = (a?: string[], b?: string[]) => (a ?? []).filter(x => (b ?? []).includes(x));
+    const domClash = overlap(c.include_domains, c.exclude_domains);
+    if (domClash.length) {
+      out.push({
+        title: `Domain both included and excluded: ${domClash.join(', ')}`,
+        detail: 'Excluded wins for domains — those entities are dropped.',
+      });
+    }
+    const intClash = overlap(c.include_integrations, c.exclude_integrations);
+    if (intClash.length) {
+      out.push({
+        title: `Integration both included and excluded: ${intClash.join(', ')}`,
+        detail: 'Included wins for integrations — the opposite of how domains resolve, so this is worth a second look.',
+      });
+    }
+
+    // A layout can name the block, but the feature gate decides whether it draws.
+    if (!c.delegate_controls) {
+      const layouts: Array<TileLayout | undefined> = [
+        c.tile_layout,
+        ...Object.values(c.device_styles ?? {}).map(d => d.tile_layout),
+        ...Object.values(c.profile_styles ?? {}).map(d => d.tile_layout),
+        ...Object.values(c.custom_styles ?? {}).map(d => d.tile_layout),
+      ];
+      if (layouts.some(l => (flattenTileLayout(l) ?? []).includes('delegated_controls'))) {
+        out.push({
+          title: 'The Native controls block is in a layout but the feature is off',
+          detail: 'delegate_controls is off, so that block renders nothing. Turn it on under Rooms & devices, or drop the block.',
+        });
+      }
+    }
+
+    // Dangling references — a saved style that was deleted, or config keyed to a
+    // device/area that no longer exists (device ids change when a device is re-added).
+    const customKeys = new Set(Object.keys(c.custom_styles ?? {}));
+    const styleRefs = [c.tile_style, ...Object.values(c.device_styles ?? {}).map(d => d.tile_style),
+      ...Object.values(c.profile_styles ?? {}).map(d => d.tile_style),
+      ...Object.values(c.area_styles ?? {}).map(a => a.tile_style)];
+    const missingStyles = [...new Set(styleRefs.filter(
+      (v): v is `custom:${string}` =>
+        typeof v === 'string' && v.startsWith('custom:') && !customKeys.has(v.slice(7))))];
+    if (missingStyles.length) {
+      out.push({
+        title: `Saved style not found: ${missingStyles.join(', ')}`,
+        detail: 'Whatever points at it falls back to the default tile style.',
+      });
+    }
+
+    const devices = this._allDevices();
+    const known = new Set(devices.map(d => d.device_id));
+    const staleDevs = Object.keys(c.device_styles ?? {}).filter(id => !known.has(id));
+    if (staleDevs.length) {
+      out.push({
+        title: `${staleDevs.length} device styling block${staleDevs.length > 1 ? 's' : ''} for a device that is not here`,
+        detail: 'The device was removed, re-added with a new id, or is filtered out by discovery. Harmless, but it will never apply.',
+      });
+    }
+    const areas = new Set(devices.map(d => d.area ?? '').filter(Boolean));
+    const staleAreas = Object.keys(c.area_styles ?? {}).filter(a => a !== 'Favourites' && !areas.has(a));
+    if (staleAreas.length) {
+      out.push({
+        title: `Room styling for rooms with no devices: ${staleAreas.join(', ')}`,
+        detail: 'Usually a renamed area — room styles are keyed by name, so a rename orphans them.',
+      });
+    }
+
+    // Input actions pointing at entities HA does not have.
+    const missingTargets = new Set<string>();
+    for (const ds of Object.values(c.device_styles ?? {})) {
+      for (const act of Object.values(ds.input_actions ?? {})) {
+        const ids = [act.entity, act.hold_action?.entity, act.double_tap_action?.entity, act.select_chip?.entity]
+          .flatMap(e => (Array.isArray(e) ? e : e ? [e] : []));
+        for (const id of ids) if (this.hass && !this.hass.states[id]) missingTargets.add(id);
+      }
+    }
+    if (missingTargets.size) {
+      out.push({
+        title: `Input action target does not exist: ${[...missingTargets].join(', ')}`,
+        detail: 'The key still renders, but pressing it does nothing.',
+      });
+    }
+
+    return out;
+  }
+
+  private _renderConflicts(): TemplateResult | typeof nothing {
+    const found = this._configConflicts();
+    if (!found.length) return nothing;
+    return html`
+      <div class="conflict-panel">
+        <div class="conflict-hdr" @click=${() => { this._conflictsOpen = !this._conflictsOpen; }}>
+          <span class="conflict-badge">${found.length}</span>
+          <span class="conflict-title">${found.length === 1 ? 'setting is overridden or ignored' : 'settings are overridden or ignored'}</span>
+          <span class="conflict-caret">${this._conflictsOpen ? '▾' : '▸'}</span>
+        </div>
+        ${this._conflictsOpen ? html`
+          <div class="conflict-list">
+            ${found.map(f => html`
+              <div class="conflict-item">
+                <div class="conflict-item-title">${f.title}</div>
+                <div class="conflict-item-detail">${f.detail}</div>
+              </div>`)}
+          </div>` : nothing}
+      </div>`;
+  }
+
   // ══════════════════════════════════════════════════════════════
   //  MAIN RENDER
   // ══════════════════════════════════════════════════════════════
@@ -3889,6 +4044,7 @@ export class HADeviceDashboardEditor extends LitElement {
           ` : nothing}
         </div>
         ${this._defaultsOpen ? this._renderDefaultsPanel() : nothing}
+        ${this._renderConflicts()}
         <div class="tab-body">
           ${(() => {
             // Tab bodies resolve by id; unknown ids (custom tabs from the designer)
@@ -3993,6 +4149,22 @@ export class HADeviceDashboardEditor extends LitElement {
     .xc-yaml { width:100%; min-height:120px; font-family:monospace; font-size:12px; background:var(--s2); color:var(--t2); border:1px solid var(--border); border-radius:6px; padding:8px; resize:vertical; }
     ha-yaml-editor { display:block; margin-top:4px; }
     .tab-body { padding:16px; background:var(--bg); overflow-y:auto; flex:1; min-height:0; }
+
+    /* Conflict panel — settings that another setting overrides or ignores. */
+    .conflict-panel { margin:0 16px; border:1px solid rgba(219,162,92,.35);
+      border-radius:10px; background:rgba(219,162,92,.08); overflow:hidden; }
+    .conflict-hdr { display:flex; align-items:center; gap:8px; padding:8px 10px; cursor:pointer;
+      user-select:none; }
+    .conflict-hdr:hover { background:rgba(219,162,92,.10); }
+    .conflict-badge { min-width:20px; height:20px; padding:0 6px; border-radius:10px;
+      display:inline-flex; align-items:center; justify-content:center;
+      background:#dba25c; color:#1e1a17; font-size:11px; font-weight:800; }
+    .conflict-title { flex:1; font-size:12.5px; font-weight:600; color:#dba25c; }
+    .conflict-caret { color:#dba25c; font-size:12px; }
+    .conflict-list { padding:2px 10px 10px; display:flex; flex-direction:column; gap:8px; }
+    .conflict-item { border-left:2px solid rgba(219,162,92,.5); padding-left:8px; }
+    .conflict-item-title { font-size:12px; font-weight:650; color:var(--text); }
+    .conflict-item-detail { font-size:11.5px; color:var(--t2); margin-top:2px; line-height:1.45; }
     .tab-body::-webkit-scrollbar { width:5px; }
     .tab-body::-webkit-scrollbar-track { background:var(--s2); }
     .tab-body::-webkit-scrollbar-thumb { background:var(--s3); border-radius:3px; }

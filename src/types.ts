@@ -369,6 +369,14 @@ export interface InputGestureConfig {
 /** Hold behaviour — the same shape as any other secondary gesture. */
 export type InputHoldConfig = InputGestureConfig;
 
+/** The subset of DeviceStyle the per-type ("all relays") layer actually resolves.
+ *  It used to be typed as the whole of DeviceStyle, which let the editor and YAML
+ *  accept a dozen keys — bg_image, energy_period, energy_entity, tile_icon,
+ *  entity_animations, input_actions — that no cascade ever reads at profile level.
+ *  Widening this means teaching the matching resolver to look here too. */
+export type ProfileStyle = Pick<DeviceStyle,
+  'tile_style' | 'power_monitor_variant' | 'tile_layout' | 'sensors' | 'show_graphs' | 'elements' | 'color'>;
+
 /** A user-defined, savable tile style. Renders as `base` with the saved config
  *  applied; assigned via `tile_style: 'custom:<key>'`. */
 export interface CustomStyleDef {
@@ -595,7 +603,7 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   /** Per-device-TYPE overrides, keyed by profile (relay/dimmer/climate/…). Applies
    *  to every device of that type — "all relays". Sits one rung below device_styles
    *  in the cascade (device → type → area → style preset → global → profile default). */
-  profile_styles?: Partial<Record<DeviceProfile, DeviceStyle>>;
+  profile_styles?: Partial<Record<DeviceProfile, ProfileStyle>>;
   /** Per-tile-style presets: default chips / blocks / variant / element visibility
    *  for every tile rendered in a given style. Overridable per device/area. */
   style_presets?: Partial<Record<TileStyle, StylePreset>>;

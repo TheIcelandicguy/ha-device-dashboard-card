@@ -430,7 +430,9 @@ behaves at the wall. `step` (% of full, default 5) and `interval` (ms, default
 ### The rest of the cascade
 
 - **`profile_styles`** — keyed by profile (`relay`, `dimmer`, …): "all relays", one
-  rung below `device_styles`.
+  rung below `device_styles`. Accepts `tile_style`, `power_monitor_variant`,
+  `tile_layout`, `sensors`, `show_graphs`, `elements` and `color` — the rest of the
+  per-device keys are not read at this layer.
 - **`style_presets`** — keyed by tile style: defaults for every tile rendered in
   that style (`variant`, `sensors`, `tile_layout`, `elements`).
 - **`custom_styles`** — your saved named styles, assigned with `tile_style: custom:<key>`.

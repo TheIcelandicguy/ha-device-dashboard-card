@@ -1975,15 +1975,29 @@ export class HADeviceDashboard extends LitElement {
    * Resolves the ordered block list for a device.
    * Priority: device_styles > config.tile_layout > profile default
    */
+  /** Blocks a tile is built from, in force for this device. THE cascade — the
+   *  renderer and the Customize panel both resolve through here, because when
+   *  they had one each the panel listed a different set than the tile drew and
+   *  toggling a block there silently rebased onto the wrong layout.
+   *
+   *  Specific wins: device → device-type → the saved custom style → that style's
+   *  preset → global → the profile's built-in blocks. Areas have no tile_layout.
+   *  The viewer's own Customize choices sit above all of it, applied by callers. */
+  private _blockLayout(device: HADevice, profile: DeviceProfileResult): TileLayout {
+    return this._config.device_styles?.[device.device_id]?.tile_layout
+      ?? this._profileStyle(device)?.tile_layout
+      ?? this._customDef(device)?.tile_layout
+      ?? this._config.style_presets?.['default']?.tile_layout
+      ?? this._config.tile_layout
+      ?? PROFILE_DEFAULT_BLOCKS[profile.type] ?? PROFILE_DEFAULT_BLOCKS.generic;
+  }
+
   private _getBlockOrder(device: HADevice, profile: DeviceProfileResult): TileBlockId[] {
     const viewerOverride = this._tileBlockOverride.get(device.device_id);
     if (viewerOverride) return viewerOverride;
     // Flat: the Customize panel deals in "which blocks are visible", not rows.
-    const deviceOverride = flattenTileLayout(this._config.device_styles?.[device.device_id]?.tile_layout);
-    if (deviceOverride) return deviceOverride;
-    const globalLayout = flattenTileLayout(this._config.tile_layout);
-    if (globalLayout) return globalLayout;
-    return PROFILE_DEFAULT_BLOCKS[profile.type] ?? PROFILE_DEFAULT_BLOCKS.generic;
+    return flattenTileLayout(this._blockLayout(device, profile))
+      ?? PROFILE_DEFAULT_BLOCKS[profile.type] ?? PROFILE_DEFAULT_BLOCKS.generic;
   }
 
   private _trvColor(ratio: number): string {
@@ -2990,16 +3004,10 @@ export class HADeviceDashboard extends LitElement {
       ?? legacyVariant;
 
     if (style === 'default' || !style) {
-      // Original block-based layout
-      const _defaultBlocks: TileBlockId[] = ['name_row', 'sensors', 'graph', 'dimmer', 'cover_controls', 'trv_control', 'valve_controls', 'input_channels', 'relay_channels', 'power_bar', 'virtual_controls', 'delegated_controls', 'badges'];
+      // The viewer's own Customize choices win over config. Always flat — the
+      // panel is a visibility list, so toggling a block there flattens any rows.
       const blockLayout: TileLayout =
-        // The viewer's own Customize choices win over config. Always flat — the
-        // panel is a visibility list, so toggling a block there flattens any rows.
-        this._tileBlockOverride.get(device.device_id) ??
-        devStyle?.tile_layout ?? profStyle?.tile_layout ?? this._config.tile_layout ??
-        customDef?.tile_layout ??
-        this._config.style_presets?.['default']?.tile_layout ??
-        PROFILE_DEFAULT_BLOCKS[profile.type] ?? _defaultBlocks;
+        this._tileBlockOverride.get(device.device_id) ?? this._blockLayout(device, profile);
       const blockRows = normalizeTileLayout(blockLayout)!;
       const areaAccent = this._tileAccent(device, device.area ?? '');
       const blockCtx = this._buildTileCtx(device, profile, areaAccent);
@@ -3091,7 +3099,9 @@ export class HADeviceDashboard extends LitElement {
 
     const totalPower  = favDevices.reduce((s, d) => s + (this._getPower(d) ?? 0), 0);
     const onlineCount = favDevices.filter(d => this._isOnline(d)).length;
-    const cols        = this._config.columns ?? 3;
+    // Favourites spans rooms, so there is no area layer — but a view's columns
+    // must still apply, or setting them does nothing in the default layout.
+    const cols        = this._getActiveView()?.columns ?? this._config.columns ?? 3;
     const tileStyle   = this._config.area_styles?.['Favourites']?.tile_style;
 
     return html`
@@ -3268,7 +3278,7 @@ export class HADeviceDashboard extends LitElement {
     const isClosed = this._closedAreas.has(area);
     const onlineCount = devices.filter(d => this._isOnline(d)).length;
     const areaStyle = this._config.area_styles?.[label];
-    const cols = areaStyle?.columns ?? this._config.columns ?? 3;
+    const cols = areaStyle?.columns ?? this._getActiveView()?.columns ?? this._config.columns ?? 3;
 
     const styleObj: Record<string, string> = {};
     if (areaStyle) {

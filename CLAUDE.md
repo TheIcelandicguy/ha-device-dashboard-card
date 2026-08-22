@@ -83,6 +83,21 @@ when you need depth; this file is the fast orientation.
 - **Resolution cascade** for style/layout: device → device-type (profile) → area/
   room → view → global → built-in default. Viewer-local "what to show" tweaks layer
   on top via `localStorage` (not saved to YAML).
+- **Blocks resolve in exactly one place — `_blockLayout()`.** The renderer and the
+  Customize panel used to each have their own cascade; they disagreed whenever
+  `profile_styles` / `custom_styles` / `style_presets` set a layout, so the panel
+  rebased a toggle onto a layout that wasn't in force. Order is device → profile →
+  custom style → style preset → global → profile default: a *saved style's* layout
+  now outranks the global one, since the global is the least specific thing there is.
+- **`profile_styles` is `ProfileStyle`, not `DeviceStyle`** — only tile_style,
+  power_monitor_variant, tile_layout, sensors, show_graphs, elements and color are
+  read at the per-type layer. Widening it means teaching the matching resolver first.
+- **The editor flags config conflicts** (`_configConflicts` in `editor.ts`): settings
+  another setting silently overrides — a `theme` that `style` contradicts, smart tile
+  styles masked by a global `tile_style`, universal-only filters in Shelly mode,
+  dangling `custom:` references, `device_styles` keyed to a device that no longer
+  exists, input actions pointing at missing entities. Add a check there when adding
+  a cascade layer.
 - **Render throttling**: `shouldUpdate()` coalesces pure sensor updates over ~2s so
   heavy Shelly power-sensor churn doesn't re-render the whole fleet. Card-level
   CSS-var map is cached and only rebuilt on config change (bg images can be huge
