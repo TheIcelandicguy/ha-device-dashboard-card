@@ -199,7 +199,6 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _xcImportLoading = false;
   /** Theme awaiting a "replace custom colours?" confirmation, and the last
    *  saved custom palette (a restorable swatch). */
-  @state() private _pendingTheme: Exclude<ThemePreset, 'custom'> | null = null;
   /** Named colour palettes saved in this browser, for this card. */
   @state() private _palettes: Record<string, ThemePalette> = {};
   @state() private _paletteNaming = false;
@@ -486,11 +485,10 @@ export class HADeviceDashboardEditor extends LitElement {
   // palette from a random hue. Both stash the current colours in the ★ Saved
   // slot first, so a roll you dislike is one click from being undone.
 
-  private _stashColours(): void {
-    this._writePalettes({
-      ...this._palettes,
-      [HADeviceDashboardEditor.ROLL_SLOT]: this._effectivePalette(),
-    });
+  /** Keep the colours about to be replaced, under a reserved name so repeats
+   *  overwrite one entry instead of burying the list. */
+  private _stashColours(slot: string = HADeviceDashboardEditor.ROLL_SLOT): void {
+    this._writePalettes({ ...this._palettes, [slot]: this._effectivePalette() });
   }
 
   private _rollTheme(): void {
@@ -4209,9 +4207,13 @@ export class HADeviceDashboardEditor extends LitElement {
    *  switching is lossless and applies immediately. */
   private _onPickTheme(name: Exclude<ThemePreset, 'custom'>) {
     const sty = this._config.style ?? {};
-    const hasColours = THEME_KEYS.some(k => sty[k] !== undefined);
-    if (hasColours) this._pendingTheme = name;
-    else this._applyTheme(name);
+    // Applying a preset clears palette overrides, so keep what is being replaced
+    // — same stash a roll does. This used to interrupt with a three-button
+    // "save / apply anyway / cancel" prompt; the ★ swatch answers it better.
+    if (THEME_KEYS.some(k => sty[k] !== undefined)) this._stashColours('Before theme change');
+    this._applyTheme(name);
+    this._rolled = `${THEME_LABELS[name] ?? name} — previous colours are under ★ Before theme change`;
+    this._clearRolledSoon();
   }
 
   /** Restore a saved palette. It becomes the theme: 'custom' means "these
@@ -4329,16 +4331,9 @@ export class HADeviceDashboardEditor extends LitElement {
                   </button>`;
               })}
             </div>
-            ${this._pendingTheme ? html`
-              <div class="theme-warn">
-                <div class="tw-msg">Replace your current custom colours with <b>${THEME_LABELS[this._pendingTheme]}</b>?</div>
-                <div class="tw-btns">
-                  <button class="tw-save" @click=${() => { this._savePalette(`Colours ${Object.keys(this._palettes).length + 1}`); if (this._pendingTheme) this._applyTheme(this._pendingTheme); this._pendingTheme = null; }}>💾 Save current &amp; apply</button>
-                  <button class="tw-apply" @click=${() => { if (this._pendingTheme) this._applyTheme(this._pendingTheme); this._pendingTheme = null; }}>Apply anyway</button>
-                  <button class="tw-cancel" @click=${() => { this._pendingTheme = null; }}>Cancel</button>
-                </div>
-              </div>`
-              : (activeTheme === 'custom' ? html`<div class="hint">Custom — your colours don't match a preset.${Object.keys(this._palettes).length ? '' : ' 💾 Save keeps them, or applying a preset will offer to.'}</div>` : nothing)}
+            ${activeTheme === 'custom'
+              ? html`<div class="hint">Custom — your colours don't match a preset. 💾 Save keeps them; picking a preset stashes them under ★ first.</div>`
+              : nothing}
           </div>
 
           <div class="dp-group">
@@ -4612,13 +4607,6 @@ export class HADeviceDashboardEditor extends LitElement {
     .ts-name { font-size:9px; font-weight:600; color:var(--t2); text-align:center; line-height:1.1; }
     .theme-swatch.on .ts-name { color:var(--text); }
     .theme-swatch.saved .ts-name { color:var(--accent); }
-    .theme-warn { margin-top:8px; padding:9px 11px; border:1px solid var(--accentbdr); background:var(--accentbg); border-radius:8px; }
-    .tw-msg { font-size:11px; color:var(--text); margin-bottom:7px; }
-    .tw-btns { display:flex; flex-wrap:wrap; gap:6px; }
-    .tw-btns button { font-size:10px; padding:5px 9px; border-radius:5px; cursor:pointer; border:1px solid var(--border2); background:transparent; color:var(--t2); transition:all .15s; }
-    .tw-save { border-color:var(--accentbdr) !important; color:var(--accent) !important; font-weight:600; }
-    .tw-save:hover { background:var(--accentbg); }
-    .tw-apply:hover, .tw-cancel:hover { color:var(--text); border-color:var(--accent); }
     .sec-toolbar-btn { font-size:10px; padding:4px 9px; border-radius:4px; border:1px solid var(--border2); background:transparent; color:var(--t2); cursor:pointer; transition:all .15s; }
     .sec-toolbar-btn:hover { background:var(--s3); color:var(--text); border-color:var(--accent); }
 

@@ -132,7 +132,7 @@ The theme picker can roll a look for you, and keep the ones you like as named pa
 2. 🎲 Random lands on one of the built-in presets.
 3. ✨ Surprise me generates a palette from a random hue instead. Every text colour is contrast-checked against the surface behind it, so a roll is never unreadable.
 4. 💾 Save keeps the colours you are looking at under a name — including a preset you have tweaked. Saved palettes appear as ★ swatches in the picker; ✕ on a swatch forgets it.
-5. Rolling always stashes the current colours as “Before roll” first, so an unwanted roll is one click from being undone.
+5. Rolling stashes the current colours as “Before roll” first, and picking a preset stashes them as “Before theme change”, so neither is a one-way door.
 
 ### Save a setup you can get back
 

@@ -158,7 +158,7 @@ export const HELP_RECIPES: HelpTopic[] = [
       '🎲 Random lands on one of the built-in presets.',
       '✨ Surprise me generates a palette from a random hue instead. Every text colour is contrast-checked against the surface behind it, so a roll is never unreadable.',
       '💾 Save keeps the colours you are looking at under a name — including a preset you have tweaked. Saved palettes appear as ★ swatches in the picker; ✕ on a swatch forgets it.',
-      'Rolling always stashes the current colours as “Before roll” first, so an unwanted roll is one click from being undone.',
+      'Rolling stashes the current colours as “Before roll” first, and picking a preset stashes them as “Before theme change”, so neither is a one-way door.',
     ],
   },
   {

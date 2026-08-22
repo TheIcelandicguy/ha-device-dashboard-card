@@ -509,8 +509,9 @@ The theme picker carries two rolls: **🎲 Random** lands on a built-in preset, 
 nudged until it clears a WCAG floor against the surface behind it (primary ≥ 7:1,
 secondary ≥ 4.5:1). **💾 Save** keeps the colours you are looking at as a named
 palette — presets you have tweaked included — and saved palettes show up as ★
-swatches you can restore or forget. Rolling stashes the current colours as
-"Before roll" first, so a roll you dislike is one click from being undone.
+swatches you can restore or forget. Nothing is a one-way door: rolling stashes
+the current colours as "Before roll", and picking a preset stashes them as
+"Before theme change".
 
 Palettes live in the browser you saved them in (`shelly-dashboard:palettes:<card
 title>`), not in the dashboard config.
