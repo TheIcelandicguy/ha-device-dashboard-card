@@ -6,3 +6,6 @@ Thumbs.db
 .idea/
 .claude/
 .ha-token
+
+# personal HA config snapshots — never commit
+backups/
