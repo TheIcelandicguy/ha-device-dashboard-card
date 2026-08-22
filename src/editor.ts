@@ -10,7 +10,7 @@ import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, detectTheme, type
 import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons';
 import { EDITOR_LAYOUT } from './editor-layout';
 import { HELP_CONCEPTS, HELP_RECIPES, HELP_INTRO, type HelpTopic } from './help';
-import { buildCardConfig, randomChoices, randomPalette, describeChoices, DEFAULT_CHOICES, type BuilderChoices } from './card-builder';
+import { randomPalette, randomTheme } from './palette';
 
 /** The global `style` sub-object — typed so key access catches typos. */
 type StyleCfg = NonNullable<HADeviceDashboardConfig['style']>;
@@ -230,9 +230,7 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _helpOpen = false;
   @state() private _helpFilter = '';
   @state() private _helpTopic: string | null = null;
-  /** ✨ Create — the checklist panel. Choices live here until Create is pressed. */
-  @state() private _createOpen = false;
-  @state() private _choices: BuilderChoices = { ...DEFAULT_CHOICES };
+  /** Set after a colour roll, so the picker can say what it landed on. */
   @state() private _rolled: string | null = null;
   @state() private _deviceSearch = '';
   @state() private _styleClipFeedback = '';   // transient feedback for image-upload errors
@@ -480,131 +478,37 @@ export class HADeviceDashboardEditor extends LitElement {
       </div>`;
   }
 
-  // ── ✨ Create ────────────────────────────────────────────────────
-  // Builds a whole card from a checklist. It replaces the config outright, so
-  // the panel warns, offers to save first, and keeps the outgoing config as a
-  // snapshot regardless — a generated look should never be a one-way door.
+  // ── Colour rolls ────────────────────────────────────────────────
+  // Two buttons in the theme picker: one lands on a preset, one generates a
+  // palette from a random hue. Both stash the current colours in the ★ Saved
+  // slot first, so a roll you dislike is one click from being undone.
 
-  private _chipPool(): string[] {
-    return SENSOR_GROUPS.flatMap(g => g.items.map(i => i.key));
+  private _stashColours(): void {
+    const sty = this._config.style ?? {};
+    if (THEME_KEYS.some(k => sty[k] !== undefined)) this._saveCurrentTheme();
   }
 
-  private _setChoice(patch: Partial<BuilderChoices>): void {
-    this._choices = { ...this._choices, ...patch };
-    this._rolled = null;
+  private _rollTheme(): void {
+    this._stashColours();
+    const name = randomTheme(this._config.theme);
+    this._applyTheme(name);
+    this._rolled = `🎲 ${THEME_LABELS[name] ?? name}`;
+    this._clearRolledSoon();
   }
 
-  private _roll(wild: boolean): void {
-    const next = randomChoices(this._chipPool(), this._choices);
-    if (wild) { next.theme = 'custom'; next.palette = randomPalette(); }
-    this._choices = next;
-    this._rolled = describeChoices(next);
+  private _rollPalette(): void {
+    this._stashColours();
+    const pal = randomPalette();
+    // 'custom' means "these colours ARE the theme" — a generated palette has no
+    // preset behind it, so it is written to `style` rather than cleared from it.
+    this._set('style', { ...(this._config.style ?? {}), ...pal });
+    this._set('theme', 'custom');
+    this._rolled = `✨ Generated palette — accent ${pal.accent_color}`;
+    this._clearRolledSoon();
   }
 
-  private _applyCreate(): void {
-    // Snapshot first, under a reserved name, so Create is undoable from 📂 Load
-    // even though the warning told them to save.
-    this._loadSnapshots();
-    const stamp = new Date().toLocaleString();
-    this._writeSnapshots({
-      ...this._snapshots,
-      'Before ✨ Create': { saved: new Date().toISOString(), config: JSON.parse(JSON.stringify(this._config)) },
-    });
-    this._emitNow(buildCardConfig(this._choices, this._config?.title));
-    this._createOpen = false;
-    this._snapMsg = `Card created. Your previous setup is in 📂 Load as “Before ✨ Create” (${stamp}).`;
-    this._clearSnapMsgSoon();
-  }
-
-  private _renderCreatePanel(): TemplateResult {
-    const c = this._choices;
-    const seg = <T,>(opts: Array<[string, T]>, cur: T, on: (v: T) => void) => html`
-      <div class="pill-grp">
-        ${opts.map(([lbl, v]) => html`
-          <span class="pill ${cur === v ? 'on' : ''}" @click=${() => on(v)}>${lbl}</span>`)}
-      </div>`;
-    const check = (label: string, val: boolean, on: (v: boolean) => void) => html`
-      <label class="cr-check">
-        <input type="checkbox" .checked=${val} @change=${(e: Event) => on((e.target as HTMLInputElement).checked)}>
-        <span>${label}</span>
-      </label>`;
-
-    return html`
-      <div class="create-panel">
-        <div class="help-hdr">
-          <span class="help-title">✨ Create a card</span>
-          <button class="snap-x" title="Close" @click=${() => { this._createOpen = false; }}>✕</button>
-        </div>
-
-        <div class="cr-warn">
-          <b>This replaces your whole card.</b> Discovery, views, favourites, room and
-          device styling and any input actions are rewritten from these choices.
-          Save your current setup first — the outgoing config is also kept
-          automatically as “Before ✨ Create”.
-          <button class="sec-toolbar-btn" style="margin-left:6px"
-            @click=${() => { this._createOpen = false; this._snapMenu = 'save'; }}>💾 Save current</button>
-        </div>
-
-        <div class="cr-group">Show</div>
-        <div class="cr-checks">
-          ${check('Card title', c.showTitle, v => this._setChoice({ showTitle: v }))}
-          ${check('Stats row', c.showStats, v => this._setChoice({ showStats: v }))}
-          ${check('Cloud status', c.showCloud, v => this._setChoice({ showCloud: v }))}
-          ${check('Glow orbs', c.orbs, v => this._setChoice({ orbs: v }))}
-          ${check('Sparkline graphs', c.showGraphs, v => this._setChoice({ showGraphs: v }))}
-          ${check('Native controls', c.delegate, v => this._setChoice({ delegate: v }))}
-          ${check('Every HA device', c.universal, v => this._setChoice({ universal: v }))}
-        </div>
-        ${c.universal ? html`
-          <div class="cr-row"><span class="cr-lbl">Scope</span>
-            ${seg([['Real devices', 'devices'], ['Controllable', 'controllable'], ['Everything', 'all']] as Array<[string, BuilderChoices['scope']]>,
-              c.scope, v => this._setChoice({ scope: v }))}</div>` : nothing}
-
-        <div class="cr-group">Tiles</div>
-        <div class="cr-row"><span class="cr-lbl">Style</span>
-          ${seg([['Adaptive', ''], ['Power', 'power-monitor'], ['Light', 'light-control'],
-                 ['Sensor', 'sensor-card'], ['Inputs', 'input-control']] as Array<[string, BuilderChoices['tileStyle']]>,
-            c.tileStyle, v => this._setChoice({ tileStyle: v }))}</div>
-        <div class="cr-row"><span class="cr-lbl">Size</span>
-          ${seg([['Small', 'sm'], ['Medium', 'md'], ['Large', 'lg']] as Array<[string, BuilderChoices['tileSize']]>,
-            c.tileSize, v => this._setChoice({ tileSize: v }))}</div>
-        <div class="cr-row"><span class="cr-lbl">Columns</span>
-          ${seg([1, 2, 3, 4, 5, 6].map(n => [String(n), n] as [string, number]),
-            c.columns, v => this._setChoice({ columns: v }))}</div>
-        <div class="cr-row"><span class="cr-lbl">Per type</span>
-          ${seg([['One style', false], ['Smart per device type', true]] as Array<[string, boolean]>,
-            c.smart, v => this._setChoice({ smart: v }))}</div>
-
-        <div class="cr-group">Colours</div>
-        <div class="cr-themes">
-          ${THEME_ORDER.map(t => html`
-            <button class="cr-theme ${c.theme === t ? 'on' : ''}" title=${THEME_LABELS[t] ?? t}
-              @click=${() => this._setChoice({ theme: t, palette: undefined })}>
-              <span class="cr-sw" style="background:${THEME_PRESETS[t].card_bg}">
-                <i style="background:${THEME_PRESETS[t].accent_color}"></i>
-                <i style="background:${THEME_PRESETS[t].header_bg2}"></i>
-              </span>
-              <span class="cr-theme-nm">${THEME_LABELS[t] ?? t}</span>
-            </button>`)}
-          ${c.theme === 'custom' && c.palette ? html`
-            <button class="cr-theme on" title="Generated palette">
-              <span class="cr-sw" style="background:${c.palette.card_bg}">
-                <i style="background:${c.palette.accent_color}"></i>
-                <i style="background:${c.palette.header_bg2}"></i>
-              </span>
-              <span class="cr-theme-nm">Generated</span>
-            </button>` : nothing}
-        </div>
-
-        ${this._rolled ? html`<div class="cr-rolled">🎲 ${this._rolled}</div>` : nothing}
-
-        <div class="cr-actions">
-          <button class="sec-toolbar-btn" @click=${() => this._roll(false)}>🎲 Random</button>
-          <button class="sec-toolbar-btn" @click=${() => this._roll(true)}>✨ Surprise me</button>
-          <span class="sec-toolbar-spacer"></span>
-          <button class="sec-toolbar-btn cr-go" @click=${() => this._applyCreate()}>Create card</button>
-        </div>
-      </div>`;
+  private _clearRolledSoon(): void {
+    window.setTimeout(() => { this._rolled = null; }, 5000);
   }
 
   private _savedThemeKey(): string {
@@ -4332,7 +4236,15 @@ export class HADeviceDashboardEditor extends LitElement {
           </div>
 
           <div class="dp-group">
-            <div class="dp-title">Colour theme</div>
+            <div class="dp-title" style="display:flex;align-items:center;gap:6px">
+              <span>Colour theme</span>
+              <span class="sec-toolbar-spacer"></span>
+              <button class="sec-toolbar-btn" title="Land on a random preset"
+                @click=${() => this._rollTheme()}>🎲 Random</button>
+              <button class="sec-toolbar-btn" title="Generate a palette from a random hue, contrast-checked"
+                @click=${() => this._rollPalette()}>✨ Surprise me</button>
+            </div>
+            ${this._rolled ? html`<div class="cr-rolled">${this._rolled} — previous colours are under ★ Saved</div>` : nothing}
             <div class="theme-grid">
               ${this._savedTheme ? html`
                 <button class="theme-swatch saved ${savedActive ? 'on' : ''}" title="Your saved colours — click to restore"
@@ -4487,9 +4399,7 @@ export class HADeviceDashboardEditor extends LitElement {
           <button class="sec-toolbar-btn ${this._helpOpen ? 'active' : ''}"
             title="How the card fits together"
             @click=${() => { this._helpOpen = !this._helpOpen; }}>? Help</button>
-          <button class="sec-toolbar-btn ${this._createOpen ? 'active' : ''}"
-            title="Build a whole card from a checklist — or roll one"
-            @click=${() => { this._createOpen = !this._createOpen; }}>✨ Create</button>
+
           <span class="sec-toolbar-spacer"></span>
           ${showSectionToggle ? html`
             <button class="sec-toolbar-btn" title="Expand all sections" @click=${() => setAllSections(true)}>▾ Expand all</button>
@@ -4500,7 +4410,6 @@ export class HADeviceDashboardEditor extends LitElement {
         ${this._snapMsg ? html`<div class="snap-msg">${this._snapMsg}</div>` : nothing}
         ${this._defaultsOpen ? this._renderDefaultsPanel() : nothing}
         ${this._helpOpen ? this._renderHelpPanel() : nothing}
-        ${this._createOpen ? this._renderCreatePanel() : nothing}
         ${this._renderConflicts()}
         <div class="tab-body">
           ${(() => {
@@ -4597,29 +4506,7 @@ export class HADeviceDashboardEditor extends LitElement {
     .help-topic-body ol { margin:6px 0 0; padding-left:18px; }
     .help-topic-body li { margin-bottom:5px; }
     .help-topic-body b { color:var(--text); }
-    /* ✨ Create */
-    .create-panel { margin:8px 16px 0; padding:10px; border:1px solid var(--border); border-radius:10px;
-      background:var(--s2,var(--s1)); max-height:56vh; overflow-y:auto; }
-    .cr-warn { font-size:11.5px; line-height:1.5; color:var(--t2); padding:8px 9px; margin-bottom:8px;
-      border:1px solid rgba(219,162,92,.35); border-radius:8px; background:rgba(219,162,92,.08); }
-    .cr-warn b { color:#dba25c; }
-    .cr-group { font-size:10.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
-      color:var(--t3); margin:10px 0 5px; }
-    .cr-checks { display:flex; flex-wrap:wrap; gap:6px 14px; }
-    .cr-check { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text); cursor:pointer; }
-    .cr-row { display:flex; align-items:center; gap:8px; margin:5px 0; flex-wrap:wrap; }
-    .cr-lbl { flex:0 0 66px; font-size:11px; color:var(--t2); }
-    .cr-themes { display:flex; flex-wrap:wrap; gap:6px; }
-    .cr-theme { display:flex; align-items:center; gap:6px; padding:4px 8px 4px 4px; border-radius:8px;
-      border:1px solid var(--border); background:var(--s1); color:var(--t2); font:inherit; font-size:11px;
-      cursor:pointer; }
-    .cr-theme.on { border-color:var(--accent); color:var(--text); }
-    .cr-sw { display:inline-flex; gap:2px; padding:3px; border-radius:5px; }
-    .cr-sw i { width:8px; height:12px; border-radius:2px; }
-    .cr-rolled { margin-top:8px; font-size:11.5px; color:var(--accent); }
-    .cr-actions { display:flex; align-items:center; gap:6px; margin-top:10px;
-      padding-top:9px; border-top:1px solid var(--border); }
-    .cr-go { background:var(--accentbg); color:var(--accent); border-color:var(--accentbdr); font-weight:700; }
+    .cr-rolled { margin:2px 0 6px; font-size:11.5px; color:var(--accent); }
     .help-code { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:10.5px;
       background:var(--s1); border:1px solid var(--border); border-radius:4px; padding:1px 4px; }
     .adv-toggle { display:inline-flex; align-items:center; gap:7px; cursor:pointer; user-select:none; }

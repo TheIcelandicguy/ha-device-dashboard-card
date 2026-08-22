@@ -124,15 +124,14 @@ This mirrors the physical button rather than driving it — both paths keep work
 4. Optionally set a double-tap action, or point the Dropdown field at a select entity such as select.wled_preset.
 5. If the switch does not show a keypad, its tile style is set elsewhere — set Device type "Input" to the Inputs style, or use the per-type panel.
 
-### Generate a card from a checklist
+### Roll a colour scheme
 
-✨ Create builds a whole card from what you tick — and rolls one for you if you would rather be surprised. It replaces the entire config, so it saves your outgoing setup first.
+The theme picker has two dice next to it, for when you want a look but not a decision.
 
-1. Toolbar → ✨ Create.
-2. Tick what the card should show, pick tile style, size and columns, pick a theme.
-3. 🎲 Random fills the checklist from the card's own vocabularies — every roll is a combination that works.
-4. ✨ Surprise me does the same but generates a palette from a random hue, contrast-checked so text stays readable.
-5. Press Create card. Your previous config is kept in 📂 Load as “Before ✨ Create” if you want it back.
+1. ◆ Defaults → Colour theme.
+2. 🎲 Random lands on one of the built-in presets.
+3. ✨ Surprise me generates a palette from a random hue instead. Every text colour is contrast-checked against the surface behind it, so a roll is never unreadable.
+4. Both stash your current colours under ★ Saved first — one click puts them back.
 
 ### Save a setup you can get back
 

@@ -20,7 +20,7 @@ when you need depth; this file is the fast orientation.
   BUILD_TAG). Most of `docs/` is hand-synced, so run this before claiming docs are current.
 - `npm run docs:guide` — regenerate `docs/GUIDE.md` from `src/help.ts`.
 - `npm run test:builder` — smoke-test `docs/tools/config-builder.html`'s YAML output.
-- `npm run test:create` — test `src/card-builder.ts`, including WCAG floors on 300
+- `npm run test:palette` — test `src/palette.ts`, including WCAG floors on 300
   generated palettes.
 - `npm test` — check:docs + both test scripts.
 - `.\update.ps1` — git-sync (`reset --hard origin/<branch>`) + build + report build tag.
@@ -57,9 +57,9 @@ when you need depth; this file is the fast orientation.
   `delegated-control.ts` (native HA controls for long-tail domains) +
   `tile-context.ts` (`TileCtx`) + `tile-parts.ts` (shared fragments: name row,
   input channel row, input action button, effect picker).
-- `src/card-builder.ts` — ✨ Create: choices → whole config, plus the random
-  rolls and the contrast-checked palette generator. Pure (no DOM/hass), tested by
-  `npm run test:create`.
+- `src/palette.ts` — the theme picker's 🎲 / ✨ rolls: a random preset, or a
+  palette generated from a random hue with WCAG floors enforced per colour. Pure
+  (no DOM/hass), tested by `npm run test:palette`.
 - `src/help.ts` — the ? Help content, and the source `docs/GUIDE.md` is generated
   from. Edit here, never the markdown.
 - `src/detail/detail-sheet.ts` — the expandable per-device panel.

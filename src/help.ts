@@ -150,15 +150,14 @@ export const HELP_RECIPES: HelpTopic[] = [
     ],
   },
   {
-    id: 'create',
-    title: 'Generate a card from a checklist',
-    body: ['✨ Create builds a whole card from what you tick — and rolls one for you if you would rather be surprised. It replaces the entire config, so it saves your outgoing setup first.'],
+    id: 'colours',
+    title: 'Roll a colour scheme',
+    body: ['The theme picker has two dice next to it, for when you want a look but not a decision.'],
     steps: [
-      'Toolbar → ✨ Create.',
-      'Tick what the card should show, pick tile style, size and columns, pick a theme.',
-      '🎲 Random fills the checklist from the card\'s own vocabularies — every roll is a combination that works.',
-      '✨ Surprise me does the same but generates a palette from a random hue, contrast-checked so text stays readable.',
-      'Press Create card. Your previous config is kept in 📂 Load as “Before ✨ Create” if you want it back.',
+      '◆ Defaults → Colour theme.',
+      '🎲 Random lands on one of the built-in presets.',
+      '✨ Surprise me generates a palette from a random hue instead. Every text colour is contrast-checked against the surface behind it, so a roll is never unreadable.',
+      'Both stash your current colours under ★ Saved first — one click puts them back.',
     ],
   },
   {
