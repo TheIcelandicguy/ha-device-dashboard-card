@@ -73,6 +73,8 @@
     { "setting": "Views",                "value": "Single implicit \"All devices\"",                "source": "—" }
   ],
 
+  "$profilesNote": "chips: [] means SHOW ALL — the profile has no entry in PROFILE_DEFAULT_SENSORS, and an absent entry is the card's 'no curated set, show every chip this device produces' signal. It does NOT mean 'no chips'. Only 'generic' and 'media' are in that state.",
+
   "profiles": [
     { "key": "relay",        "label": "Relay",   "smartStyle": "power-monitor",   "chips": ["power","energy","voltage","current","temperature","overtemp","overpower"] },
     { "key": "plug",         "label": "Plug",    "smartStyle": "power-monitor",   "chips": ["power","energy","voltage","current","overtemp","overpower"] },

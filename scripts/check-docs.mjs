@@ -78,6 +78,23 @@ if (blockOrder && ref.profileBlockOrder) {
   }
 }
 
+// ── per-profile chip defaults ──
+// The JSON writes [] for a profile the code omits, and an omitted profile means
+// "show every chip", not "show none". Compare with that convention in mind.
+const chipDefaults = helpers.match(/PROFILE_DEFAULT_SENSORS[^{]*\{([\s\S]*?)\n\};/);
+if (chipDefaults) {
+  for (const p of ref.profiles) {
+    const row = chipDefaults[1].match(new RegExp(`^\\s*${p.key}:\\s*\\[([\\s\\S]*?)\\]`, 'm'));
+    const code = row ? [...row[1].matchAll(/'([\w]+)'/g)].map((m) => m[1]) : null;
+    const docd = p.chips ?? [];
+    if (code === null) {
+      if (docd.length) note('card-reference.profiles', `${p.key} lists chips but the code has no entry (= show all)`);
+    } else if (JSON.stringify(code) !== JSON.stringify(docd)) {
+      note('card-reference.profiles', `${p.key} chips differ — code [${code.join(',')}] vs docs [${docd.join(',')}]`);
+    }
+  }
+}
+
 // ── style elements ──
 const seBlock = helpers.match(/STYLE_ELEMENTS[^{]*\{([\s\S]*?)\n\};/);
 if (seBlock) {

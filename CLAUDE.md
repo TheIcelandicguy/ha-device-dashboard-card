@@ -22,6 +22,11 @@ when you need depth; this file is the fast orientation.
 - `npm run test:builder` — smoke-test `docs/tools/config-builder.html`'s YAML output.
 - `npm run test:palette` — test `src/palette.ts`, including WCAG floors on 300
   generated palettes.
+- `npm run test:card` — the card's core logic against fixture `hass` objects:
+  discovery + both merge passes, input-channel detection, relevance, layout
+  utilities, migrateConfig. Compiles `helpers.ts` to CJS in a temp dir (the
+  project is `type: module`, so the emitted files need a `{"type":"commonjs"}`
+  shim next to them).
 - `npm test` — check:docs + both test scripts.
 - `.\update.ps1` — git-sync (`reset --hard origin/<branch>`) + build + report build tag.
 
