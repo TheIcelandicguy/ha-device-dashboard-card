@@ -178,7 +178,7 @@ const DEFAULTS = { theme:'warm_dusk', title:'Shelly', columns:3, tile_size:'md',
   tile_style:null, power_monitor_variant:'big-number', smart_tile_styles:false, show_offline:true,
   show_graphs:true, graph_hours:24, effects:false, header_show_title:true, header_show_stats:true,
   header_show_cloud:false, header_show_orbs:false, header_chips:['online','offline','power','alerts'],
-  sensors:null };
+  sensors:null, mode:'shelly', universal_scope:'devices', delegate_controls:false, energy_period:'total' };
 
 const THEMES = [
   ['warm_dusk','Warm Dusk',true,{accent_color:'#c98a63',card_bg:'#1e1a17',tile_bg:'rgba(255,244,232,0.035)',tile_border:'rgba(255,244,232,0.08)',tile_hover_bg:'rgba(255,244,232,0.06)',tile_hover_shadow:'rgba(0,0,0,0.35)',tile_sensor_bg:'rgba(255,244,232,0.045)',tile_exp_bg:'rgba(255,244,232,0.05)',text_primary:'#ece5dc',text_secondary:'#b3a596',text_muted:'#7e7265',header_bg:'#241f1b',header_bg2:'#33291f',header_text_color:'#f3ece3',header_orb_color:'#c98a63',online_color:'#93b384',offline_color:'#d47f62',power_color:'#dba25c',area_header_color:'#c98a63'}],
@@ -199,10 +199,10 @@ const SENSOR_GROUPS = {
   Electrical: [['power','Power'],['voltage','Voltage'],['current','Current'],['energy','Energy'],['frequency','Frequency'],['apparent_power','App. Power'],['reactive_power','React. Power'],['power_factor','Power Factor']],
   Environmental: [['temperature','Temperature'],['humidity','Humidity'],['illuminance','Illuminance'],['co2','CO₂'],['gas','Gas']],
   'Device info': [['cloud','Cloud'],['rssi','RSSI'],['uptime','Uptime'],['ip','IP'],['ssid','SSID'],['battery','Battery'],['fw_version','Firmware'],['mac','MAC']],
-  Alerts: [['overtemp','Overtemp'],['overpower','Overpower'],['motion','Motion'],['door','Door'],['flood','Flood'],['smoke','Smoke']],
+  Alerts: [['overtemp','Overtemp'],['overpower','Overpower'],['motion','Motion'],['door','Door'],['flood','Flood'],['smoke','Smoke'],['vibration','Vibration']],
 };
 const ALL_SENSORS = Object.values(SENSOR_GROUPS).flat().map(x=>x[0]);
-const TILE_STYLES = [['','Adaptive'],['power-monitor','Power'],['light-control','Light'],['climate-control','Climate'],['cover-control','Cover'],['sensor-card','Sensor'],['scene-button','Scene']];
+const TILE_STYLES = [['','Adaptive'],['power-monitor','Power'],['light-control','Light'],['climate-control','Climate'],['cover-control','Cover'],['sensor-card','Sensor'],['input-control','Inputs'],['scene-button','Scene']];
 const PM_VARIANTS = ['big-number','gauge','graph','compact','table'];
 
 /* ── state ── */
@@ -210,7 +210,9 @@ let S;
 function fresh(){ return { theme:'warm_dusk', title:'', columns:3, tile_size:'md', sort_by:'name',
   tile_style:'', power_monitor_variant:'big-number', smart_tile_styles:false, show_offline:true, show_graphs:true,
   graph_hours:24, effects:false, header_show_title:true, header_show_stats:true, header_show_cloud:false,
-  header_show_orbs:false, header_chips:['online','offline','power','alerts'], sensors:[...ALL_SENSORS] }; }
+  header_show_orbs:false, header_chips:['online','offline','power','alerts'], sensors:[...ALL_SENSORS],
+  mode:'shelly', universal_scope:'devices', exclude_integrations:[], exclude_domains:[],
+  delegate_controls:false, energy_period:'total' }; }
 S = fresh();
 
 const panel = document.getElementById('panel');
@@ -221,6 +223,8 @@ function group(name){ const g=el('div','grp'); g.appendChild(el('div','gh',`<spa
 function rowEl(g,lbl,sub,ctl){ const r=el('div','row'); r.innerHTML=`<div class="lbl">${lbl}${sub?`<small>${sub}</small>`:''}</div>`; const c=el('div','ctl'); c.appendChild(ctl); r.appendChild(c); g.appendChild(r); return r; }
 function seg(opts,val,on){ const s=el('div','seg'); opts.forEach(([v,l])=>{const b=el('button',v===val?'on':'',l);b.onclick=()=>{on(v);};s.appendChild(b);}); return s; }
 function toggle(val,on){ const w=el('label','sw'); w.innerHTML=`<input type="checkbox" ${val?'checked':''}><span class="tk"></span><span class="kn"></span>`; w.querySelector('input').onchange=e=>on(e.target.checked); return w; }
+function textList(val,ph,on){ const i=el('input'); i.type='text'; i.placeholder=ph; i.value=val.join(', ');
+  i.onchange=e=>on(e.target.value.split(',').map(x=>x.trim()).filter(Boolean)); return i; }
 function slider(min,max,step,val,unit,on){ const w=el('div','slider'); w.innerHTML=`<input type="range" min="${min}" max="${max}" step="${step}" value="${val}"><span class="val">${val}${unit}</span>`; const i=w.querySelector('input'),v=w.querySelector('.val'); i.oninput=e=>{v.textContent=e.target.value+unit;on(+e.target.value);}; return w; }
 
 function render(){
@@ -238,6 +242,17 @@ function render(){
   g.appendChild(tg);
   const ti=el('input'); ti.type='text'; ti.placeholder='Shelly'; ti.value=S.title; ti.oninput=e=>{S.title=e.target.value;sync();};
   rowEl(g,'Card title','default: "Shelly"',ti);
+
+  // DISCOVERY
+  g=group('Discovery');
+  rowEl(g,'Mode','what the card looks at',seg([['shelly','Shelly only'],['universal','Universal']],S.mode,v=>{S.mode=v;render();sync();}));
+  if(S.mode==='universal'){
+    rowEl(g,'Scope','how wide to cast',seg([['devices','Real devices'],['controllable','Controllable'],['all','Everything']],S.universal_scope,v=>{S.universal_scope=v;sync();}));
+    rowEl(g,'Hide integrations','comma separated, e.g. hue, tplink',textList(S.exclude_integrations,'added to the built-in deny-list',v=>{S.exclude_integrations=v;sync();}));
+    rowEl(g,'Hide entity types','comma separated, e.g. update, camera',textList(S.exclude_domains,'domains to drop entirely',v=>{S.exclude_domains=v;sync();}));
+    const dn=el('div','note','This tool cannot list your integrations — the editor can, with tick boxes and Hide all. These fields are for building a config up front.');
+    dn.style.marginTop='2px'; g.appendChild(dn);
+  }
 
   // LAYOUT
   g=group('Layout');
@@ -279,7 +294,9 @@ function render(){
 
   // BEHAVIOUR
   g=group('Behaviour');
-  rowEl(g,'Sort devices by','',seg([['name','Name'],['power','Power'],['online','Online']],S.sort_by,v=>{S.sort_by=v;sync();}));
+  rowEl(g,'Sort devices by','',seg([['name','Name'],['power','Power'],['online','Online'],['area','Room']],S.sort_by,v=>{S.sort_by=v;sync();}));
+  rowEl(g,'Native controls','HA\'s own tiles for media, locks, fans, vacuums',toggle(S.delegate_controls,v=>{S.delegate_controls=v;sync();}));
+  rowEl(g,'Energy shows','lifetime total, or a window',seg([['total','Total'],['today','Today'],['week','Week'],['month','Month']],S.energy_period,v=>{S.energy_period=v;sync();}));
   rowEl(g,'Show offline devices','',toggle(S.show_offline,v=>{S.show_offline=v;sync();}));
   rowEl(g,'Sparkline graphs','',toggle(S.show_graphs,v=>{S.show_graphs=v;render();sync();}));
   if(S.show_graphs) rowEl(g,'History window','hours of look-back',slider(1,168,1,S.graph_hours,'h',v=>{S.graph_hours=v;sync();}));
@@ -309,6 +326,14 @@ function buildConfig(){
   if(S.tile_size!=='md') c.tile_size=S.tile_size;
   if(S.tile_style){ c.tile_style=S.tile_style; if(S.tile_style==='power-monitor' && S.power_monitor_variant!=='big-number') c.power_monitor_variant=S.power_monitor_variant; }
   if(S.smart_tile_styles) c.smart_tile_styles=true;
+  if(S.mode==='universal'){
+    c.mode='universal';
+    if(S.universal_scope!=='devices') c.universal_scope=S.universal_scope;
+    if(S.exclude_integrations.length) c.exclude_integrations=[...S.exclude_integrations];
+    if(S.exclude_domains.length) c.exclude_domains=[...S.exclude_domains];
+  }
+  if(S.delegate_controls) c.delegate_controls=true;
+  if(S.energy_period!=='total') c.energy_period=S.energy_period;
   if(S.sort_by!=='name') c.sort_by=S.sort_by;
   if(S.show_offline===false) c.show_offline=false;
   if(S.show_graphs===false) c.show_graphs=false;
@@ -384,7 +409,7 @@ document.getElementById('dl').onclick=()=>{const blob=new Blob([window._cfgYaml]
 document.getElementById('reset').onclick=()=>{S=fresh();render();sync();};
 
 /* ── import existing YAML ── */
-const MANAGED=['type','title','columns','tile_size','tile_style','power_monitor_variant','smart_tile_styles','sort_by','show_offline','show_graphs','graph_hours','effects','header_show_title','header_show_stats','header_show_cloud','header_show_orbs','header_chips','sensors','style'];
+const MANAGED=['type','title','columns','tile_size','tile_style','power_monitor_variant','smart_tile_styles','sort_by','show_offline','show_graphs','graph_hours','effects','header_show_title','header_show_stats','header_show_cloud','header_show_orbs','header_chips','sensors','style','theme','mode','universal_scope','exclude_integrations','exclude_domains','delegate_controls','energy_period'];
 function parseScalar(s){ if(s==='')return '';
   if((s[0]==='"'&&s.slice(-1)==='"')||(s[0]==="'"&&s.slice(-1)==="'"))return s.slice(1,-1);
   if(s==='true')return true; if(s==='false')return false;
@@ -428,6 +453,12 @@ function applyConfig(c){
   S.header_show_orbs=c.header_show_orbs===true;
   if(Array.isArray(c.header_chips)) S.header_chips=c.header_chips.filter(k=>HC_LABEL[k]);
   if(Array.isArray(c.sensors)) S.sensors=c.sensors.filter(k=>ALL_SENSORS.includes(k));
+  S.mode = c.mode==='universal' ? 'universal' : 'shelly';
+  S.universal_scope = ['devices','controllable','all'].includes(c.universal_scope) ? c.universal_scope : 'devices';
+  S.exclude_integrations = Array.isArray(c.exclude_integrations) ? c.exclude_integrations.slice() : [];
+  S.exclude_domains = Array.isArray(c.exclude_domains) ? c.exclude_domains.slice() : [];
+  S.delegate_controls = c.delegate_controls===true;
+  S.energy_period = ['total','today','week','month'].includes(c.energy_period) ? c.energy_period : 'total';
   if(typeof c.theme==='string'&&THEME_MAP[c.theme]) S.theme=c.theme;
   /* older configs carried the palette in style: instead */
   else if(c.style&&typeof c.style==='object'){ const t=matchTheme(c.style); if(t) S.theme=t; }

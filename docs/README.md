@@ -33,7 +33,7 @@ Open any of these directly in a browser (no build, no server, no network):
 | File | What it does |
 |------|--------------|
 | `reference.html` | Interactive reference — every default and every editor control, filterable, with scope pills. |
-| `config-builder.html` | Build the card's first-run defaults (theme, layout, header chips via drag-and-drop, sensor chips). Imports existing YAML; exports minimal YAML. |
+| `config-builder.html` | Build the card's first-run defaults — discovery mode and scope, layout, header chips via drag-and-drop, sensor chips, native controls, energy window. Imports existing YAML; exports minimal YAML (only keys that differ from the built-in defaults). Guarded by `npm run test:builder`. |
 | `profile-tiles.html` | Per-profile tile designer — drag tile blocks and pick default chips per device profile. Exports the `PROFILE_DEFAULT_BLOCKS` / `PROFILE_DEFAULT_SENSORS` / `PROFILE_DEFAULT_TILE_STYLE` constants for `src/helpers.ts`. |
 | `editor-layout.html` | Editor layout designer — drag editor sections between tabs, reorder, and set which are behind the Advanced toggle. Exports a data-driven `editor-layout.ts` (`EDITOR_LAYOUT`) for a future section-registry refactor of `src/editor.ts`. See [editor-layout-designer plan]. |
 | `style-presets.html` | Per-tile-style preset designer — for each style (Default/Power/Light/Climate/Cover/Sensor/Inputs/Scene) toggle its elements, default chips, variant, and (Default style) blocks. Exports a `style_presets` YAML block. Honoured at runtime via the device→area→style-preset→default cascade + `TileCtx.showEl` (see `STYLE_ELEMENTS` in `src/helpers.ts`). |
