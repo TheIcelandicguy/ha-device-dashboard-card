@@ -53,7 +53,7 @@ try {
       registry[devId] = {
         name: `Device ${i}`, manufacturer: 'Shelly', model: 'Shelly Plus 1PM',
         sw_version: `20260311-095847/1.${i % 4}.0-g99`, area_id: `a${i % 8}`,
-        configuration_url: `http://192.168.0.${i % 250}`,
+        configuration_url: `http://10.0.0.${i % 250}`,
         connections: [['mac', `aa:bb:cc:dd:${String(i).padStart(2, '0')}:01`]],
       };
       devices.push({ device_id: devId, name: `Device ${i}`, area: `Area ${i % 8}`,

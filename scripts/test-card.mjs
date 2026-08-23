@@ -6,10 +6,11 @@
  * rows rendering twice, an i4's only button never appearing, labels off by one,
  * cascades disagreeing. All were found by eye, after shipping. This is the net.
  *
- * Fixtures mirror shapes seen on a real fleet rather than invented ones — a
- * device_pulse shadow sharing a MAC with its Shelly, a Gen1 i3 whose channels
- * are all `event.`, a Gen3 i4 whose input binary_sensors are device_class
- * `power` and whose event entity has been renamed.
+ * Fixtures use anonymous devices but real-world *shapes*, which is where the
+ * bugs live: two registry rows sharing one MAC (an integration shadowing another
+ * integration's device), a Gen1 switch whose channels are all `event.` entities,
+ * a Gen3 switch whose inputs are tagged `device_class: power` and whose event
+ * entity has been renamed by its owner.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -39,31 +40,31 @@ function fleet() {
   const devices = {
     // A Shelly Dimmer 2 and the device_pulse shadow that shares its MAC.
     dimmer: {
-      name: 'Ljós hjónaherbergi', manufacturer: 'Shelly', model: 'Shelly Dimmer 2',
+      name: 'Bedroom dimmer', manufacturer: 'Shelly', model: 'Shelly Dimmer 2',
       configuration_url: 'http://10.0.0.11', area_id: 'bed',
-      connections: [['mac', 'aa:bb:cc:00:00:02']], identifiers: [['shelly', '98CDAC0BF296']],
+      connections: [['mac', 'aa:bb:cc:00:00:01']], identifiers: [['shelly', 'AABBCC000001']],
     },
     dimmerShadow: {
-      name: 'Ljós hjónaherbergi', manufacturer: 'Shelly', model: 'Shelly Dimmer 2', area_id: 'bed',
-      connections: [['mac', 'aa:bb:cc:00:00:02']], identifiers: [['shelly', '98CDAC0BF296']],
+      name: 'Bedroom dimmer', manufacturer: 'Shelly', model: 'Shelly Dimmer 2', area_id: 'bed',
+      connections: [['mac', 'aa:bb:cc:00:00:01']], identifiers: [['shelly', 'AABBCC000001']],
     },
     // A Gen1 i3: channels are event entities only.
     i3: {
-      name: 'Rofi bílskúr', manufacturer: 'Shelly', model: 'Shelly i3',
+      name: 'Garage switch', manufacturer: 'Shelly', model: 'Shelly i3',
       configuration_url: 'http://10.0.0.12', area_id: 'garage',
-      connections: [['mac', 'aa:bb:cc:00:00:03']], identifiers: [['shelly', 'E8DB84D6C996']],
+      connections: [['mac', 'aa:bb:cc:00:00:02']], identifiers: [['shelly', 'AABBCC000002']],
     },
     // A Gen3 i4: binary_sensor inputs tagged `power`, plus a renamed event.
     i4: {
-      name: 'Rofi Hjóna', manufacturer: 'Shelly', model: 'Shelly I4 Gen3',
+      name: 'Bedroom switch', manufacturer: 'Shelly', model: 'Shelly I4 Gen3',
       configuration_url: 'http://10.0.0.13', area_id: 'bed',
-      connections: [['mac', 'aa:bb:cc:00:00:01']], identifiers: [['shelly', '8CBFEA978BD0']],
+      connections: [['mac', 'aa:bb:cc:00:00:03']], identifiers: [['shelly', 'AABBCC000003']],
     },
     // A 2.5 parent + per-channel sub-device on the same host.
     relay: {
       name: 'Shelly 2.5', manufacturer: 'Shelly', model: 'Shelly 2.5',
       configuration_url: 'http://10.0.0.14', area_id: 'hall',
-      connections: [['mac', 'aa:bb:cc:dd:ee:01']], identifiers: [['shelly', 'AABBCCDDEE01']],
+      connections: [['mac', 'aa:bb:cc:00:00:04']], identifiers: [['shelly', 'AABBCC000004']],
     },
     relayCh2: {
       name: 'Shelly 2.5 Channel 2', manufacturer: 'Shelly', model: 'Shelly 2.5',
@@ -85,18 +86,18 @@ function fleet() {
     'binary_sensor.dimmer_ping': ent('dimmerShadow', 'device_pulse'),
     'sensor.dimmer_failed_pings': ent('dimmerShadow', 'device_pulse'),
 
-    'event.rofi_bilskur_channel_1': ent('i3', 'shelly'),
-    'event.rofi_bilskur_channel_2': ent('i3', 'shelly'),
-    'event.rofi_bilskur_channel_3': ent('i3', 'shelly'),
-    'binary_sensor.rofi_bilskur_cloud': ent('i3', 'shelly'),
-    'sensor.rofi_bilskur_rssi': ent('i3', 'shelly'),
+    'event.garage_switch_channel_1': ent('i3', 'shelly'),
+    'event.garage_switch_channel_2': ent('i3', 'shelly'),
+    'event.garage_switch_channel_3': ent('i3', 'shelly'),
+    'binary_sensor.garage_switch_cloud': ent('i3', 'shelly'),
+    'sensor.garage_switch_rssi': ent('i3', 'shelly'),
 
-    'binary_sensor.rofi_hjona_input_2': ent('i4', 'shelly'),
-    'binary_sensor.rofi_hjona_input_3': ent('i4', 'shelly'),
-    'event.rofi_hjona_hjon_ljos': ent('i4', 'shelly'),
-    'binary_sensor.rofi_hjona_restart_required': ent('i4', 'shelly'),
-    'binary_sensor.rofi_hjona_cloud': ent('i4', 'shelly'),
-    'sensor.rofi_hjona_uptime': ent('i4', 'shelly'),
+    'binary_sensor.bedroom_switch_input_2': ent('i4', 'shelly'),
+    'binary_sensor.bedroom_switch_input_3': ent('i4', 'shelly'),
+    'event.bedroom_switch_hjon_ljos': ent('i4', 'shelly'),
+    'binary_sensor.bedroom_switch_restart_required': ent('i4', 'shelly'),
+    'binary_sensor.bedroom_switch_cloud': ent('i4', 'shelly'),
+    'sensor.bedroom_switch_uptime': ent('i4', 'shelly'),
 
     'switch.relay_1': ent('relay', 'shelly'),
     'switch.relay_2': ent('relayCh2', 'shelly'),
@@ -110,24 +111,24 @@ function fleet() {
   };
 
   const states = {
-    'light.dimmer': st('on', { friendly_name: 'Ljós hjónaherbergi', brightness: 180 }),
-    'sensor.dimmer_power': st('4.2', { device_class: 'power', friendly_name: 'Ljós hjónaherbergi Power' }),
+    'light.dimmer': st('on', { friendly_name: 'Bedroom dimmer', brightness: 180 }),
+    'sensor.dimmer_power': st('4.2', { device_class: 'power', friendly_name: 'Bedroom dimmer Power' }),
     'sensor.dimmer_energy': st('1.5', { device_class: 'energy' }),
     'binary_sensor.dimmer_ping': st('on', { device_class: 'connectivity' }),
     'sensor.dimmer_failed_pings': st('0'),
 
-    'event.rofi_bilskur_channel_1': st('2026-08-20T10:00:00Z', { device_class: 'button', event_type: 'single', friendly_name: 'Rofi bílskúr Input 1' }),
-    'event.rofi_bilskur_channel_2': st('2026-08-20T10:00:00Z', { device_class: 'button', event_type: 'double', friendly_name: 'Rofi bílskúr Input 2' }),
-    'event.rofi_bilskur_channel_3': st('2026-08-20T10:00:00Z', { device_class: 'button', friendly_name: 'Rofi bílskúr Input 3' }),
-    'binary_sensor.rofi_bilskur_cloud': st('on', { device_class: 'connectivity', friendly_name: 'Rofi bílskúr Cloud' }),
-    'sensor.rofi_bilskur_rssi': st('-58', { device_class: 'signal_strength' }),
+    'event.garage_switch_channel_1': st('2026-08-20T10:00:00Z', { device_class: 'button', event_type: 'single', friendly_name: 'Garage switch Input 1' }),
+    'event.garage_switch_channel_2': st('2026-08-20T10:00:00Z', { device_class: 'button', event_type: 'double', friendly_name: 'Garage switch Input 2' }),
+    'event.garage_switch_channel_3': st('2026-08-20T10:00:00Z', { device_class: 'button', friendly_name: 'Garage switch Input 3' }),
+    'binary_sensor.garage_switch_cloud': st('on', { device_class: 'connectivity', friendly_name: 'Garage switch Cloud' }),
+    'sensor.garage_switch_rssi': st('-58', { device_class: 'signal_strength' }),
 
-    'binary_sensor.rofi_hjona_input_2': st('off', { device_class: 'power', friendly_name: 'Rofi Hjóna Input 2' }),
-    'binary_sensor.rofi_hjona_input_3': st('off', { device_class: 'power', friendly_name: 'Rofi Hjóna Input 3' }),
-    'event.rofi_hjona_hjon_ljos': st('2026-08-15T02:59:44Z', { device_class: 'button', event_type: 'single_push', friendly_name: 'Rofi Hjóna Hjón ljós' }),
-    'binary_sensor.rofi_hjona_restart_required': st('off', { device_class: 'problem', friendly_name: 'Rofi Hjóna Restart required' }),
-    'binary_sensor.rofi_hjona_cloud': st('on', { device_class: 'connectivity', friendly_name: 'Rofi Hjóna Cloud' }),
-    'sensor.rofi_hjona_uptime': st('1200', { friendly_name: 'Rofi Hjóna Uptime' }),
+    'binary_sensor.bedroom_switch_input_2': st('off', { device_class: 'power', friendly_name: 'Bedroom switch Input 2' }),
+    'binary_sensor.bedroom_switch_input_3': st('off', { device_class: 'power', friendly_name: 'Bedroom switch Input 3' }),
+    'event.bedroom_switch_hjon_ljos': st('2026-08-15T02:59:44Z', { device_class: 'button', event_type: 'single_push', friendly_name: 'Bedroom switch Bedside lamp' }),
+    'binary_sensor.bedroom_switch_restart_required': st('off', { device_class: 'problem', friendly_name: 'Bedroom switch Restart required' }),
+    'binary_sensor.bedroom_switch_cloud': st('on', { device_class: 'connectivity', friendly_name: 'Bedroom switch Cloud' }),
+    'sensor.bedroom_switch_uptime': st('1200', { friendly_name: 'Bedroom switch Uptime' }),
 
     'switch.relay_1': st('on', { friendly_name: 'Shelly 2.5 Channel 1' }),
     'switch.relay_2': st('off', { friendly_name: 'Shelly 2.5 Channel 2' }),
@@ -164,15 +165,15 @@ try {
   console.log('\ngetAllDevices — Shelly mode');
   const shelly = h.getAllDevices(hass);
   ok('drops non-Shelly integrations', !byName(shelly, 'Hue lamp'));
-  ok('drops the device_pulse shadow', shelly.filter(d => d.name === 'Ljós hjónaherbergi').length === 1);
+  ok('drops the device_pulse shadow', shelly.filter(d => d.name === 'Bedroom dimmer').length === 1);
   eq('keeps exactly the Shelly devices', shelly.map(d => d.name).sort(),
-    ['Bare device', 'Ljós hjónaherbergi', 'Rofi Hjóna', 'Rofi bílskúr', 'Shelly 2.5']);
+    ['Bare device', 'Bedroom dimmer', 'Bedroom switch', 'Garage switch', 'Shelly 2.5']);
 
   console.log('\ngetAllDevices — universal mode');
   const uni = h.getAllDevices(hass, { universal: true, scope: 'all' });
   ok('includes non-Shelly devices', !!byName(uni, 'Hue lamp'));
-  const dimmer = byName(uni, 'Ljós hjónaherbergi');
-  ok('the MAC-twin shadow is merged away', uni.filter(d => d.name === 'Ljós hjónaherbergi').length === 1);
+  const dimmer = byName(uni, 'Bedroom dimmer');
+  ok('the MAC-twin shadow is merged away', uni.filter(d => d.name === 'Bedroom dimmer').length === 1);
   eq('merged device keeps every entity', dimmer.entities.length, 5);
   eq('a Shelly entity wins the integration field', dimmer.integration, 'shelly');
   eq('the surviving row keeps the config-URL IP', dimmer.ip, '10.0.0.11');
@@ -183,7 +184,7 @@ try {
   eq('parent gained the channel entity', relay.entities.length, 2);
 
   console.log('\ndetectInputChannels — Gen1 i3 (event-only)');
-  const i3 = byName(uni, 'Rofi bílskúr');
+  const i3 = byName(uni, 'Garage switch');
   const ch3 = h.detectInputChannels(i3, hass.states);
   eq('finds three channels', ch3.length, 3);
   eq('labels match HA, not shifted by one', ch3.map(c => c.label), ['Input 1', 'Input 2', 'Input 3']);
@@ -193,12 +194,12 @@ try {
   ok('the cloud binary_sensor is not an input', !ch3.some(c => c.entityId.includes('cloud')));
 
   console.log('\ndetectInputChannels — Gen3 i4 (binary + renamed event)');
-  const i4 = byName(uni, 'Rofi Hjóna');
+  const i4 = byName(uni, 'Bedroom switch');
   const ch4 = h.detectInputChannels(i4, hass.states);
-  ok('the renamed event channel is present', ch4.some(c => c.entityId === 'event.rofi_hjona_hjon_ljos'),
+  ok('the renamed event channel is present', ch4.some(c => c.entityId === 'event.bedroom_switch_hjon_ljos'),
     'this is the bug that hid an i4\'s only button');
   eq('finds all three channels', ch4.length, 3);
-  ok('a rename survives', ch4.some(c => c.label === 'Hjón ljós'));
+  ok('a rename survives', ch4.some(c => c.label === 'Bedside lamp'));
   eq('binary input labels are not shifted', ch4.filter(c => c.label.startsWith('Input')).map(c => c.label), ['Input 2', 'Input 3']);
   ok('restart_required is not treated as an input', !ch4.some(c => c.entityId.includes('restart')));
 
@@ -254,7 +255,7 @@ try {
   const noLights = h.getAllDevices(hass, { universal: true, scope: 'all', excludeDomains: ['light'] });
   ok('exclude_domains removes the entities', !byName(noLights, 'Hue lamp'));
   const onlyLights = h.getAllDevices(hass, { universal: true, scope: 'all', includeDomains: ['light'] });
-  ok('include_domains restricts to those domains', !byName(onlyLights, 'Rofi Hjóna'));
+  ok('include_domains restricts to those domains', !byName(onlyLights, 'Bedroom switch'));
   const both = h.getAllDevices(hass, {
     universal: true, scope: 'all', includeDomains: ['light'], excludeDomains: ['light'],
   });
@@ -262,16 +263,16 @@ try {
 
   console.log('\nhidden entities');
   ok('a hidden entity is not collected',
-    !byName(all, 'Ljós hjónaherbergi').entities.some(e => e.entity_id === 'sensor.dimmer_hidden'));
+    !byName(all, 'Bedroom dimmer').entities.some(e => e.entity_id === 'sensor.dimmer_hidden'));
 
   console.log('\nShelly mode vendor filtering');
   ok('BTHome from another vendor is dropped in Shelly mode', !byName(shelly, 'Tuya BLE'));
   ok('…but kept in universal mode', !!byName(all, 'Tuya BLE'));
 
   console.log('\ngetDeviceProfile');
-  eq('i3 is an input device', h.getDeviceProfile(byName(all, 'Rofi bílskúr')).type, 'input');
-  eq('i4 is an input device', h.getDeviceProfile(byName(all, 'Rofi Hjóna')).type, 'input');
-  eq('a Dimmer 2 is a dimmer', h.getDeviceProfile(byName(all, 'Ljós hjónaherbergi')).type, 'dimmer');
+  eq('i3 is an input device', h.getDeviceProfile(byName(all, 'Garage switch')).type, 'input');
+  eq('i4 is an input device', h.getDeviceProfile(byName(all, 'Bedroom switch')).type, 'input');
+  eq('a Dimmer 2 is a dimmer', h.getDeviceProfile(byName(all, 'Bedroom dimmer')).type, 'dimmer');
   eq('a Hue lamp is a dimmer-ish light', h.getDeviceProfile(byName(all, 'Hue lamp')).type, 'dimmer');
 
   console.log('\nper-profile tables are complete');
@@ -293,16 +294,16 @@ try {
   ok('no profile references a block with no label', blocksOutsideVocab.length === 0, blocksOutsideVocab.join(', '));
 
   console.log('\ndeviceChipKeys');
-  const keysI4 = [...h.deviceChipKeys(byName(all, 'Rofi Hjóna'))].sort();
+  const keysI4 = [...h.deviceChipKeys(byName(all, 'Bedroom switch'))].sort();
   eq('i4 produces exactly its diagnostics', keysI4, ['cloud', 'uptime']);
-  const keysDim = [...h.deviceChipKeys(byName(all, 'Ljós hjónaherbergi'))].sort();
+  const keysDim = [...h.deviceChipKeys(byName(all, 'Bedroom dimmer'))].sort();
   ok('a dimmer produces power and energy', keysDim.includes('power') && keysDim.includes('energy'));
 
   // ── cascades ───────────────────────────────────────────────────────────────
   // These used to be methods on the card element, untestable without a DOM —
   // which is how the renderer and the Customize panel came to resolve blocks
   // differently without anyone noticing.
-  const dev = byName(all, 'Ljós hjónaherbergi');
+  const dev = byName(all, 'Bedroom dimmer');
   const cin = (config, view) => ({ config, device: dev, profile: 'dimmer', view });
 
   console.log('\ncascade — tile style precedence');
