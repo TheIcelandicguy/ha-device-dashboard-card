@@ -1,5 +1,4 @@
 {
   "name": "HA Device Dashboard",
-  "filename": "ha-device-dashboard.js",
-  "homeassistant": "2024.8.0"
+  "filename": "ha-device-dashboard.js"
 }

@@ -1,5 +1,8 @@
 # HA Device Dashboard
 
+![HA Device Dashboard — header chips, needs-attention summary, and device tiles including an i3/i4 keypad](docs/images/banner.svg)
+
+
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange)](https://github.com/hacs/integration)
 ![Version](https://img.shields.io/badge/version-2.0.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
