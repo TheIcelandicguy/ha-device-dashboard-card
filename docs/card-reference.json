@@ -146,7 +146,8 @@
     { "key": "energy",      "label": "Energy",      "agg": "sum" },
     { "key": "temperature", "label": "Temperature", "agg": "avg" },
     { "key": "humidity",    "label": "Humidity",    "agg": "avg" },
-    { "key": "illuminance", "label": "Light",       "agg": "avg" },
+    { "key": "illuminance", "label": "Lux",         "agg": "avg" },
+    { "key": "lights",      "label": "Lights",      "agg": "count" },
     { "key": "rssi",        "label": "Wi-Fi",       "agg": "avg" },
     { "key": "alerts",      "label": "Alerts",      "agg": "count" },
     { "key": "updates",     "label": "Updates",     "agg": "count" }

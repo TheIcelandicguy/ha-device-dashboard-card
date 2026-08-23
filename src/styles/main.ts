@@ -1171,6 +1171,9 @@ export const mainCss = css`
     .att-fw-n { min-width:22px; text-align:right; color:var(--sc-text-primary); font-variant-numeric:tabular-nums; }
     .att-fw-tag { font-size:9.5px; color:var(--sc-online-color); text-transform:uppercase; letter-spacing:.06em; }
 
+    /* Lights-on count: lit while any light is on, plain when all are off. */
+    .stat.lights-on { color:var(--sc-power-color); }
+
     .delegate-notice {
       display:flex; align-items:center; gap:10px; margin:0 12px 10px;
       padding:8px 12px; border-radius:10px;

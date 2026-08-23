@@ -20,7 +20,7 @@ import { renderSceneButtonTile } from './tiles/scene-button';
 import { renderInputControlTile } from './tiles/input-control';
 import { renderEffectPicker } from './tiles/tile-parts';
 import * as cascade from './cascade';
-import { attentionItems, firmwareGroups, type AttentionItem, type AttentionKind } from './attention';
+import { attentionItems, firmwareGroups, lightCounts, type AttentionItem, type AttentionKind } from './attention';
 import { renderSensorCardTile } from './tiles/sensor-card';
 import { renderPowerMonitorTile } from './tiles/power-monitor';
 import { renderLightControlTile } from './tiles/light-control';
@@ -2524,6 +2524,11 @@ export class HADeviceDashboard extends LitElement {
             const n = this._devicesWithUpdates(devices).length;
             if (!n) return nothing;
             text = `⬆ ${n} update${n > 1 ? 's' : ''}`; cls = 'updates-count';
+          } else if (key === 'lights') {
+            const { on, total } = lightCounts(devices, this.hass.states as never);
+            if (!total) return nothing;
+            text = `${on}/${total} lights on`;
+            cls = on ? 'lights-on' : 'metric';
           } else if (key === 'energy') {
             const e = this._headerEnergyAgg(devices);
             if (!e) return nothing;
@@ -2565,6 +2570,9 @@ export class HADeviceDashboard extends LitElement {
     } else if (key === 'updates') {
       rows = this._devicesWithUpdates(devices)
         .map(x => ({ name: x.device.name, value: `${x.fw.current} → ${x.fw.newVersion}` }));
+    } else if (key === 'lights') {
+      // Which ones are on — the useful follow-up to the count.
+      rows = lightCounts(devices, this.hass.states as never).onNames.map(n => ({ name: n, value: 'on' }));
     } else {
       rows = devices
         .map(d => ({ d, v: this._deviceMetric(d, key) }))

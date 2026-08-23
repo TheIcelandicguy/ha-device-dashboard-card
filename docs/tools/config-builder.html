@@ -192,7 +192,7 @@ const THEMES = [
 const THEME_MAP = Object.fromEntries(THEMES.map(t=>[t[0],t[3]]));
 
 const HEADER_CHIPS = [['online','Online'],['offline','Offline'],['power','Power'],['energy','Energy'],
-  ['temperature','Temperature'],['humidity','Humidity'],['illuminance','Light'],['rssi','Wi-Fi'],['alerts','Alerts'],['updates','Updates']];
+  ['temperature','Temperature'],['humidity','Humidity'],['illuminance','Lux'],['lights','Lights'],['rssi','Wi-Fi'],['alerts','Alerts'],['updates','Updates']];
 const HC_LABEL = Object.fromEntries(HEADER_CHIPS);
 
 const SENSOR_GROUPS = {
@@ -374,7 +374,7 @@ function hl(y){ return y.split('\n').map(line=>{
 function renderMock(){
   const pal=THEME_MAP[S.theme], m=document.getElementById('mock');
   m.style.cssText=`--mp-card:${pal.card_bg};--mp-h1:${pal.header_bg};--mp-h2:${pal.header_bg2};--mp-htext:${pal.header_text_color};--mp-tile:${pal.tile_bg};--mp-tb:${pal.tile_border};--mp-text:${pal.text_primary};--mp-text2:${pal.text_secondary};--mp-sbg:${pal.tile_sensor_bg};--mp-gap:${Math.max(4,Math.round(14-S.columns))}px;--mp-tr:10px`;
-  const statMap={online:['Online',pal.online_color,'12'],offline:['Offline',pal.offline_color,'1'],power:['Power',pal.power_color,'840 W'],energy:['Energy',pal.power_color,'6.2'],temperature:['Temp',pal.accent_color,'21°'],humidity:['Hum',pal.accent_color,'44%'],illuminance:['Light',pal.accent_color,'120'],rssi:['Wi-Fi',pal.accent_color,'−58'],alerts:['Alerts',pal.offline_color,'0'],updates:['Updates',pal.accent_color,'2']};
+  const statMap={online:['Online',pal.online_color,'12'],offline:['Offline',pal.offline_color,'1'],power:['Power',pal.power_color,'840 W'],energy:['Energy',pal.power_color,'6.2'],temperature:['Temp',pal.accent_color,'21°'],humidity:['Hum',pal.accent_color,'44%'],illuminance:['Lux',pal.accent_color,'120'],lights:['Lights',pal.power_color,'3/8'],rssi:['Wi-Fi',pal.accent_color,'−58'],alerts:['Alerts',pal.offline_color,'0'],updates:['Updates',pal.accent_color,'2']};
   let head='';
   if(S.header_show_title||S.header_show_stats){
     head='<div class="mh">';

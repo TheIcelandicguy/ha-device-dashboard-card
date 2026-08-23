@@ -419,6 +419,22 @@ try {
   eq('the battery threshold is configurable',
     att.attentionItems([lowBatt], S, { batteryBelow: 5 }).length, 0);
 
+  console.log('\nattention — lights on');
+  const LS = {
+    'light.a': { state: 'on', attributes: { friendly_name: 'Hall lamp' } },
+    'light.b': { state: 'off', attributes: {} },
+    'light.c': { state: 'unavailable', attributes: {} },
+    'switch.d': { state: 'on', attributes: {} },
+  };
+  const lightDev = D('Lights', [E('light.a', 'light'), E('light.b', 'light'),
+    E('light.c', 'light'), E('switch.d', 'switch')], '1.0.0');
+  const lc = att.lightCounts([lightDev], LS);
+  eq('counts lights that are on', lc.on, 1);
+  eq('an unavailable light is not counted at all', lc.total, 2);
+  eq('a switch is not a light', lc.onNames.length, 1);
+  eq('names the ones that are on', lc.onNames, ['Hall lamp']);
+  eq('no lights means nothing to show', att.lightCounts([D('X', [], '1')], LS).total, 0);
+
   console.log('\nattention — firmware spread');
   const groups = att.firmwareGroups(fleetD);
   eq('groups by semantic version', groups.map(g => g.version), ['2.0.0', '1.7.5', '1.6.0']);

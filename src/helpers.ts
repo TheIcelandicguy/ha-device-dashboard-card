@@ -1133,7 +1133,10 @@ export const HEADER_CHIP_DEFS: Array<{
   { key: 'energy',      label: 'Energy',      agg: 'sum' },
   { key: 'temperature', label: 'Temperature', agg: 'avg' },
   { key: 'humidity',    label: 'Humidity',    agg: 'avg' },
-  { key: 'illuminance', label: 'Light',       agg: 'avg' },
+  // 'Light' read as "how many lights are on"; it is an average of lux. Renamed
+  // for what it is, with the count people expected added alongside.
+  { key: 'illuminance', label: 'Lux',         agg: 'avg' },
+  { key: 'lights',      label: 'Lights',      agg: 'count' },
   { key: 'rssi',        label: 'Wi-Fi',       agg: 'avg' },
   { key: 'alerts',      label: 'Alerts',      agg: 'count' },
   { key: 'updates',     label: 'Updates',     agg: 'count' },
@@ -1165,7 +1168,7 @@ export const AREA_CHIP_DEFS: Array<{
   { key: 'temperature', label: 'Temp',    dc: 'temperature',    agg: 'avg' },
   { key: 'humidity',    label: 'Hum',     dc: 'humidity',       agg: 'avg' },
   { key: 'co2',         label: 'CO₂',     dc: 'carbon_dioxide', agg: 'avg' },
-  { key: 'illuminance', label: 'Light',   dc: 'illuminance',    agg: 'avg' },
+  { key: 'illuminance', label: 'Lux',     dc: 'illuminance',    agg: 'avg' },
   { key: 'battery',     label: 'Batt',    dc: 'battery',        agg: 'avg' },
   { key: 'rssi',        label: 'Wi-Fi',   dc: 'signal_strength', agg: 'avg' },
 ];

@@ -170,7 +170,12 @@ the machine-readable model that drives the editor defaults and the offline tools
 | `header_chips` | string[] | `[online, offline, power, alerts]` | Which stat chips appear, in order. Every chip is clickable and opens a high-to-low device list |
 
 Header chip keys: `online`, `offline`, `power`, `energy`, `temperature`, `humidity`,
-`illuminance`, `rssi`, `alerts`, `updates`.
+`illuminance`, `lights`, `rssi`, `alerts`, `updates`.
+
+`illuminance` is labelled **Lux** and averages your light *sensors*. `lights`
+counts `light` entities that are on — `3/8 lights on` — and its detail lists
+which ones. They answer different questions, and the old label ("Light" on the
+lux average) suggested the second while showing the first.
 
 ### Graphs
 

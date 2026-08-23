@@ -123,6 +123,32 @@ export function attentionItems(
   return items.sort((a, b) => worst(a) - worst(b) || a.device.name.localeCompare(b.device.name));
 }
 
+/**
+ * Lights on, out of lights present. The header's old "Light" chip averaged
+ * illuminance in lux, which is a different question — this one answers "how many
+ * lights are on", which is what people read that chip as asking.
+ *
+ * Counts `light` entities only: a switch driving a lamp is a switch as far as HA
+ * is concerned, and guessing otherwise would make the number unexplainable.
+ */
+export function lightCounts(devices: HADevice[], states: States): { on: number; total: number; onNames: string[] } {
+  let on = 0, total = 0;
+  const onNames: string[] = [];
+  for (const d of devices) {
+    for (const e of d.entities) {
+      if (e.domain !== 'light') continue;
+      const s = states[e.entity_id];
+      if (!s || DEAD.has(s.state ?? '')) continue;
+      total++;
+      if (s.state === 'on') {
+        on++;
+        onNames.push((s.attributes?.friendly_name as string) ?? d.name);
+      }
+    }
+  }
+  return { on, total, onNames };
+}
+
 export interface FirmwareGroup {
   version: string;
   devices: HADevice[];
