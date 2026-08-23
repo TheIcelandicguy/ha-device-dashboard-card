@@ -131,21 +131,51 @@ export function attentionItems(
  * Counts `light` entities only: a switch driving a lamp is a switch as far as HA
  * is concerned, and guessing otherwise would make the number unexplainable.
  */
-export function lightCounts(devices: HADevice[], states: States): { on: number; total: number; onNames: string[] } {
+export interface LightCountOptions {
+  /** HA label ids that mean "this device drives a light". A device carrying one
+   *  has its switch entities counted too. */
+  labels?: string[];
+  /** Entity ids to count regardless of domain or label. */
+  entities?: string[];
+}
+
+export function lightCounts(
+  devices: HADevice[],
+  states: States,
+  opts: LightCountOptions = {},
+): { on: number; total: number; onNames: string[] } {
+  const labels = new Set(opts.labels ?? []);
+  const extra = new Set(opts.entities ?? []);
   let on = 0, total = 0;
   const onNames: string[] = [];
+  const seen = new Set<string>();
+
+  const consider = (entityId: string, fallbackName: string) => {
+    if (seen.has(entityId)) return;
+    const s = states[entityId];
+    if (!s || DEAD.has(s.state ?? '')) return;
+    seen.add(entityId);
+    total++;
+    if (s.state === 'on') {
+      on++;
+      onNames.push((s.attributes?.friendly_name as string) ?? fallbackName);
+    }
+  };
+
   for (const d of devices) {
+    // A device labelled as driving lights lends that meaning to its switches:
+    // HA has no way to know a relay is wired to a lamp, and the user does.
+    const labelled = !!d.labels?.some(l => labels.has(l));
     for (const e of d.entities) {
-      if (e.domain !== 'light') continue;
-      const s = states[e.entity_id];
-      if (!s || DEAD.has(s.state ?? '')) continue;
-      total++;
-      if (s.state === 'on') {
-        on++;
-        onNames.push((s.attributes?.friendly_name as string) ?? d.name);
+      if (e.domain === 'light' || extra.has(e.entity_id) || (labelled && e.domain === 'switch')) {
+        consider(e.entity_id, d.name);
       }
     }
   }
+
+  // Explicit entities that belong to no discovered device still count.
+  for (const id of extra) consider(id, id);
+
   return { on, total, onNames };
 }
 

@@ -177,6 +177,17 @@ counts `light` entities that are on — `3/8 lights on` — and its detail lists
 which ones. They answer different questions, and the old label ("Light" on the
 lux average) suggested the second while showing the first.
 
+```yaml
+light_labels: [dimming_lights]          # HA labels meaning "this drives a light"
+light_entities: [switch.hall_relay]     # anything a label doesn't cover
+```
+
+Home Assistant has no idea a relay or plug is wired to a lamp, so the chip counts
+only `light` entities by default. Label those devices in HA (Settings → Areas &
+labels) and tick the label under **Header → What counts as a light**: every
+`switch` on a labelled device then counts too. `light_entities` handles the
+stragglers. A device caught by both routes is still counted once.
+
 ### Graphs
 
 | Option | Type | Default | Description |

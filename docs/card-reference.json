@@ -395,6 +395,10 @@
           { "control": "Flag a battery at or below", "fn": "Battery percentage that counts as needing attention", "key": "attention_battery", "scope": "global", "default": "20", "advanced": false },
           { "control": "Firmware spread", "fn": "Group the fleet by firmware version inside that summary; hidden when everything runs one version", "key": "show_firmware_summary", "scope": "global", "default": "on", "advanced": false }
         ]},
+        { "name": "What counts as a light", "controls": [
+          { "control": "Label pills", "fn": "HA device labels that mark a relay or plug as driving a light — every switch on a labelled device is then counted by the Lights header chip. Only labels present on discovered devices are offered, with a count each.", "key": "light_labels", "scope": "global", "default": "none", "advanced": false },
+          { "control": "Extra entities to count", "fn": "Individual entity ids counted as lights, for anything a label does not cover", "key": "light_entities", "scope": "global", "default": "none", "advanced": false }
+        ]},
         { "name": "Tiles", "controls": [
           { "control": "Smart tile styles", "fn": "Auto-pick a layout per device type where none is set", "key": "smart_tile_styles", "scope": "global", "default": "off", "advanced": false },
           { "control": "Native controls", "fn": "Render HA's own tiles for media players, fans, vacuums, locks and other domains this card doesn't draw itself. Off by default — each embeds a native element, so it costs render time on big media fleets.", "key": "delegate_controls", "scope": "global", "default": "off", "advanced": false },

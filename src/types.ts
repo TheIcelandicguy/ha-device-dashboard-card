@@ -604,6 +604,13 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   };
   /** Per-area style overrides */
   area_styles?: Record<string, AreaStyle>;
+  /** HA label ids that mark a device as driving a light. A relay or plug carrying
+   *  one is counted by the Lights header chip, which otherwise only knows about
+   *  `light` entities — HA has no idea a switch is wired to a lamp. */
+  light_labels?: string[];
+  /** Individual entities to count as lights, for anything a label does not cover. */
+  light_entities?: string[];
+
   /** Show the "Needs attention" summary above the rooms — offline devices,
    *  firing alerts, flat batteries, pending updates. It renders only when
    *  something qualifies, so it is invisible on a healthy fleet. Default on. */
@@ -662,6 +669,9 @@ export interface HADevice {
   isShelly: boolean;
   /** Source integration platform, e.g. "shelly", "zha", "hue" */
   integration: string;
+  /** HA label ids on the device, e.g. ['dimming_lights']. Used by `light_labels`
+   *  to count relays and plugs that drive lights as lights. */
+  labels?: string[];
   entities: HAEntity[];
 }
 

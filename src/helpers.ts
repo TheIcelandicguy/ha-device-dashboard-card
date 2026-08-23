@@ -94,6 +94,7 @@ export function getAllDevices(
         ip:          ipMatch ? ipMatch[1] : undefined,
         isShelly,
         integration: platform,
+        labels:      Array.isArray(devInfo.labels) ? [...devInfo.labels] : undefined,
         entities:    [],
       });
     }
@@ -206,6 +207,7 @@ export function getAllDevices(
       if (!keep.model && dup.model) keep.model = dup.model;
       if (!keep.area  && dup.area)  keep.area  = dup.area;
       if (dup.isShelly) keep.isShelly = true;
+      if (dup.labels?.length) keep.labels = [...new Set([...(keep.labels ?? []), ...dup.labels])];
       hwMerged.set(id, survivor);
       devices.delete(id);
     }
@@ -1228,6 +1230,7 @@ export const CONFIG_KEYS: readonly string[] = [
   'card_opacity', 'header_opacity', 'header_show_title', 'header_show_stats',
   'header_show_cloud', 'header_show_orbs', 'effects', 'header_chips', 'card_bg_image',
   'card_bg_image_size', 'show_power_bar', 'power_bar_max', 'show_entity_list', 'theme',
+  'light_labels', 'light_entities',
   'show_attention', 'attention_battery', 'show_firmware_summary',
   'style', 'area_styles', 'device_styles', 'profile_styles', 'style_presets', 'custom_styles',
   'energy_period', 'graph_sensors', 'graph_hours', 'graph_style', 'graph_line_color',

@@ -435,6 +435,32 @@ try {
   eq('names the ones that are on', lc.onNames, ['Hall lamp']);
   eq('no lights means nothing to show', att.lightCounts([D('X', [], '1')], LS).total, 0);
 
+  console.log('\nattention — labelled lights');
+  const LL = {
+    'switch.relay_lamp': { state: 'on', attributes: { friendly_name: 'Hall relay' } },
+    'switch.relay_pump': { state: 'on', attributes: { friendly_name: 'Pump' } },
+    'switch.plug_lamp': { state: 'off', attributes: {} },
+    'light.real': { state: 'on', attributes: { friendly_name: 'Real light' } },
+  };
+  const lampRelay = { device_id: 'r', name: 'Relay', labels: ['dimming_lights'],
+    entities: [E('switch.relay_lamp', 'switch')] };
+  const pumpRelay = { device_id: 'p', name: 'Pump relay', labels: [],
+    entities: [E('switch.relay_pump', 'switch')] };
+  const plug = { device_id: 'g', name: 'Plug', entities: [E('switch.plug_lamp', 'switch')] };
+  const realLight = { device_id: 'l', name: 'Lamp', entities: [E('light.real', 'light')] };
+  const mixed = [lampRelay, pumpRelay, plug, realLight];
+
+  eq('without labels, only real lights count', att.lightCounts(mixed, LL).total, 1);
+  const labelled = att.lightCounts(mixed, LL, { labels: ['dimming_lights'] });
+  eq('a labelled relay counts as a light', labelled.total, 2);
+  eq('and is included when on', labelled.on, 2);
+  ok('an unlabelled relay is left alone', !labelled.onNames.includes('Pump'));
+  const withExtra = att.lightCounts(mixed, LL, { entities: ['switch.plug_lamp'] });
+  eq('an explicitly named entity counts', withExtra.total, 2);
+  eq('and its off state is respected', withExtra.on, 1);
+  const viaBoth = att.lightCounts(mixed, LL, { labels: ['dimming_lights'], entities: ['switch.relay_lamp'] });
+  eq('a device counted by both routes is only counted once', viaBoth.total, 2);
+
   console.log('\nattention — firmware spread');
   const groups = att.firmwareGroups(fleetD);
   eq('groups by semantic version', groups.map(g => g.version), ['2.0.0', '1.7.5', '1.6.0']);

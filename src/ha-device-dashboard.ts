@@ -2372,6 +2372,11 @@ export class HADeviceDashboard extends LitElement {
 
   // ── Header stat chips ───────────────────────────────────────────────────────
 
+  /** What the Lights chip counts beyond `light` entities. */
+  private _lightOpts() {
+    return { labels: this._config.light_labels, entities: this._config.light_entities };
+  }
+
   /** Per-device value for a header chip metric. null = device doesn't report it. */
   private _deviceMetric(device: HADevice, key: string): number | null {
     if (key === 'power') return this._getPower(device);
@@ -2525,7 +2530,7 @@ export class HADeviceDashboard extends LitElement {
             if (!n) return nothing;
             text = `⬆ ${n} update${n > 1 ? 's' : ''}`; cls = 'updates-count';
           } else if (key === 'lights') {
-            const { on, total } = lightCounts(devices, this.hass.states as never);
+            const { on, total } = lightCounts(devices, this.hass.states as never, this._lightOpts());
             if (!total) return nothing;
             text = `${on}/${total} lights on`;
             cls = on ? 'lights-on' : 'metric';
@@ -2572,7 +2577,8 @@ export class HADeviceDashboard extends LitElement {
         .map(x => ({ name: x.device.name, value: `${x.fw.current} → ${x.fw.newVersion}` }));
     } else if (key === 'lights') {
       // Which ones are on — the useful follow-up to the count.
-      rows = lightCounts(devices, this.hass.states as never).onNames.map(n => ({ name: n, value: 'on' }));
+      rows = lightCounts(devices, this.hass.states as never, this._lightOpts())
+        .onNames.map(n => ({ name: n, value: 'on' }));
     } else {
       rows = devices
         .map(d => ({ d, v: this._deviceMetric(d, key) }))

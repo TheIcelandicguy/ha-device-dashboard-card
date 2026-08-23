@@ -435,6 +435,10 @@ const TABS = [
       ['Flag a battery at or below','Battery percentage that counts as needing attention','attention_battery','global','20',0],
       ['Firmware spread','Group the fleet by firmware version inside that summary; hidden when everything runs one version','show_firmware_summary','global','on',0],
     ]},
+    {name:'What counts as a light', rows:[
+      ['Label pills','HA device labels that mark a relay or plug as driving a light — every switch on a labelled device is then counted by the Lights header chip. Only labels present on discovered devices are offered.','light_labels','global','none',0],
+      ['Extra entities to count','Individual entity ids counted as lights, for anything a label does not cover','light_entities','global','none',0],
+    ]},
     {name:'Tiles', rows:[
       ['Smart tile styles','Auto-pick a layout per device type where none is set','smart_tile_styles','global','off',0],
       ['Native controls','Render HA\'s own tiles for media players, fans, vacuums, locks and other domains this card doesn\'t draw itself. Off by default — each embeds a native element, so it costs render time on big media fleets.','delegate_controls','global','off',0],

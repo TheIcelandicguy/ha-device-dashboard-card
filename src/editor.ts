@@ -3260,6 +3260,20 @@ export class HADeviceDashboardEditor extends LitElement {
         </div>`;
     };
 
+    // Labels actually present on discovered devices, with HA's display name when
+    // the label registry is available. No point offering labels nobody uses.
+    const deviceLabels = (() => {
+      const counts = new Map<string, number>();
+      for (const d of this._allDevices()) {
+        for (const l of d.labels ?? []) counts.set(l, (counts.get(l) ?? 0) + 1);
+      }
+      const reg = (this.hass as unknown as { labels?: Record<string, { name?: string }> })?.labels;
+      return [...counts.entries()]
+        .map(([id, n]) => ({ id, n, name: reg?.[id]?.name ?? id.replace(/_/g, ' ') }))
+        .sort((a, b) => b.n - a.n || a.name.localeCompare(b.name));
+    })();
+    const lightLabels = new Set(c.light_labels ?? []);
+
     const headerBody = html`
       <!-- Title -->
       <div class="field">
@@ -3596,8 +3610,40 @@ export class HADeviceDashboardEditor extends LitElement {
         ` : nothing}
       </div>`;
 
+    const lightsBody = html`
+      <div class="hint" style="margin-bottom:8px">
+        The <b>Lights</b> chip counts <code>light</code> entities. Home Assistant has no
+        idea a relay or plug is wired to a lamp — tick the labels you use for those, or
+        name the entities directly.
+      </div>
+      ${deviceLabels.length ? html`
+        <div class="field-lbl">Labels that mean “this drives a light”</div>
+        <div class="pill-grp" style="margin-bottom:10px">
+          ${deviceLabels.map(l => html`
+            <span class="pill ${lightLabels.has(l.id) ? 'on' : ''}"
+              title=${`${l.n} device${l.n > 1 ? 's' : ''} carry this label`}
+              @click=${() => {
+                const next = new Set(lightLabels);
+                if (next.has(l.id)) next.delete(l.id); else next.add(l.id);
+                this._set('light_labels', next.size ? [...next] : undefined);
+              }}>${l.name} <span style="opacity:.55">${l.n}</span></span>`)}
+        </div>`
+        : html`<div class="hint" style="margin-bottom:10px">No device labels found — add them in Home Assistant under Settings → Areas &amp; labels, then tick them here.</div>`}
+      <div class="field">
+        <div class="field-lbl">Extra entities to count</div>
+        <input type="text" class="inline-text" style="width:100%"
+          placeholder="switch.hall_relay, switch.lamp — comma separated"
+          .value=${(c.light_entities ?? []).join(', ')}
+          @change=${(e: Event) => {
+            const v = (e.target as HTMLInputElement).value.split(',').map(x => x.trim()).filter(Boolean);
+            this._set('light_entities', v.length ? v : undefined);
+          }}/>
+        <div class="hint" style="margin-top:2px">For anything a label does not cover.</div>
+      </div>`;
+
     return {
       header:     { icon: '◈', bg: 'rgba(99,102,241,0.1)',  fg: '#818cf8', label: 'Header',     badge: nothing, body: headerBody },
+      lights:     { icon: '💡', bg: 'rgba(251,191,36,0.1)', fg: '#fbbf24', label: 'What counts as a light', badge: nothing, body: lightsBody },
       tiles:      { icon: '⊡', bg: 'rgba(45,212,191,0.1)',  fg: '#2dd4bf', label: 'Tiles',      badge: nothing, body: tilesBody },
       card:       { icon: '▢', bg: 'rgba(129,140,248,0.1)', fg: '#818cf8', label: 'Card',       badge: nothing, body: cardBody },
       colors:     { icon: '◐', bg: 'rgba(244,96,30,0.12)',  fg: '#f4601e', label: 'Colours',    badge: nothing, body: colorsBody },

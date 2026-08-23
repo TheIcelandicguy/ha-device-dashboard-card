@@ -67,6 +67,15 @@ export const HELP_CONCEPTS: HelpTopic[] = [
     ],
   },
   {
+    id: 'lights',
+    title: 'What counts as a light',
+    body: [
+      'The **Lights** header chip counts `light` entities that are on. A relay or plug wired to a lamp is a `switch` as far as Home Assistant is concerned — it has no way to know what is on the other end of the wire, and neither does the card.',
+      'You do. Label those devices in Home Assistant (Settings → Areas & labels), then tick the label under **Header → What counts as a light**. Every `switch` on a labelled device is counted from then on. The picker only offers labels that exist on your devices, with how many carry each.',
+      'For the stragglers a label does not cover, name entities directly in the same panel. A device caught by both routes is still counted once.',
+    ],
+  },
+  {
     id: 'themes',
     title: 'Themes and colours',
     body: [

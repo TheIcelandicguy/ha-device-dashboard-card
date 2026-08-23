@@ -50,6 +50,7 @@ export const EDITOR_LAYOUT: EditorTab[] = [
   //    _renderCustomTab from the global section registry (no bespoke body needed).
   { id: 'header-styling', label: 'Header', icon: '◈', sections: [
     { id: 'header', label: 'Header' },
+    { id: 'lights', label: 'What counts as a light' },
   ] },
   { id: 'card-theme', label: 'Card & Theme', icon: '🎨', sections: [
     { id: 'tiles',      label: 'Tiles' },
