@@ -110,6 +110,7 @@ export const HELP_CONCEPTS: HelpTopic[] = [
       'It lists offline devices, firing alerts, flat batteries and pending updates, worst first. Each row opens that device. It is invisible when nothing qualifies, so it costs nothing on a good day.',
       'An offline device is reported as offline and nothing else — its last alert reading is stale, not news.',
       'The firmware block groups the fleet by version and marks the newest, so a device left behind on an old build is obvious. It appears only when more than one version is running.',
+      '**Beta firmware does not count as an update.** A Shelly exposes a `beta_firmware` entity that is on nearly permanently — on one real fleet that was 21 of 25 "available updates". Turn on `include_beta_updates` if you actually run betas.',
     ],
   },
   {

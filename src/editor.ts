@@ -3552,6 +3552,14 @@ export class HADeviceDashboardEditor extends LitElement {
             @input=${(e: Event) => { const v = parseInt((e.target as HTMLInputElement).value, 10); this._set('attention_battery', v === 20 ? undefined : v); }}/>
         </div>
         <div class="tog-row">
+          <div class="tog-lbl">Count beta firmware
+            <div class="hint">Shelly devices offer a beta build almost permanently. Off by default, so “needs update” means a release you would actually install.</div>
+          </div>
+          <label class="sw"><input type="checkbox" .checked=${c.include_beta_updates === true}
+            @change=${(e: Event) => this._set('include_beta_updates', (e.target as HTMLInputElement).checked || undefined)}>
+            <span class="sw-t"></span><span class="sw-b"></span></label>
+        </div>
+        <div class="tog-row">
           <div class="tog-lbl">Firmware spread
             <div class="hint">Inside that summary, group the fleet by firmware version so you can see what is lagging. Hidden when everything is on one version.</div>
           </div>

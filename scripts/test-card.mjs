@@ -461,6 +461,63 @@ try {
   const viaBoth = att.lightCounts(mixed, LL, { labels: ['dimming_lights'], entities: ['switch.relay_lamp'] });
   eq('a device counted by both routes is only counted once', viaBoth.total, 2);
 
+  console.log('\nattention — faults vs alarms');
+  const AS = {
+    'binary_sensor.hot': { state: 'on', attributes: { device_class: 'heat' } },
+    'binary_sensor.smoke': { state: 'on', attributes: { device_class: 'smoke' } },
+    'binary_sensor.wet': { state: 'on', attributes: { device_class: 'moisture' } },
+    'sensor.alive': { state: '1', attributes: {} },
+  };
+  const faulty = D('Hot relay', [E('binary_sensor.hot', 'binary_sensor'), E('sensor.alive', 'sensor')], '1');
+  const alarming = D('Smoke alarm', [E('binary_sensor.smoke', 'binary_sensor'), E('sensor.alive', 'sensor')], '1');
+  const leaking = D('Leak', [E('binary_sensor.wet', 'binary_sensor'), E('sensor.alive', 'sensor')], '1');
+  eq('a fault is the device complaining about itself', att.deviceFaults(faulty, AS), ['overtemp']);
+  eq('an alarm is the world being wrong', att.environmentAlarms(alarming, AS), ['smoke']);
+  eq('a fault is not an alarm', att.environmentAlarms(faulty, AS), []);
+  eq('an alarm is not a fault', att.deviceFaults(alarming, AS), []);
+  eq('both surface together', att.firingAlerts(leaking, AS), ['water']);
+  eq('and a firing alarm reaches the attention list',
+    att.attentionItems([alarming], AS).map(i => i.detail.join()), ['smoke']);
+
+  console.log('\nattention — beta firmware');
+  const BS = {
+    // What a real Shelly looks like: a beta on offer permanently, and sometimes
+    // a real release alongside it.
+    'update.dev_beta_firmware': { state: 'on', attributes: { friendly_name: 'Dev Beta firmware', installed_version: '1.7.5', latest_version: '1.8.0-beta1' } },
+    'update.dev_firmware': { state: 'on', attributes: { friendly_name: 'Dev Firmware', installed_version: '1.7.5', latest_version: '2.0.0' } },
+    'update.betaonly_beta_firmware': { state: 'on', attributes: { friendly_name: 'Beta only Beta firmware', installed_version: '1.7.5', latest_version: '1.8.0-beta1' } },
+    'sensor.dev_alive': { state: '1', attributes: {} },
+    'sensor.betaonly_alive': { state: '1', attributes: {} },
+  };
+  const both2 = D('Real and beta', [E('update.dev_beta_firmware', 'update'), E('update.dev_firmware', 'update'), E('sensor.dev_alive', 'sensor')], '1.7.5');
+  const betaOnly = D('Beta only', [E('update.betaonly_beta_firmware', 'update'), E('sensor.betaonly_alive', 'sensor')], '1.7.5');
+
+  eq('a beta-only offer is not an update', att.hasUpdate(betaOnly, BS), false);
+  eq('a real release still is', att.hasUpdate(both2, BS), true);
+  eq('and the real one is the version reported', att.pendingUpdate(both2, BS).next, '2.0.0');
+  eq('betas can be opted into', att.hasUpdate(betaOnly, BS, { includeBeta: true }), true);
+  eq('a beta-only device stays out of the attention list',
+    att.attentionItems([betaOnly], BS).length, 0);
+  eq('but appears when betas are wanted',
+    att.attentionItems([betaOnly], BS, { includeBeta: true }).length, 1);
+  eq('detection covers the id and the name',
+    [att.isBetaUpdate('update.x_beta_firmware'), att.isBetaUpdate('update.x', { friendly_name: 'X Beta firmware' }),
+      att.isBetaUpdate('update.x_firmware', { friendly_name: 'X Firmware' })],
+    [true, true, false]);
+
+  console.log('\nattention — update predicate');
+  const US = {
+    'update.real': { state: 'on', attributes: { installed_version: '1.0', latest_version: '2.0' } },
+    'update.same': { state: 'on', attributes: { installed_version: '2.0', latest_version: '2.0' } },
+    'sensor.up': { state: '1', attributes: {} },
+  };
+  const realUpd = D('Has update', [E('update.real', 'update'), E('sensor.up', 'sensor')], '1');
+  const fakeUpd = D('No real update', [E('update.same', 'update'), E('sensor.up', 'sensor')], '1');
+  eq('an update to a different version counts', att.hasUpdate(realUpd, US), true);
+  eq('an "update" to the same version does not', att.hasUpdate(fakeUpd, US), false);
+  eq('the attention list uses the same rule',
+    att.attentionItems([fakeUpd], US).length, 0);
+
   console.log('\nattention — firmware spread');
   const groups = att.firmwareGroups(fleetD);
   eq('groups by semantic version', groups.map(g => g.version), ['2.0.0', '1.7.5', '1.6.0']);

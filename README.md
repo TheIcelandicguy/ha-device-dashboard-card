@@ -243,9 +243,10 @@ Device-info chips are hidden by default on every profile.
 ## Needs attention
 
 ```yaml
-show_attention: true        # default — the section hides itself when all is well
-attention_battery: 20       # flag a battery at or below this %
-show_firmware_summary: true # group the fleet by firmware version
+show_attention: true         # default — the section hides itself when all is well
+attention_battery: 20        # flag a battery at or below this %
+show_firmware_summary: true  # group the fleet by firmware version
+include_beta_updates: false  # default — a Shelly offers a beta almost always
 ```
 
 A summary above the rooms answering what a wall of tiles cannot: *which* devices,
@@ -255,6 +256,12 @@ opening that device's detail sheet. It renders only when something qualifies.
 
 An offline device is reported as offline and nothing else: its last-known alert
 is a stale reading, not news.
+
+**Beta firmware is not an update.** A Shelly exposes both `firmware` and
+`beta_firmware` update entities, and the beta one is on nearly permanently — on
+one real fleet that was 21 of 25 "available updates". Betas are excluded from
+the attention list, the header `updates` chip and the tile firmware badge unless
+you set `include_beta_updates: true`.
 
 The firmware block groups the fleet by version — Shelly's
 `20260311-095847/1.7.5-g9979d16` reduces to `1.7.5` — marks the newest one, and

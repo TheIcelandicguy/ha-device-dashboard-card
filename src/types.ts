@@ -617,6 +617,9 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   show_attention?: boolean;
   /** Battery percentage at or below which a device is flagged. Default 20. */
   attention_battery?: number;
+  /** Count beta firmware as an available update. Off by default: a Shelly offers
+   *  a beta almost permanently, which drowns the real updates. */
+  include_beta_updates?: boolean;
   /** Show the firmware spread inside that summary. Default on, and only visible
    *  when the fleet is running more than one version. */
   show_firmware_summary?: boolean;

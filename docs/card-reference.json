@@ -393,6 +393,7 @@
         { "name": "Card", "controls": [
           { "control": "Needs attention", "fn": "Summary above the rooms: offline devices, firing alerts, flat batteries, pending updates. Renders only when something qualifies.", "key": "show_attention", "scope": "global", "default": "on", "advanced": false },
           { "control": "Flag a battery at or below", "fn": "Battery percentage that counts as needing attention", "key": "attention_battery", "scope": "global", "default": "20", "advanced": false },
+          { "control": "Count beta firmware", "fn": "Treat a beta firmware offer as an available update. Off by default: Shelly devices offer a beta almost permanently, which drowns the real releases in the attention list, the updates chip and the tile badge.", "key": "include_beta_updates", "scope": "global", "default": "off", "advanced": false },
           { "control": "Firmware spread", "fn": "Group the fleet by firmware version inside that summary; hidden when everything runs one version", "key": "show_firmware_summary", "scope": "global", "default": "on", "advanced": false }
         ]},
         { "name": "What counts as a light", "controls": [

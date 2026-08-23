@@ -20,7 +20,10 @@ import { renderSceneButtonTile } from './tiles/scene-button';
 import { renderInputControlTile } from './tiles/input-control';
 import { renderEffectPicker } from './tiles/tile-parts';
 import * as cascade from './cascade';
-import { attentionItems, firmwareGroups, lightCounts, type AttentionItem, type AttentionKind } from './attention';
+import {
+  attentionItems, firmwareGroups, lightCounts, deviceFaults, environmentAlarms, hasUpdate,
+  isOnline as deviceIsOnline, isBetaUpdate, type AttentionItem, type AttentionKind,
+} from './attention';
 import { renderSensorCardTile } from './tiles/sensor-card';
 import { renderPowerMonitorTile } from './tiles/power-monitor';
 import { renderLightControlTile } from './tiles/light-control';
@@ -795,10 +798,7 @@ export class HADeviceDashboard extends LitElement {
   }
 
   private _isOnline(device: HADevice): boolean {
-    return device.entities.some(e => {
-      const s = this.hass.states[e.entity_id];
-      return s && s.state !== 'unavailable' && s.state !== 'unknown';
-    });
+    return deviceIsOnline(device, this.hass.states as never);
   }
 
   private _getPower(device: HADevice): number | null {
@@ -943,25 +943,23 @@ export class HADeviceDashboard extends LitElement {
     }
   }
 
+  /** Device faults for the tile badge and the detail sheet — the device
+   *  complaining about itself. Environmental alarms are a separate list; see
+   *  `deviceFaults` / `environmentAlarms` in attention.ts. */
   private _getAlerts(device: HADevice): DeviceAlert[] {
-    const alerts: Array<'overtemp' | 'overpower'> = [];
-    for (const e of device.entities) {
-      if (e.domain !== 'binary_sensor') continue;
-      const s = this.hass.states[e.entity_id];
-      if (!s || s.state !== 'on') continue;
-      const dc = (s.attributes as HassAttrs).device_class ?? '';
-      if (dc === 'heat' || e.entity_id.includes('overtemp')) alerts.push('overtemp');
-      else if (dc === 'safety' || e.entity_id.includes('overpower')) alerts.push('overpower');
-    }
-    return alerts;
+    return deviceFaults(device, this.hass.states as never) as DeviceAlert[];
   }
 
   private _getFirmware(device: HADevice): FirmwareInfo | null {
+    const includeBeta = this._config.include_beta_updates === true;
     for (const e of device.entities) {
       if (e.domain !== 'update') continue;
       const s = this.hass.states[e.entity_id];
       if (!s || s.state !== 'on') continue;
       const attrs = s.attributes as HassAttrs;
+      // A Shelly always has a beta on offer; counting it as an update buries the
+      // handful of real ones.
+      if (!includeBeta && isBetaUpdate(e.entity_id, attrs)) continue;
       return { entityId: e.entity_id, current: attrs.installed_version ?? '', newVersion: attrs.latest_version };
     }
     return null;
@@ -2372,6 +2370,13 @@ export class HADeviceDashboard extends LitElement {
 
   // ── Header stat chips ───────────────────────────────────────────────────────
 
+  /** Everything worth raising on a device: its own faults plus environmental
+   *  alarms. Used by the header chip and its detail list. */
+  private _deviceAlertLabels(device: HADevice): string[] {
+    const st = this.hass.states as never;
+    return [...deviceFaults(device, st), ...environmentAlarms(device, st)];
+  }
+
   /** What the Lights chip counts beyond `light` entities. */
   private _lightOpts() {
     return { labels: this._config.light_labels, entities: this._config.light_entities };
@@ -2463,9 +2468,9 @@ export class HADeviceDashboard extends LitElement {
 
   private _devicesWithUpdates(devices: HADevice[]): Array<{ device: HADevice; fw: FirmwareInfo }> {
     return devices
-      .map(d => ({ device: d, fw: this._getFirmware(d) }))
-      .filter((x): x is { device: HADevice; fw: FirmwareInfo } =>
-        !!x.fw?.newVersion && x.fw.newVersion !== x.fw.current);
+      .filter(d => hasUpdate(d, this.hass.states as never, { includeBeta: this._config.include_beta_updates }))
+      .map(d => ({ device: d, fw: this._getFirmware(d)! }))
+      .filter((x): x is { device: HADevice; fw: FirmwareInfo } => !!x.fw);
   }
 
   /** Aggregate all selected numeric-metric chips in ONE pass over devices —
@@ -2522,7 +2527,9 @@ export class HADeviceDashboard extends LitElement {
             if (!off) return nothing;
             text = `${off} offline`; cls = 'offline-count';
           } else if (key === 'alerts') {
-            const n = devices.filter(d => this._getAlerts(d).length > 0).length;
+            // Faults AND alarms: a smoke detector going off not raising the
+            // alert count was indefensible once both were being computed.
+            const n = devices.filter(d => this._deviceAlertLabels(d).length > 0).length;
             if (!n) return nothing;
             text = `⚠ ${n}`; cls = 'alerts-count';
           } else if (key === 'updates') {
@@ -2567,7 +2574,7 @@ export class HADeviceDashboard extends LitElement {
       hdrCls = 'cloud-off';
     } else if (key === 'alerts') {
       rows = devices
-        .map(d => ({ d, a: this._getAlerts(d) }))
+        .map(d => ({ d, a: this._deviceAlertLabels(d) }))
         .filter(x => x.a.length)
         .sort((a, b) => b.a.length - a.a.length)
         .map(x => ({ name: x.d.name, value: x.a.join(', ') }));
@@ -3487,6 +3494,7 @@ export class HADeviceDashboard extends LitElement {
     if (this._config.show_attention === false) return html``;
     const items = attentionItems(devices, this.hass.states as never, {
       batteryBelow: this._config.attention_battery,
+      includeBeta: this._config.include_beta_updates,
     });
     const fw = this._config.show_firmware_summary === false ? [] : firmwareGroups(devices);
     const drifting = fw.length > 1;

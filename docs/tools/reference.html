@@ -433,6 +433,7 @@ const TABS = [
     {name:'Card', rows:[
       ['Needs attention','Summary above the rooms: offline devices, firing alerts, flat batteries, pending updates. Renders only when something qualifies.','show_attention','global','on',0],
       ['Flag a battery at or below','Battery percentage that counts as needing attention','attention_battery','global','20',0],
+      ['Count beta firmware','Treat a beta firmware offer as an available update. Off by default: Shelly devices offer a beta almost permanently, which drowns the real releases.','include_beta_updates','global','off',0],
       ['Firmware spread','Group the fleet by firmware version inside that summary; hidden when everything runs one version','show_firmware_summary','global','on',0],
     ]},
     {name:'What counts as a light', rows:[

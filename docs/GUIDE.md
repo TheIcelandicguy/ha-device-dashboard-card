@@ -96,6 +96,8 @@ An offline device is reported as offline and nothing else — its last alert rea
 
 The firmware block groups the fleet by version and marks the newest, so a device left behind on an old build is obvious. It appears only when more than one version is running.
 
+**Beta firmware does not count as an update.** A Shelly exposes a `beta_firmware` entity that is on nearly permanently — on one real fleet that was 21 of 25 "available updates". Turn on `include_beta_updates` if you actually run betas.
+
 ### The Conflicts panel
 
 When a setting is overridden or ignored, a badge appears above the editor tabs. It exists because the failure is otherwise silent — the option is valid, it just never applies.

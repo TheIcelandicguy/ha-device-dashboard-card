@@ -23,6 +23,8 @@ export interface AttentionItem {
 export interface AttentionOptions {
   /** Battery percentage at or below which a device is worth flagging. */
   batteryBelow?: number;
+  /** Count beta firmware offers as updates. Off by default — see isBetaUpdate. */
+  includeBeta?: boolean;
 }
 
 interface StateLike { state?: string; attributes?: Record<string, unknown> }
@@ -39,8 +41,19 @@ export function isOnline(device: HADevice, states: States): boolean {
   });
 }
 
-/** Firing alerts on a device — the same device_class / id rules as the chips. */
-export function firingAlerts(device: HADevice, states: States): string[] {
+/**
+ * Two different things get called "alerts", and conflating them was a bug:
+ *
+ *  - a **fault** is the device complaining about itself (overtemp, overpower).
+ *    That is what the tile badge and the header chip have always meant.
+ *  - an **alarm** is the world being wrong (smoke, water, gas). Different
+ *    urgency, different audience, same need to be surfaced.
+ *
+ * Both are computed here so the tiles, the header count and the attention list
+ * cannot drift apart — which they had, with a firing smoke alarm showing in one
+ * and not the others.
+ */
+export function deviceFaults(device: HADevice, states: States): string[] {
   const out: string[] = [];
   for (const e of device.entities) {
     if (e.domain !== 'binary_sensor') continue;
@@ -49,11 +62,39 @@ export function firingAlerts(device: HADevice, states: States): string[] {
     const dc = (s.attributes?.device_class as string) ?? '';
     if (dc === 'heat' || e.entity_id.includes('overtemp')) out.push('overtemp');
     else if (dc === 'safety' || e.entity_id.includes('overpower')) out.push('overpower');
-    else if (dc === 'smoke') out.push('smoke');
+  }
+  return [...new Set(out)];
+}
+
+export function environmentAlarms(device: HADevice, states: States): string[] {
+  const out: string[] = [];
+  for (const e of device.entities) {
+    if (e.domain !== 'binary_sensor') continue;
+    const s = states[e.entity_id];
+    if (!s || s.state !== 'on') continue;
+    const dc = (s.attributes?.device_class as string) ?? '';
+    if (dc === 'smoke') out.push('smoke');
     else if (dc === 'moisture') out.push('water');
     else if (dc === 'gas') out.push('gas');
   }
   return [...new Set(out)];
+}
+
+/** Everything worth raising on a device, faults and alarms together. */
+export function firingAlerts(device: HADevice, states: States): string[] {
+  return [...deviceFaults(device, states), ...environmentAlarms(device, states)];
+}
+
+/** Whether an update is genuinely available — an `update` entity that is on AND
+ *  offers a version different from the installed one. The header chip has always
+ *  used the stricter rule; the attention list now uses the same one. */
+export function hasUpdate(
+  device: HADevice,
+  states: States,
+  opts: { includeBeta?: boolean } = {},
+): boolean {
+  const u = pendingUpdate(device, states, opts);
+  return !!u && !!u.next && u.next !== u.current;
 }
 
 /** Lowest battery reading on the device, or null if it has none. */
@@ -70,13 +111,29 @@ export function batteryLevel(device: HADevice, states: States): number | null {
   return low;
 }
 
+/**
+ * A Shelly exposes two update entities per device: `firmware` and
+ * `beta_firmware`. The beta one is on whenever a beta exists, which is nearly
+ * always — on a real fleet that was 21 of 25 "available updates", none of which
+ * anyone intended to install. Betas are excluded unless asked for.
+ */
+export function isBetaUpdate(entityId: string, attributes?: Record<string, unknown>): boolean {
+  return /beta/i.test(entityId) || /beta/i.test((attributes?.friendly_name as string) ?? '');
+}
+
 /** An `update` entity that is on — i.e. an install is available. */
-export function pendingUpdate(device: HADevice, states: States): { current: string; next: string } | null {
+export function pendingUpdate(
+  device: HADevice,
+  states: States,
+  opts: { includeBeta?: boolean } = {},
+): { current: string; next: string; entityId: string } | null {
   for (const e of device.entities) {
     if (e.domain !== 'update') continue;
     const s = states[e.entity_id];
     if (!s || s.state !== 'on') continue;
+    if (!opts.includeBeta && isBetaUpdate(e.entity_id, s.attributes)) continue;
     return {
+      entityId: e.entity_id,
       current: (s.attributes?.installed_version as string) ?? '',
       next: (s.attributes?.latest_version as string) ?? '',
     };
@@ -111,8 +168,8 @@ export function attentionItems(
       if (alerts.length) { kinds.push('alert'); detail.push(...alerts); }
       const batt = batteryLevel(device, states);
       if (batt !== null && batt <= floor) { kinds.push('battery'); detail.push(`battery ${Math.round(batt)}%`); }
-      const upd = pendingUpdate(device, states);
-      if (upd) { kinds.push('update'); detail.push(upd.next ? `update → ${upd.next}` : 'update available'); }
+      const upd = hasUpdate(device, states, opts) ? pendingUpdate(device, states, opts) : null;
+      if (upd) { kinds.push('update'); detail.push(`update → ${upd.next}`); }
     }
 
     if (kinds.length) items.push({ device, kinds, detail });
