@@ -1,6 +1,6 @@
 {
   "name": "ha-device-dashboard",
-  "version": "2.0.0",
+  "version": "2.2.0",
   "description": "Universal HA device dashboard Lovelace card",
   "keywords": ["home-assistant", "lovelace", "hacs"],
   "author": "TheIcelandicguy",

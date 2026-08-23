@@ -6,8 +6,9 @@ Python backend). TypeScript + Lit 3, bundled by Rollup to a single committed fil
 `hass` object — Shelly/BTHome by default, or every HA device in universal mode —
 and renders a device-centric fleet dashboard.
 
-Full architecture tour lives in `OVERVIEW.md` (untracked, on-disk only). Read it
-when you need depth; this file is the fast orientation.
+Full architecture tour lives in `OVERVIEW.md` (tracked). Read it when you need
+depth; this file is the fast orientation. Contributor workflow is in
+`CONTRIBUTING.md`.
 
 ## Commands
 

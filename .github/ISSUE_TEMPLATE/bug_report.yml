@@ -1,0 +1,61 @@
+name: Bug report
+description: Something renders wrong, does nothing, or is missing
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Two things answer most reports before anyone reads further, so they are asked first.
+
+  - type: input
+    id: build
+    attributes:
+      label: Build tag
+      description: >
+        Open the browser console — the card logs a line like
+        `ha-device-dashboard  audit-2026-08-23f`. If it does not match the version
+        you installed, the browser is serving a cached bundle; hard-refresh first.
+      placeholder: audit-2026-08-23f
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Discovery mode
+      description: >
+        Rooms & devices → Discovery. Most "my device is missing" reports are
+        Shelly mode, which by design only keeps Shelly and BTHome devices.
+      options:
+        - Shelly only (the default)
+        - Universal
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens, and what you expected instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: conflicts
+    attributes:
+      label: Conflicts panel
+      description: >
+        The editor shows a badge above the tabs when a setting is overridden or
+        ignored. If it lists anything, paste it — a setting that never applies is
+        the most common cause of "this does nothing".
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Card YAML
+      description: From the editor's YAML tab. Redact anything you would rather not publish.
+      render: yaml
+
+  - type: input
+    id: ha
+    attributes:
+      label: Home Assistant version

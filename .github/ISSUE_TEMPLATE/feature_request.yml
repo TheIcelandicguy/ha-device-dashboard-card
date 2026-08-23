@@ -1,0 +1,27 @@
+name: Feature request
+description: Something the card should do and does not
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: >
+        The situation, not the solution. "I have 50 devices and cannot tell which
+        three are offline" leads somewhere better than "add a table".
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you had in mind, if anything
+
+  - type: textarea
+    id: existing
+    attributes:
+      label: What you tried
+      description: >
+        The option surface is large — `docs/tools/reference.html` lists every key
+        and `docs/GUIDE.md` explains the model. Worth a look first; some of this
+        exists already under a name you would not have guessed.

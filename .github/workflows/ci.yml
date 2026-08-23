@@ -1,0 +1,47 @@
+name: CI
+
+# The repo has 137 assertions, a src↔docs checker and a benchmark. Until this
+# existed, none of them ran unless someone remembered to run them.
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # dist/ is committed and is what HACS serves, so a stale one ships broken
+      # code to every user. Fail loudly rather than quietly serving yesterday.
+      - name: dist is current with src
+        run: |
+          if ! git diff --quiet -- dist/; then
+            echo "::error::dist/ is out of date — run 'npm run build' and commit the result"
+            git diff --stat -- dist/
+            exit 1
+          fi
+
+      - name: Benchmark (informational)
+        run: npm run bench

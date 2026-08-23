@@ -1,0 +1,24 @@
+name: HACS validation
+
+# Catches the packaging mistakes that only surface when someone tries to install:
+# a filename HACS cannot resolve, a missing brand image, malformed hacs.json.
+on:
+  push:
+    branches: [master]
+  pull_request:
+  schedule:
+    # HACS's own requirements change; a monthly run notices without a commit.
+    - cron: '0 4 1 * *'
+  workflow_dispatch:
+
+jobs:
+  hacs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hacs/action@main
+        with:
+          category: plugin
+          # Brand images live in the home-assistant/brands repo; this card is not
+          # there yet, so the check would fail on something unrelated to the code.
+          ignore: brands

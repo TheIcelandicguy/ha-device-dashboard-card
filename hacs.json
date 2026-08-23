@@ -1,4 +1,6 @@
 {
-  "name":          "HA Device Dashboard",
-  "render_readme": true
+  "name": "HA Device Dashboard",
+  "filename": "ha-device-dashboard.js",
+  "render_readme": true,
+  "homeassistant": "2024.8.0"
 }
