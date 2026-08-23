@@ -4,7 +4,7 @@
 
 
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange)](https://github.com/hacs/integration)
-![Version](https://img.shields.io/badge/version-2.0.0-blue)
+[![Release](https://img.shields.io/github/v/release/TheIcelandicguy/ha-device-dashboard-card)](https://github.com/TheIcelandicguy/ha-device-dashboard-card/releases)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 A Home Assistant Lovelace custom card that auto-discovers your devices and renders
