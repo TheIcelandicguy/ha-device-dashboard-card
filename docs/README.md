@@ -2,10 +2,13 @@
 
 Documentation and offline design tools for the **`custom:ha-device-dashboard`** card.
 
-## `card-reference.json` — the single source of truth
+## `card-reference.json` — the model the tools read
 
-A machine-readable model of the card's entire config surface, generated from
-`src/editor.ts`, `src/helpers.ts`, and `src/themes.ts`:
+A machine-readable model of the card's entire config surface, hand-synced from
+`src/editor.ts`, `src/helpers.ts`, and `src/themes.ts`. It drives the editor
+defaults and the offline designers, but `src/types.ts` is the authority on the
+option surface and this file can lag it — `npm run check:docs` catches the drift
+it knows how to check:
 
 - **`defaults`** — the actual runtime default values (what a bare card renders as).
 - **`firstRun`** — the first-run defaults, human-readable, with their code source.

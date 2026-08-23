@@ -55,7 +55,7 @@ depth; this file is the fast orientation. Contributor workflow is in
 
 - `src/ha-device-dashboard.ts` (~3.6k lines) — main card: config, hass wiring, device
   grouping, header, graph fetch, CSS-var building.
-- `src/editor.ts` (~4.9k lines) — GUI editor. Mid-refactor toward the data-driven
+- `src/editor.ts` (~5.1k lines) — GUI editor. Mid-refactor toward the data-driven
   `EDITOR_LAYOUT` spec in `src/editor-layout.ts`; only the Graphs & Sensors tab is
   fully wired to it, other tabs still render from bespoke methods.
 - `src/helpers.ts` — discovery (`getAllDevices`), `getDeviceProfile`, defaults,

@@ -221,12 +221,6 @@ export function getAllDevices(
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** Returns the HA area name for an area_id */
-export function getAreaName(hass: HomeAssistant, areaId?: string): string | undefined {
-  if (!areaId) return undefined;
-  return (hass as any).areas?.[areaId]?.name;
-}
-
 // ─── Entity tiering ────────────────────────────────────────────────────────────
 
 /** Entity importance tier derived from the HA registry entity_category. This is
@@ -840,16 +834,6 @@ export function getDiscoverySources(hass: HomeAssistant): { integrations: string
     integrations: [...integrations].sort((a, b) => getIntegrationLabel(a).localeCompare(getIntegrationLabel(b))),
     domains: [...domains].sort(),
   };
-}
-
-// ─── Entity helpers ────────────────────────────────────────────────────────────
-
-export function getEntityByDomain(entities: HAEntity[], domain: string): HAEntity | undefined {
-  return entities.find(e => e.domain === domain);
-}
-
-export function getEntitiesByDomain(entities: HAEntity[], domain: string): HAEntity[] {
-  return entities.filter(e => e.domain === domain);
 }
 
 // ─── Format functions ──────────────────────────────────────────────────────────

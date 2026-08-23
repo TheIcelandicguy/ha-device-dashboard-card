@@ -1,6 +1,6 @@
 # Universal Device Engine — Design & Plan
 
-Status: **active** · Started 2026-07 · Owner: TheIcelandicguy
+Status: **active — Phase 5 outstanding** · Started 2026-07 · Owner: TheIcelandicguy
 
 ## Why
 
@@ -161,7 +161,7 @@ Each phase ships independently and is reversible.
     the editor") appears if delegatable devices exist; dismissal persists in
     localStorage. Editor toggle added in the defaults panel. Verified live: off →
     0 native tiles created + notice shown.
-- **Phase 4 — Editor universal support + reset buttons.** 🚧 *In progress.*
+- **Phase 4 — Editor universal support + reset buttons.** ✅ *Done.*
   - Native-controls toggle (shipped with P3 opt-in).
   - **4a — Discovery section** in the Rooms & devices tab: Shelly↔Universal mode
     pills, scope pills (Real devices / Controllable / Everything), and comma-list

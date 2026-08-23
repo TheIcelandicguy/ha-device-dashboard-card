@@ -226,7 +226,7 @@ src/
 docs/                   README, card-reference.json, shelly-reference/, tools/.
 dist/ha-device-dashboard.js   Built bundle (committed).
 rollup.config.mjs, tsconfig.json, package.json, hacs.json
-sync-to-ha.ps1, update.ps1, create-ha-token.ps1   Deploy helpers.
+update.ps1              Git-sync + build + deploy helper.
 ```
 
 ### Main card class — `ha-device-dashboard.ts`
@@ -474,14 +474,9 @@ The repo targets an HA config mounted on the Windows `Z:` drive:
 - **`rollup.config.mjs` `autoDeploy` plugin** — after every build, copies the
   bundle to `Z:/www/community/ha-device-dashboard/ha-device-dashboard.js` (silently
   skipped if `Z:` isn't mapped). So `npm run build`/`watch` deploys automatically.
-- **`sync-to-ha.ps1`** — runs `npm run build`, ensures the dest dir, copies the
-  bundle to `Z:\www\community\ha-device-dashboard\`, and reminds you to
-  hard-refresh HA.
 - **`update.ps1`** — one-command update from Git: `git fetch` + `git reset --hard
   origin/<branch>` (defaults to `master`) to avoid the committed-`dist` merge
   conflict, then rebuilds and reports the deployed build tag.
-- **`create-ha-token.ps1`** — one-time helper to store a long-lived HA token in a
-  gitignored `.ha-token` for cache-busting.
 
 Because it deploys under `www/community/...`, the Lovelace resource URL is
 `/local/community/ha-device-dashboard/ha-device-dashboard.js` (Type: JavaScript

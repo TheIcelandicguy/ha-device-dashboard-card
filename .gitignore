@@ -5,7 +5,6 @@ Thumbs.db
 .vscode/
 .idea/
 .claude/
-.ha-token
 
 # personal HA config snapshots — never commit
 backups/

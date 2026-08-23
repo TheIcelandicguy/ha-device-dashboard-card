@@ -26,7 +26,11 @@ if ($LASTEXITCODE -ne 0) { Write-Host "Build failed." -ForegroundColor Red; exit
 
 $dest = "Z:\www\community\ha-device-dashboard\ha-device-dashboard.js"
 if (Test-Path $dest) {
-    $tag = (Select-String -Path $dest -Pattern "mobile-editor-[0-9-]+[a-z]").Matches.Value
+    # Read the tag out of the console banner the bundle prints, so this keeps
+    # working when BUILD_TAG changes prefix — it used to look for a literal
+    # "mobile-editor-*" and silently reported nothing for every tag since.
+    $m = Select-String -Path $dest -Pattern 'ha-device-dashboard %c ([\w.-]+)'
+    $tag = if ($m) { $m.Matches[0].Groups[1].Value } else { "not found" }
     Write-Host "==> Deployed to HA." -ForegroundColor Green
     Write-Host "    build tag: $tag"
 } else {

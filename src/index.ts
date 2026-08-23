@@ -4,7 +4,7 @@ import './tiles/delegated-control';
 
 // Build marker — lets you confirm in the browser console which bundle HA loaded.
 // Bump the tag on each deploy so a stale cache is obvious at a glance.
-const BUILD_TAG = 'audit-2026-08-23f';
+const BUILD_TAG = 'cleanup-2026-08-23a';
 // eslint-disable-next-line no-console
 console.info(
   `%c ha-device-dashboard %c ${BUILD_TAG} `,
@@ -18,5 +18,5 @@ window.customCards.push({
   name:             'HA Device Dashboard',
   description:      'Universal device fleet overview — Shelly, ZHA, Hue, ESPHome, Matter and more.',
   preview:          true,
-  documentationURL: 'https://github.com/TheIcelandicguy/ha-device-dashboard',
+  documentationURL: 'https://github.com/TheIcelandicguy/ha-device-dashboard-card',
 });
