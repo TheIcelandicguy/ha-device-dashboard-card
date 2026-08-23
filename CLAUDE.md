@@ -27,7 +27,10 @@ when you need depth; this file is the fast orientation.
   utilities, migrateConfig. Compiles `helpers.ts` to CJS in a temp dir (the
   project is `type: module`, so the emitted files need a `{"type":"commonjs"}`
   shim next to them).
-- `npm test` — check:docs + both test scripts.
+- `npm test` — check:docs + the test scripts.
+- `npm run bench` — time the hot paths against a synthetic fleet. Measure before
+  claiming something needs optimising: the fleet summaries were suspected of
+  needing memoisation and came in at 0.18ms for 56 devices.
 - `.\update.ps1` — git-sync (`reset --hard origin/<branch>`) + build + report build tag.
 
 ## Source of truth

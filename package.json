@@ -14,6 +14,7 @@
     "docs:guide": "node scripts/gen-guide.mjs",
     "test:builder": "node scripts/test-config-builder.mjs",
     "check:docs": "node scripts/check-docs.mjs",
+    "bench": "node scripts/bench.mjs",
     "test:palette": "node scripts/test-palette.mjs",
     "test:card": "node scripts/test-card.mjs",
     "test": "npm run check:docs && npm run test:builder && npm run test:palette && npm run test:card"
