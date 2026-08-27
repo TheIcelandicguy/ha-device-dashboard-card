@@ -142,7 +142,12 @@ export function getAllDevices(
 
     const getHost = (url: string) => { const m = url.match(/https?:\/\/([^/]+)/); return m ? m[1] : ''; };
     const sameHost     = childUrl && parentUrl && getHost(childUrl) === getHost(parentUrl);
-    const subComponent = !childUrl && parentUrl && device.integration === devices.get(parentId)!.integration;
+    // Restricted to Shelly: the "child has no config URL, parent does, same
+    // integration" shape also describes hub-and-spoke ecosystems (Hue/deCONZ/ZHA
+    // bulbs linked to a bridge) — merging those in universal mode would collapse
+    // every device on the hub into the bridge. Shelly sub-devices are the intended target.
+    const subComponent = !childUrl && parentUrl && device.isShelly
+      && device.integration === devices.get(parentId)!.integration;
 
     if (!sameHost && !subComponent) continue;
 
@@ -583,7 +588,9 @@ export function detectTypeByDomain(device: HADevice): DeviceProfile {
 
   let type: DeviceProfile;
 
-  if (domains.has('climate') && domains.has('switch')) {
+  if (domains.has('climate') && domains.has('switch') && device.isShelly) {
+    // Wall Display is a Shelly-specific pairing. A non-Shelly climate+switch combo
+    // (DIY thermostat + relay in universal mode) is a climate device, not a Display.
     type = 'wall_display';
   } else if (domains.has('climate')) {
     type = 'climate';
@@ -606,9 +613,10 @@ export function detectTypeByDomain(device: HADevice): DeviceProfile {
     device.entities.some(e => e.domain === 'event' && (e.attributes as any)?.device_class === 'button') &&
     !device.entities.some(e => e.domain === 'switch' && /_(switch|relay)_\d/.test(e.entity_id)) &&
     // A device with environmental sensors (e.g. Shelly BLU H&T — which also exposes
-    // a button) is a sensor, not an input remote.
+    // a button) is a sensor, not an input remote. (Battery excluded on purpose —
+    // input remotes have batteries; temperature/humidity/etc. are the real signal.)
     !device.entities.some(e => e.domain === 'sensor' &&
-      ['humidity', 'carbon_dioxide', 'illuminance', 'pressure', 'moisture'].includes((e.attributes as any)?.device_class ?? ''))
+      ['temperature', 'humidity', 'carbon_dioxide', 'illuminance', 'pressure', 'moisture'].includes((e.attributes as any)?.device_class ?? ''))
   ) {
     type = 'input';
   } else if (domains.has('switch')) {

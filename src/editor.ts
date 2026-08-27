@@ -726,6 +726,7 @@ export class HADeviceDashboardEditor extends LitElement {
     window.removeEventListener('mousedown', this._onIconPickerOutsideClick, true);
     window.removeEventListener('hdd-editor-goto', this._onEditorGoto);
     if (this._flashTimer) { clearTimeout(this._flashTimer); this._flashTimer = null; }
+    clearTimeout(this._styleClipTimer);
     // Tear down the dialog-sizing plumbing so it doesn't leak across editor opens.
     if (this._editorRAF != null) { cancelAnimationFrame(this._editorRAF); this._editorRAF = undefined; }
     this._editorLayoutTimers.forEach(t => clearTimeout(t));
@@ -1043,9 +1044,10 @@ export class HADeviceDashboardEditor extends LitElement {
     const toggle = (key: string) => {
       const base = isOverride ? [...selected] : [...effective];
       const next = base.includes(key) ? base.filter(k => k !== key) : [...base, key];
-      // If the result matches "everything on", store undefined-equivalent full list only when overriding;
-      // an emptied selection clears the override entirely.
-      onChange(next.length ? next : undefined);
+      // Persist the selection verbatim — including [] ("show none"). Only the
+      // explicit ↺ Inherit button clears the override; unchecking the last chip
+      // must NOT silently revert to the full inherited set.
+      onChange(next);
     };
     return html`
       <div class="chip-picker">
@@ -1905,7 +1907,12 @@ export class HADeviceDashboardEditor extends LitElement {
                   @blur=${(e: Event) => this._renameCustomStyle(key, (e.target as HTMLInputElement).value)}
                   @keydown=${(e: KeyboardEvent) => {
                     if (e.key === 'Enter') this._renameCustomStyle(key, (e.target as HTMLInputElement).value);
-                    if (e.key === 'Escape') this._renamingStyle = null;
+                    if (e.key === 'Escape') {
+                      // Reset the field first so the blur that fires when this input
+                      // is removed is a no-op (rename bails on an unchanged label).
+                      (e.target as HTMLInputElement).value = def.label || key;
+                      this._renamingStyle = null;
+                    }
                   }}
                   @focus=${(e: Event) => (e.target as HTMLInputElement).select()}
                   ${ref((el?: Element) => (el as HTMLInputElement | undefined)?.focus())}/>`;

@@ -2029,15 +2029,23 @@ export class HADeviceDashboard extends LitElement {
         const t = this._trvTempFromEvent(ev, svgEl, minTemp, maxTemp, step);
         if (t != null) this._trvDragTemp = t;
       };
+      const detach = () => {
+        svgEl.removeEventListener('pointermove', onMove);
+        svgEl.removeEventListener('pointerup', onUp);
+        svgEl.removeEventListener('pointercancel', onCancel);
+      };
       const onUp = (ev: PointerEvent) => {
         const t = this._trvTempFromEvent(ev, svgEl, minTemp, maxTemp, step) ?? this._trvDragTemp;
         this._trvDragTemp = null;
         if (t != null) this._setTemp(entityId, t);
-        svgEl.removeEventListener('pointermove', onMove);
-        svgEl.removeEventListener('pointerup', onUp);
+        detach();
       };
+      // A cancelled gesture (mobile scroll, OS interruption) must clear the drag
+      // preview and detach — otherwise the dial sticks on a stale target.
+      const onCancel = () => { this._trvDragTemp = null; detach(); };
       svgEl.addEventListener('pointermove', onMove);
       svgEl.addEventListener('pointerup', onUp);
+      svgEl.addEventListener('pointercancel', onCancel);
     };
 
     return svg`
@@ -2122,15 +2130,21 @@ export class HADeviceDashboard extends LitElement {
         const pct = this._valvePosFromEvent(ev, svgEl);
         if (pct != null) this._valveDragPos = pct; // visual preview only
       };
+      const detach = () => {
+        svgEl.removeEventListener('pointermove', onMove);
+        svgEl.removeEventListener('pointerup', onUp);
+        svgEl.removeEventListener('pointercancel', onCancel);
+      };
       const onUp = (ev: PointerEvent) => {
         const pct = this._valvePosFromEvent(ev, svgEl) ?? this._valveDragPos;
         this._valveDragPos = null;
         if (pct != null) this._setValvePosition(vc.entityId, pct, vc.numEntityId);
-        svgEl.removeEventListener('pointermove', onMove);
-        svgEl.removeEventListener('pointerup', onUp);
+        detach();
       };
+      const onCancel = () => { this._valveDragPos = null; detach(); };
       svgEl.addEventListener('pointermove', onMove);
       svgEl.addEventListener('pointerup', onUp);
+      svgEl.addEventListener('pointercancel', onCancel);
     };
 
     return svg`
@@ -3475,7 +3489,7 @@ export class HADeviceDashboard extends LitElement {
           ${showRooms
             ? repeat([...grouped.entries()], ([area]) => area, ([area, areaDevices]) => this._renderAreaSection(area, areaDevices))
             : html`<div class="device-grid" style="--cols:${activeView?.columns ?? this._config.columns ?? 3}">
-                ${repeat(viewDevices, (d) => d.device_id, (d) => this._renderTile(d))}
+                ${repeat(viewDevices, (d) => d.device_id, (d) => this._renderTile(d, this._config.area_styles?.[d.area ?? '']?.tile_style))}
               </div>`}
         </div>
         ${this._renderExtraCards(this._config.footer_cards)}

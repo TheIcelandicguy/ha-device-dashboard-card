@@ -97,7 +97,8 @@ function renderSheetHeader(ctx: TileCtx): TemplateResult {
         ${device.area ? html`<span class="ds-chip ds-chip--room">${device.area}</span>` : nothing}
         <span class="ds-chip ds-chip--type">${profile.label}</span>
         ${device.model ? html`<span class="ds-chip">${device.model}</span>` : nothing}
-        ${profile.gen !== 'other' ? html`<span class="ds-chip">Gen ${profile.gen}</span>` : nothing}
+        ${profile.gen === 'ble' ? html`<span class="ds-chip">BLE</span>`
+          : profile.gen !== 'other' ? html`<span class="ds-chip">Gen ${profile.gen}</span>` : nothing}
         ${device.ip ? html`<span class="ds-chip">${device.ip}</span>` : nothing}
       </div>
       ${fw ? html`<div class="ds-fw-update"><span>FW update: ${fw.current} → ${fw.newVersion}</span></div>` : nothing}
@@ -222,7 +223,11 @@ function renderSheetFooter(
 
 function renderSheetRelay(ctx: TileCtx): TemplateResult {
   const { device, hass } = ctx;
-  const channels = device.entities.filter(e => e.domain === 'switch');
+  // Real load relays only — a channel-shaped id. Excludes config toggles like the
+  // Shelly Bluetooth-gateway switch (`_aioshelly_ble_integration`), which has no
+  // `_switch_N`/`_relay_N` shape.
+  const channels = device.entities.filter(e =>
+    e.domain === 'switch' && /_(switch|relay|channel)_\d/.test(e.entity_id));
   return html`
     ${channels.length > 1 ? html`
       <div class="ds-section">
@@ -232,8 +237,13 @@ function renderSheetRelay(ctx: TileCtx): TemplateResult {
             const s = hass.states[ch.entity_id];
             const isOn = s?.state === 'on';
             const name = (s?.attributes as HassAttrs)?.friendly_name ?? ch.entity_id;
-            const chNum = ch.entity_id.match(/[_-](\d+)$/)?.[1] ?? '';
-            const pwEnt = device.entities.find(e => e.domain === 'sensor' && e.entity_id.includes(chNum) && (hass.states[e.entity_id]?.attributes as HassAttrs)?.device_class === 'power');
+            // Match this channel's own power sensor by its `_switch_N`/`_relay_N`
+            // token, not a bare digit (which also hits digits in the MAC slug and
+            // could return another channel's reading).
+            const chTok = ch.entity_id.match(/_(?:switch|relay|channel)_\d+/)?.[0] ?? '';
+            const pwEnt = chTok
+              ? device.entities.find(e => e.domain === 'sensor' && e.entity_id.includes(chTok) && (hass.states[e.entity_id]?.attributes as HassAttrs)?.device_class === 'power')
+              : undefined;
             const pw = pwEnt ? parseFloat(hass.states[pwEnt.entity_id]?.state ?? '') : NaN;
             return html`
               <div class="ds-channel-row">
