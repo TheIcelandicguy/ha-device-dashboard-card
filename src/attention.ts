@@ -252,7 +252,7 @@ export function firmwareGroups(devices: HADevice[]): FirmwareGroup[] {
   const byVersion = new Map<string, HADevice[]>();
   for (const d of devices) {
     const raw = d.sw_version;
-    if (!raw) continue;
+    if (raw == null || raw === '') continue;
     const version = shortVersion(raw);
     if (!byVersion.has(version)) byVersion.set(version, []);
     byVersion.get(version)!.push(d);
@@ -264,10 +264,13 @@ export function firmwareGroups(devices: HADevice[]): FirmwareGroup[] {
   return groups;
 }
 
-/** `20260311-095847/1.7.5-g9979d16` → `1.7.5`. Anything unrecognised is kept. */
-export function shortVersion(raw: string): string {
-  const m = raw.match(/(\d+\.\d+(?:\.\d+)?)/);
-  return m ? m[1] : raw;
+/** `20260311-095847/1.7.5-g9979d16` → `1.7.5`. Anything unrecognised is kept.
+ *  Tolerates non-string input — in universal mode some integrations report a
+ *  numeric `sw_version` (e.g. a Yamaha receiver's `2.87`), which must not crash. */
+export function shortVersion(raw: unknown): string {
+  const s = typeof raw === 'string' ? raw : String(raw ?? '');
+  const m = s.match(/(\d+\.\d+(?:\.\d+)?)/);
+  return m ? m[1] : s;
 }
 
 /** Numeric-segment comparison, so 1.10.0 sorts above 1.9.9. */
