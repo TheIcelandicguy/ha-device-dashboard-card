@@ -82,6 +82,13 @@ export class HADeviceDashboard extends LitElement {
   @state() private _periodEnergy = new Map<string, number>();
   private _periodEnergyFetching = new Set<string>();
   private _periodEnergyAt = new Map<string, number>();
+  // Concurrency-capped fetch queue + a coalesced commit buffer, so a fleet with a
+  // period set doesn't fire N concurrent WS calls and re-render once per resolution.
+  private _periodEnergyQueue: string[] = [];
+  private _periodEnergyInFlight = 0;
+  private readonly _maxPeriodEnergyFetch = 4;
+  private _periodEnergyPending = new Map<string, number>();
+  private _periodEnergyCommitTimer: number | null = null;
   /** When the last `statistics_during_period` call for a key failed. Gates retries
    *  so a persistently failing entity doesn't re-fire on every render. */
   @state() private _periodEnergyErrAt = new Map<string, number>();
@@ -307,6 +314,14 @@ export class HADeviceDashboard extends LitElement {
       this._graphCommitTimer = null;
     }
     this._graphCommitPending = null;
+    this._periodEnergyFetching.clear();
+    this._periodEnergyQueue = [];
+    this._periodEnergyInFlight = 0;
+    this._periodEnergyPending.clear();
+    if (this._periodEnergyCommitTimer != null) {
+      clearTimeout(this._periodEnergyCommitTimer);
+      this._periodEnergyCommitTimer = null;
+    }
     if (this._sensorRenderTimer != null) {
       clearTimeout(this._sensorRenderTimer);
       this._sensorRenderTimer = null;
@@ -1636,13 +1651,50 @@ export class HADeviceDashboard extends LitElement {
       // caller to fall back to the live total.
       return { kwh: cached, failed: cached == null };
     }
-    void this._fetchPeriodEnergy(entityId, period);
+    this._requestPeriodEnergy(entityId, period);
     return { kwh: cached, failed: false };
   }
 
-  private async _fetchPeriodEnergy(entityId: string, period: EnergyPeriod): Promise<void> {
+  /** Enqueue a period-energy fetch (deduped); drains under a concurrency cap. */
+  private _requestPeriodEnergy(entityId: string, period: EnergyPeriod): void {
     const key = `${entityId}|${period}`;
+    if (this._periodEnergyFetching.has(key) || this._periodEnergyQueue.includes(key)) return;
+    this._periodEnergyQueue.push(key);
+    this._drainPeriodEnergyQueue();
+  }
+
+  private _drainPeriodEnergyQueue(): void {
+    while (this._periodEnergyInFlight < this._maxPeriodEnergyFetch && this._periodEnergyQueue.length > 0) {
+      const key = this._periodEnergyQueue.shift()!;
+      this._periodEnergyInFlight++;
+      void this._fetchPeriodEnergy(key).finally(() => {
+        this._periodEnergyInFlight--;
+        this._drainPeriodEnergyQueue();
+      });
+    }
+  }
+
+  /** Buffer a resolved value and schedule ONE reactive commit for the batch, so a
+   *  burst of resolutions is a single render, not one per fetch. */
+  private _commitPeriodEnergy(key: string, kwh: number): void {
+    this._periodEnergyAt.set(key, Date.now());
+    this._periodEnergyPending.set(key, kwh);
+    if (this._periodEnergyCommitTimer != null) return;
+    this._periodEnergyCommitTimer = window.setTimeout(() => {
+      this._periodEnergyCommitTimer = null;
+      if (!this._periodEnergyPending.size) return;
+      const next = new Map(this._periodEnergy);
+      for (const [k, v] of this._periodEnergyPending) next.set(k, v);
+      this._periodEnergyPending.clear();
+      this._periodEnergy = next; // single reassignment → one render for the burst
+    }, 120);
+  }
+
+  private async _fetchPeriodEnergy(key: string): Promise<void> {
     if (this._periodEnergyFetching.has(key)) return;
+    const sep = key.lastIndexOf('|');
+    const entityId = key.slice(0, sep);
+    const period = key.slice(sep + 1) as EnergyPeriod;
     const age = Date.now() - (this._periodEnergyAt.get(key) ?? 0);
     if (age < HADeviceDashboard.PERIOD_ENERGY_TTL && this._periodEnergy.has(key)) return;
     const errAge = Date.now() - (this._periodEnergyErrAt.get(key) ?? 0);
@@ -1659,11 +1711,8 @@ export class HADeviceDashboard extends LitElement {
         types: ['change'],
       }) as Record<string, Array<{ change?: number | null }>>;
       const change = (rows?.[entityId] ?? []).reduce((a, r) => a + (r.change ?? 0), 0);
-      this._periodEnergyAt.set(key, Date.now());
       if (this._periodEnergyErrAt.delete(key)) this._periodEnergyErrAt = new Map(this._periodEnergyErrAt);
-      const next = new Map(this._periodEnergy);
-      next.set(key, change);
-      this._periodEnergy = next; // reassign → reactive re-render
+      this._commitPeriodEnergy(key, change);
     } catch {
       // Stamp the failure so we back off instead of re-firing every render; the
       // caller falls back to the live total meanwhile.
