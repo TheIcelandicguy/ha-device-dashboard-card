@@ -24,8 +24,18 @@ export const HELP_CONCEPTS: HelpTopic[] = [
     body: [
       'Almost every visual option can be set at several levels, and the most specific one wins. The order is: this device → this device type → this room → this view → the whole card → the built-in default.',
       'That is why a per-device colour beats a room colour, and why a card-wide `tile_style` beats the per-profile defaults that `smart_tile_styles` turns on — the card-wide value is more specific than a built-in default, so smart styles never get a look in. Set styles per device type instead of card-wide if you want both.',
-      'Two things sit above all of it: your own Customize tweaks on a tile (stored in this browser, see Local tweaks) and, for blocks, whatever a saved custom style defines.',
+      'For blocks there is one extra rung: a saved custom style\'s own layout sits above the room and card-wide values, since choosing a saved look is more deliberate than leaving the global default in place.',
       'The editor flags the common cases for you — see Conflicts.',
+    ],
+  },
+  {
+    id: 'content-defaults',
+    title: 'Global defaults vs. per-room overrides',
+    body: [
+      'The **Chips & metrics** section at the top of Card & Theme sets three things card-wide: which chips each room header shows, which window the energy readout totals (Total / Today / Week / Month), and which sensor chips appear on tiles. Treat it as the first stop — decide what data is on show, then style it.',
+      'These are *defaults*. Every room and device inherits them, but any room or device can override any of them — in Per-room styling or Device styling — and the moment it does, it stops listening to the global. A global toggle only moves scopes that are still inheriting: turning a chip on globally will **not** turn it on in a room that has set its own chips, and turning it off will not turn it off there.',
+      'Each picker tells you which state it is in. **Inheriting from …** means a global change still reaches it; **Custom selection** means it is pinned to its own value. Setting a room or device to an empty selection is itself a custom choice ("show none"), not the same as inheriting.',
+      'To hand control back to the global default, use that scope\'s reset — `↺ Default` for room header chips, `↺ Inherit` for the chip pickers. Room header chips resolve room → global → built-in; energy and sensor chips also allow a per-device override (and, for sensor chips, a per-type one) in front of the room.',
     ],
   },
   {
