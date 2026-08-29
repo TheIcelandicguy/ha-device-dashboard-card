@@ -89,8 +89,11 @@ export function getAllDevices(
         device_id:   deviceId,
         name:        devInfo.name_by_user ?? devInfo.name ?? deviceId,
         area,
-        model:       devInfo.model,
-        sw_version:  devInfo.sw_version,
+        // Coerce to string: the type says `string`, but some integrations report
+        // a numeric model or sw_version (e.g. a Yamaha receiver's sw_version 2.87),
+        // and every downstream consumer does `.toLowerCase()` / `.match()` on these.
+        model:       devInfo.model == null ? undefined : String(devInfo.model),
+        sw_version:  devInfo.sw_version == null ? undefined : String(devInfo.sw_version),
         ip:          ipMatch ? ipMatch[1] : undefined,
         isShelly,
         integration: platform,
