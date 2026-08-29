@@ -548,6 +548,12 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
    *  undefined = default set (online, offline, power, alerts). Every chip is clickable and
    *  opens a high-to-low device list for its metric. */
   header_chips?: string[];
+  /** Global default for which summary chips each ROOM header shows (keys from
+   *  AREA_CHIP_DEFS: power, energy, voltage, current, temperature, humidity,
+   *  battery, rssi…). undefined = the built-in DEFAULT_AREA_HEADER_CHIPS. A
+   *  per-room `area_styles[room].header_chips` overrides this. Distinct from
+   *  `header_chips`, which is the card's own top (fleet-summary) header. */
+  area_header_chips?: string[];
   card_bg_image?: string;
   card_bg_image_size?: 'cover' | 'contain' | 'stretch';
   show_power_bar?: boolean;            // default: false

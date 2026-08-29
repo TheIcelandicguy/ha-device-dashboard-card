@@ -2722,9 +2722,11 @@ export class HADeviceDashboardEditor extends LitElement {
     }
     const defs = AREA_CHIP_DEFS.filter(d => present.has(d.key));
     if (!defs.length) return html`<div class="hint" style="margin:2px 2px 6px">No summary sensors in this room.</div>`;
-    const sel = st.header_chips ?? DEFAULT_AREA_HEADER_CHIPS;
+    // Inherited baseline: the global area_header_chips, or the built-in default.
+    const inherited = this._config.area_header_chips ?? DEFAULT_AREA_HEADER_CHIPS;
+    const sel = st.header_chips ?? inherited;
     const isDefault = (arr: string[]) =>
-      arr.length === DEFAULT_AREA_HEADER_CHIPS.length && DEFAULT_AREA_HEADER_CHIPS.every(k => arr.includes(k));
+      arr.length === inherited.length && inherited.every(k => arr.includes(k));
     return html`
       <div class="field" style="margin-bottom:4px">
         ${st.header_chips !== undefined
@@ -2740,6 +2742,40 @@ export class HADeviceDashboardEditor extends LitElement {
           })}
         </div>
         <div class="hint" style="margin-top:4px">Live power already shows in the room's meta row; add Energy/Voltage/etc. here.</div>
+      </div>`;
+  }
+
+  /** Global default for every room header's summary chips (config.area_header_chips).
+   *  A per-room `header_chips` overrides it; the built-in default backs it. */
+  private _renderGlobalRoomHeaderChips(): TemplateResult {
+    const present = new Set<string>();
+    for (const d of this._allDevices()) for (const e of d.entities) {
+      if (e.domain !== 'sensor') continue;
+      const dc = ((e.attributes as any)?.device_class as string) ?? '';
+      const def = AREA_CHIP_DEFS.find(x =>
+        x.dc === dc || (x.key === 'rssi' && (dc === 'signal_strength' || e.entity_id.includes('_rssi'))));
+      if (def) present.add(def.key);
+    }
+    const defs = AREA_CHIP_DEFS.filter(d => present.has(d.key));
+    if (!defs.length) return html`<div class="hint" style="margin:2px 2px 6px">No summary sensors discovered yet.</div>`;
+    const cur = this._config.area_header_chips ?? DEFAULT_AREA_HEADER_CHIPS;
+    const isDefault = (arr: string[]) =>
+      arr.length === DEFAULT_AREA_HEADER_CHIPS.length && DEFAULT_AREA_HEADER_CHIPS.every(k => arr.includes(k));
+    return html`
+      <div class="field" style="margin-bottom:4px">
+        ${this._config.area_header_chips !== undefined
+          ? html`<button class="color-reset" style="margin-bottom:4px" @click=${() => this._set('area_header_chips', undefined)}>↺ Default</button>`
+          : nothing}
+        <div class="pill-grp">
+          ${defs.map(def => {
+            const on = cur.includes(def.key);
+            return html`<span class="pill ${on ? 'on' : ''}" @click=${() => {
+              const next = on ? cur.filter(k => k !== def.key) : [...cur, def.key];
+              this._set('area_header_chips', isDefault(next) ? undefined : next);
+            }}>${def.label}</span>`;
+          })}
+        </div>
+        <div class="hint" style="margin-top:4px">Default for every room header — live power always shows in the room's meta row; add Energy/Voltage/etc. here. A room can override this in Per-room styling below.</div>
       </div>`;
   }
 
@@ -3687,9 +3723,21 @@ export class HADeviceDashboardEditor extends LitElement {
         <div class="hint" style="margin-top:2px">For anything a label does not cover.</div>
       </div>`;
 
+    // Card-wide "what to show" defaults — the first thing to set in Card & Theme.
+    const contentBody = html`
+      <div class="field-lbl">Room header chips</div>
+      ${this._renderGlobalRoomHeaderChips()}
+      <div class="field" style="margin-top:8px">
+        <div class="field-lbl">Energy shows</div>
+        ${this._renderEnergyPeriodPicker(c.energy_period, (v) => this._set('energy_period', v === 'total' ? undefined : v))}
+      </div>
+      <div class="field-lbl" style="margin-top:8px">Sensor chips</div>
+      ${this._chipPicker(c.sensors, undefined, 'the default (all shown)', (next) => this._set('sensors', next))}`;
+
     return {
       header:     { icon: '◈', bg: 'rgba(99,102,241,0.1)',  fg: '#818cf8', label: 'Header',     badge: nothing, body: headerBody },
       lights:     { icon: '💡', bg: 'rgba(251,191,36,0.1)', fg: '#fbbf24', label: 'What counts as a light', badge: nothing, body: lightsBody },
+      content:    { icon: '◫', bg: 'rgba(244,96,30,0.1)',   fg: '#f4601e', label: 'Chips & metrics', badge: nothing, body: contentBody },
       tiles:      { icon: '⊡', bg: 'rgba(45,212,191,0.1)',  fg: '#2dd4bf', label: 'Tiles',      badge: nothing, body: tilesBody },
       card:       { icon: '▢', bg: 'rgba(129,140,248,0.1)', fg: '#818cf8', label: 'Card',       badge: nothing, body: cardBody },
       colors:     { icon: '◐', bg: 'rgba(244,96,30,0.12)',  fg: '#f4601e', label: 'Colours',    badge: nothing, body: colorsBody },

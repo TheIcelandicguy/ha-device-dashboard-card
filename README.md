@@ -170,7 +170,8 @@ the machine-readable model that drives the editor defaults and the offline tools
 | `header_show_cloud` | boolean | `false` | Extra cloud-status row |
 | `header_show_orbs` | boolean | follows `effects` | Header glow orbs |
 | `effects` | boolean | `false` | Ambient effects — orbs, pulse/glow, backdrop blur, hover shadows |
-| `header_chips` | string[] | `[online, offline, power, alerts]` | Which stat chips appear, in order. Every chip is clickable and opens a high-to-low device list |
+| `header_chips` | string[] | `[online, offline, power, alerts]` | Which stat chips appear on the card's top (fleet-summary) header, in order. Every chip is clickable and opens a high-to-low device list |
+| `area_header_chips` | string[] | `[power, energy, voltage, current, temperature]` | Global default for the summary chips each **room** header shows. A per-room `header_chips` (under `area_styles`) overrides it. Set it in Card & Theme → Chips & metrics |
 
 Header chip keys: `online`, `offline`, `power`, `energy`, `temperature`, `humidity`,
 `illuminance`, `lights`, `rssi`, `alerts`, `updates`.

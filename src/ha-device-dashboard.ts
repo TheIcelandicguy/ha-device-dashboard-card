@@ -2973,12 +2973,14 @@ export class HADeviceDashboard extends LitElement {
   // ── Area section ──────────────────────────────────────────────────────────
 
   private _getAreaChips(devices: HADevice[], areaName?: string): Array<{ label: string; value: string }> {
-    // Precedence: area header_chips (config, explicit — empty = none) → the
-    // default set (env/status metrics; NOT energy or per-sensor power — live power
-    // is the always-on number in the room meta row).
-    const headerChips = areaName ? this._config.area_styles?.[areaName]?.header_chips : undefined;
+    // Precedence: per-room header_chips → global area_header_chips → the built-in
+    // default set (all explicit, empty = none). Env/status metrics by default;
+    // NOT energy or per-sensor power — live power is the always-on number in the
+    // room meta row.
+    const roomChips = areaName ? this._config.area_styles?.[areaName]?.header_chips : undefined;
     const allowed: Set<string> =
-      headerChips !== undefined ? new Set(headerChips)
+      roomChips !== undefined ? new Set(roomChips)
+      : this._config.area_header_chips !== undefined ? new Set(this._config.area_header_chips)
       : new Set(DEFAULT_AREA_HEADER_CHIPS);
     const show = (k: string) => allowed.has(k);
     const acc: Record<string, { sum: number; count: number }> = {};

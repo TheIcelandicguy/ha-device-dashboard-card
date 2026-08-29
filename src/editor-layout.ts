@@ -53,6 +53,8 @@ export const EDITOR_LAYOUT: EditorTab[] = [
     { id: 'lights', label: 'What counts as a light' },
   ] },
   { id: 'card-theme', label: 'Card & Theme', icon: '🎨', sections: [
+    // Card-wide "what to show" defaults come first — decide content before styling.
+    { id: 'content',    label: 'Chips & metrics' },
     { id: 'tiles',      label: 'Tiles' },
     { id: 'card',       label: 'Card',       advanced: true },
     { id: 'colors',     label: 'Colours',    advanced: true },
