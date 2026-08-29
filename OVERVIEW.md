@@ -244,8 +244,7 @@ Key elements:
   (rebuilt only when config changes — important because background images can be
   large data URLs).
 - Local UI state (not saved to YAML): open/closed areas, expanded detail device,
-  graph data, drag positions, active view, and viewer-local block/chip overrides
-  persisted in `localStorage`.
+  graph data, drag positions, and the active view (persisted in `localStorage`).
 
 ### Tile renderers — `src/tiles/`
 
@@ -381,8 +380,10 @@ runtime defaults from `docs/card-reference.json` where applicable.
 
 Most style/layout options can be set at several scopes; the effective value
 resolves in order: **device → device-type (profile) → area/room → view → global →
-built-in profile default**, with viewer-local (`localStorage`) overrides on top for
-non-persisted "what to show" tweaks.
+built-in profile default**. Everything comes from config — the editor is the
+single source of truth. (An earlier viewer-local `localStorage` override layer for
+in-view "what to show" tweaks was removed; it may return as an opt-in advanced
+feature.)
 
 ---
 

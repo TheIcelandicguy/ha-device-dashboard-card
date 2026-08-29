@@ -291,17 +291,6 @@ export const mainCss = css`
 
     .chevron.open { transform:rotate(180deg); }
 
-    .area-cog { background:transparent; border:none; color:var(--sc-text-muted, var(--secondary-text-color)); font-size:.8em; cursor:pointer; padding:2px 4px; border-radius:4px; line-height:1; opacity:.55; transition:opacity .15s,color .15s; }
-    .area-cog:hover, .area-cog.on { opacity:1; color:var(--sc-accent); }
-    .area-cog-pop { margin:0 0 8px; padding:10px 12px; background:var(--sc-tile-exp-bg, rgba(255,255,255,.05)); border:1px solid var(--sc-tile-border); border-radius:8px; }
-    .acp-title { font-size:.68em; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--sc-text-muted, var(--secondary-text-color)); margin-bottom:6px; }
-    .acp-list { display:flex; flex-wrap:wrap; gap:4px 16px; }
-    .acp-row { display:flex; align-items:center; gap:7px; font-size:.8em; color:var(--sc-text-primary, var(--primary-text-color)); cursor:pointer; padding:2px 0; }
-    .acp-row input { accent-color:var(--sc-accent); cursor:pointer; }
-    .acp-empty { font-size:.75em; color:var(--sc-text-muted, var(--secondary-text-color)); }
-    .acp-reset { margin-top:8px; font-size:.72em; padding:4px 10px; border-radius:6px; border:1px solid var(--sc-tile-border); background:transparent; color:var(--sc-text-secondary, var(--secondary-text-color)); cursor:pointer; }
-    .acp-reset:hover { color:var(--sc-accent); border-color:var(--sc-accent); }
-
 
     .device-grid {
       display:grid; grid-template-columns:repeat(var(--cols,3),1fr);

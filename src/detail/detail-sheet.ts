@@ -16,7 +16,6 @@ export function renderDetailSheet(ctx: TileCtx): TemplateResult {
         ${renderSheetHeader(ctx)}
         <div class="ds-body ds-body--${ctx.profile.type}">
           ${renderSheetProfile(ctx)}
-          ${renderSheetCustomize(ctx)}
         </div>
       </div>
     </div>`;
@@ -41,44 +40,6 @@ function renderSheetProfile(ctx: TileCtx): TemplateResult {
 }
 
 // ── Shared sections ────────────────────────────────────────────────────────
-
-/** "Customise tile" — toggle which blocks & sensor chips show on the card face.
- *  Persists per-viewer (localStorage) and bakes to config when editing. */
-function renderSheetCustomize(ctx: TileCtx): TemplateResult {
-  const cz = ctx.customize;
-  return html`
-    <details class="ds-customize">
-      <summary class="ds-cz-summary">⚙ Customise tile${cz.customized ? html`<span class="ds-cz-dot" title="This tile has custom visibility"></span>` : nothing}</summary>
-      <div class="ds-cz-body">
-        <div class="ds-cz-hint">Choose what appears on this tile on the dashboard.</div>
-        <label class="ds-cz-row ds-cz-graphs">
-          <input type="checkbox" .checked=${cz.graphs}
-            @change=${(e: Event) => cz.setGraphs((e.target as HTMLInputElement).checked)}>
-          <span>Sparkline graphs</span>
-        </label>
-        <div class="ds-cz-group-lbl">Sections</div>
-        <div class="ds-cz-list">
-          ${cz.blocks.map(b => html`
-            <label class="ds-cz-row">
-              <input type="checkbox" .checked=${b.visible}
-                @change=${(e: Event) => cz.setBlock(b.id, (e.target as HTMLInputElement).checked)}>
-              <span>${b.label}</span>
-            </label>`)}
-        </div>
-        ${cz.chips.length ? html`
-          <div class="ds-cz-group-lbl">Sensor chips</div>
-          <div class="ds-cz-list">
-            ${cz.chips.map(c => html`
-              <label class="ds-cz-row">
-                <input type="checkbox" .checked=${c.visible}
-                  @change=${(e: Event) => cz.setChip(c.key, (e.target as HTMLInputElement).checked)}>
-                <span>${c.label}</span>
-              </label>`)}
-          </div>` : nothing}
-        ${cz.customized ? html`<button class="ds-cz-reset" @click=${() => cz.reset()}>↺ Reset to default</button>` : nothing}
-      </div>
-    </details>`;
-}
 
 function renderSheetHeader(ctx: TileCtx): TemplateResult {
   const { device, profile, accent, online } = ctx;

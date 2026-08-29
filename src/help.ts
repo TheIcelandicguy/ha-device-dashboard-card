@@ -85,15 +85,6 @@ export const HELP_CONCEPTS: HelpTopic[] = [
     ],
   },
   {
-    id: 'local',
-    title: 'Local tweaks live in your browser',
-    body: [
-      'The little Customize panel on a tile — which blocks, which chips, graphs on or off — is deliberately *not* saved to your dashboard. It is stored in the browser you did it in, so you can adjust a tile on your phone without changing what everyone else sees.',
-      'The catch: those tweaks sit above the config in every cascade. If a YAML edit seems to be ignored on one device only, that is usually why.',
-      'Each tile has a reset in its own Customize panel, and **◆ Defaults → Clear local tweaks** wipes all of them for this browser at once.',
-    ],
-  },
-  {
     id: 'energy',
     title: 'Energy: totals versus windows',
     body: [

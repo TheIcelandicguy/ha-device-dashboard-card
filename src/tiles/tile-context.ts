@@ -87,20 +87,6 @@ export interface VirtualControl {
 }
 export type DeviceAlert = 'overtemp' | 'overpower';
 
-/** "What to show on this tile" — surfaced in the detail dialog's Customize panel. */
-export interface TileCustomize {
-  blocks: Array<{ id: string; label: string; visible: boolean }>;
-  chips: Array<{ key: string; label: string; visible: boolean }>;
-  /** Whether sparkline graphs show on this tile (the dedicated Show-graphs gate). */
-  graphs: boolean;
-  /** True when this tile has any block/chip/graph override (viewer or config). */
-  customized: boolean;
-  setBlock: (id: string, visible: boolean) => void;
-  setChip: (key: string, visible: boolean) => void;
-  setGraphs: (visible: boolean) => void;
-  reset: () => void;
-}
-
 export interface TileCtx {
   hass: HomeAssistant;
   config: HADeviceDashboardConfig;
@@ -185,7 +171,6 @@ export interface TileCtx {
   renderPowerBar: (d: HADevice) => TemplateResult;
 
   // Detail-sheet helpers
-  customize: TileCustomize;
   closeDetailSheet: () => void;
   getDetailHistoryRange: () => 24 | 168 | 720;
   setDetailHistoryRange: (r: 24 | 168 | 720) => void;

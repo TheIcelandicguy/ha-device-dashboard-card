@@ -75,22 +75,6 @@ export const detailCss = css`
 
     .ds-body { padding: 14px 18px 20px; display: flex; flex-direction: column; gap: 14px; }
 
-    /* Customise tile panel */
-    .ds-customize { border: 1px solid var(--sc-tile-border, rgba(255,255,255,.08)); border-radius: 10px; background: var(--sc-tile-bg, rgba(255,255,255,.03)); overflow: hidden; }
-    .ds-cz-summary { list-style: none; cursor: pointer; padding: 10px 14px; font-size: .82em; font-weight: 600; color: var(--sc-text-secondary, #9ca3af); display: flex; align-items: center; gap: 8px; user-select: none; }
-    .ds-cz-summary::-webkit-details-marker { display: none; }
-    .ds-cz-summary:hover { color: var(--sc-text-primary, #e5e7eb); }
-    .ds-customize[open] .ds-cz-summary { border-bottom: 1px solid var(--sc-tile-border, rgba(255,255,255,.08)); }
-    .ds-cz-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--sc-accent, #f4601e); }
-    .ds-cz-body { padding: 10px 14px 14px; display: flex; flex-direction: column; gap: 6px; }
-    .ds-cz-hint { font-size: .7em; color: var(--sc-text-muted, #6b7280); margin-bottom: 2px; }
-    .ds-cz-group-lbl { font-size: .68em; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--sc-text-muted, #6b7280); margin-top: 6px; }
-    .ds-cz-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 2px 12px; }
-    .ds-cz-row { display: flex; align-items: center; gap: 8px; font-size: .8em; color: var(--sc-text-primary, #e5e7eb); padding: 3px 0; cursor: pointer; }
-    .ds-cz-row input { accent-color: var(--sc-accent, #f4601e); cursor: pointer; }
-    .ds-cz-reset { align-self: flex-start; margin-top: 8px; font-size: .72em; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--sc-tile-border, rgba(255,255,255,.1)); background: transparent; color: var(--sc-text-secondary, #9ca3af); cursor: pointer; }
-    .ds-cz-reset:hover { color: var(--sc-text-primary, #e5e7eb); border-color: var(--sc-accent, #f4601e); }
-
     .ds-section {
       padding: 12px 14px;
       background: rgba(255, 255, 255, .03);

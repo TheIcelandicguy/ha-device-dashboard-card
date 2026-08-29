@@ -70,14 +70,6 @@ Picking a theme clears those overrides, so the editor offers to save your curren
 
 Older configs wrote the whole palette into `style`, which shadowed the theme and made switching it do nothing. Those are migrated automatically on load: a palette that exactly matches a preset collapses back to the theme name, while a partial palette is left alone as the genuine override it is.
 
-### Local tweaks live in your browser
-
-The little Customize panel on a tile — which blocks, which chips, graphs on or off — is deliberately *not* saved to your dashboard. It is stored in the browser you did it in, so you can adjust a tile on your phone without changing what everyone else sees.
-
-The catch: those tweaks sit above the config in every cascade. If a YAML edit seems to be ignored on one device only, that is usually why.
-
-Each tile has a reset in its own Customize panel, and **◆ Defaults → Clear local tweaks** wipes all of them for this browser at once.
-
 ### Energy: totals versus windows
 
 By default the energy chip shows a device's lifetime total, straight from its own sensor. Switch it to Today, This week or This month and the card asks the recorder for consumption over that window instead — no helper entities required.

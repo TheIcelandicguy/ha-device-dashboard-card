@@ -105,17 +105,20 @@ depth; this file is the fast orientation. Contributor workflow is in
   `src/tiles/delegated-control.ts`; it's off by default because each embeds a
   native tile element, which costs real render time on large media fleets.
 - **Resolution cascade** for style/layout: device → device-type (profile) → area/
-  room → view → global → built-in default. Viewer-local "what to show" tweaks layer
-  on top via `localStorage` (not saved to YAML).
+  room → view → global → built-in default. All of it comes from config (YAML) —
+  the editor is the single source of truth. (There used to be a viewer-local
+  in-view Customize layer on top via `localStorage`; it was removed because it
+  silently shadowed the config, and could return later as an opt-in advanced
+  feature.)
 - **Every cascade lives in `src/cascade.ts`, as pure functions.** The card's
   `_rawStyle` / `_blockLayout` / `_sensorSelection` / `_showGraphs` / `showEl` /
-  `_energyPeriod` are thin wrappers that add the viewer's localStorage overrides
-  and memoisation. They were methods until the renderer and the Customize panel
-  drifted apart unnoticed; pure functions are testable (`npm run test:card`).
-  The layer sets differ per option on purpose — `sensors` has no view layer,
-  `tile_style` puts the room before the view — and each function says so.
+  `_energyPeriod` are thin wrappers that add memoisation. They were methods until
+  the renderer and the editor drifted apart unnoticed; pure functions are testable
+  (`npm run test:card`). The layer sets differ per option on purpose — `sensors`
+  has no view layer, `tile_style` puts the room before the view — and each function
+  says so.
 - **Blocks resolve in exactly one place — `cascade.blockLayout()`.** The renderer and the
-  Customize panel used to each have their own cascade; they disagreed whenever
+  editor's Customize panel used to each have their own cascade; they disagreed whenever
   `profile_styles` / `custom_styles` / `style_presets` set a layout, so the panel
   rebased a toggle onto a layout that wasn't in force. Order is device → profile →
   custom style → style preset → global → profile default: a *saved style's* layout

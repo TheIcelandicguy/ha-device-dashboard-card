@@ -219,8 +219,6 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _devPanelAll = false;
   /** Conflict panel expanded — collapsed by default so it stays a hint, not a wall. */
   @state() private _conflictsOpen = false;
-  /** How many local tweaks the last clear removed — feedback for that button. */
-  @state() private _localTweaksCleared: number | null = null;
   /** Control id to highlight after a jump, cleared on a timer. */
   @state() private _flashControl: string | null = null;
   private _flashTimer: number | null = null;
@@ -4379,22 +4377,6 @@ export class HADeviceDashboardEditor extends LitElement {
     this._set('theme', 'custom');
   }
 
-  /** Wipe this browser's viewer-local tweaks — the per-tile block/chip/graph
-   *  choices and pinned area chips the CARD stores in localStorage. They sit
-   *  above config in every cascade, so a stale one makes a YAML edit look
-   *  ignored, and nothing else in the editor can reach them. */
-  private _clearLocalTweaks(): void {
-    try {
-      const doomed: string[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k && k.startsWith('shelly-dashboard:')) doomed.push(k);
-      }
-      for (const k of doomed) localStorage.removeItem(k);
-      this._localTweaksCleared = doomed.length;
-    } catch { /* private mode — nothing to clear */ }
-  }
-
   /** Config keys that describe *content* (what's shown), preserved by "Reset look". */
   private static readonly _CONTENT_KEYS = [
     'type', 'title', 'mode', 'universal_scope', 'include_integrations', 'exclude_integrations',
@@ -4535,11 +4517,6 @@ export class HADeviceDashboardEditor extends LitElement {
             <div class="dp-hint-inline">Restore the built-in default look. “Reset look” keeps your rooms, devices, views, favourites and discovery settings; “Reset everything” clears the whole card back to factory.</div>
             <div class="pill-grp" style="gap:8px">
               <button class="sec-toolbar-btn" @click=${() => { this._resetArmed = false; this._resetLook(); }}>Reset look</button>
-              <button class="sec-toolbar-btn" title="Clear the per-tile tweaks this browser stored locally"
-                @click=${() => this._clearLocalTweaks()}>
-                ${this._localTweaksCleared == null
-                  ? 'Clear local tweaks'
-                  : `Cleared ${this._localTweaksCleared}`}</button>
               <button class="sec-toolbar-btn" style=${this._resetArmed ? 'color:#f4601e;border-color:#f4601e' : ''}
                 @click=${() => this._onResetEverything()}>
                 ${this._resetArmed ? 'Click again to wipe everything' : 'Reset everything'}</button>
