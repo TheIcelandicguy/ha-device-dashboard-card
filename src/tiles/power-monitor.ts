@@ -40,8 +40,8 @@ function renderPMBigNumber(ctx: TileCtx): TemplateResult {
     <div class="ts-hero" style="--ts-accent:${accent}">
       <div class="ts-hero-bar" style="background:${isOn ? accent : 'var(--sc-tile-border)'}"></div>
       <div class="ts-hero-top">
-        ${renderNameDot(device, online, 'ts-hero-name')}
         ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
+        ${renderNameDot(device, online, 'ts-hero-name')}
       </div>
       <div class="ts-hero-num" style="color:${isOn ? accent : 'var(--sc-text-muted)'}">${s.power != null ? s.power.toFixed(s.power < 10 ? 1 : 0) : '—'}</div>
       <div class="ts-hero-unit">watts · ${isOn ? 'active' : 'idle'}</div>
@@ -100,8 +100,8 @@ function renderPMGauge(ctx: TileCtx): TemplateResult {
   return html`
     <div class="ts-ring" style="--ts-accent:${accent};align-items:center">
       <div class="ts-ring-top" style="width:100%">
-        ${renderNameDot(device, online, 'ts-ring-name')}
         ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
+        ${renderNameDot(device, online, 'ts-ring-name')}
       </div>
       <svg viewBox="0 0 ${CX * 2} ${svgH}" style="width:100%;max-width:360px;height:auto;overflow:visible;display:block">
         ${rings.map((ring, i) => {
@@ -152,8 +152,8 @@ function renderPMGraph(ctx: TileCtx): TemplateResult {
   return html`
     <div class="ts-spark" style="--ts-accent:${accent}">
       <div class="ts-spark-top">
-        ${renderNameDot(device, online, 'ts-spark-name')}
         ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
+        ${renderNameDot(device, online, 'ts-spark-name')}
       </div>
       ${ctx.showEl('graph') ? html`<div class="ts-spark-graph"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:${H}px;display:block;overflow:visible">${sparkBody}</svg></div>` : nothing}
       <div class="ts-spark-bottom">
@@ -234,8 +234,8 @@ function renderPMTable(ctx: TileCtx): TemplateResult {
   return html`
     <div class="ts-list" style="--ts-accent:${accent}">
       <div class="ts-list-header">
-        ${renderNameDot(device, online, 'ts-list-name')}
         ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
+        ${renderNameDot(device, online, 'ts-list-name')}
       </div>
       ${s.power   != null ? row('Power',   formatPower(s.power),         true) : nothing}
       ${ctx.showEl('secondary') ? html`

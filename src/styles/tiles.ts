@@ -16,7 +16,7 @@ export const tilesCss = css`
     /* ── STYLE: HERO NUMBER ─────────────────────────────── */
     .ts-hero-bar { height:2px; margin:-11px -13px 10px; background:var(--sc-tile-border); border-radius:var(--tile-radius) var(--tile-radius) 0 0; }
 
-    .ts-hero-top { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:8px; }
+    .ts-hero-top { display:flex; align-items:center; justify-content:flex-start; gap:8px; margin-bottom:8px; }
 
     .ts-hero-name { display:flex; align-items:center; gap:5px; font-size:.82em; font-weight:700; color:var(--sc-text-primary); line-height:1.3; flex:1; min-width:0; }
 
@@ -36,7 +36,7 @@ export const tilesCss = css`
 
 
     /* ── STYLE: DONUT RING ──────────────────────────────── */
-    .ts-ring-top  { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; width:100%; }
+    .ts-ring-top  { display:flex; align-items:center; justify-content:flex-start; gap:8px; margin-bottom:4px; width:100%; }
 
     .ts-ring-name { display:flex; align-items:center; gap:5px; font-size:.82em; font-weight:700; color:var(--sc-text-primary); flex:1; min-width:0; }
 
@@ -90,7 +90,7 @@ export const tilesCss = css`
 
 
     /* ── STYLE: SPARKLINE FOCUS ─────────────────────────── */
-    .ts-spark-top    { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+    .ts-spark-top    { display:flex; align-items:center; justify-content:flex-start; gap:8px; margin-bottom:6px; }
 
     .ts-spark-name   { display:flex; align-items:center; gap:5px; font-size:.82em; font-weight:700; color:var(--sc-text-primary); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
@@ -110,7 +110,7 @@ export const tilesCss = css`
 
 
     /* ── STYLE: LIST DENSE ──────────────────────────────── */
-    .ts-list-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; padding-bottom:7px; border-bottom:1px solid var(--sc-tile-border); }
+    .ts-list-header { display:flex; align-items:center; justify-content:flex-start; gap:8px; margin-bottom:8px; padding-bottom:7px; border-bottom:1px solid var(--sc-tile-border); }
 
     .ts-list-name   { display:flex; align-items:center; gap:5px; font-size:.82em; font-weight:700; color:var(--sc-text-primary); flex:1; min-width:0; }
 
