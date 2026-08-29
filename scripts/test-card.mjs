@@ -348,7 +348,7 @@ try {
     cas.sensorSelection(cin({ sensors: ['power'], device_styles: { dimmer: { sensors: [] } } })), []);
   eq('unset falls through to the profile default',
     cas.sensorSelection(cin({})), h.PROFILE_DEFAULT_SENSORS.dimmer);
-  eq('graphs default on', cas.showGraphs(cin({})), true);
+  eq('graphs default off (opt-in)', cas.showGraphs(cin({})), false);
   eq('a room can turn graphs off', cas.showGraphs(cin({ area_styles: { Bedroom: { show_graphs: false } } })), false);
   eq('a device overrides its room', cas.showGraphs(cin({
     area_styles: { Bedroom: { show_graphs: false } }, device_styles: { dimmer: { show_graphs: true } },

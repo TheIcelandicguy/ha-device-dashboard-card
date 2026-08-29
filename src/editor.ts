@@ -1890,10 +1890,11 @@ export class HADeviceDashboardEditor extends LitElement {
     // setter we surface that as a single "Display" control and demote the other
     // layouts (Number/Compact/Table) to a secondary row.
     const threeWay = showVariant && !!onGraphs;
+    // Graphs default OFF (cascade.showGraphs), so an unset value reads as Circles.
     const DISPLAY_MODES = [
-      { k: 'circles', label: '◉ Circles', on: variant === 'gauge' && graphs === false },
+      { k: 'circles', label: '◉ Circles', on: variant === 'gauge' && graphs !== true },
       { k: 'graphs',  label: '∿ Graphs',  on: variant === 'graph' },
-      { k: 'both',    label: '◉∿ Both',   on: variant === 'gauge' && graphs !== false },
+      { k: 'both',    label: '◉∿ Both',   on: variant === 'gauge' && graphs === true },
     ] as const;
     const pickDisplay = (k: string) => {
       if (k === 'circles')      { onVariant('gauge'); onGraphs!(false); }
@@ -3832,8 +3833,8 @@ export class HADeviceDashboardEditor extends LitElement {
       <div class="tog-row" style="border:none;padding:0 0 6px">
         <div class="tog-lbl">Show graphs on tiles
           <span class="field-note">master switch — “Which sensors” below is the palette</span></div>
-        <label class="sw"><input type="checkbox" .checked=${c.show_graphs !== false}
-          @change=${(e:Event)=>this._set('show_graphs', (e.target as HTMLInputElement).checked ? undefined : false)}>
+        <label class="sw"><input type="checkbox" .checked=${c.show_graphs === true}
+          @change=${(e:Event)=>this._set('show_graphs', (e.target as HTMLInputElement).checked ? true : undefined)}>
           <span class="sw-t"></span><span class="sw-b"></span></label>
       </div>
       <div class="field">
