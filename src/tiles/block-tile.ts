@@ -65,12 +65,26 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
         tileIcon = html``;
       }
       const swAnimIcon = sw ? ctx.renderEntityAnim(sw.entityId, isOn, device.device_id) : html``;
+      // The on/off control leads the row, in front of the name (cover keeps its
+      // three-button cluster on the right — it isn't a single on/off button).
+      const primaryToggle = sw ? html`
+        <button class="tog ${isOn ? 'on' : 'off'}"
+          @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>
+          ${isOn ? 'ON' : 'OFF'}
+        </button>
+      ` : trv ? html`
+        <button class="tog ${isHeating ? 'on' : 'off'}"
+          @click=${(e: Event) => ctx.setHvacMode(trv.entityId, isHeating ? 'off' : 'heat', e)}>
+          ${isHeating ? 'HEAT' : 'OFF'}
+        </button>
+      ` : nothing;
       return html`
         <div class="tile-top">
           <div class="tile-left tile-trigger">
             <span class="dot ${online ? 'online' : 'offline'}"></span>
             ${tileIcon}
             ${swAnimIcon}
+            ${primaryToggle}
             <span class="tile-name">${device.name}</span>
             ${fw ? html`<span class="update-dot" title="Firmware update">●</span>` : nothing}
           </div>
@@ -80,16 +94,6 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
               <button class="cov-btn stop" @click=${(e: Event) => ctx.coverAction(cover.entityId, 'stop', e)}>■</button>
               <button class="cov-btn" @click=${(e: Event) => ctx.coverAction(cover.entityId, 'close', e)}>▼</button>
             </div>
-          ` : sw ? html`
-            <button class="tog ${isOn ? 'on' : 'off'}"
-              @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>
-              ${isOn ? 'ON' : 'OFF'}
-            </button>
-          ` : trv ? html`
-            <button class="tog ${isHeating ? 'on' : 'off'}"
-              @click=${(e: Event) => ctx.setHvacMode(trv.entityId, isHeating ? 'off' : 'heat', e)}>
-              ${isHeating ? 'HEAT' : 'OFF'}
-            </button>
           ` : nothing}
         </div>
       `;

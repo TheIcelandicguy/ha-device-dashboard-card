@@ -2345,7 +2345,7 @@ export class HADeviceDashboard extends LitElement {
 
   /** Aggregate all selected numeric-metric chips in ONE pass over devices —
    *  each device's entities are scanned once, not once per metric chip. */
-  private _headerMetricAggs(devices: HADevice[], keys: string[]): Map<string, { sum: number; count: number }> {
+  private _headerMetricAggs(devices: HADevice[], keys: string[]): Map<string, { sum: number; count: number; min: number; max: number }> {
     const DC: Record<string, string> = { temperature: 'temperature', humidity: 'humidity', illuminance: 'illuminance' };
     const dcKeys = keys.filter(k => DC[k]);
     const wantPower = keys.includes('power');
@@ -2353,10 +2353,10 @@ export class HADeviceDashboard extends LitElement {
     // Energy is aggregated by _headerEnergyAgg instead: it sums every sensor on a
     // device (not the first match this loop uses) and each device carries its own
     // window, so it can't share this pass.
-    const agg = new Map<string, { sum: number; count: number }>();
+    const agg = new Map<string, { sum: number; count: number; min: number; max: number }>();
     const add = (k: string, v: number) => {
-      const a = agg.get(k) ?? { sum: 0, count: 0 };
-      a.sum += v; a.count++; agg.set(k, a);
+      const a = agg.get(k) ?? { sum: 0, count: 0, min: v, max: v };
+      a.sum += v; a.count++; a.min = Math.min(a.min, v); a.max = Math.max(a.max, v); agg.set(k, a);
     };
     for (const d of devices) {
       if (wantPower) { const p = this._getPower(d); if (p != null) add('power', p); }
@@ -2415,6 +2415,15 @@ export class HADeviceDashboard extends LitElement {
             const e = this._headerEnergyAgg(devices);
             if (!e) return nothing;
             text = `${e.label} ${this._formatHeaderMetric('energy', e.value)}`;
+          } else if (key === 'rssi') {
+            // Signal spread, not an average: the strongest link tells you nothing
+            // about the device that keeps dropping. Higher (nearer 0) = stronger.
+            const a = metricAggs.get('rssi');
+            if (!a || !a.count) return nothing;
+            // ▲ strongest (nearest 0), ▼ weakest. One device shows a single value.
+            text = a.count > 1
+              ? `${def.label} ▲${Math.round(a.max)} ▼${Math.round(a.min)} dBm`
+              : `${def.label} ${Math.round(a.max)} dBm`;
           } else {
             const a = metricAggs.get(key);
             if (!a || !a.count) return nothing;
@@ -2423,7 +2432,8 @@ export class HADeviceDashboard extends LitElement {
             if (key === 'power') cls = 'power';
           }
           const open = this._cloudDetailOpen === `m:${key}`;
-          return html`<span class="stat ${cls} ${open ? 'active' : ''}" @click=${toggle(key)}>${text}</span>`;
+          const title = key === 'rssi' ? 'Strongest / weakest Wi-Fi signal — tap for the full list' : undefined;
+          return html`<span class="stat ${cls} ${open ? 'active' : ''}" title=${title ?? nothing} @click=${toggle(key)}>${text}</span>`;
         })}
       </div>`;
   }
