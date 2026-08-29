@@ -1109,9 +1109,9 @@ export const mainCss = css`
       font:inherit; font-size:11px; font-weight:600; flex-shrink:0;
       color:var(--sc-text-secondary); background:rgba(255,255,255,.06);
       border:1px solid rgba(255,255,255,.14); appearance:none;
-      -webkit-appearance:none; text-overflow:ellipsis; }
+      -webkit-appearance:none; text-overflow:ellipsis; color-scheme:dark; }
     .input-sel:hover { background:rgba(255,255,255,.12); color:var(--sc-text-primary); }
-    .input-sel option { background:var(--sc-tile-bg,#241f1b); color:var(--sc-text-primary); }
+    .input-sel option { background-color:#241f1b; color:#f2ece3; }
 
     .input-chip { display:flex; align-items:center; gap:4px; padding:4px 10px 4px 8px; border-radius:14px; border:1px solid rgba(255,255,255,.08); background:rgba(255,255,255,.05); font-size:12px; color:var(--sc-text-muted); transition:all .15s; }
 
@@ -1330,9 +1330,15 @@ export const mainCss = css`
     .effect-sel { flex:1; min-width:0; padding:5px 8px; border-radius:10px; cursor:pointer;
       font:inherit; font-size:11px; font-weight:600; appearance:none; -webkit-appearance:none;
       color:var(--sc-text-secondary); background:rgba(255,255,255,.05);
-      border:1px solid rgba(255,255,255,.12); transition:background .15s,color .15s; }
+      border:1px solid rgba(255,255,255,.12); transition:background .15s,color .15s;
+      /* The native option popup renders in browser chrome, where the card's
+         translucent option backgrounds don't apply — it fell back to white with
+         light card text (unreadable). color-scheme:dark makes the browser paint
+         the popup with dark chrome, and the explicit option colors below give a
+         readable fallback on browsers that do honor them. */
+      color-scheme:dark; }
     .effect-sel:hover { background:var(--sc-hover-bg); color:var(--sc-text-primary); }
-    .effect-sel option, .effect-sel optgroup { background:var(--sc-tile-bg,#241f1b); color:var(--sc-text-primary); }
+    .effect-sel option, .effect-sel optgroup { background-color:#241f1b; color:#f2ece3; }
 
 
 
