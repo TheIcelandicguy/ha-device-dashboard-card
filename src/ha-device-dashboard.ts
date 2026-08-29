@@ -76,6 +76,8 @@ export class HADeviceDashboard extends LitElement {
   @property({ type: Boolean }) public preview = false;
   @state() private _config!: HADeviceDashboardConfig;
   @state() private _closedAreas = new Set<string>();
+  /** Which room-header chip's per-device drill-down is open, as `area|key`. */
+  @state() private _areaChipOpen: string | null = null;
   @state() private _entityListOpen = new Set<string>();
   @state() private _graphData = new Map<string, Array<{ t: number; v: number }>>();
   /** Period-energy consumption (kWh) from recorder statistics, keyed `${entityId}|${period}`. */
@@ -178,6 +180,7 @@ export class HADeviceDashboard extends LitElement {
       changed.has('_detailHistoryRange') ||
       changed.has('_activeViewId') ||
       changed.has('_cloudDetailOpen') ||
+      changed.has('_areaChipOpen') ||
       changed.has('preview')
     ) {
       return true;
@@ -2982,7 +2985,7 @@ export class HADeviceDashboard extends LitElement {
 
   // ── Area section ──────────────────────────────────────────────────────────
 
-  private _getAreaChips(devices: HADevice[], areaName?: string): Array<{ label: string; value: string }> {
+  private _getAreaChips(devices: HADevice[], areaName?: string): Array<{ key: string; label: string; value: string }> {
     // Precedence: per-room header_chips → global area_header_chips → the built-in
     // default set (all explicit, empty = none). Env/status metrics by default;
     // NOT energy or per-sensor power — live power is the always-on number in the
@@ -2993,10 +2996,10 @@ export class HADeviceDashboard extends LitElement {
       : this._config.area_header_chips !== undefined ? new Set(this._config.area_header_chips)
       : new Set(DEFAULT_AREA_HEADER_CHIPS);
     const show = (k: string) => allowed.has(k);
-    const acc: Record<string, { sum: number; count: number }> = {};
+    const acc: Record<string, { sum: number; count: number; min: number; max: number }> = {};
     const add = (k: string, v: number) => {
-      if (!acc[k]) acc[k] = { sum: 0, count: 0 };
-      acc[k].sum += v; acc[k].count++;
+      if (!acc[k]) acc[k] = { sum: 0, count: 0, min: v, max: v };
+      const a = acc[k]; a.sum += v; a.count++; a.min = Math.min(a.min, v); a.max = Math.max(a.max, v);
     };
     for (const device of devices) {
       for (const e of device.entities) {
@@ -3017,7 +3020,7 @@ export class HADeviceDashboard extends LitElement {
       (areaName ? this._config.area_styles?.[areaName]?.energy_period : undefined)
       ?? this._config.energy_period ?? 'total';
 
-    const chips: Array<{ label: string; value: string }> = [];
+    const chips: Array<{ key: string; label: string; value: string }> = [];
     for (const def of AREA_CHIP_DEFS) {
       if (def.key === 'energy' && show('energy') && areaPeriod !== 'total') {
         let sum = 0, got = false, failed = false;
@@ -3032,21 +3035,55 @@ export class HADeviceDashboard extends LitElement {
         // failed, show the room's raw lifetime total instead of a short number
         // wearing a "Today" label.
         if (failed) {
-          if (acc['energy']) chips.push({ label: def.label, value: this._formatAreaChip('energy', acc['energy'].sum) });
+          if (acc['energy']) chips.push({ key: 'energy', label: def.label, value: this._formatAreaChip('energy', acc['energy'].sum) });
           continue;
         }
         if (got || acc['energy']) {
           const lbl = areaPeriod === 'today' ? 'Today' : areaPeriod === 'week' ? 'Week' : 'Month';
-          chips.push({ label: lbl, value: got ? formatEnergy(sum) : '…' });
+          chips.push({ key: 'energy', label: lbl, value: got ? formatEnergy(sum) : '…' });
         }
         continue;
       }
       const a = acc[def.key];
       if (!a) continue;
+      if (def.key === 'rssi') {
+        // Spread, not average — the average hides the device that keeps dropping.
+        // ▲ strongest (nearest 0), ▼ weakest. One device shows its single value.
+        const value = a.count > 1
+          ? `▲${Math.round(a.max)} ▼${Math.round(a.min)} dBm`
+          : `${Math.round(a.max)} dBm`;
+        chips.push({ key: 'rssi', label: def.label, value });
+        continue;
+      }
       const val = def.agg === 'sum' ? a.sum : a.sum / a.count;
-      chips.push({ label: def.label, value: this._formatAreaChip(def.key, val) });
+      chips.push({ key: def.key, label: def.label, value: this._formatAreaChip(def.key, val) });
     }
     return chips;
+  }
+
+  /** Per-device values behind a room-header chip, highest first — the drill-down
+   *  answer to "which device is this reading coming from". Aggregated per device
+   *  the same way the chip is: sum metrics add a device's channels, avg metrics
+   *  take the device's mean. */
+  private _areaChipDeviceValues(devices: HADevice[], key: string): Array<{ name: string; value: number }> {
+    const def = AREA_CHIP_DEFS.find(d => d.key === key);
+    if (!def) return [];
+    const out: Array<{ name: string; value: number }> = [];
+    for (const device of devices) {
+      let sum = 0, count = 0;
+      for (const e of device.entities) {
+        if (e.domain !== 'sensor') continue;
+        const s = this.hass.states[e.entity_id];
+        if (!s || s.state === 'unavailable' || s.state === 'unknown') continue;
+        const v = parseFloat(s.state); if (isNaN(v)) continue;
+        const dc = ((s.attributes as Record<string, unknown>).device_class as string) ?? '';
+        if (def.dc === dc || (def.key === 'rssi' && (dc === 'signal_strength' || e.entity_id.includes('_rssi')))) {
+          sum += v; count++;
+        }
+      }
+      if (count) out.push({ name: device.name, value: def.agg === 'sum' ? sum : sum / count });
+    }
+    return out.sort((a, b) => b.value - a.value);
   }
 
   /** Format a room-header chip value by key. Mirrors the tile formatters. */
@@ -3147,17 +3184,41 @@ export class HADeviceDashboard extends LitElement {
           <span class="area-name">${label}</span>
           ${areaChips.length ? html`
             <div class="area-chips">
-              ${areaChips.map(c => html`
-                <div class="area-chip">
+              ${areaChips.map(c => {
+                const id = `${area}::${c.key}`;
+                return html`
+                <div class="area-chip ${this._areaChipOpen === id ? 'active' : ''}"
+                  title="Tap to see which device"
+                  @click=${(e: Event) => { e.stopPropagation(); this._areaChipOpen = this._areaChipOpen === id ? null : id; }}>
                   <span class="tsc-lbl">${c.label}</span>
                   <span class="tsc-val">${c.value}</span>
-                </div>`)}
+                </div>`;
+              })}
             </div>` : nothing}
           <div class="area-meta">
             <span class="area-count">${onlineCount}/${devices.length}</span>
             <span class="chevron ${isClosed ? '' : 'open'}">▼</span>
           </div>
         </div>
+        ${(() => {
+          const open = this._areaChipOpen;
+          if (!open || !open.startsWith(`${area}::`)) return nothing;
+          const key = open.slice(area.length + 2);
+          const rows = this._areaChipDeviceValues(devices, key);
+          if (!rows.length) return nothing;
+          const def = AREA_CHIP_DEFS.find(d => d.key === key);
+          return html`
+            <div class="area-chip-detail" @click=${(e: Event) => e.stopPropagation()}>
+              <div class="acd-hdr">${def?.label ?? key} · ${rows.length} device${rows.length > 1 ? 's' : ''}</div>
+              <div class="acd-list">
+                ${rows.map(r => html`
+                  <div class="acd-row">
+                    <span class="acd-name">${r.name}</span>
+                    <span class="acd-val">${this._formatAreaChip(key, r.value)}</span>
+                  </div>`)}
+              </div>
+            </div>`;
+        })()}
         ${isClosed ? nothing : html`
           ${this._renderExtraCards(this._config.area_cards?.[label])}
           <div class="device-grid" style="--cols:${cols}">

@@ -275,13 +275,22 @@ export const mainCss = css`
 
     .area-chips { display:flex; align-items:center; flex-wrap:wrap; gap:4px; flex:1; margin:0 10px; }
 
-    .area-chip { display:flex; align-items:center; gap:3px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.08); border-radius:4px; padding:1px 5px; }
+    .area-chip { display:flex; align-items:center; gap:3px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.08); border-radius:4px; padding:1px 5px; cursor:pointer; transition:border-color .12s,background .12s; }
+    .area-chip:hover { border-color:var(--sc-accent); }
+    .area-chip.active { border-color:var(--sc-accent); background:var(--sc-accent-glow,rgba(244,96,30,0.14)); }
 
     .area-chip .tsc-lbl { font-size:var(--fs-xs); color:var(--secondary-text-color); }
 
     .area-chip .tsc-val { font-size:.72em; font-weight:600; color:var(--sc-text-primary,var(--primary-text-color)); }
 
     .area-meta { display:flex; align-items:center; gap:8px; }
+
+    .area-chip-detail { margin:2px 0 10px; padding:8px 12px; background:var(--sc-tile-exp-bg,rgba(255,255,255,0.05)); border:1px solid var(--sc-tile-border,rgba(255,255,255,0.08)); border-radius:8px; }
+    .acd-hdr { font-size:.68em; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--sc-text-muted,var(--secondary-text-color)); margin-bottom:6px; }
+    .acd-list { display:flex; flex-direction:column; gap:2px; }
+    .acd-row { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:.82em; padding:2px 0; }
+    .acd-name { color:var(--sc-text-secondary,var(--secondary-text-color)); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .acd-val { font-weight:600; color:var(--sc-text-primary,var(--primary-text-color)); font-variant-numeric:tabular-nums; flex-shrink:0; }
 
     .area-count { font-size:.75em; color:var(--secondary-text-color); }
 
