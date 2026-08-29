@@ -1879,9 +1879,30 @@ export class HADeviceDashboardEditor extends LitElement {
     recommended: TileStyle | undefined,
     onStyle: (v: TileStyle | undefined) => void,
     onVariant: (v: PowerMonitorVariant | undefined) => void,
+    graphs?: boolean | undefined,
+    onGraphs?: (v: boolean | undefined) => void,
   ): TemplateResult {
     const cur = current ?? 'default';
     const showVariant = cur === 'power-monitor' || (!current && recommended === 'power-monitor');
+    // The Gauge (arcs) and Graph (sparklines) variants are really one choice with
+    // three faces — arcs, sparklines, or both — because the gauge's companion
+    // graphs are the show_graphs-gated lower body. When the caller wires a graphs
+    // setter we surface that as a single "Display" control and demote the other
+    // layouts (Number/Compact/Table) to a secondary row.
+    const threeWay = showVariant && !!onGraphs;
+    const DISPLAY_MODES = [
+      { k: 'circles', label: '◉ Circles', on: variant === 'gauge' && graphs === false },
+      { k: 'graphs',  label: '∿ Graphs',  on: variant === 'graph' },
+      { k: 'both',    label: '◉∿ Both',   on: variant === 'gauge' && graphs !== false },
+    ] as const;
+    const pickDisplay = (k: string) => {
+      if (k === 'circles')      { onVariant('gauge'); onGraphs!(false); }
+      else if (k === 'graphs')  { onVariant('graph'); onGraphs!(undefined); }
+      else                      { onVariant('gauge'); onGraphs!(true); }
+    };
+    const moreLayouts = threeWay
+      ? PM_VARIANT_OPTIONS.filter(o => o.v !== 'gauge' && o.v !== 'graph')
+      : PM_VARIANT_OPTIONS;
     return html`
       <div class="ts-style-grid" style="grid-template-columns:repeat(4,minmax(0,1fr))">
         ${TILE_STYLE_OPTIONS.map(opt => html`
@@ -1927,10 +1948,17 @@ export class HADeviceDashboardEditor extends LitElement {
             })}
           </div>`;
       })()}
-      ${showVariant ? html`
-        <div class="field-lbl" style="margin-top:8px">Power monitor variant</div>
+      ${threeWay ? html`
+        <div class="field-lbl" style="margin-top:8px">Display</div>
         <div class="pill-grp">
-          ${PM_VARIANT_OPTIONS.map(opt => html`
+          ${DISPLAY_MODES.map(m => html`
+            <span class="pill ${m.on ? 'on' : ''}" @click=${() => pickDisplay(m.k)}>${m.label}</span>`)}
+        </div>
+        <div class="hint" style="margin-top:2px">Circles = arc gauges · Graphs = sparklines · Both = arcs with sparklines below</div>` : nothing}
+      ${showVariant ? html`
+        <div class="field-lbl" style="margin-top:8px">${threeWay ? 'More layouts' : 'Power monitor variant'}</div>
+        <div class="pill-grp">
+          ${moreLayouts.map(opt => html`
             <span class="pill ${variant === opt.v ? 'on' : ''}"
               @click=${() => onVariant(opt.v === 'big-number' ? undefined : opt.v)}>
               ${opt.icon} ${opt.label}
@@ -1988,7 +2016,9 @@ export class HADeviceDashboardEditor extends LitElement {
             ${this._renderTileStylePicker(
               ps.tile_style, ps.power_monitor_variant ?? 'big-number', PROFILE_DEFAULT_TILE_STYLE[profile!.type],
               v => this._setProfileStyle(profile!.type, { tile_style: v }),
-              v => this._setProfileStyle(profile!.type, { power_monitor_variant: v }))}
+              v => this._setProfileStyle(profile!.type, { power_monitor_variant: v }),
+              ps.show_graphs,
+              v => this._setProfileStyle(profile!.type, { show_graphs: v }))}
           </div>
           <div class="tog-row" style="border:none;padding:6px 0 0">
             <div class="tog-lbl">Sparkline graphs</div>
@@ -2334,6 +2364,8 @@ export class HADeviceDashboardEditor extends LitElement {
           curDevStyle, curVariant, recommended,
           (v) => this._setDeviceStyle(deviceId, { tile_style: v }),
           (v) => this._setDeviceStyle(deviceId, { power_monitor_variant: v }),
+          devStyle.show_graphs,
+          (v) => this._setDeviceStyle(deviceId, { show_graphs: v }),
         )}
       </div>`;
 
@@ -4467,6 +4499,8 @@ export class HADeviceDashboardEditor extends LitElement {
               c.tile_style, c.power_monitor_variant ?? 'big-number', undefined,
               (v) => this._set('tile_style', v),
               (v) => this._set('power_monitor_variant', v),
+              c.show_graphs,
+              (v) => this._set('show_graphs', v),
             )}
           </div>
 
