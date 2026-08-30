@@ -258,9 +258,10 @@ const PROFILES = [
   ['generic','—','default','(show all — no opinion)'],
 ];
 
-/* 7 themes — [key, label, accent, bg, header1, header2, blurb, isDefault] */
+/* 8 themes — [key, label, accent, bg, header1, header2, blurb, isDefault] */
 const THEMES = [
   ['warm_dusk','Warm Dusk','#c98a63','#1e1a17','#241f1b','#33291f','Subtle & warm',true],
+  ['shelly_blue','Shelly Blue','#3ea1f5','#12161f','#151b28','#1e2c47','Shelly Control app blues',false],
   ['dark_industrial','Dark Industrial','#f4601e','#1c1c1e','#1a1a2e','#0f3460','Shelly orange, industrial',false],
   ['teal_terminal','Teal Terminal','#2dd4bf','#0b0f0e','#042f2e','#0b6157','Terminal vibe',false],
   ['brutalist','Brutalist','#facc15','#000000','#000000','#171717','High-contrast flat',false],
@@ -549,7 +550,7 @@ const TABS = [
    groups:[
     {name:'Defaults panel', rows:[
       ['Default view','Which view loads first','default_view','global','first view',0],
-      ['Colour theme','Apply one of 7 preset palettes over style','style.* (palette keys)','global','warm_dusk',0],
+      ['Colour theme','Apply one of 8 preset palettes over style','style.* (palette keys)','global','warm_dusk',0],
       ['★ Saved palettes','One swatch per palette saved in this browser — click to restore, ✕ to forget. Restoring writes the colours to style and sets theme: custom.','style.* + localStorage','global','none',0],
       ['💾 Save (colours)','Save the colours currently rendering — the preset behind `theme` plus any style overrides — as a named palette in this browser','localStorage','local','—',0],
       ['🎲 Random / ✨ Surprise me','Roll a colour scheme — a random built-in preset, or a palette generated from a random hue with every text colour contrast-checked (WCAG 7:1 primary, 4.5:1 secondary). Current colours are stashed under ★ Saved first.','theme / style.*','global','—',0],

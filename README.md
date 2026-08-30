@@ -39,7 +39,7 @@ Frontend only: no custom integration, no Python, no helper entities.
   today / this week / this month, computed from recorder statistics (no helpers)
 - **Views** — filtered tabs over the same fleet, each with its own layout overrides
 - **Deep styling cascade** — device → device-type → room → view → saved style →
-  style preset → global, with seven built-in themes
+  style preset → global, with eight built-in themes
 - **Embed your own cards** — any Lovelace card above, below, or inside a room
 - **Visual editor** — full GUI editor with an Advanced toggle and a read-only YAML tab
 
@@ -332,7 +332,7 @@ Nest arrays to put blocks side by side: `[[name_row], [sensors, graph]]`.
 theme: nordic_warm
 ```
 
-`warm_dusk` (default), `dark_industrial`, `teal_terminal`, `brutalist`,
+`warm_dusk` (default), `shelly_blue`, `dark_industrial`, `teal_terminal`, `brutalist`,
 `frosted_light`, `nordic_warm`, `midnight_purple`, `custom`.
 
 The theme is **authoritative**: every colour comes from the preset, and `style`

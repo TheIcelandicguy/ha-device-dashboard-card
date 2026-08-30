@@ -53,6 +53,28 @@ export const THEME_PRESETS: Record<Exclude<ThemePreset, 'custom'>, ThemePalette>
     power_color: '#fb923c',
     area_header_color: '#f4601e',
   },
+  // ── Azure on deep slate-blue, modeled on the Shelly Control app's dark look ──
+  shelly_blue: {
+    accent_color: '#3ea1f5',
+    card_bg: '#12161f',
+    tile_bg: '#1a212e',
+    tile_border: '#263247',
+    tile_hover_bg: 'rgba(62,161,245,0.08)',
+    tile_hover_shadow: 'rgba(0,0,0,0.40)',
+    tile_sensor_bg: 'rgba(62,161,245,0.06)',
+    tile_exp_bg: 'rgba(62,161,245,0.08)',
+    text_primary: '#e9eef6',
+    text_secondary: '#a9b7cd',
+    text_muted: '#6b7a91',
+    header_bg: '#151b28',
+    header_bg2: '#1e2c47',
+    header_text_color: '#eef3fa',
+    header_orb_color: '#3ea1f5',
+    online_color: '#39c86e',
+    offline_color: '#ef5350',
+    power_color: '#f5a623',
+    area_header_color: '#3ea1f5',
+  },
   // ── Teal on deep green-black, terminal vibe ──
   teal_terminal: {
     accent_color: '#2dd4bf',
@@ -167,12 +189,13 @@ export const THEME_PRESETS: Record<Exclude<ThemePreset, 'custom'>, ThemePalette>
 
 /** Display order + labels for the theme picker. */
 export const THEME_ORDER: Array<Exclude<ThemePreset, 'custom'>> = [
-  'warm_dusk', 'dark_industrial', 'teal_terminal', 'brutalist',
+  'warm_dusk', 'shelly_blue', 'dark_industrial', 'teal_terminal', 'brutalist',
   'frosted_light', 'nordic_warm', 'midnight_purple',
 ];
 
 export const THEME_LABELS: Record<ThemePreset, string> = {
   warm_dusk: 'Warm Dusk',
+  shelly_blue: 'Shelly Blue',
   dark_industrial: 'Dark Industrial',
   teal_terminal: 'Teal Terminal',
   brutalist: 'Brutalist',

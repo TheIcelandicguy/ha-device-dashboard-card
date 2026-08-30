@@ -87,7 +87,7 @@ export type EnergyPeriod  = 'total' | 'today' | 'week' | 'month';
 /** Device sort order. 'area' groups by room name, then by device name inside it. */
 export type SortBy        = 'name' | 'power' | 'online' | 'area';
 export type BoxShadow     = 'none' | 'soft' | 'medium' | 'strong';
-export type ThemePreset   = 'warm_dusk' | 'dark_industrial' | 'teal_terminal' | 'brutalist' | 'frosted_light' | 'nordic_warm' | 'midnight_purple' | 'custom';
+export type ThemePreset   = 'warm_dusk' | 'shelly_blue' | 'dark_industrial' | 'teal_terminal' | 'brutalist' | 'frosted_light' | 'nordic_warm' | 'midnight_purple' | 'custom';
 
 /** Global graph display settings */
 export interface SensorRange {

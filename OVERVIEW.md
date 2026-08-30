@@ -92,9 +92,9 @@ in the default Shelly mode only Shelly/BTHome devices appear (see §7).
   (profiles, domains, areas, device include/exclude, entity-id regex) and layout
   overrides.
 - **Favourites** — devices pinned to a Favourites section.
-- **Theming** — 7 built-in colour presets (`warm_dusk` default, `dark_industrial`,
-  `teal_terminal`, `brutalist`, `frosted_light`, `nordic_warm`, `midnight_purple`)
-  plus fully custom palettes; bundled + Google-Fonts display fonts.
+- **Theming** — 8 built-in colour presets (`warm_dusk` default, `shelly_blue`,
+  `dark_industrial`, `teal_terminal`, `brutalist`, `frosted_light`, `nordic_warm`,
+  `midnight_purple`) plus fully custom palettes; bundled + Google-Fonts display fonts.
 - **Animated status icons** — a large library of SVG animation presets (flame,
   snowflake, fan, pulse, bolt, bulb, water, sun, moon, wind, bell, thermometer,
   battery, star, wave …) assignable per device/entity for on/off states.
@@ -347,7 +347,7 @@ runtime defaults from `docs/card-reference.json` where applicable.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `theme` | ThemePreset | `warm_dusk` | One of 7 presets (or `custom`); writes palette colours into `style`. |
+| `theme` | ThemePreset | `warm_dusk` | One of 8 presets (or `custom`); writes palette colours into `style`. |
 | `style` | object | — | ~50 global look keys: `accent_color`, `tile_radius`, `tile_gap`, `font_family`, `text_size_scale`, button shape/variant/size, card/header/tile colours, text tiers, status colours, header sizing, etc. |
 | `area_styles` | Record<area, AreaStyle> | — | Per-room overrides: background/image, borders, header gradient, typography, tile colours, columns, `tile_style`, per-area `sensors`/`header_chips`/`show_graphs`/`elements`. |
 | `device_styles` | Record<device_id, DeviceStyle> | — | Per-device: accent `color`, `tile_layout`, forced `profile`, `tile_style` + variant, `tile_icon`/`tile_icon_off`/`tile_icon_speed`, per-entity `entity_animations`, `sensors`, `show_graphs`, `elements`. |
