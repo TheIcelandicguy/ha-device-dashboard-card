@@ -2725,7 +2725,7 @@ export class HADeviceDashboardEditor extends LitElement {
   }
 
   /** Per-room header-chip picker. Offers only metrics whose sensor is present in
-   *  the room; live power stays the always-on number in the room meta row. */
+   *  the room; Power is one of the chips (on by default), not a fixed meta-row value. */
   private _renderRoomHeaderChips(name: string, st: AreaStyle): TemplateResult {
     const roomDevices = this._allDevices().filter(d => (d.area ?? '') === name);
     const present = new Set<string>();
@@ -2757,7 +2757,7 @@ export class HADeviceDashboardEditor extends LitElement {
             }}>${def.label}</span>`;
           })}
         </div>
-        <div class="hint" style="margin-top:4px">Live power already shows in the room's meta row; add Energy/Voltage/etc. here.</div>
+        <div class="hint" style="margin-top:4px">Which summary chips this room's header shows. Power is on by default — toggle it off if you don't want it.</div>
       </div>`;
   }
 
@@ -2791,7 +2791,7 @@ export class HADeviceDashboardEditor extends LitElement {
             }}>${def.label}</span>`;
           })}
         </div>
-        <div class="hint" style="margin-top:4px">Default for every room header — live power always shows in the room's meta row; add Energy/Voltage/etc. here. A room can override this in Per-room styling below.</div>
+        <div class="hint" style="margin-top:4px">Default summary chips for every room header. Power is on by default — toggle it off to drop it. A room can override this in Per-room styling below.</div>
       </div>`;
   }
 

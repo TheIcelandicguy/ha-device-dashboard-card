@@ -119,8 +119,8 @@ export function sensorSelection(i: CascadeInput): string[] | undefined {
 
 /** Sparklines on/off: device → type → room → card → off. No view layer.
  *  Default is OFF — tiles are lean out of the box and graphs are opt-in (the
- *  power tiles' Display picker, the per-tile Customize toggle, or a global
- *  show_graphs). This governs the getGraphEntities-based sparklines: the power
+ *  power tiles' Display picker, or a global/room/device show_graphs). This
+ *  governs the getGraphEntities-based sparklines: the power
  *  tiles' companion sensor graphs, the sensor tile's primary spark, and the
  *  block tile's graph block. The inline hero/graph-variant sparklines run off
  *  the separate `graph` element visibility and are unaffected. */

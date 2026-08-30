@@ -2936,7 +2936,10 @@ export class HADeviceDashboard extends LitElement {
           }
           if (got) rows.push({ name: device.name, value: sum });
         }
-        return rows.sort((a, b) => b.value - a.value);
+        // If period stats aren't usable yet (warming up or failed), the chip
+        // falls back to raw lifetime totals — mirror that here (fall through to
+        // the generic branch) instead of a silent empty panel on a live chip.
+        if (rows.length) return rows.sort((a, b) => b.value - a.value);
       }
     }
     const out: Array<{ name: string; value: number }> = [];
@@ -3049,7 +3052,13 @@ export class HADeviceDashboard extends LitElement {
       <div class="area-section ${isClosed ? 'closed' : ''} ${areaStyle?.bg_image && areaStyle.bg_image_mode === 'ambient' ? 'area-bg-ambient' : ''}" style=${styleMap(styleObj)}>
         <div class="area-header" @click=${() => {
           const next = new Set(this._closedAreas);
-          next.has(area) ? next.delete(area) : next.add(area);
+          if (next.has(area)) { next.delete(area); }
+          else {
+            next.add(area);
+            // Collapsing hides the device grid; close any open chip drill-down for
+            // this room too, so it doesn't orphan below the collapsed header.
+            if (this._areaChipOpen?.startsWith(`${area}::`)) this._areaChipOpen = null;
+          }
           this._closedAreas = next;
         }}>
           <span class="area-name">${label}</span>

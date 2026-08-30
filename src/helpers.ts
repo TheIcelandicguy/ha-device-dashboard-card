@@ -1180,7 +1180,6 @@ export const FACTORY_DEFAULTS: Readonly<Partial<HADeviceDashboardConfig>> = Obje
   columns:           3,
   sort_by:           'name',
   smart_tile_styles: false,
-  show_graphs:       true,
   graph_hours:       24,
   header_chips:      DEFAULT_HEADER_CHIPS,
 });

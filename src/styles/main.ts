@@ -404,27 +404,20 @@ export const mainCss = css`
 
 
     /* Relay / plug — lightning bolt */
-    .tile-icon-relay.on { color:var(--sc-accent); animation:icon-pulse 2s ease-in-out infinite; }
 
     @keyframes icon-pulse { 0%,100%{filter:drop-shadow(0 0 3px var(--ipglow,var(--sc-accent-glow)))} 50%{filter:drop-shadow(0 0 8px var(--ipglow,var(--sc-accent-glow)))} }
 
 
     /* Fan — spinning blades */
-    .tile-icon-fan .fan-blades { transform-origin:10px 10px; }
 
-    .tile-icon-fan.on { color:var(--sc-accent); }
 
-    .tile-icon-fan.on .fan-blades { animation:fan-spin 1s linear infinite; }
 
     @keyframes fan-spin { to{transform:rotate(360deg)} }
 
 
     /* Sun — rotate + glow */
-    .tile-icon-sun { transform-origin:10px 10px; }
 
-    .tile-icon-sun.on { color:#fbbf24; filter:drop-shadow(0 0 5px rgba(251,191,36,0.6)); animation:sun-spin 8s linear infinite; }
 
-    @keyframes sun-spin { to{transform:rotate(360deg)} }
 
 
     /* Cover — slat movement */
@@ -433,37 +426,27 @@ export const mainCss = css`
 
 
     /* Flame — flicker */
-    .tile-icon-flame.on { color:#f97316; filter:drop-shadow(0 0 5px rgba(249,115,22,0.6)); }
 
-    .tile-icon-flame.on .flame-main { animation:flicker 1.5s ease-in-out infinite alternate; transform-origin:10px 18px; }
 
-    .tile-icon-flame.on .flame-inner { animation:flicker 1.5s ease-in-out infinite alternate-reverse; transform-origin:10px 18px; }
 
     @keyframes flicker { 0%{transform:scaleX(1) scaleY(1)} 33%{transform:scaleX(.95) scaleY(1.04)} 66%{transform:scaleX(1.04) scaleY(.97)} 100%{transform:scaleX(.97) scaleY(1.03)} }
 
 
     /* Valve — drip pulse */
-    .tile-icon-valve.on { color:#38bdf8; filter:drop-shadow(0 0 4px rgba(56,189,248,0.5)); }
 
-    .tile-icon-valve.on .drop-body { animation:drip 2s ease-in-out infinite; transform-origin:10px 10px; }
 
     @keyframes drip { 0%,100%{transform:scaleY(1)} 50%{transform:scaleY(1.06) translateY(1px)} }
 
 
     /* Energy — wave scroll */
-    .tile-icon-energy { color:var(--sc-accent); }
 
-    .tile-icon-energy .energy-wave { stroke-dasharray:40; animation:wave-scroll 2s linear infinite; }
 
     @keyframes wave-scroll { to{stroke-dashoffset:-40} }
 
 
     /* Input — ripple */
-    .tile-icon-input.on { color:var(--sc-accent); }
 
-    .tile-icon-input.on .input-ripple { animation:input-ripple .8s ease-out forwards; }
 
-    @keyframes input-ripple { 0%{r:0;opacity:.8} 100%{r:6;opacity:0} }
 
 
     /* ── Entity-level state animation icons ─────────────────────────────── */
@@ -1395,7 +1378,6 @@ export const mainCss = css`
        explicit per-device icon animations) stay live. */
     .no-fx .dot.online { animation:none; box-shadow:none; }
 
-    .no-fx .tile-icon-relay.on { animation:none; filter:none; }
 
     .no-fx .stat, .no-fx .cloud-chip { backdrop-filter:none; }
 
