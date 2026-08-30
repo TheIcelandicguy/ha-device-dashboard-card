@@ -176,6 +176,10 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _defaultsOpen = false;
   /** Two-click arming for the destructive "Reset everything" button. */
   @state() private _resetArmed = false;
+  /** Two-click arming for a view's delete button, by view id (in-card confirm,
+   *  not a browser popup). Auto-disarms after a few seconds. */
+  @state() private _viewDeleteArmed: string | null = null;
+  private _viewDeleteTimer?: ReturnType<typeof setTimeout>;
   /** Extra-cards manager state. */
   @state() private _xcPlacement: 'header' | 'footer' | 'room' = 'header';
   @state() private _xcRoom = '';
@@ -725,6 +729,7 @@ export class HADeviceDashboardEditor extends LitElement {
     window.removeEventListener('hdd-editor-goto', this._onEditorGoto);
     if (this._flashTimer) { clearTimeout(this._flashTimer); this._flashTimer = null; }
     clearTimeout(this._styleClipTimer);
+    clearTimeout(this._viewDeleteTimer);
     // Tear down the dialog-sizing plumbing so it doesn't leak across editor opens.
     if (this._editorRAF != null) { cancelAnimationFrame(this._editorRAF); this._editorRAF = undefined; }
     this._editorLayoutTimers.forEach(t => clearTimeout(t));
@@ -3002,6 +3007,20 @@ export class HADeviceDashboardEditor extends LitElement {
     this._flushConfig();   // structural change — apply immediately
   }
 
+  /** In-card two-click delete confirm (no browser popup): first click arms the
+   *  button, second deletes; it auto-disarms after a few seconds. */
+  private _armDeleteView(id: string): void {
+    clearTimeout(this._viewDeleteTimer);
+    if (this._viewDeleteArmed === id) {
+      this._viewDeleteArmed = null;
+      this._deleteView(id);
+      return;
+    }
+    this._viewDeleteArmed = id;
+    this._viewDeleteTimer = setTimeout(() => { this._viewDeleteArmed = null; }, 3500);
+  }
+
+
   private _moveView(id: string, dir: -1 | 1): void {
     const views = [...(this._config.views ?? [])];
     const idx = views.findIndex(v => v.id === id);
@@ -3122,7 +3141,9 @@ export class HADeviceDashboardEditor extends LitElement {
           <div class="view-card-actions" @click=${(e: Event) => e.stopPropagation()}>
             <button class="vc-btn" ?disabled=${idx === 0}           title="Move up"   @click=${() => this._moveView(v.id, -1)}>▲</button>
             <button class="vc-btn" ?disabled=${idx === total - 1}   title="Move down" @click=${() => this._moveView(v.id, 1)}>▼</button>
-            <button class="vc-btn danger" title="Delete" @click=${() => { if (confirm(`Delete view "${v.name}"?`)) this._deleteView(v.id); }}>🗑</button>
+            <button class="vc-btn danger ${this._viewDeleteArmed === v.id ? 'armed' : ''}"
+              title=${this._viewDeleteArmed === v.id ? `Delete "${v.name}"?` : 'Delete view'}
+              @click=${() => this._armDeleteView(v.id)}>${this._viewDeleteArmed === v.id ? 'Delete?' : '🗑'}</button>
           </div>
           <span class="view-card-chev">${expanded ? '▲' : '▼'}</span>
         </div>
@@ -5175,6 +5196,7 @@ export class HADeviceDashboardEditor extends LitElement {
     .view-card-actions .vc-btn:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
     .view-card-actions .vc-btn:disabled { opacity:0.35; cursor:not-allowed; }
     .view-card-actions .vc-btn.danger:hover { border-color:#ef4444; color:#ef4444; }
+    .view-card-actions .vc-btn.danger.armed { border-color:#ef4444; color:#fff; background:#ef4444; font-weight:600; }
     .view-card-chev { font-size:10px; color:var(--t3); }
     .view-card-body { padding:10px 14px 14px; border-top:1px solid var(--border); background:var(--s1); }
     .view-dev-list { max-height:200px; overflow-y:auto; display:flex; flex-direction:column; gap:2px; padding:6px; background:var(--s2); border:1px solid var(--border); border-radius:6px; }
