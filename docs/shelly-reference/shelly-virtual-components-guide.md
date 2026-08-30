@@ -18,7 +18,7 @@
 3. Click **Create new** next to "User-defined components"
 4. Select the component type: **Boolean**, **Number**, **Text**, **Enum**, or **Button**
 5. Fill in the configuration:
-   - **Name** — display name (use Icelandic: "Gestamódi", "Lýsingarhamur", etc.)
+   - **Name** — display name (use Icelandic: "Guest mode", "Lighting mode", etc.)
    - **View** — how it renders in the Shelly app (toggle/label, slider/field, dropdown/label)
    - **Custom Icon URL** — optional icon for the Shelly app home page
 6. Click **Save**
@@ -37,10 +37,10 @@ curl -X POST -d '{
   "params":{
     "type":"boolean",
     "config":{
-      "name":"Gestamódi",
+      "name":"Guest mode",
       "persisted":true,
       "default_value":false,
-      "meta":{"ui":{"view":"toggle","titles":["Slökkt","Kveikt"]}}
+      "meta":{"ui":{"view":"toggle","titles":["Off","On"]}}
     }
   }
 }' http://192.168.1.100/rpc
@@ -53,7 +53,7 @@ curl -X POST -d '{
   "params":{
     "type":"number",
     "config":{
-      "name":"Hitastig",
+      "name":"Temperature",
       "min":15,"max":35,
       "default_value":22,
       "persisted":true,
@@ -69,16 +69,16 @@ curl -X POST -d '{
   "params":{
     "type":"enum",
     "config":{
-      "name":"Lýsingarhamur",
-      "options":["dagur","kvold","kvikmynd","nott","burt"],
-      "default_value":"dagur",
+      "name":"Lighting mode",
+      "options":["day","evening","movie","night","away"],
+      "default_value":"day",
       "persisted":true,
       "meta":{"ui":{"view":"dropdown","titles":{
-        "dagur":"Dagljós",
-        "kvold":"Kvöldbirta",
-        "kvikmynd":"Kvikmynd",
-        "nott":"Næturljós",
-        "burt":"Allt slökkt"
+        "day":"Daylight",
+        "evening":"Evening",
+        "movie":"Movie",
+        "night":"Night light",
+        "away":"All off"
       }}}
     }
   }
@@ -91,8 +91,8 @@ curl -X POST -d '{
   "params":{
     "type":"text",
     "config":{
-      "name":"Staða",
-      "default_value":"Ekkert nýtt",
+      "name":"Status",
+      "default_value":"Nothing new",
       "meta":{"ui":{"view":"label"}}
     }
   }
@@ -105,7 +105,7 @@ curl -X POST -d '{
   "params":{
     "type":"button",
     "config":{
-      "name":"Slökkva allt"
+      "name":"Turn off all"
     }
   }
 }' http://192.168.1.100/rpc
@@ -137,10 +137,10 @@ Shelly.call("Shelly.GetComponents", { dynamic_only: true }, function(res) {
       type: "boolean",
       id: 200,
       config: {
-        name: "Gestamódi",
+        name: "Guest mode",
         persisted: true,
         default_value: false,
-        meta: { ui: { view: "toggle", titles: ["Slökkt", "Kveikt"] } }
+        meta: { ui: { view: "toggle", titles: ["Off", "On"] } }
       }
     }, function(r, ec, em) {
       if (ec === 0) print("Created boolean:200");
@@ -162,7 +162,7 @@ Shelly.call("Shelly.GetComponents", { dynamic_only: true }, function(res) {
 | `persisted` | boolean | Keep value across reboots (default: false) |
 | `default_value` | boolean | Value on reboot if not persisted |
 | `meta.ui.view` | string | `"toggle"` = interactive switch, `"label"` = read-only display |
-| `meta.ui.titles` | array[2] | Labels for [false, true]: `["Lokað", "Opið"]` |
+| `meta.ui.titles` | array[2] | Labels for [false, true]: `["Closed", "Open"]` |
 | `meta.ui.icon` | string | URL to custom icon |
 
 **HA mapping:** toggle → `switch`, label → `binary_sensor`
@@ -198,11 +198,11 @@ Shelly.call("Shelly.GetComponents", { dynamic_only: true }, function(res) {
 | Property | Type | Description |
 |----------|------|-------------|
 | `name` | string | Display name |
-| `options` | array | Allowed values: `["dagur","kvold","nott"]` |
+| `options` | array | Allowed values: `["day","evening","night"]` |
 | `persisted` | boolean | Keep value across reboots |
 | `default_value` | string\|null | One of the options or null |
 | `meta.ui.view` | string | `"dropdown"` = select list, `"label"` = read-only |
-| `meta.ui.titles` | object | Friendly names: `{"dagur":"Dagljós"}` |
+| `meta.ui.titles` | object | Friendly names: `{"day":"Daylight"}` |
 
 **HA mapping:** dropdown → `select`, label → `sensor`
 
@@ -239,13 +239,13 @@ curl http://192.168.1.100/rpc/Number.GetStatus?id=201
 # → {"value":22.5,"source":"rpc","last_update_ts":1700864253}
 
 curl http://192.168.1.100/rpc/Enum.GetStatus?id=203
-# → {"value":"kvold","source":"UI","last_update_ts":1700864253}
+# → {"value":"evening","source":"UI","last_update_ts":1700864253}
 
 # Write
 curl "http://192.168.1.100/rpc/Boolean.Set?id=200&value=true"
 curl "http://192.168.1.100/rpc/Number.Set?id=201&value=25.0"
-curl "http://192.168.1.100/rpc/Enum.Set?id=203&value=%22nott%22"
-curl "http://192.168.1.100/rpc/Text.Set?id=202&value=%22Allt%20í%20lagi%22"
+curl "http://192.168.1.100/rpc/Enum.Set?id=203&value=%22night%22"
+curl "http://192.168.1.100/rpc/Text.Set?id=202&value=%22All%20OK%22"
 
 # Reconfigure
 curl "http://192.168.1.100/rpc/Number.SetConfig?id=201&config={%22min%22:10,%22max%22:40}"
@@ -266,13 +266,13 @@ let masterOff = Virtual.getHandle("button:204");
 // Read values (synchronous)
 let isGuest = guestMode.getValue();     // true or false
 let temp    = tempSet.getValue();       // 22.5
-let mode    = lightMode.getValue();     // "kvold"
+let mode    = lightMode.getValue();     // "evening"
 
 // Write values
 guestMode.setValue(true);
 tempSet.setValue(24.0);
-statusTxt.setValue("Uppfært: " + new Date().toISOString());
-lightMode.setValue("nott");
+statusTxt.setValue("Updated: " + new Date().toISOString());
+lightMode.setValue("night");
 
 // === LISTEN FOR CHANGES ===
 
@@ -292,19 +292,19 @@ guestMode.on("change", function(ev) {
 lightMode.on("change", function(ev) {
   print("Mode changed to:", ev.value);
   switch (ev.value) {
-    case "dagur":
+    case "day":
       Shelly.call("Light.Set", {id: 0, on: true, brightness: 100});
       break;
-    case "kvold":
+    case "evening":
       Shelly.call("Light.Set", {id: 0, on: true, brightness: 40});
       break;
-    case "kvikmynd":
+    case "movie":
       Shelly.call("Light.Set", {id: 0, on: true, brightness: 15});
       break;
-    case "nott":
+    case "night":
       Shelly.call("Light.Set", {id: 0, on: true, brightness: 5});
       break;
-    case "burt":
+    case "away":
       Shelly.call("Light.Set", {id: 0, on: false});
       break;
   }
@@ -328,7 +328,7 @@ masterOff.on("single_push", function(ev) {
   Shelly.call("HTTP.GET", {
     url: "http://192.168.1.102/rpc/Switch.Set?id=0&on=false"
   });
-  statusTxt.setValue("Slökkt á öllu kl. " + new Date().toLocaleTimeString());
+  statusTxt.setValue("All off at " + new Date().toLocaleTimeString());
 });
 
 // Remove a listener
@@ -376,14 +376,14 @@ Virtual components are discovered automatically by the Shelly HA integration. Af
 {platform}.{device_name}_{type}_{id}
 
 Examples:
-  switch.shelly_stofa_boolean_200        (boolean in toggle mode)
-  binary_sensor.shelly_stofa_boolean_200 (boolean in label mode)
-  number.shelly_stofa_number_201         (number in field or slider mode)
-  sensor.shelly_stofa_text_202           (text in label mode)
-  text.shelly_stofa_text_202             (text in field mode)
-  select.shelly_stofa_enum_203           (enum in dropdown mode)
-  sensor.shelly_stofa_enum_203           (enum in label mode)
-  button.shelly_stofa_button_204         (button)
+  switch.shelly_livingroom_boolean_200        (boolean in toggle mode)
+  binary_sensor.shelly_livingroom_boolean_200 (boolean in label mode)
+  number.shelly_livingroom_number_201         (number in field or slider mode)
+  sensor.shelly_livingroom_text_202           (text in label mode)
+  text.shelly_livingroom_text_202             (text in field mode)
+  select.shelly_livingroom_enum_203           (enum in dropdown mode)
+  sensor.shelly_livingroom_enum_203           (enum in label mode)
+  button.shelly_livingroom_button_204         (button)
 ```
 
 ### HA Automation Examples
@@ -391,54 +391,54 @@ Examples:
 ```yaml
 # Trigger on enum (scene selector) change
 automation:
-  - alias: "Stofa lýsingarhamur"
+  - alias: "Living Room lighting mode"
     trigger:
       - platform: state
-        entity_id: select.shelly_stofa_enum_203
+        entity_id: select.shelly_livingroom_enum_203
     action:
       - choose:
           - conditions:
               - condition: state
-                entity_id: select.shelly_stofa_enum_203
-                state: "dagur"
+                entity_id: select.shelly_livingroom_enum_203
+                state: "day"
             sequence:
               - service: scene.turn_on
                 target:
-                  entity_id: scene.stofa_dagljós
+                  entity_id: scene.livingroom_daglight
           - conditions:
               - condition: state
-                entity_id: select.shelly_stofa_enum_203
-                state: "kvold"
+                entity_id: select.shelly_livingroom_enum_203
+                state: "evening"
             sequence:
               - service: scene.turn_on
                 target:
-                  entity_id: scene.stofa_kvoldbirta
+                  entity_id: scene.livingroom_evening
           - conditions:
               - condition: state
-                entity_id: select.shelly_stofa_enum_203
-                state: "burt"
+                entity_id: select.shelly_livingroom_enum_203
+                state: "away"
             sequence:
               - service: light.turn_off
                 target:
-                  entity_id: light.stofa_ljos_group
+                  entity_id: light.livingroom_light_group
 
 # React to boolean toggle from device
 automation:
-  - alias: "Gestamódi kveikt"
+  - alias: "Guest mode on"
     trigger:
       - platform: state
-        entity_id: switch.shelly_forstofa_boolean_200
+        entity_id: switch.shelly_hallway_boolean_200
         to: "on"
     action:
       - service: light.turn_on
         target:
-          entity_id: light.stofa_ljos_group
+          entity_id: light.livingroom_light_group
         data:
           brightness_pct: 30
       - service: notify.mobile_app
         data:
-          title: "Gestamódi"
-          message: "Gestamódi kveikt — ljós stillt á 30%"
+          title: "Guest mode"
+          message: "Guest mode on — light set to 30%"
 
 # Set a number virtual from HA (e.g., from an input_number helper)
 automation:
@@ -449,20 +449,20 @@ automation:
     action:
       - service: number.set_value
         target:
-          entity_id: number.shelly_eldhus_number_201
+          entity_id: number.shelly_kitchen_number_201
         data:
           value: "{{ states('input_number.target_temperature') }}"
 
 # Press virtual button from HA automation
 automation:
-  - alias: "Slökkva öllu við miðnætti"
+  - alias: "Turn off all at midnight"
     trigger:
       - platform: time
         at: "00:00:00"
     action:
       - service: button.press
         target:
-          entity_id: button.shelly_forstofa_button_204
+          entity_id: button.shelly_hallway_button_204
 ```
 
 ### Mushroom Dashboard Cards
@@ -470,8 +470,8 @@ automation:
 ```yaml
 # Boolean toggle — Mushroom entity card
 type: custom:mushroom-entity-card
-entity: switch.shelly_forstofa_boolean_200
-name: Gestamódi
+entity: switch.shelly_hallway_boolean_200
+name: Guest mode
 icon: mdi:account-group
 fill_container: true
 tap_action:
@@ -479,46 +479,46 @@ tap_action:
 
 # Enum select — Mushroom select card
 type: custom:mushroom-select-card
-entity: select.shelly_stofa_enum_203
-name: Lýsingarhamur
+entity: select.shelly_livingroom_enum_203
+name: Lighting mode
 icon: mdi:lightbulb-group
 fill_container: true
 
 # Number slider — Mushroom number card
 type: custom:mushroom-number-card
-entity: number.shelly_eldhus_number_201
-name: Hitastig
+entity: number.shelly_kitchen_number_201
+name: Temperature
 icon: mdi:thermometer
 fill_container: true
 display_mode: slider
 
 # Status text — Mushroom entity card
 type: custom:mushroom-entity-card
-entity: sensor.shelly_forstofa_text_202
-name: Staða
+entity: sensor.shelly_hallway_text_202
+name: Status
 icon: mdi:information
 fill_container: true
 
 # Button — Mushroom entity card with tap action
 type: custom:mushroom-entity-card
-entity: button.shelly_forstofa_button_204
-name: Slökkva allt
+entity: button.shelly_hallway_button_204
+name: Turn off all
 icon: mdi:power-off
 fill_container: true
 tap_action:
   action: call-service
   service: button.press
   target:
-    entity_id: button.shelly_forstofa_button_204
+    entity_id: button.shelly_hallway_button_204
 ```
 
 ---
 
 ## Part 5: Complete Working Example
 
-### Scenario: Stofa (living room) lighting controller
+### Scenario: Living Room (living room) lighting controller
 
-This sets up a Shelly Gen3/Gen4 device in your Stofa with:
+This sets up a Shelly Gen3/Gen4 device in your Living Room with:
 - **Enum** for selecting lighting mode (5 scenes)
 - **Number** for setting custom brightness percentage
 - **Boolean** for enabling "movie mode" dim timer
@@ -528,32 +528,32 @@ This sets up a Shelly Gen3/Gen4 device in your Stofa with:
 #### Step 1: Create all virtuals via script (runs once)
 
 ```javascript
-// stofa-setup.js — Run once to create virtual components
+// livingroom-setup.js — Run once to create virtual components
 // After running, disable this script and enable the main controller script
 
 let components = [
   { type: "enum", id: 200, config: {
-    name: "Lýsingarhamur", persisted: true, default_value: "dagur",
-    options: ["dagur","kvold","kvikmynd","nott","burt"],
+    name: "Lighting mode", persisted: true, default_value: "day",
+    options: ["day","evening","movie","night","away"],
     meta: { ui: { view: "dropdown", titles: {
-      dagur: "Dagljós", kvold: "Kvöldbirta",
-      kvikmynd: "Kvikmynd", nott: "Næturljós", burt: "Allt slökkt"
+      day: "Daylight", evening: "Evening",
+      movie: "Movie", night: "Night light", away: "All off"
     }}}
   }},
   { type: "number", id: 201, config: {
-    name: "Birtustig", min: 0, max: 100, default_value: 100, persisted: true,
+    name: "Brightness", min: 0, max: 100, default_value: 100, persisted: true,
     meta: { ui: { view: "slider", unit: "%", step: 5 }}
   }},
   { type: "boolean", id: 202, config: {
-    name: "Kvikmyndahamur tímasettur", persisted: false, default_value: false,
-    meta: { ui: { view: "toggle", titles: ["Slökkt", "Kveikt"] }}
+    name: "Movie mode timed", persisted: false, default_value: false,
+    meta: { ui: { view: "toggle", titles: ["Off", "On"] }}
   }},
   { type: "text", id: 203, config: {
-    name: "Stofa staða", default_value: "Tilbúið",
+    name: "Living Room status", default_value: "Ready",
     meta: { ui: { view: "label" }}
   }},
   { type: "button", id: 204, config: {
-    name: "Slökkva stofu"
+    name: "Turn off livingroom"
   }}
 ];
 
@@ -565,7 +565,7 @@ function createNext() {
     Shelly.call("Virtual.Add", {
       type: "group",
       config: {
-        name: "Stofa stjórnborð",
+        name: "Living Room control panel",
         components: ["enum:200","number:201","boolean:202","text:203","button:204"]
       }
     });
@@ -588,7 +588,7 @@ createNext();
 #### Step 2: Main controller script
 
 ```javascript
-// stofa-controller.js — Main automation script
+// livingroom-controller.js — Main automation script
 // Set to run on startup
 
 let lightMode   = Virtual.getHandle("enum:200");
@@ -599,11 +599,11 @@ let offButton   = Virtual.getHandle("button:204");
 
 // Brightness presets per mode
 let presets = {
-  dagur:     100,
-  kvold:     40,
-  kvikmynd:  15,
-  nott:      5,
-  burt:      0
+  day:     100,
+  evening:     40,
+  movie:  15,
+  night:      5,
+  away:      0
 };
 
 let movieTimerHandle = null;
@@ -615,7 +615,7 @@ function applyMode(mode) {
 
   if (brt === 0) {
     Shelly.call("Light.Set", {id: 0, on: false});
-    statusText.setValue("Slökkt");
+    statusText.setValue("Off");
   } else {
     Shelly.call("Light.Set", {id: 0, on: true, brightness: brt});
     brightness.setValue(brt);  // sync slider
@@ -644,14 +644,14 @@ brightness.on("change", function(ev) {
 // Movie mode timer — dim to 5% after 10 minutes
 movieTimer.on("change", function(ev) {
   if (ev.value) {
-    statusText.setValue("Kvikmynd: dimmast eftir 10 mín");
+    statusText.setValue("Movie: dimming after 10 min");
     // Set to movie brightness now
     Shelly.call("Light.Set", {id: 0, on: true, brightness: 30});
     // After 10 minutes, dim to 5%
     movieTimerHandle = Timer.set(600000, false, function() {
       Shelly.call("Light.Set", {id: 0, on: true, brightness: 5});
       brightness.setValue(5);
-      statusText.setValue("Kvikmynd: dimmt");
+      statusText.setValue("Movie: dimmt");
       movieTimer.setValue(false);  // reset toggle
     });
   } else {
@@ -659,7 +659,7 @@ movieTimer.on("change", function(ev) {
       Timer.clear(movieTimerHandle);
       movieTimerHandle = null;
     }
-    statusText.setValue("Tímastilling hætt");
+    statusText.setValue("Timer stopped");
   }
 });
 
@@ -667,8 +667,8 @@ movieTimer.on("change", function(ev) {
 offButton.on("single_push", function() {
   Shelly.call("Light.Set", {id: 0, on: false});
   brightness.setValue(0);
-  lightMode.setValue("burt");
-  statusText.setValue("Slökkt á öllu");
+  lightMode.setValue("away");
+  statusText.setValue("All off");
   // Clear any running timers
   if (movieTimerHandle) {
     Timer.clear(movieTimerHandle);
@@ -679,42 +679,42 @@ offButton.on("single_push", function() {
 });
 
 // Initial status
-statusText.setValue("Tilbúið — " + lightMode.getValue());
-print("Stofa controller started");
+statusText.setValue("Ready — " + lightMode.getValue());
+print("Living Room controller started");
 ```
 
 #### Step 3: HA dashboard card
 
 ```yaml
-# Complete Stofa control section for your HA dashboard
+# Complete Living Room control section for your HA dashboard
 type: vertical-stack
 cards:
   - type: custom:mushroom-title-card
-    title: Stofa
-    subtitle: "{{ states('sensor.shelly_stofa_text_203') }}"
+    title: Living Room
+    subtitle: "{{ states('sensor.shelly_livingroom_text_203') }}"
   - type: grid
     columns: 2
     square: false
     cards:
       - type: custom:mushroom-select-card
-        entity: select.shelly_stofa_enum_200
-        name: Lýsingarhamur
+        entity: select.shelly_livingroom_enum_200
+        name: Lighting mode
         icon: mdi:lightbulb-group
         fill_container: true
       - type: custom:mushroom-entity-card
-        entity: switch.shelly_stofa_boolean_202
-        name: Kvikmyndahamur
+        entity: switch.shelly_livingroom_boolean_202
+        name: Movieahamur
         icon: mdi:filmstrip
         fill_container: true
   - type: custom:mushroom-number-card
-    entity: number.shelly_stofa_number_201
-    name: Birtustig
+    entity: number.shelly_livingroom_number_201
+    name: Brightness
     icon: mdi:brightness-percent
     fill_container: true
     display_mode: slider
   - type: custom:mushroom-entity-card
-    entity: button.shelly_stofa_button_204
-    name: Slökkva stofu
+    entity: button.shelly_livingroom_button_204
+    name: Turn off livingroom
     icon: mdi:power-off
     icon_color: red
     fill_container: true
@@ -722,7 +722,7 @@ cards:
       action: call-service
       service: button.press
       target:
-        entity_id: button.shelly_stofa_button_204
+        entity_id: button.shelly_livingroom_button_204
 ```
 
 ---
@@ -776,8 +776,8 @@ DEVICES=("192.168.1.100" "192.168.1.101" "192.168.1.102")
 
 for IP in "${DEVICES[@]}"; do
   echo "Setting up $IP..."
-  curl -s -X POST -d '{"id":1,"method":"Virtual.Add","params":{"type":"boolean","id":200,"config":{"name":"Gestamódi","persisted":true}}}' http://$IP/rpc
-  curl -s -X POST -d '{"id":1,"method":"Virtual.Add","params":{"type":"button","id":204,"config":{"name":"Slökkva allt"}}}' http://$IP/rpc
+  curl -s -X POST -d '{"id":1,"method":"Virtual.Add","params":{"type":"boolean","id":200,"config":{"name":"Guest mode","persisted":true}}}' http://$IP/rpc
+  curl -s -X POST -d '{"id":1,"method":"Virtual.Add","params":{"type":"button","id":204,"config":{"name":"Turn off all"}}}' http://$IP/rpc
   echo " done"
 done
 ```
@@ -795,7 +795,7 @@ Before HA can see your virtual components, they must exist on the device:
 1. **Firmware version:** Ensure your device is running firmware **1.1.0 or newer** (check at `http://<device-ip>/rpc/Shelly.GetDeviceInfo`)
 2. **Device generation:** Must be Gen3, Gen4, or Gen2 Pro — Gen2 Plus and Gen1 do not support virtual components
 3. **Create the virtual components** using any of the methods from Part 1 (Web UI, RPC, or script)
-4. **Give the device a name** in the Shelly web UI under Settings → Device Name (e.g., "Shelly Stofa"). This name becomes part of the HA entity IDs
+4. **Give the device a name** in the Shelly web UI under Settings → Device Name (e.g., "Shelly Living Room"). This name becomes part of the HA entity IDs
 
 ### Step 2: Add the Shelly Device to HA (if not already added)
 
@@ -848,19 +848,19 @@ If the Shelly device was **already in HA** when you created the virtual componen
 ### Step 4: Verify the Entities Appeared
 
 1. Go to **Settings → Devices & Services → Shelly**
-2. Click on your Shelly device (e.g., "Shelly Stofa")
+2. Click on your Shelly device (e.g., "Shelly Living Room")
 3. You should see the virtual component entities listed alongside the physical entities:
 
 ```
 Entity ID                                    Type       Description
 ─────────────────────────────────────────────────────────────────────
-switch.shelly_stofa_gestamodi                switch     Boolean (toggle mode)
-select.shelly_stofa_lysingarhamur            select     Enum (dropdown mode)
-number.shelly_stofa_birtustig                number     Number (slider mode)
-sensor.shelly_stofa_stada                    sensor     Text (label mode)
-button.shelly_stofa_slokkva_stofu            button     Button
-light.shelly_stofa_switch_0                  light      Physical relay
-sensor.shelly_stofa_power                    sensor     Physical power meter
+switch.shelly_livingroom_guest_mode                switch     Boolean (toggle mode)
+select.shelly_livingroom_light_mode            select     Enum (dropdown mode)
+number.shelly_livingroom_brightness                number     Number (slider mode)
+sensor.shelly_livingroom_status                    sensor     Text (label mode)
+button.shelly_livingroom_turn_off_livingroom            button     Button
+light.shelly_livingroom_switch_0                  light      Physical relay
+sensor.shelly_livingroom_power                    sensor     Physical power meter
 ...
 ```
 
@@ -881,8 +881,8 @@ The Shelly integration generates entity IDs from the device name and component n
 4. Change:
    - **Name** — display name shown on dashboards
    - **Icon** — set a Material Design Icon (e.g., `mdi:account-group`)
-   - **Entity ID** — change the entity_id if needed (e.g., rename to `switch.gestamodi_stofa`)
-   - **Area** — assign to a room/area (e.g., "Stofa")
+   - **Entity ID** — change the entity_id if needed (e.g., rename to `switch.guest_mode_livingroom`)
+   - **Area** — assign to a room/area (e.g., "Living Room")
 
 **Via customize.yaml:**
 ```yaml
@@ -891,24 +891,24 @@ homeassistant:
   customize: !include customize.yaml
 
 # customize.yaml
-switch.shelly_stofa_gestamodi:
-  friendly_name: "Gestamódi"
+switch.shelly_livingroom_guest_mode:
+  friendly_name: "Guest mode"
   icon: mdi:account-group
 
-select.shelly_stofa_lysingarhamur:
-  friendly_name: "Lýsingarhamur Stofu"
+select.shelly_livingroom_light_mode:
+  friendly_name: "Lighting mode Stofu"
   icon: mdi:lightbulb-group
 
-number.shelly_stofa_birtustig:
-  friendly_name: "Birtustig"
+number.shelly_livingroom_brightness:
+  friendly_name: "Brightness"
   icon: mdi:brightness-percent
 
-sensor.shelly_stofa_stada:
-  friendly_name: "Staða Stofu"
+sensor.shelly_livingroom_status:
+  friendly_name: "Status Stofu"
   icon: mdi:information-outline
 
-button.shelly_stofa_slokkva_stofu:
-  friendly_name: "Slökkva Stofu"
+button.shelly_livingroom_turn_off_livingroom:
+  friendly_name: "Turn off Stofu"
   icon: mdi:power-off
 ```
 
@@ -917,7 +917,7 @@ button.shelly_stofa_slokkva_stofu:
 For your Icelandic room naming convention:
 
 1. Go to **Settings → Areas & Zones**
-2. Create areas if they don't exist: Forstofa, Eldhús, Stofa, Herbergi, Baðherbergi, Bílskúr, Úti
+2. Create areas if they don't exist: Hallway, Kitchen, Living Room, Bedroom, Bathroom, Garage, Outdoor
 3. Go to each device under **Settings → Devices & Services → Shelly → [device]**
 4. Click **Area** and assign it to the correct room
 5. All entities on that device automatically inherit the area assignment
@@ -928,19 +928,19 @@ For your Icelandic room naming convention:
 #### Mushroom Cards (recommended for your setup)
 
 ```yaml
-# ── Stofa Virtual Components Control Panel ──
+# ── Living Room Virtual Components Control Panel ──
 
 # Title with live status from text virtual
 type: custom:mushroom-title-card
-title: Stofa stjórnborð
-subtitle: "{{ states('sensor.shelly_stofa_stada') }}"
+title: Living Room control panel
+subtitle: "{{ states('sensor.shelly_livingroom_status') }}"
 
 ---
 
 # Boolean toggle — Guest mode
 type: custom:mushroom-entity-card
-entity: switch.shelly_stofa_gestamodi
-name: Gestamódi
+entity: switch.shelly_livingroom_guest_mode
+name: Guest mode
 icon: mdi:account-group
 fill_container: true
 tap_action:
@@ -952,8 +952,8 @@ hold_action:
 
 # Enum select — Lighting scene
 type: custom:mushroom-select-card
-entity: select.shelly_stofa_lysingarhamur
-name: Lýsingarhamur
+entity: select.shelly_livingroom_light_mode
+name: Lighting mode
 icon: mdi:lightbulb-group
 fill_container: true
 
@@ -961,8 +961,8 @@ fill_container: true
 
 # Number slider — Brightness
 type: custom:mushroom-number-card
-entity: number.shelly_stofa_birtustig
-name: Birtustig
+entity: number.shelly_livingroom_brightness
+name: Brightness
 icon: mdi:brightness-percent
 fill_container: true
 display_mode: slider
@@ -971,8 +971,8 @@ display_mode: slider
 
 # Button — Quick off
 type: custom:mushroom-entity-card
-entity: button.shelly_stofa_slokkva_stofu
-name: Slökkva stofu
+entity: button.shelly_livingroom_turn_off_livingroom
+name: Turn off livingroom
 icon: mdi:power-off
 icon_color: red
 fill_container: true
@@ -980,14 +980,14 @@ tap_action:
   action: call-service
   service: button.press
   target:
-    entity_id: button.shelly_stofa_slokkva_stofu
+    entity_id: button.shelly_livingroom_turn_off_livingroom
 
 ---
 
 # Status text — read-only display
 type: custom:mushroom-entity-card
-entity: sensor.shelly_stofa_stada
-name: Staða
+entity: sensor.shelly_livingroom_status
+name: Status
 icon: mdi:information-outline
 fill_container: true
 ```
@@ -997,13 +997,13 @@ fill_container: true
 ```yaml
 # Main card that opens a popup with all virtual controls
 type: custom:mushroom-template-card
-primary: Stofa
-secondary: "{{ states('select.shelly_stofa_lysingarhamur') }}"
+primary: Living Room
+secondary: "{{ states('select.shelly_livingroom_light_mode') }}"
 icon: mdi:sofa
 icon_color: >
-  {% if is_state('select.shelly_stofa_lysingarhamur', 'burt') %}
+  {% if is_state('select.shelly_livingroom_light_mode', 'away') %}
     gray
-  {% elif is_state('select.shelly_stofa_lysingarhamur', 'nott') %}
+  {% elif is_state('select.shelly_livingroom_light_mode', 'night') %}
     deep-purple
   {% else %}
     amber
@@ -1014,18 +1014,18 @@ tap_action:
   browser_mod:
     service: browser_mod.popup
     data:
-      title: Stofa stjórnborð
+      title: Living Room control panel
       size: wide
       content:
         type: vertical-stack
         cards:
           - type: custom:mushroom-select-card
-            entity: select.shelly_stofa_lysingarhamur
-            name: Lýsingarhamur
+            entity: select.shelly_livingroom_light_mode
+            name: Lighting mode
             fill_container: true
           - type: custom:mushroom-number-card
-            entity: number.shelly_stofa_birtustig
-            name: Birtustig
+            entity: number.shelly_livingroom_brightness
+            name: Brightness
             display_mode: slider
             fill_container: true
           - type: grid
@@ -1033,24 +1033,24 @@ tap_action:
             square: false
             cards:
               - type: custom:mushroom-entity-card
-                entity: switch.shelly_stofa_gestamodi
-                name: Gestamódi
+                entity: switch.shelly_livingroom_guest_mode
+                name: Guest mode
                 fill_container: true
                 tap_action:
                   action: toggle
               - type: custom:mushroom-entity-card
-                entity: button.shelly_stofa_slokkva_stofu
-                name: Slökkva
+                entity: button.shelly_livingroom_turn_off_livingroom
+                name: Turn off
                 icon_color: red
                 fill_container: true
                 tap_action:
                   action: call-service
                   service: button.press
                   target:
-                    entity_id: button.shelly_stofa_slokkva_stofu
+                    entity_id: button.shelly_livingroom_turn_off_livingroom
           - type: custom:mushroom-entity-card
-            entity: sensor.shelly_stofa_stada
-            name: Staða
+            entity: sensor.shelly_livingroom_status
+            name: Status
             fill_container: true
 ```
 
@@ -1060,67 +1060,67 @@ tap_action:
 
 ```yaml
 automation:
-  - id: stofa_lysingarhamur_breyting
-    alias: "Stofa — Lýsingarhamur breyting"
+  - id: livingroom_light_mode_breyting
+    alias: "Living Room — Lighting mode breyting"
     description: "React when lighting mode is changed on the Shelly device or from HA"
     trigger:
       - platform: state
-        entity_id: select.shelly_stofa_lysingarhamur
+        entity_id: select.shelly_livingroom_light_mode
     condition: []
     action:
       - choose:
           - conditions:
               - condition: state
-                entity_id: select.shelly_stofa_lysingarhamur
-                state: "dagur"
+                entity_id: select.shelly_livingroom_light_mode
+                state: "day"
             sequence:
               - service: light.turn_on
                 target:
-                  entity_id: light.stofa_ljos_group
+                  entity_id: light.livingroom_light_group
                 data:
                   brightness_pct: 100
                   color_temp_kelvin: 4000
           - conditions:
               - condition: state
-                entity_id: select.shelly_stofa_lysingarhamur
-                state: "kvold"
+                entity_id: select.shelly_livingroom_light_mode
+                state: "evening"
             sequence:
               - service: light.turn_on
                 target:
-                  entity_id: light.stofa_ljos_group
+                  entity_id: light.livingroom_light_group
                 data:
                   brightness_pct: 40
                   color_temp_kelvin: 2700
           - conditions:
               - condition: state
-                entity_id: select.shelly_stofa_lysingarhamur
-                state: "kvikmynd"
+                entity_id: select.shelly_livingroom_light_mode
+                state: "movie"
             sequence:
               - service: light.turn_on
                 target:
-                  entity_id: light.stofa_ljos_group
+                  entity_id: light.livingroom_light_group
                 data:
                   brightness_pct: 15
                   color_temp_kelvin: 2200
           - conditions:
               - condition: state
-                entity_id: select.shelly_stofa_lysingarhamur
-                state: "nott"
+                entity_id: select.shelly_livingroom_light_mode
+                state: "night"
             sequence:
               - service: light.turn_on
                 target:
-                  entity_id: light.stofa_ljos_group
+                  entity_id: light.livingroom_light_group
                 data:
                   brightness_pct: 5
                   color_temp_kelvin: 2000
           - conditions:
               - condition: state
-                entity_id: select.shelly_stofa_lysingarhamur
-                state: "burt"
+                entity_id: select.shelly_livingroom_light_mode
+                state: "away"
             sequence:
               - service: light.turn_off
                 target:
-                  entity_id: light.stofa_ljos_group
+                  entity_id: light.livingroom_light_group
     mode: single
 ```
 
@@ -1128,24 +1128,24 @@ automation:
 
 ```yaml
 automation:
-  - id: gestamodi_allir_herbergi
-    alias: "Gestamódi — Samstilla öll herbergi"
-    description: "When guest mode is toggled on Forstofa, sync to all rooms"
+  - id: guest_mode_allir_bedroom
+    alias: "Guest mode — Sync all bedroom"
+    description: "When guest mode is toggled on Hallway, sync to all rooms"
     trigger:
       - platform: state
-        entity_id: switch.shelly_forstofa_gestamodi
+        entity_id: switch.shelly_hallway_guest_mode
     action:
-      # Sync the boolean to all other Shelly devices with Gestamódi virtual
+      # Sync the boolean to all other Shelly devices with Guest mode virtual
       - service: "switch.turn_{{ trigger.to_state.state }}"
         target:
           entity_id:
-            - switch.shelly_stofa_gestamodi
-            - switch.shelly_eldhus_gestamodi
-            - switch.shelly_herbergi_gestamodi
+            - switch.shelly_livingroom_guest_mode
+            - switch.shelly_kitchen_guest_mode
+            - switch.shelly_bedroom_guest_mode
       # Set lights based on mode
       - if:
           - condition: state
-            entity_id: switch.shelly_forstofa_gestamodi
+            entity_id: switch.shelly_hallway_guest_mode
             state: "on"
         then:
           - service: light.turn_on
@@ -1155,13 +1155,13 @@ automation:
               brightness_pct: 30
           - service: notify.mobile_app
             data:
-              title: "Gestamódi kveikt"
-              message: "Öll ljós stillt á 30%"
+              title: "Guest mode on"
+              message: "All lights set to 30%"
         else:
           - service: notify.mobile_app
             data:
-              title: "Gestamódi slökkt"
-              message: "Ljós aftur í venjulegu"
+              title: "Guest mode off"
+              message: "Light back to normal"
     mode: single
 ```
 
@@ -1169,16 +1169,16 @@ automation:
 
 ```yaml
 automation:
-  - id: slokkva_ollu_takki
-    alias: "Slökkva öllu — Takki"
+  - id: turn_off_ollu_takki
+    alias: "Turn off all — Button"
     description: "Master off button pressed on any Shelly"
     trigger:
       # Listen for button press on ALL Shelly devices that have this virtual
       - platform: state
         entity_id:
-          - button.shelly_forstofa_slokkva_allt
-          - button.shelly_stofa_slokkva_allt
-          - button.shelly_eldhus_slokkva_allt
+          - button.shelly_hallway_turn_off_all
+          - button.shelly_livingroom_turn_off_all
+          - button.shelly_kitchen_turn_off_all
     action:
       - service: light.turn_off
         target:
@@ -1186,16 +1186,16 @@ automation:
       - service: switch.turn_off
         target:
           entity_id:
-            - switch.shelly_stofa_gestamodi
-            - switch.shelly_forstofa_gestamodi
-      # Reset all scene selectors to "burt"
+            - switch.shelly_livingroom_guest_mode
+            - switch.shelly_hallway_guest_mode
+      # Reset all scene selectors to "away"
       - service: select.select_option
         target:
           entity_id:
-            - select.shelly_stofa_lysingarhamur
-            - select.shelly_eldhus_lysingarhamur
+            - select.shelly_livingroom_light_mode
+            - select.shelly_kitchen_light_mode
         data:
-          option: "burt"
+          option: "away"
     mode: single
 ```
 
@@ -1204,21 +1204,21 @@ automation:
 ```yaml
 automation:
   - id: hitastig_vidvorun
-    alias: "Hitastig — Viðvörun ef yfir þröskuldi"
+    alias: "Temperature — Alert if over threshold"
     description: "Alert when temperature exceeds the configurable threshold"
     trigger:
       - platform: numeric_state
-        entity_id: sensor.shelly_eldhus_temperature
+        entity_id: sensor.shelly_kitchen_temperature
         above: input_number.hitavidburdur_throskuld
         # Or use the Shelly number virtual directly:
-        # above: number.shelly_eldhus_number_201
+        # above: number.shelly_kitchen_number_201
     action:
       - service: notify.mobile_app
         data:
-          title: "Hitaviðvörun"
+          title: "Temp alert"
           message: >
-            Hitastig í eldhúsi er {{ states('sensor.shelly_eldhus_temperature') }}°C,
-            yfir þröskuldi ({{ states('number.shelly_eldhus_number_201') }}°C)
+            Temperature in kitchen is {{ states('sensor.shelly_kitchen_temperature') }}°C,
+            over threshold ({{ states('number.shelly_kitchen_number_201') }}°C)
     mode: single
 ```
 
@@ -1231,24 +1231,24 @@ You can control Shelly virtual components from HA using standard services. Here'
 # Turn on
 service: switch.turn_on
 target:
-  entity_id: switch.shelly_stofa_gestamodi
+  entity_id: switch.shelly_livingroom_guest_mode
 
 # Turn off
 service: switch.turn_off
 target:
-  entity_id: switch.shelly_stofa_gestamodi
+  entity_id: switch.shelly_livingroom_guest_mode
 
 # Toggle
 service: switch.toggle
 target:
-  entity_id: switch.shelly_stofa_gestamodi
+  entity_id: switch.shelly_livingroom_guest_mode
 
 
 # ── NUMBER (number entity) ──
 # Set value
 service: number.set_value
 target:
-  entity_id: number.shelly_stofa_birtustig
+  entity_id: number.shelly_livingroom_brightness
 data:
   value: 75
 
@@ -1257,40 +1257,40 @@ data:
 # Set value
 service: text.set_value
 target:
-  entity_id: text.shelly_stofa_text_202
+  entity_id: text.shelly_livingroom_text_202
 data:
-  value: "Ný skilaboð frá HA"
+  value: "New message from HA"
 
 
 # ── ENUM (select entity) ──
 # Select an option
 service: select.select_option
 target:
-  entity_id: select.shelly_stofa_lysingarhamur
+  entity_id: select.shelly_livingroom_light_mode
 data:
-  option: "kvold"
+  option: "evening"
 
 # Select first option
 service: select.select_first
 target:
-  entity_id: select.shelly_stofa_lysingarhamur
+  entity_id: select.shelly_livingroom_light_mode
 
 # Select last option
 service: select.select_last
 target:
-  entity_id: select.shelly_stofa_lysingarhamur
+  entity_id: select.shelly_livingroom_light_mode
 
 # Select next option (cycle forward)
 service: select.select_next
 target:
-  entity_id: select.shelly_stofa_lysingarhamur
+  entity_id: select.shelly_livingroom_light_mode
 data:
   cycle: true
 
 # Select previous option (cycle backward)
 service: select.select_previous
 target:
-  entity_id: select.shelly_stofa_lysingarhamur
+  entity_id: select.shelly_livingroom_light_mode
 data:
   cycle: true
 
@@ -1299,7 +1299,7 @@ data:
 # Press the button (triggers event on Shelly device)
 service: button.press
 target:
-  entity_id: button.shelly_stofa_slokkva_stofu
+  entity_id: button.shelly_livingroom_turn_off_livingroom
 ```
 
 ### Step 10: Template Sensors and Helpers
@@ -1312,62 +1312,62 @@ You can create HA template sensors that derive values from virtual components:
 # Template sensor: combine multiple virtual states into one
 template:
   - sensor:
-      - name: "Stofa hamur samantekt"
-        unique_id: stofa_hamur_samantekt
+      - name: "Living Room hamur samantekt"
+        unique_id: livingroom_hamur_samantekt
         state: >
-          {% set mode = states('select.shelly_stofa_lysingarhamur') %}
-          {% set guest = is_state('switch.shelly_stofa_gestamodi', 'on') %}
-          {% set brightness = states('number.shelly_stofa_birtustig') | int(0) %}
+          {% set mode = states('select.shelly_livingroom_light_mode') %}
+          {% set guest = is_state('switch.shelly_livingroom_guest_mode', 'on') %}
+          {% set brightness = states('number.shelly_livingroom_brightness') | int(0) %}
           {% if guest %}Gestir ({{ brightness }}%)
           {% else %}{{ mode | title }} ({{ brightness }}%)
           {% endif %}
         icon: mdi:sofa
 
       # Combine all room scene selectors into one status
-      - name: "Heildarhamur húss"
+      - name: "Whole-house mode"
         unique_id: heildarhamur_huss
         state: >
           {% set rooms = [
-            states('select.shelly_stofa_lysingarhamur'),
-            states('select.shelly_eldhus_lysingarhamur'),
-            states('select.shelly_herbergi_lysingarhamur')
+            states('select.shelly_livingroom_light_mode'),
+            states('select.shelly_kitchen_light_mode'),
+            states('select.shelly_bedroom_light_mode')
           ] %}
           {% if rooms | unique | list | length == 1 %}
             {{ rooms[0] | title }}
           {% else %}
-            Blandað
+            Mixed
           {% endif %}
         icon: mdi:home
 
 # Input select helper: mirror a Shelly enum for use in other automations
 input_select:
-  hushamur:
-    name: "Húshamur"
+  house_mode:
+    name: "House mode"
     options:
-      - dagur
-      - kvold
-      - kvikmynd
-      - nott
-      - burt
-    initial: dagur
+      - day
+      - evening
+      - movie
+      - night
+      - away
+    initial: day
     icon: mdi:home-lightbulb
 
 # Automation to sync input_select → all Shelly enums
 automation:
-  - id: sync_hushamur
-    alias: "Sync Húshamur to all Shellys"
+  - id: sync_house_mode
+    alias: "Sync House mode to all Shellys"
     trigger:
       - platform: state
-        entity_id: input_select.hushamur
+        entity_id: input_select.house_mode
     action:
       - service: select.select_option
         target:
           entity_id:
-            - select.shelly_stofa_lysingarhamur
-            - select.shelly_eldhus_lysingarhamur
-            - select.shelly_herbergi_lysingarhamur
+            - select.shelly_livingroom_light_mode
+            - select.shelly_kitchen_light_mode
+            - select.shelly_bedroom_light_mode
         data:
-          option: "{{ states('input_select.hushamur') }}"
+          option: "{{ states('input_select.house_mode') }}"
 ```
 
 ### Step 11: Use with Shelly KVS (Key-Value Storage) from HA
@@ -1380,7 +1380,7 @@ service: shelly.set_kvs_value
 data:
   device_id: "abc123def456"  # from HA device info
   key: "ha_last_scene"
-  value: "kvold"
+  value: "evening"
 
 # Get a KVS value (useful in scripts/automations via response variable)
 service: shelly.get_kvs_value

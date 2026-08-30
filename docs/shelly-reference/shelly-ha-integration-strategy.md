@@ -1,7 +1,7 @@
 # Shelly + Home Assistant Integration Strategy
 ## Best Practices for a 2700+ Entity Smart Home
 
-*Tailored for Davíð's HA instance with Shelly, ZHA, Hue, ESPHome, Matter, Tuya, Z2M, WLED, Tasmota, TP-Link Kasa, Sonos, and deCONZ integrations across Icelandic-named rooms.*
+*Example configuration for a mixed HA instance with Shelly, ZHA, Hue, ESPHome, Matter, Tuya, Z2M, WLED, Tasmota, TP-Link Kasa, Sonos, and deCONZ integrations across Icelandic-named rooms.*
 
 ---
 
@@ -75,8 +75,8 @@ User presses button
 Use for anything that crosses integration boundaries or needs HA-specific state.
 
 **Examples:**
-- "When sun sets AND person is home AND it's a weekday → set all rooms to kvöld mode" (needs sun, person, calendar)
-- "When Sonos starts playing in Stofa → dim lights to movie mode" (needs Sonos integration)
+- "When sun sets AND person is home AND it's a weekday → set all rooms to evening mode" (needs sun, person, calendar)
+- "When Sonos starts playing in Living Room → dim lights to movie mode" (needs Sonos integration)
 - "When ZHA door sensor opens AND alarm is armed → trigger siren" (needs ZHA + alarm panel)
 - "When energy consumption > 5kW for 30 minutes → send notification" (needs energy monitoring aggregation)
 
@@ -84,12 +84,12 @@ Use for anything that crosses integration boundaries or needs HA-specific state.
 
 | Room / Device | Shelly Script | Virtual Components | HA Automation |
 |---------------|---------------|--------------------|---------------|
-| Light switches (all rooms) | Input handling, local toggle, dimming | Lýsingarhamur (enum), Birtustig (number) | Cross-room scene sync, time-based presets |
-| Power monitoring (Eldhús) | Overcurrent protection, load shedding | Power status (number), Alert flag (boolean) | Energy dashboard, monthly reports |
+| Light switches (all rooms) | Input handling, local toggle, dimming | Lighting mode (enum), Brightness (number) | Cross-room scene sync, time-based presets |
+| Power monitoring (Kitchen) | Overcurrent protection, load shedding | Power status (number), Alert flag (boolean) | Energy dashboard, monthly reports |
 | BLE sensors | BLE scanning, BTHome decoding | — (use BTHome integration) | Threshold alerts, history graphs |
 | Covers/blinds | Position control, obstruction safety | — | Sun-based automation, weather-based |
 | Gecko spa | — | Target temp (number), Status (text) | Schedule, presence-based heating |
-| Master off | Local relay off | Slökkva allt (button) | Turn off all Hue/WLED/Sonos/ZHA devices |
+| Master off | Local relay off | Turn off all (button) | Turn off all Hue/WLED/Sonos/ZHA devices |
 
 ---
 
@@ -105,11 +105,11 @@ Define a **standard set of virtual components** that every room's Shelly gets. T
 
 ```
 Every room Shelly gets:
-  boolean:200  → "Gestamódi" (guest mode)        → HA: switch
-  enum:201     → "Lýsingarhamur" (scene mode)     → HA: select
-  number:202   → "Birtustig" (brightness %)        → HA: number
-  text:203     → "Staða" (status display)          → HA: sensor
-  button:204   → "Slökkva" (quick off)             → HA: button
+  boolean:200  → "Guest mode" (guest mode)        → HA: switch
+  enum:201     → "Lighting mode" (scene mode)     → HA: select
+  number:202   → "Brightness" (brightness %)        → HA: number
+  text:203     → "Status" (status display)          → HA: sensor
+  button:204   → "Turn off" (quick off)             → HA: button
 ```
 
 #### Deployment Script
@@ -122,21 +122,21 @@ Deploy the same virtual layout to all devices at once:
 # Standard virtual component template for every room Shelly
 
 DEVICES=(
-  "192.168.1.100"  # Forstofa
-  "192.168.1.101"  # Eldhús
-  "192.168.1.102"  # Stofa
-  "192.168.1.103"  # Herbergi 1
-  "192.168.1.104"  # Herbergi 2
-  "192.168.1.105"  # Baðherbergi
-  "192.168.1.106"  # Bílskúr
+  "192.168.1.100"  # Hallway
+  "192.168.1.101"  # Kitchen
+  "192.168.1.102"  # Living Room
+  "192.168.1.103"  # Bedroom 1
+  "192.168.1.104"  # Bedroom 2
+  "192.168.1.105"  # Bathroom
+  "192.168.1.106"  # Garage
 )
 
 VIRTUALS='[
-  {"type":"boolean","id":200,"config":{"name":"Gestamódi","persisted":true,"default_value":false,"meta":{"ui":{"view":"toggle","titles":["Slökkt","Kveikt"]}}}},
-  {"type":"enum","id":201,"config":{"name":"Lýsingarhamur","persisted":true,"default_value":"dagur","options":["dagur","kvold","kvikmynd","nott","burt"],"meta":{"ui":{"view":"dropdown","titles":{"dagur":"Dagljós","kvold":"Kvöldbirta","kvikmynd":"Kvikmynd","nott":"Næturljós","burt":"Allt slökkt"}}}}},
-  {"type":"number","id":202,"config":{"name":"Birtustig","min":0,"max":100,"default_value":100,"persisted":true,"meta":{"ui":{"view":"slider","unit":"%","step":5}}}},
-  {"type":"text","id":203,"config":{"name":"Staða","default_value":"Tilbúið","meta":{"ui":{"view":"label"}}}},
-  {"type":"button","id":204,"config":{"name":"Slökkva"}}
+  {"type":"boolean","id":200,"config":{"name":"Guest mode","persisted":true,"default_value":false,"meta":{"ui":{"view":"toggle","titles":["Off","On"]}}}},
+  {"type":"enum","id":201,"config":{"name":"Lighting mode","persisted":true,"default_value":"day","options":["day","evening","movie","night","away"],"meta":{"ui":{"view":"dropdown","titles":{"day":"Daylight","evening":"Evening","movie":"Movie","night":"Night light","away":"All off"}}}}},
+  {"type":"number","id":202,"config":{"name":"Brightness","min":0,"max":100,"default_value":100,"persisted":true,"meta":{"ui":{"view":"slider","unit":"%","step":5}}}},
+  {"type":"text","id":203,"config":{"name":"Status","default_value":"Ready","meta":{"ui":{"view":"label"}}}},
+  {"type":"button","id":204,"config":{"name":"Turn off"}}
 ]'
 
 for IP in "${DEVICES[@]}"; do
@@ -190,13 +190,13 @@ Deploy the same controller script to every room, just changing the config at the
 
 // ═══ CONFIG — change per device ═══
 let CONFIG = {
-  room: "Stofa",           // Room name for status messages
+  room: "Living Room",           // Room name for status messages
   relay_id: 0,             // Which relay/light to control
   relay_type: "Light",     // "Light" or "Switch"
-  preset_dagur: 100,       // Brightness for day mode
-  preset_kvold: 40,        // Brightness for evening mode
-  preset_kvikmynd: 15,     // Brightness for movie mode
-  preset_nott: 5,          // Brightness for night mode
+  preset_day: 100,       // Brightness for day mode
+  preset_evening: 40,        // Brightness for evening mode
+  preset_movie: 15,     // Brightness for movie mode
+  preset_night: 5,          // Brightness for night mode
 };
 // ═══ END CONFIG ═══
 
@@ -207,11 +207,11 @@ let offBtn = Virtual.getHandle("button:204");
 let guest  = Virtual.getHandle("boolean:200");
 
 let presets = {
-  dagur:     CONFIG.preset_dagur,
-  kvold:     CONFIG.preset_kvold,
-  kvikmynd:  CONFIG.preset_kvikmynd,
-  nott:      CONFIG.preset_nott,
-  burt:      0
+  day:     CONFIG.preset_day,
+  evening:     CONFIG.preset_evening,
+  movie:  CONFIG.preset_movie,
+  night:      CONFIG.preset_night,
+  away:      0
 };
 
 function applyMode(m) {
@@ -241,11 +241,11 @@ bright.on("change", function(ev) {
 offBtn.on("single_push", function() {
   Shelly.call(CONFIG.relay_type + ".Set", {id: CONFIG.relay_id, on: false});
   bright.setValue(0);
-  mode.setValue("burt");
-  status.setValue(CONFIG.room + ": slökkt");
+  mode.setValue("away");
+  status.setValue(CONFIG.room + ": off");
 });
 
-status.setValue(CONFIG.room + ": tilbúið");
+status.setValue(CONFIG.room + ": ready");
 ```
 
 ### HA Blueprint for Room Scene Automation
@@ -255,12 +255,12 @@ Instead of writing an automation for every room, create one **blueprint** and in
 ```yaml
 # blueprints/automation/shelly_room_scene.yaml
 blueprint:
-  name: "Shelly herbergi lýsingarhamur"
+  name: "Shelly bedroom lighting mode"
   description: "React to Shelly scene selector enum and control room lights"
   domain: automation
   input:
     scene_selector:
-      name: "Lýsingarhamur select entity"
+      name: "Lighting mode select entity"
       description: "The Shelly enum virtual component"
       selector:
         entity:
@@ -268,54 +268,54 @@ blueprint:
             domain: select
             integration: shelly
     light_target:
-      name: "Ljós til að stýra"
+      name: "Light to control"
       description: "The light or light group for this room"
       selector:
         target:
           entity:
             domain: light
-    brightness_dagur:
-      name: "Birtustig — dagur"
+    brightness_day:
+      name: "Brightness — day"
       default: 100
       selector:
         number:
           min: 0
           max: 100
           unit_of_measurement: "%"
-    brightness_kvold:
-      name: "Birtustig — kvöld"
+    brightness_evening:
+      name: "Brightness — evening"
       default: 40
       selector:
         number:
           min: 0
           max: 100
           unit_of_measurement: "%"
-    brightness_kvikmynd:
-      name: "Birtustig — kvikmynd"
+    brightness_movie:
+      name: "Brightness — movie"
       default: 15
       selector:
         number:
           min: 0
           max: 100
           unit_of_measurement: "%"
-    brightness_nott:
-      name: "Birtustig — nótt"
+    brightness_night:
+      name: "Brightness — night"
       default: 5
       selector:
         number:
           min: 0
           max: 100
           unit_of_measurement: "%"
-    color_temp_dagur:
-      name: "Litahiti — dagur (Kelvin)"
+    color_temp_day:
+      name: "Color temp — day (Kelvin)"
       default: 4000
       selector:
         number:
           min: 2000
           max: 6500
           unit_of_measurement: "K"
-    color_temp_kvold:
-      name: "Litahiti — kvöld (Kelvin)"
+    color_temp_evening:
+      name: "Color temp — evening (Kelvin)"
       default: 2700
       selector:
         number:
@@ -325,12 +325,12 @@ blueprint:
 
 variables:
   scene_selector: !input scene_selector
-  brightness_dagur: !input brightness_dagur
-  brightness_kvold: !input brightness_kvold
-  brightness_kvikmynd: !input brightness_kvikmynd
-  brightness_nott: !input brightness_nott
-  color_temp_dagur: !input color_temp_dagur
-  color_temp_kvold: !input color_temp_kvold
+  brightness_day: !input brightness_day
+  brightness_evening: !input brightness_evening
+  brightness_movie: !input brightness_movie
+  brightness_night: !input brightness_night
+  color_temp_day: !input color_temp_day
+  color_temp_evening: !input color_temp_evening
 
 trigger:
   - platform: state
@@ -341,47 +341,47 @@ action:
       - conditions:
           - condition: state
             entity_id: !input scene_selector
-            state: "dagur"
+            state: "day"
         sequence:
           - service: light.turn_on
             target: !input light_target
             data:
-              brightness_pct: "{{ brightness_dagur }}"
-              color_temp_kelvin: "{{ color_temp_dagur }}"
+              brightness_pct: "{{ brightness_day }}"
+              color_temp_kelvin: "{{ color_temp_day }}"
       - conditions:
           - condition: state
             entity_id: !input scene_selector
-            state: "kvold"
+            state: "evening"
         sequence:
           - service: light.turn_on
             target: !input light_target
             data:
-              brightness_pct: "{{ brightness_kvold }}"
-              color_temp_kelvin: "{{ color_temp_kvold }}"
+              brightness_pct: "{{ brightness_evening }}"
+              color_temp_kelvin: "{{ color_temp_evening }}"
       - conditions:
           - condition: state
             entity_id: !input scene_selector
-            state: "kvikmynd"
+            state: "movie"
         sequence:
           - service: light.turn_on
             target: !input light_target
             data:
-              brightness_pct: "{{ brightness_kvikmynd }}"
+              brightness_pct: "{{ brightness_movie }}"
               color_temp_kelvin: 2200
       - conditions:
           - condition: state
             entity_id: !input scene_selector
-            state: "nott"
+            state: "night"
         sequence:
           - service: light.turn_on
             target: !input light_target
             data:
-              brightness_pct: "{{ brightness_nott }}"
+              brightness_pct: "{{ brightness_night }}"
               color_temp_kelvin: 2000
       - conditions:
           - condition: state
             entity_id: !input scene_selector
-            state: "burt"
+            state: "away"
         sequence:
           - service: light.turn_off
             target: !input light_target
@@ -392,39 +392,39 @@ mode: single
 **Instantiate per room** (UI or YAML):
 ```yaml
 # automations.yaml — one entry per room, all using the same blueprint
-- id: stofa_scene
-  alias: "Stofa lýsingarhamur"
+- id: livingroom_scene
+  alias: "Living Room lighting mode"
   use_blueprint:
     path: shelly_room_scene.yaml
     input:
-      scene_selector: select.shelly_stofa_lysingarhamur
+      scene_selector: select.shelly_livingroom_light_mode
       light_target:
-        entity_id: light.stofa_ljos_group
-      brightness_dagur: 100
-      brightness_kvold: 40
+        entity_id: light.livingroom_light_group
+      brightness_day: 100
+      brightness_evening: 40
 
-- id: eldhus_scene
-  alias: "Eldhús lýsingarhamur"
+- id: kitchen_scene
+  alias: "Kitchen lighting mode"
   use_blueprint:
     path: shelly_room_scene.yaml
     input:
-      scene_selector: select.shelly_eldhus_lysingarhamur
+      scene_selector: select.shelly_kitchen_light_mode
       light_target:
-        entity_id: light.eldhus_ljos_group
-      brightness_dagur: 100
-      brightness_kvold: 60
+        entity_id: light.kitchen_light_group
+      brightness_day: 100
+      brightness_evening: 60
 
-- id: herbergi_scene
-  alias: "Herbergi lýsingarhamur"
+- id: bedroom_scene
+  alias: "Bedroom lighting mode"
   use_blueprint:
     path: shelly_room_scene.yaml
     input:
-      scene_selector: select.shelly_herbergi_lysingarhamur
+      scene_selector: select.shelly_bedroom_light_mode
       light_target:
-        entity_id: light.herbergi_ljos_group
-      brightness_dagur: 80
-      brightness_kvold: 30
-      brightness_nott: 2
+        entity_id: light.bedroom_light_group
+      brightness_day: 80
+      brightness_evening: 30
+      brightness_night: 2
 ```
 
 ### Whole-House Scene Sync
@@ -433,22 +433,22 @@ A single automation that syncs all room enums when a house-level mode changes:
 
 ```yaml
 automation:
-  - id: hushamur_sync
-    alias: "Húshamur — Samstilla öll herbergi"
+  - id: house_mode_sync
+    alias: "House mode — Sync all bedroom"
     trigger:
       - platform: state
-        entity_id: input_select.hushamur
+        entity_id: input_select.house_mode
     action:
       - service: select.select_option
         target:
           entity_id:
-            - select.shelly_forstofa_lysingarhamur
-            - select.shelly_stofa_lysingarhamur
-            - select.shelly_eldhus_lysingarhamur
-            - select.shelly_herbergi_lysingarhamur
-            - select.shelly_badherbergi_lysingarhamur
+            - select.shelly_hallway_light_mode
+            - select.shelly_livingroom_light_mode
+            - select.shelly_kitchen_light_mode
+            - select.shelly_bedroom_light_mode
+            - select.shelly_bathroom_light_mode
         data:
-          option: "{{ states('input_select.hushamur') }}"
+          option: "{{ states('input_select.house_mode') }}"
 ```
 
 ---
@@ -490,23 +490,23 @@ views:
     sections:
       # ── Room overview section ──
       - type: grid
-        title: Herbergi
+        title: Bedroom
         cards:
           # Each room gets a template card that summarizes its state
           - type: custom:mushroom-template-card
-            primary: Stofa
+            primary: Living Room
             secondary: >
-              {{ states('select.shelly_stofa_lysingarhamur') | replace('dagur','Dagljós')
-                 | replace('kvold','Kvöldbirta') | replace('kvikmynd','Kvikmynd')
-                 | replace('nott','Næturljós') | replace('burt','Slökkt') }}
-              {% if is_state('switch.shelly_stofa_gestamodi','on') %} · Gestir{% endif %}
+              {{ states('select.shelly_livingroom_light_mode') | replace('day','Daylight')
+                 | replace('evening','Evening') | replace('movie','Movie')
+                 | replace('night','Night light') | replace('away','Off') }}
+              {% if is_state('switch.shelly_livingroom_guest_mode','on') %} · Gestir{% endif %}
             icon: mdi:sofa
             icon_color: >
-              {% set m = states('select.shelly_stofa_lysingarhamur') %}
-              {% if m == 'burt' %}disabled
-              {% elif m == 'nott' %}deep-purple
-              {% elif m == 'kvikmynd' %}indigo
-              {% elif m == 'kvold' %}amber
+              {% set m = states('select.shelly_livingroom_light_mode') %}
+              {% if m == 'away' %}disabled
+              {% elif m == 'night' %}deep-purple
+              {% elif m == 'movie' %}indigo
+              {% elif m == 'evening' %}amber
               {% else %}teal{% endif %}
             fill_container: true
             tap_action:
@@ -514,18 +514,18 @@ views:
               browser_mod:
                 service: browser_mod.popup
                 data:
-                  title: Stofa
+                  title: Living Room
                   size: wide
                   content:
                     type: vertical-stack
                     cards:
                       - type: custom:mushroom-select-card
-                        entity: select.shelly_stofa_lysingarhamur
-                        name: Lýsingarhamur
+                        entity: select.shelly_livingroom_light_mode
+                        name: Lighting mode
                         fill_container: true
                       - type: custom:mushroom-number-card
-                        entity: number.shelly_stofa_birtustig
-                        name: Birtustig
+                        entity: number.shelly_livingroom_brightness
+                        name: Brightness
                         display_mode: slider
                         fill_container: true
                       - type: grid
@@ -533,15 +533,15 @@ views:
                         square: false
                         cards:
                           - type: custom:mushroom-entity-card
-                            entity: switch.shelly_stofa_gestamodi
-                            name: Gestamódi
+                            entity: switch.shelly_livingroom_guest_mode
+                            name: Guest mode
                             icon: mdi:account-group
                             fill_container: true
                             tap_action:
                               action: toggle
                           - type: custom:mushroom-entity-card
-                            entity: button.shelly_stofa_slokkva
-                            name: Slökkva
+                            entity: button.shelly_livingroom_turn_off
+                            name: Turn off
                             icon: mdi:power-off
                             icon_color: red
                             fill_container: true
@@ -549,33 +549,33 @@ views:
                               action: call-service
                               service: button.press
                               target:
-                                entity_id: button.shelly_stofa_slokkva
+                                entity_id: button.shelly_livingroom_turn_off
                       - type: custom:mushroom-entity-card
-                        entity: sensor.shelly_stofa_stada
-                        name: Staða
+                        entity: sensor.shelly_livingroom_status
+                        name: Status
                         fill_container: true
 
           # Repeat same pattern for other rooms (or use decluttering-card)
 
       # ── Whole-house controls ──
       - type: grid
-        title: Allt húsið
+        title: Whole house
         cards:
           - type: custom:mushroom-select-card
-            entity: input_select.hushamur
-            name: Húshamur
+            entity: input_select.house_mode
+            name: House mode
             icon: mdi:home-lightbulb
             fill_container: true
           - type: custom:mushroom-chips-card
             chips:
               - type: entity
-                entity: switch.shelly_forstofa_gestamodi
+                entity: switch.shelly_hallway_guest_mode
                 name: Gestir
                 icon: mdi:account-group
                 tap_action:
                   action: toggle
               - type: template
-                content: "{{ states.select | selectattr('entity_id','search','lysingarhamur') | selectattr('state','eq','burt') | list | count }}/{{ states.select | selectattr('entity_id','search','lysingarhamur') | list | count }} slökkt"
+                content: "{{ states.select | selectattr('entity_id','search','light_mode') | selectattr('state','eq','away') | list | count }}/{{ states.select | selectattr('entity_id','search','light_mode') | list | count }} off"
                 icon: mdi:lightbulb-group-off
 ```
 
@@ -591,14 +591,14 @@ decluttering_templates:
       type: custom:mushroom-template-card
       primary: "[[name]]"
       secondary: >
-        {{ states('[[scene_entity]]') | replace('dagur','Dagljós')
-           | replace('kvold','Kvöldbirta') | replace('kvikmynd','Kvikmynd')
-           | replace('nott','Næturljós') | replace('burt','Slökkt') }}
+        {{ states('[[scene_entity]]') | replace('day','Daylight')
+           | replace('evening','Evening') | replace('movie','Movie')
+           | replace('night','Night light') | replace('away','Off') }}
       icon: "[[icon]]"
       icon_color: >
         {% set m = states('[[scene_entity]]') %}
-        {% if m == 'burt' %}disabled{% elif m == 'nott' %}deep-purple
-        {% elif m == 'kvold' %}amber{% else %}teal{% endif %}
+        {% if m == 'away' %}disabled{% elif m == 'night' %}deep-purple
+        {% elif m == 'evening' %}amber{% else %}teal{% endif %}
       fill_container: true
       tap_action:
         action: fire-dom-event
@@ -623,13 +623,13 @@ decluttering_templates:
                   cards:
                     - type: custom:mushroom-entity-card
                       entity: "[[guest_entity]]"
-                      name: Gestamódi
+                      name: Guest mode
                       fill_container: true
                       tap_action:
                         action: toggle
                     - type: custom:mushroom-entity-card
                       entity: "[[off_entity]]"
-                      name: Slökkva
+                      name: Turn off
                       icon_color: red
                       fill_container: true
                       tap_action:
@@ -643,32 +643,32 @@ cards:
   - type: custom:decluttering-card
     template: room_control
     variables:
-      - name: Stofa
+      - name: Living Room
       - icon: mdi:sofa
-      - scene_entity: select.shelly_stofa_lysingarhamur
-      - brightness_entity: number.shelly_stofa_birtustig
-      - guest_entity: switch.shelly_stofa_gestamodi
-      - off_entity: button.shelly_stofa_slokkva
+      - scene_entity: select.shelly_livingroom_light_mode
+      - brightness_entity: number.shelly_livingroom_brightness
+      - guest_entity: switch.shelly_livingroom_guest_mode
+      - off_entity: button.shelly_livingroom_turn_off
 
   - type: custom:decluttering-card
     template: room_control
     variables:
-      - name: Eldhús
+      - name: Kitchen
       - icon: mdi:stove
-      - scene_entity: select.shelly_eldhus_lysingarhamur
-      - brightness_entity: number.shelly_eldhus_birtustig
-      - guest_entity: switch.shelly_eldhus_gestamodi
-      - off_entity: button.shelly_eldhus_slokkva
+      - scene_entity: select.shelly_kitchen_light_mode
+      - brightness_entity: number.shelly_kitchen_brightness
+      - guest_entity: switch.shelly_kitchen_guest_mode
+      - off_entity: button.shelly_kitchen_turn_off
 
   - type: custom:decluttering-card
     template: room_control
     variables:
-      - name: Forstofa
+      - name: Hallway
       - icon: mdi:door
-      - scene_entity: select.shelly_forstofa_lysingarhamur
-      - brightness_entity: number.shelly_forstofa_birtustig
-      - guest_entity: switch.shelly_forstofa_gestamodi
-      - off_entity: button.shelly_forstofa_slokkva
+      - scene_entity: select.shelly_hallway_light_mode
+      - brightness_entity: number.shelly_hallway_brightness
+      - guest_entity: switch.shelly_hallway_guest_mode
+      - off_entity: button.shelly_hallway_turn_off
 ```
 
 ---
@@ -693,7 +693,7 @@ You've already assigned static IPs via your Huawei V261a-20 router for 43 of 61 
 type: custom:auto-entities
 card:
   type: entities
-  title: Shelly uppfærslur
+  title: Shelly updates
 filter:
   include:
     - entity_id: "update.shelly_*"
@@ -718,9 +718,9 @@ cards:
     title: Shelly floti
     subtitle: >
       {{ states.sensor | selectattr('entity_id','search','shelly.*rssi')
-         | list | count }} tæki ·
+         | list | count }} devices ·
       {{ states.update | selectattr('entity_id','search','shelly')
-         | selectattr('state','eq','on') | list | count }} uppfærslur
+         | selectattr('state','eq','on') | list | count }} updates
   - type: custom:auto-entities
     card:
       type: grid
@@ -746,11 +746,11 @@ cards:
 
 ## 6. Recommended Implementation Order
 
-1. **Start with one room** (Stofa is a good candidate) — create all 5 virtual components, deploy the controller script, set up the HA automation, build the dashboard card
+1. **Start with one room** (Living Room is a good candidate) — create all 5 virtual components, deploy the controller script, set up the HA automation, build the dashboard card
 2. **Validate the pattern** — test scene selection from both the Shelly web UI and HA dashboard, confirm bidirectional sync works
-3. **Create the blueprint** — convert the working Stofa automation into a blueprint
+3. **Create the blueprint** — convert the working Living Room automation into a blueprint
 4. **Deploy to remaining rooms** — use the bash deployment script for virtuals, copy the controller script with modified CONFIG section, instantiate the blueprint per room
 5. **Add the decluttering card** — create the dashboard template, add all rooms with 5-line entries
-6. **Build the whole-house layer** — add the `input_select.hushamur` and sync automation
+6. **Build the whole-house layer** — add the `input_select.house_mode` and sync automation
 7. **Add monitoring** — fleet health dashboard, firmware update tracking
-8. **Iterate** — add room-specific features (movie mode timer for Stofa, cooking timer for Eldhús, etc.)
+8. **Iterate** — add room-specific features (movie mode timer for Living Room, cooking timer for Kitchen, etc.)

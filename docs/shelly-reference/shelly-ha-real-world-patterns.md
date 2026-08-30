@@ -499,14 +499,14 @@ A real-world example from the johnflorin/shelly-use-cases repo, adapted to Icela
 ```yaml
 script:
   bedtime:
-    alias: "Háttamál"
+    alias: "Bedtime"
     sequence:
       # Close the living room shutters
       - service: cover.close_cover
         target:
           entity_id:
-            - cover.stofa_shutter
-            - cover.eldhus_shutter
+            - cover.livingroom_shutter
+            - cover.kitchen_shutter
       
       # Soft shutdown the PC via RPC shutdown add-on
       - service: hassio.addon_stdin
@@ -527,8 +527,8 @@ script:
       - service: climate.set_temperature
         target:
           entity_id:
-            - climate.svefnherbergi_trv
-            - climate.stofa_trv
+            - climate.svefnbedroom_trv
+            - climate.livingroom_trv
         data:
           temperature: 18
       
@@ -536,9 +536,9 @@ script:
       - service: light.turn_off
         target:
           area_id:
-            - stofa
-            - eldhus
-            - forstofa
+            - livingroom
+            - kitchen
+            - hallway
 ```
 
 ### Triggered by Time Plus Spoken Reminder
@@ -551,18 +551,18 @@ script:
       at: "20:30:00"
   conditions:
     - condition: state
-      entity_id: cover.barnaherbergi_shutter
+      entity_id: cover.barnabedroom_shutter
       state: open
   actions:
     - action: media_player.volume_set
       data:
         volume_level: 0.5
       target:
-        entity_id: media_player.barnaherbergi_speaker
+        entity_id: media_player.barnabedroom_speaker
     - action: tts.cloud_say
       data:
-        message: "Það er kominn háttatími. Vinsamlegast farðu að sofa núna."
-        entity_id: media_player.barnaherbergi_speaker
+        message: "It's bedtime. Please go to sleep now."
+        entity_id: media_player.barnabedroom_speaker
 ```
 
 ---
@@ -685,7 +685,7 @@ let CONFIG = {
       priority: 2
     },
     {
-      name: "Bílskúr hleðsla",
+      name: "Garage charging",
       url: "http://192.168.1.52/rpc/Switch.Set",
       switch_id: 0,
       power_estimate: 3500,
@@ -712,7 +712,7 @@ If you have a Gecko spa with the in.touch module (matching your existing setup),
 ### Automation: Pre-Heat Before Use
 
 ```yaml
-- alias: "Heita pott fyrir notkun"
+- alias: "Hot tub before use"
   description: "Pre-heat hot tub when calendar event 'Hot tub' starts in 90 minutes"
   triggers:
     - trigger: calendar
@@ -729,7 +729,7 @@ If you have a Gecko spa with the in.touch module (matching your existing setup),
       data:
         temperature: 38
 
-- alias: "Setja heitan pott á 'sparnaður' eftir notkun"
+- alias: "Set hot tub to 'eco' after use"
   triggers:
     - trigger: calendar
       entity_id: calendar.fjolskyldudagatal
@@ -750,16 +750,16 @@ If you have a Gecko spa with the in.touch module (matching your existing setup),
 ```yaml
 template:
   - sensor:
-      - name: "Heita pott orkunotkun í dag"
+      - name: "Hot tub energy today"
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total_increasing
         state: "{{ states('sensor.shellyplus1pm_heitur_pottur_energy') }}"
       
-      - name: "Heita pott kostnaður í dag"
+      - name: "Hot tub cost today"
         unit_of_measurement: "kr"
         state: >
-          {{ (states('sensor.heita_pott_orkunotkun_i_dag') | float * 18.5) | round(0) }}
+          {{ (states('sensor.hot_tub_energy_today') | float * 18.5) | round(0) }}
         # 18.5 ISK/kWh average price
 ```
 
@@ -789,28 +789,28 @@ cover:
   - platform: template
     covers:
       garage_door:
-        friendly_name: "Bílskúrhurð"
+        friendly_name: "Garage door"
         device_class: garage
         value_template: >
-          {{ 'open' if is_state('binary_sensor.shelly1_bilskur_input', 'on') else 'closed' }}
+          {{ 'open' if is_state('binary_sensor.shelly1_garage_input', 'on') else 'closed' }}
         open_cover:
           - condition: state
-            entity_id: binary_sensor.shelly1_bilskur_input
+            entity_id: binary_sensor.shelly1_garage_input
             state: "off"
           - service: switch.turn_on
             target:
-              entity_id: switch.shelly1_bilskur_relay
+              entity_id: switch.shelly1_garage_relay
         close_cover:
           - condition: state
-            entity_id: binary_sensor.shelly1_bilskur_input
+            entity_id: binary_sensor.shelly1_garage_input
             state: "on"
           - service: switch.turn_on
             target:
-              entity_id: switch.shelly1_bilskur_relay
+              entity_id: switch.shelly1_garage_relay
         stop_cover:
           - service: switch.turn_on
             target:
-              entity_id: switch.shelly1_bilskur_relay
+              entity_id: switch.shelly1_garage_relay
 ```
 
 ### Auto-Close Safety Net
@@ -826,7 +826,7 @@ cover:
   actions:
     - action: notify.mobile_app
       data:
-        message: "Bílskúrhurð sjálfvirkt að loka eftir 15 mín opin"
+        message: "Garage door auto-close after 15 min open"
     - action: cover.close_cover
       target:
         entity_id: cover.garage_door
@@ -881,10 +881,10 @@ curl -X POST -d '{
   "id":1,"method":"Virtual.Add","params":{
     "type":"enum","id":201,
     "config":{
-      "name":"Lýsingarhamur",
+      "name":"Lighting mode",
       "persisted":true,
-      "default_value":"dagur",
-      "options":["dagur","kvold","kvikmynd","nott","burt"],
+      "default_value":"day",
+      "options":["day","evening","movie","night","away"],
       "meta":{"ui":{"view":"dropdown"}}
     }
   }
@@ -895,7 +895,7 @@ curl -X POST -d '{
   "id":1,"method":"Virtual.Add","params":{
     "type":"number","id":202,
     "config":{
-      "name":"Birtustig","min":0,"max":100,"default_value":100,
+      "name":"Brightness","min":0,"max":100,"default_value":100,
       "persisted":true,
       "meta":{"ui":{"view":"slider","unit":"%","step":5}}
     }
@@ -910,11 +910,11 @@ let mode   = Virtual.getHandle("enum:201");
 let bright = Virtual.getHandle("number:202");
 
 let presets = {
-  dagur:    100,
-  kvold:    40,
-  kvikmynd: 15,
-  nott:     5,
-  burt:     0
+  day:    100,
+  evening:    40,
+  movie: 15,
+  night:     5,
+  away:     0
 };
 
 mode.on("change", function(ev) {
@@ -936,8 +936,8 @@ bright.on("change", function(ev) {
 ### HA Integration (Native Shelly Integration)
 
 After running the script, the Shelly integration automatically discovers the virtual components and creates:
-- `select.shelly_lysingarhamur` (the enum dropdown)
-- `number.shelly_birtustig` (the brightness slider)
+- `select.shelly_light_mode` (the enum dropdown)
+- `number.shelly_brightness` (the brightness slider)
 
 You can use these in HA dashboards directly, or in automations:
 
@@ -950,9 +950,9 @@ You can use these in HA dashboards directly, or in automations:
   actions:
     - action: select.select_option
       target:
-        entity_id: select.shelly_lysingarhamur
+        entity_id: select.shelly_light_mode
       data:
-        option: "kvold"
+        option: "evening"
 ```
 
 The change propagates through HA → Shelly RPC → script → physical light in <100ms. The light stays controlled by the Shelly script (so it works even if HA is down), but HA orchestrates which mode to use.

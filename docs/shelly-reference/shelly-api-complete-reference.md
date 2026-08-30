@@ -113,12 +113,12 @@ The KVS provides persistent storage of key-value pairs on the device itself, acc
 
 ```bash
 # KVS.Set — create or update a key
-curl "http://{IP}/rpc/KVS.Set?key=%22room_mode%22&value=%22kvold%22"
+curl "http://{IP}/rpc/KVS.Set?key=%22room_mode%22&value=%22evening%22"
 # Response: {"etag":"0DWty8HwCB","rev":2733}
 
 # KVS.Get — read a key
 curl "http://{IP}/rpc/KVS.Get?key=%22room_mode%22"
-# Response: {"etag":"0DWty8HwCB","value":"kvold"}
+# Response: {"etag":"0DWty8HwCB","value":"evening"}
 
 # KVS.List — list all keys with etags
 curl "http://{IP}/rpc/KVS.List"
@@ -126,7 +126,7 @@ curl "http://{IP}/rpc/KVS.List"
 
 # KVS.GetMany — bulk read with pattern matching
 curl -X POST -d '{"id":1,"method":"KVS.GetMany","params":{"match":"room_*"}}' http://{IP}/rpc
-# Response: {"items":[{"key":"room_mode","etag":"...","value":"kvold"},...],"offset":0,"total":3}
+# Response: {"items":[{"key":"room_mode","etag":"...","value":"evening"},...],"offset":0,"total":3}
 
 # KVS.Delete — remove a key
 curl -X POST -d '{"id":1,"method":"KVS.Delete","params":{"key":"room_mode"}}' http://{IP}/rpc
@@ -154,7 +154,7 @@ Shelly.call("KVS.Get", {key: "room_mode"}, function(res) {
 });
 
 // Write KVS
-Shelly.call("KVS.Set", {key: "room_mode", value: "nott"});
+Shelly.call("KVS.Set", {key: "room_mode", value: "night"});
 
 // Note: Script.storage is separate from KVS!
 // Script.storage: private per-script, 12 items, 1024 bytes/value
@@ -177,7 +177,7 @@ service: shelly.set_kvs_value
 data:
   device_id: "abc123def456"
   key: "room_mode"
-  value: "kvold"
+  value: "evening"
 ```
 
 ### KVS vs Virtual Components vs Script.storage
@@ -238,12 +238,12 @@ curl -X POST -d '{
 # Turn on light at sunrise (requires timezone/geolocation configured)
 # Use @sunrise/@sunset tokens in timespec (firmware 1.0+)
 
-# Set enum virtual to "nott" every day at 23:00
+# Set enum virtual to "night" every day at 23:00
 curl -X POST -d '{
   "id":1,"method":"Schedule.Create","params":{
     "enable":true,
     "timespec":"0 0 23 * * *",
-    "calls":[{"method":"Enum.Set","params":{"id":201,"value":"nott"}}]
+    "calls":[{"method":"Enum.Set","params":{"id":201,"value":"night"}}]
   }
 }' http://{IP}/rpc
 
@@ -253,7 +253,7 @@ curl -X POST -d '{
     "enable":true,
     "timespec":"0 0 8 * * MON,TUE,WED,THU,FRI",
     "calls":[
-      {"method":"Enum.Set","params":{"id":201,"value":"dagur"}},
+      {"method":"Enum.Set","params":{"id":201,"value":"day"}},
       {"method":"Number.Set","params":{"id":202,"value":100}},
       {"method":"Text.Set","params":{"id":203,"value":"Morgunnstilling"}}
     ]
@@ -278,17 +278,17 @@ curl http://{IP}/rpc/Schedule.DeleteAll
 Powerful pattern: use Schedule to set virtual component values at specific times, and let the script react via `on("change")`:
 
 ```bash
-# Morning routine: set mode to "dagur" at 7:00 weekdays
+# Morning routine: set mode to "day" at 7:00 weekdays
 Schedule.Create timespec="0 0 7 * * MON,TUE,WED,THU,FRI"
-  calls=[{"method":"Enum.Set","params":{"id":201,"value":"dagur"}}]
+  calls=[{"method":"Enum.Set","params":{"id":201,"value":"day"}}]
 
-# Evening routine: set mode to "kvold" at 18:00
+# Evening routine: set mode to "evening" at 18:00
 Schedule.Create timespec="0 0 18 * * *"
-  calls=[{"method":"Enum.Set","params":{"id":201,"value":"kvold"}}]
+  calls=[{"method":"Enum.Set","params":{"id":201,"value":"evening"}}]
 
-# Night routine: set mode to "nott" at 23:00
+# Night routine: set mode to "night" at 23:00
 Schedule.Create timespec="0 0 23 * * *"
-  calls=[{"method":"Enum.Set","params":{"id":201,"value":"nott"}}]
+  calls=[{"method":"Enum.Set","params":{"id":201,"value":"night"}}]
 ```
 
 The script's `on("change")` listener handles the actual light control — the schedule just changes the mode value. This means you can override the schedule at any time from HA or the Shelly app by selecting a different mode.
@@ -334,14 +334,14 @@ curl -X POST -d '{
   }
 }' http://{IP}/rpc
 
-# Only fire when enum changes to "burt" (all off)
+# Only fire when enum changes to "away" (all off)
 curl -X POST -d '{
   "id":1,"method":"Webhook.Create","params":{
     "cid":201,
     "enable":true,
     "event":"enum.change",
     "urls":["http://ha-server:8123/api/webhook/shelly_all_off"],
-    "condition":"event.value == \"burt\""
+    "condition":"event.value == \"away\""
   }
 }' http://{IP}/rpc
 
@@ -369,7 +369,7 @@ curl -X POST -d '{
 ```yaml
 # HA automation triggered by Shelly webhook
 automation:
-  - alias: "Shelly webhook — hitaviðvörun"
+  - alias: "Shelly webhook — temp alert"
     trigger:
       - platform: webhook
         webhook_id: shelly_hot_alert
@@ -379,8 +379,8 @@ automation:
     action:
       - service: notify.mobile_app
         data:
-          title: "Hitaviðvörun"
-          message: "Shelly gaf frá sér hitaviðvörun"
+          title: "Temp alert"
+          message: "Shelly reported a temp alert"
 ```
 
 ---
@@ -1049,7 +1049,7 @@ The newest feature: pair a BLU device directly to a WiFi Shelly device (Switch, 
 
 **Supported on:** Plug S Gen3, Outdoor Plug S Gen3, AZ Plug, and other Gen3+ devices listing BTHomeControl in their changelog.
 
-**Use case for your setup:** garage (Bílskúr) door + BLU button → directly controls Shelly Plug S running the garage light, with zero HA dependency. Works even if HA is rebooting or the network is down.
+**Use case for your setup:** garage (Garage) door + BLU button → directly controls Shelly Plug S running the garage light, with zero HA dependency. Works even if HA is rebooting or the network is down.
 
 ---
 
@@ -1180,9 +1180,9 @@ Combine an add-on sensor with a virtual component for an HA-editable threshold:
 
 ```javascript
 // Freezer monitor: DS18B20 add-on + virtual threshold + virtual alert
-let threshold = Virtual.getHandle("number:200");  // "Frystir mörk" — editable in HA
-let status    = Virtual.getHandle("text:201");    // "Frystir staða" — visible in HA
-let alert     = Virtual.getHandle("boolean:202"); // "Frystir viðvörun" — alarm flag
+let threshold = Virtual.getHandle("number:200");  // "Freezer limit" — editable in HA
+let status    = Virtual.getHandle("text:201");    // "Freezer status" — visible in HA
+let alert     = Virtual.getHandle("boolean:202"); // "Freezer alert" — alarm flag
 
 Timer.set(60000, true, function() {
   let temp = Shelly.getComponentStatus("temperature:100").tC;
@@ -1190,10 +1190,10 @@ Timer.set(60000, true, function() {
 
   if (temp > limit) {
     alert.setValue(true);
-    status.setValue("VIÐVÖRUN: " + temp + "°C (mörk: " + limit + "°C)");
+    status.setValue("ALERT: " + temp + "°C (limit: " + limit + "°C)");
   } else {
     alert.setValue(false);
-    status.setValue("Í lagi: " + temp + "°C");
+    status.setValue("OK: " + temp + "°C");
   }
 });
 ```
