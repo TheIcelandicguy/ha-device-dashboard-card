@@ -561,23 +561,6 @@ export const PROFILE_DEFAULT_SENSORS: Partial<Record<DeviceProfile, string[]>> =
  */
 export const DEFAULT_GRAPH_SENSORS: string[] = ['power', 'temperature', 'humidity', 'battery'];
 
-/** Human labels for tile blocks — used by the detail-dialog Customize panel. */
-export const BLOCK_LABELS: Record<TileBlockId, string> = {
-  name_row:         'Name & toggle',
-  sensors:          'Sensor chips',
-  graph:            'Graph',
-  dimmer:           'Brightness / colour',
-  cover_controls:   'Cover controls',
-  trv_control:      'Temperature control',
-  valve_controls:   'Valve controls',
-  input_channels:   'Input channels',
-  relay_channels:   'Relay channels',
-  power_bar:        'Power bar',
-  virtual_controls: 'Virtual controls',
-  delegated_controls: 'Native controls',
-  badges:           'Type & gen badges',
-};
-
 /**
  * Domain-based device type detection — the universal, integration-agnostic core.
  * Returns the profile implied purely by the device's entity domains + attributes,

@@ -40,25 +40,6 @@ export const tilesCss = css`
 
     .ts-ring-name { display:flex; align-items:center; gap:5px; font-size:.82em; font-weight:700; color:var(--sc-text-primary); flex:1; min-width:0; }
 
-    .ts-ring-body { display:flex; align-items:center; gap:12px; flex:1; }
-
-    .ts-ring-stats { display:flex; flex-direction:column; gap:6px; flex:1; }
-
-    .ts-ring-stat  { display:flex; flex-direction:column; gap:1px; }
-
-    .ts-ring-stat-k { font-size:var(--fs-xs); font-weight:600; letter-spacing:.03em; color:var(--sc-text-muted); }
-
-    .ts-ring-stat-v { font-size:.82em; color:var(--sc-text-secondary); }
-
-    .ts-ring-legend { display:flex; flex-wrap:wrap; gap:8px 16px; justify-content:center; margin-top:4px; }
-
-    .ts-ring-chip { display:flex; align-items:baseline; gap:4px; }
-
-    .ts-ring-chip-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; display:inline-block; margin-bottom:1px; }
-
-    .ts-ring-chip-val { font-size:15px; font-weight:800; line-height:1; }
-
-    .ts-ring-chip-unit { font-size:10px; color:var(--sc-text-muted); }
 
 
     /* ── STYLE: HORIZONTAL SPLIT ────────────────────────── */

@@ -3,7 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { styleMap } from 'lit/directives/style-map.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
-import { HADeviceDashboardConfig, HADevice, TileBlockId, DeviceProfileResult, EntityAnimationType, TileStyle, PowerMonitorVariant, HassAttrs, ViewConfig, CustomStyleDef, TileLayout, EnergyPeriod, InputActionConfig, InputHoldConfig } from './types';
+import { HADeviceDashboardConfig, HADevice, TileBlockId, DeviceProfileResult, EntityAnimationType, TileStyle, PowerMonitorVariant, HassAttrs, ViewConfig, CustomStyleDef, TileLayout, EnergyPeriod, DetailHistoryRange, InputActionConfig, InputHoldConfig } from './types';
 import type { LovelaceCardConfig } from 'custom-card-helpers';
 import { BUNDLED_FONT_CSS } from './fonts';
 import { THEME_PRESETS } from './themes';
@@ -100,7 +100,7 @@ export class HADeviceDashboard extends LitElement {
   /** Which header drill-down is open: 'on'/'off'/'unavailable' (cloud chips) or 'm:<metric>' (stat chips). */
   @state() private _cloudDetailOpen: string | null = null;
   @state() private _detailDevice: string | null = null;
-  @state() private _detailHistoryRange: 24 | 168 | 720 = 24;
+  @state() private _detailHistoryRange: DetailHistoryRange = 24;
   @state() private _activeViewId: string | null = null;
   /** One-time notice: delegatable devices exist but native controls are off. */
   @state() private _delegateNoticeDismissed = false;
@@ -2064,112 +2064,6 @@ export class HADeviceDashboard extends LitElement {
       });
   }
 
-  private _renderTileIcon(profile: DeviceProfileResult, isOn: boolean, extra: {
-    coverPos?: number; coverState?: string;
-    isHeating?: boolean; valveOpen?: boolean;
-    hasFan?: boolean;
-  } = {}): TemplateResult {
-    const { coverPos, coverState, isHeating, valveOpen, hasFan } = extra;
-    const t = profile.type;
-
-    // relay / plug — lightning bolt, pulse glow when on
-    if (t === 'relay' || t === 'plug') {
-      // Special case: if device has a fan entity, show spinning fan
-      if (hasFan) {
-        return svg`<svg class="tile-icon tile-icon-fan ${isOn ? 'on' : ''}" viewBox="0 0 20 20">
-          <g class="fan-blades">
-            <path d="M10 10 C10 6,13 4,13 8 A3 3 0 0 1 10 10Z" fill="currentColor" opacity=".9"/>
-            <path d="M10 10 C14 10,16 13,12 13 A3 3 0 0 1 10 10Z" fill="currentColor" opacity=".9"/>
-            <path d="M10 10 C10 14,7 16,7 12 A3 3 0 0 1 10 10Z" fill="currentColor" opacity=".9"/>
-            <path d="M10 10 C6 10,4 7,8 7 A3 3 0 0 1 10 10Z" fill="currentColor" opacity=".9"/>
-          </g>
-          <circle cx="10" cy="10" r="2" fill="currentColor"/>
-        </svg>`;
-      }
-      return svg`<svg class="tile-icon tile-icon-relay ${isOn ? 'on' : ''}" viewBox="0 0 20 20">
-        <path d="M11 2L4 11h6l-1 7 7-9h-6l1-7z" fill="currentColor"/>
-      </svg>`;
-    }
-
-    // dimmer / rgb — sun, rotate when on
-    if (t === 'dimmer' || t === 'rgb') {
-      return svg`<svg class="tile-icon tile-icon-sun ${isOn ? 'on' : ''}" viewBox="0 0 20 20">
-        <circle cx="10" cy="10" r="3.5" fill="currentColor"/>
-        <g class="sun-rays" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-          <line x1="10" y1="1.5" x2="10" y2="3.5"/>
-          <line x1="10" y1="16.5" x2="10" y2="18.5"/>
-          <line x1="1.5" y1="10" x2="3.5" y2="10"/>
-          <line x1="16.5" y1="10" x2="18.5" y2="10"/>
-          <line x1="4.1" y1="4.1" x2="5.5" y2="5.5"/>
-          <line x1="14.5" y1="14.5" x2="15.9" y2="15.9"/>
-          <line x1="4.1" y1="15.9" x2="5.5" y2="14.5"/>
-          <line x1="14.5" y1="5.5" x2="15.9" y2="4.1"/>
-        </g>
-      </svg>`;
-    }
-
-    // cover — blinds, slats slide based on position
-    if (t === 'cover') {
-      const pos = coverPos ?? (coverState === 'open' ? 100 : coverState === 'closed' ? 0 : 50);
-      const moving = coverState === 'opening' || coverState === 'closing';
-      const slats = [2, 5.5, 9, 12.5, 16];
-      const visibleSlats = Math.ceil((pos / 100) * slats.length);
-      return svg`<svg class="tile-icon tile-icon-cover ${moving ? 'moving' : ''}" viewBox="0 0 20 20">
-        <rect x="2" y="1" width="16" height="1.5" rx="0.75" fill="currentColor" opacity=".7"/>
-        <line x1="10" y1="2.5" x2="10" y2="18.5" stroke="currentColor" stroke-width="1" opacity=".4"/>
-        ${slats.map((y, i) => svg`<rect x="3" y="${y}" width="14" height="1.8" rx="0.5"
-          fill="currentColor" opacity="${i < visibleSlats ? '0.85' : '0.2'}"/>`)}
-      </svg>`;
-    }
-
-    // climate / wall_display — flame, flicker when heating
-    if (t === 'climate' || t === 'wall_display') {
-      return svg`<svg class="tile-icon tile-icon-flame ${isHeating ? 'on' : ''}" viewBox="0 0 20 20">
-        <path class="flame-main" d="M10 18 C5 18 3 14 5 10 C6 8 7 9 7 9 C7 6 9 3 10 2 C10 5 12 6 12 9 C12 9 13 7 14 8 C16 11 15 18 10 18Z" fill="currentColor"/>
-        <path class="flame-inner" d="M10 16 C8 16 7 14 8 12 C8.5 11 9 11.5 9 11.5 C9 10 10 9 10 9 C10 10.5 11 11 11 12.5 C12 11 12 14 10 16Z" fill="currentColor" opacity=".5"/>
-      </svg>`;
-    }
-
-    // valve — droplet, animate when open
-    if (t === 'valve') {
-      return svg`<svg class="tile-icon tile-icon-valve ${valveOpen ? 'on' : ''}" viewBox="0 0 20 20">
-        <path class="drop-body" d="M10 3 C10 3 4 10 4 13.5 A6 6 0 0 0 16 13.5 C16 10 10 3 10 3Z" fill="currentColor"/>
-        <path class="drop-shine" d="M7.5 12 C7 10.5 8 9 8 9" stroke="white" stroke-width="1" stroke-linecap="round" fill="none" opacity=".5"/>
-      </svg>`;
-    }
-
-    // energy — waveform, animate always
-    if (t === 'energy') {
-      return svg`<svg class="tile-icon tile-icon-energy" viewBox="0 0 20 20">
-        <polyline class="energy-wave" points="1,10 4,6 7,14 10,4 13,14 16,6 19,10"
-          fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>`;
-    }
-
-    // sensor — thermometer, static
-    if (t === 'sensor') {
-      return svg`<svg class="tile-icon tile-icon-sensor" viewBox="0 0 20 20">
-        <rect x="8.5" y="2" width="3" height="11" rx="1.5" fill="currentColor" opacity=".5"/>
-        <circle cx="10" cy="14.5" r="3" fill="currentColor"/>
-        <rect x="9.2" y="7" width="1.6" height="7" rx="0.8" fill="currentColor"/>
-      </svg>`;
-    }
-
-    // input — touch finger, ripple on active
-    if (t === 'input' || t === 'uni') {
-      return svg`<svg class="tile-icon tile-icon-input ${isOn ? 'on' : ''}" viewBox="0 0 20 20">
-        <path d="M8 4 C8 3 9 2 10 2 C11 2 12 3 12 4 L12 10.5 C13 9.8 15 10 15 11.5 L15 14 C15 16.5 13 18 10 18 C7 18 5 16.5 5 14 L5 4Z" fill="currentColor" opacity=".7"/>
-        <circle class="input-ripple" cx="10" cy="4" r="0" fill="none" stroke="currentColor" stroke-width="1"/>
-      </svg>`;
-    }
-
-    // generic fallback — small circle
-    return svg`<svg class="tile-icon tile-icon-generic" viewBox="0 0 20 20">
-      <circle cx="10" cy="10" r="5" fill="none" stroke="currentColor" stroke-width="1.8" opacity=".6"/>
-      <circle cx="10" cy="10" r="2" fill="currentColor" opacity=".6"/>
-    </svg>`;
-  }
-
   private _renderEntityAnim(entityId: string, isOn: boolean, deviceId: string): TemplateResult {
     const anims = this._config.device_styles?.[deviceId]?.entity_animations?.[entityId];
     if (!anims) return html``;
@@ -2657,19 +2551,6 @@ export class HADeviceDashboard extends LitElement {
   }
   // ── Style resolution helpers ─────────────────────────────────────────────
 
-  /** Auto-detect the best style for a device profile */
-  private _autoStyle(profile: DeviceProfileResult): TileStyle {
-    switch (profile.type) {
-      case 'relay': case 'plug': case 'energy': case 'uni': return 'power-monitor';
-      case 'dimmer': case 'rgb':                             return 'light-control';
-      case 'climate': case 'wall_display':                   return 'climate-control';
-      case 'cover':                                          return 'cover-control';
-      case 'sensor':                                         return 'sensor-card';
-      case 'input':                                          return 'scene-button';
-      default:                                               return 'default';
-    }
-  }
-
   /** Remap legacy style names to new purposeful names */
   private _resolveStyle(raw: TileStyle | undefined, _profile: DeviceProfileResult): { style: TileStyle; variant: PowerMonitorVariant } {
     return cascade.resolveStyle(raw);
@@ -2692,28 +2573,10 @@ export class HADeviceDashboard extends LitElement {
     };
   }
 
-  /** The raw chosen tile style (may be a legacy alias or a `custom:<key>`), from
-   *  the cascade device → type → area → view → global → smart/profile default. */
-  private _rawStyle(device: HADevice): TileStyle | undefined {
-    return cascade.rawTileStyle(this._cascade(device));
-  }
-
   /** Resolve a raw style to its base built-in style + the custom def if it was a
    *  `custom:<key>`. */
   private _resolveCustomStyle(raw: TileStyle | undefined): { base: TileStyle | undefined; custom?: CustomStyleDef } {
     return cascade.resolveCustomStyle(this._config, raw);
-  }
-
-  /** The saved custom style config active for this device, if any. */
-  private _customDef(device: HADevice): CustomStyleDef | undefined {
-    return this._resolveCustomStyle(this._rawStyle(device)).custom;
-  }
-
-  /** The tile style a device will actually render in (custom → base). Drives the
-   *  style-preset chips/element cascades. */
-  private _effectiveStyle(device: HADevice): TileStyle {
-    const { base } = this._resolveCustomStyle(this._rawStyle(device));
-    return this._resolveStyle(base, this._profile(device)).style;
   }
 
   private _handleScenePress(device: HADevice): void {

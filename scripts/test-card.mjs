@@ -289,9 +289,6 @@ try {
   ok('profile chip defaults use real chip keys', strayChips.length === 0, strayChips.join(', '));
   ok('the show-all profiles have no entry',
     !('generic' in h.PROFILE_DEFAULT_SENSORS) && !('media' in h.PROFILE_DEFAULT_SENSORS));
-  const blocksOutsideVocab = [...new Set(Object.values(h.PROFILE_DEFAULT_BLOCKS).flat())]
-    .filter(b => !(b in h.BLOCK_LABELS));
-  ok('no profile references a block with no label', blocksOutsideVocab.length === 0, blocksOutsideVocab.join(', '));
 
   console.log('\ndeviceChipKeys');
   const keysI4 = [...h.deviceChipKeys(byName(all, 'Bedroom switch'))].sort();

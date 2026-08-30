@@ -4,6 +4,7 @@ import type {
   HADevice,
   HADeviceDashboardConfig,
   DeviceProfileResult,
+  DetailHistoryRange,
 } from '../types';
 
 // Placeholder shapes — mirrored from anonymous return types in ha-device-dashboard.ts.
@@ -172,7 +173,7 @@ export interface TileCtx {
 
   // Detail-sheet helpers
   closeDetailSheet: () => void;
-  getDetailHistoryRange: () => 24 | 168 | 720;
-  setDetailHistoryRange: (r: 24 | 168 | 720) => void;
+  getDetailHistoryRange: () => DetailHistoryRange;
+  setDetailHistoryRange: (r: DetailHistoryRange) => void;
   fireMoreInfo: (entityId: string) => void;
 }
