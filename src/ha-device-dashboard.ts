@@ -148,8 +148,18 @@ export class HADeviceDashboard extends LitElement {
     return { type: 'custom:ha-device-dashboard', ...factoryLook() };
   }
 
-  static getLayoutOptions() {
-    return { grid_columns: 10, grid_min_columns: 4, grid_min_rows: 3 };
+  /** Sections-view sizing. `columns: 'full'` makes the card span the whole
+   *  section width — both in the live grid and in the card-editor preview, which
+   *  sizes the preview pane from this. These MUST be instance methods: HA calls
+   *  them on the card element, so a `static` one is never seen (which is why the
+   *  editor preview only filled part of the pane). getGridOptions is the current
+   *  API; getLayoutOptions is kept for older HA that predates it. */
+  getGridOptions() {
+    return { columns: 'full', rows: 'auto', min_columns: 6, min_rows: 4 };
+  }
+
+  getLayoutOptions() {
+    return { grid_columns: 'full', grid_rows: 'auto', grid_min_columns: 6, grid_min_rows: 3 };
   }
 
   setConfig(config: HADeviceDashboardConfig) {
