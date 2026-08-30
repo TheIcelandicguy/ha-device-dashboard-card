@@ -11,3 +11,6 @@ backups/
 
 # scratch patch scripts
 .tmp-*
+
+# internal roadmap / planning notes — local only, not for the public repo
+docs/universal-engine-plan.md
