@@ -2024,6 +2024,7 @@ export class HADeviceDashboardEditor extends LitElement {
               ps.show_graphs,
               v => this._setProfileStyle(profile!.type, { show_graphs: v }))}
           </div>
+          ${style === 'power-monitor' ? nothing : html`
           <div class="tog-row" style="border:none;padding:6px 0 0">
             <div class="tog-lbl">Sparkline graphs</div>
             <div class="pill-grp">
@@ -2031,7 +2032,7 @@ export class HADeviceDashboardEditor extends LitElement {
                 <span class="pill ${(ps.show_graphs ?? 'x') === (val ?? 'x') ? 'on' : ''}"
                   @click=${() => this._setProfileStyle(profile!.type, { show_graphs: val })}>${lbl}</span>`)}
             </div>
-          </div>
+          </div>`}
           ${this._renderStyleElementToggles(style, ps.elements ?? {}, e => this._setProfileStyle(profile!.type, { elements: e }))}
           ${style === 'default'
             ? this._renderLayoutCanvas(
@@ -2462,13 +2463,23 @@ export class HADeviceDashboardEditor extends LitElement {
             <option value="5"    ?selected=${(devStyle.tile_icon_speed ?? 1) === 5}>5× Frantic</option>
           </select>
         </div>`)}
-        ${!narrow || rel!.hasGraphs ? html`
+        ${(() => {
+          // Hidden on power-monitor tiles: the Display picker (Circles/Graphs/Both)
+          // already owns show_graphs there, so a second control would be redundant.
+          const p = dev ? getDeviceProfile(dev) : null;
+          const rawTs = devStyle.tile_style
+            ?? (this._config.smart_tile_styles && p && dev ? profileDefaultTileStyle(p.type, dev) : undefined)
+            ?? this._config.tile_style;
+          if (this._baseStyleOf(rawTs) === 'power-monitor') return nothing;
+          if (narrow && !rel!.hasGraphs) return nothing;
+          return html`
         <div class="field-lbl" style="margin-bottom:4px">Show graphs</div>
         <div class="pill-grp" style="margin-bottom:8px">
           ${([['Inherit', undefined], ['On', true], ['Off', false]] as Array<[string, boolean | undefined]>).map(([lbl, val]) => html`
             <span class="pill ${devStyle.show_graphs === val ? 'on' : ''}"
               @click=${() => this._setDeviceStyle(deviceId, { show_graphs: val })}>${lbl}</span>`)}
-        </div>` : nothing}
+        </div>`;
+        })()}
         ${(() => {
           // Blocks compose the 'default' style only. Showing this grid on a
           // power-monitor tile would offer toggles that change nothing.
@@ -4451,6 +4462,9 @@ export class HADeviceDashboardEditor extends LitElement {
     'type', 'title', 'mode', 'universal_scope', 'include_integrations', 'exclude_integrations',
     'include_domains', 'exclude_domains', 'areas', 'hidden_devices', 'favorites',
     'hidden_entities', 'show_offline', 'views', 'default_view', 'delegate_controls',
+    // "What to show" content (the Chips & metrics section + Header/Graphs picks):
+    // these describe content, not the visual look, so "Reset look" keeps them.
+    'sensors', 'graph_sensors', 'energy_period', 'header_chips', 'area_header_chips',
   ];
 
   /** Reset the look to factory defaults, keeping content (rooms/devices/views/favourites/mode). */

@@ -84,7 +84,7 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
             <span class="dot ${online ? 'online' : 'offline'}"></span>
             ${tileIcon}
             ${swAnimIcon}
-            ${primaryToggle}
+            ${cover ? nothing : primaryToggle}
             <span class="tile-name">${device.name}</span>
             ${fw ? html`<span class="update-dot" title="Firmware update">●</span>` : nothing}
           </div>

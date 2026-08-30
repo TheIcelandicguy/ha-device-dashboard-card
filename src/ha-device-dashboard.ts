@@ -78,7 +78,6 @@ export class HADeviceDashboard extends LitElement {
   @state() private _closedAreas = new Set<string>();
   /** Which room-header chip's per-device drill-down is open, as `area|key`. */
   @state() private _areaChipOpen: string | null = null;
-  @state() private _entityListOpen = new Set<string>();
   @state() private _graphData = new Map<string, Array<{ t: number; v: number }>>();
   /** Period-energy consumption (kWh) from recorder statistics, keyed `${entityId}|${period}`. */
   @state() private _periodEnergy = new Map<string, number>();
@@ -180,7 +179,6 @@ export class HADeviceDashboard extends LitElement {
     if (
       changed.has('_config') ||
       changed.has('_closedAreas') ||
-      changed.has('_entityListOpen') ||
       changed.has('_graphData') ||
       changed.has('_periodEnergy') ||
       changed.has('_periodEnergyErrAt') ||
@@ -2919,9 +2917,28 @@ export class HADeviceDashboard extends LitElement {
    *  answer to "which device is this reading coming from". Aggregated per device
    *  the same way the chip is: sum metrics add a device's channels, avg metrics
    *  take the device's mean. */
-  private _areaChipDeviceValues(devices: HADevice[], key: string): Array<{ name: string; value: number }> {
+  private _areaChipDeviceValues(devices: HADevice[], key: string, areaName?: string): Array<{ name: string; value: number }> {
     const def = AREA_CHIP_DEFS.find(d => d.key === key);
     if (!def) return [];
+    // Energy in a windowed period (Today/Week/Month): each device's period
+    // consumption, so the drill-down matches the chip instead of showing raw
+    // lifetime totals. 'total' falls through to the generic lifetime sum below.
+    if (key === 'energy') {
+      const period = (areaName ? this._config.area_styles?.[areaName]?.energy_period : undefined)
+        ?? this._config.energy_period ?? 'total';
+      if (period !== 'total') {
+        const rows: Array<{ name: string; value: number }> = [];
+        for (const device of devices) {
+          let sum = 0, got = false;
+          for (const eid of this._energyEntitiesFor(device)) {
+            const pv = this._periodEnergyValue(eid, period);
+            if (pv.kwh != null) { sum += pv.kwh; got = true; }
+          }
+          if (got) rows.push({ name: device.name, value: sum });
+        }
+        return rows.sort((a, b) => b.value - a.value);
+      }
+    }
     const out: Array<{ name: string; value: number }> = [];
     for (const device of devices) {
       let sum = 0, count = 0;
@@ -3058,7 +3075,7 @@ export class HADeviceDashboard extends LitElement {
           const open = this._areaChipOpen;
           if (!open || !open.startsWith(`${area}::`)) return nothing;
           const key = open.slice(area.length + 2);
-          const rows = this._areaChipDeviceValues(devices, key);
+          const rows = this._areaChipDeviceValues(devices, key, label);
           if (!rows.length) return nothing;
           const def = AREA_CHIP_DEFS.find(d => d.key === key);
           return html`
