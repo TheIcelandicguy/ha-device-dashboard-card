@@ -154,7 +154,7 @@ the machine-readable model that drives the editor defaults and the offline tools
 | `power_monitor_variant` | variant | `big-number` | Sub-variant when the style resolves to `power-monitor` |
 | `smart_tile_styles` | boolean | `false` | Tiles with no explicit style fall to a per-profile default (relay → power monitor, dimmer → light control, sensor → sensor card …) instead of the adaptive tile |
 | `tile_layout` | block[] | all visible | Order and visibility of tile blocks — see below |
-| `show_graphs` | boolean | `true` | Master switch for tile sparklines |
+| `show_graphs` | boolean | `false` | Master switch for tile sparklines — off by default, so tiles stay lean. Turn it on globally, per room/device, or per power tile via the Display picker (Circles / Graphs / Both) |
 | `show_power_bar` | boolean | `false` | Mini usage bar at the bottom of a tile |
 | `power_bar_max` | number | `2000` | Watts that read as 100% on that bar |
 | `tile_opacity` / `card_opacity` / `header_opacity` | number | `100` | Background opacity, 0–100 |
@@ -425,16 +425,16 @@ a bare channel number also works in hand-written YAML.
 
 ```yaml
 device_styles:
-  0f8e1d034e5a6ad427427d561dad1dd4:
+  0123456789abcdef0123456789abcdef:   # the device's device_id
     input_actions:
-      event.rofi_bilskur_stofa_channel_1:
+      event.shelly_i4_channel_1:
         action: perform-action        # runs a script, scene, or any service
         perform_action: script.garage_lights
-      event.rofi_bilskur_stofa_channel_2:
+      event.shelly_i4_channel_2:
         action: toggle                # homeassistant.toggle on one entity
-        entity: light.bilskur_stofa
+        entity: light.garage_ceiling
         label: Ceiling                # optional — defaults to the target's name
-      event.rofi_bilskur_stofa_channel_3:
+      event.shelly_i4_channel_3:
         action: more-info             # open the HA dialog (defaults to the channel)
 ```
 
@@ -472,13 +472,13 @@ behaves at the wall. `step` (% of full, default 5) and `interval` (ms, default
 200) tune the ramp; `entity` defaults to the tap action's target.
 
 ```yaml
-      event.rofi_hjona_hjon_ljos:
+      event.shelly_i4_channel_4:
         action: toggle
-        entity: light.ljos_hjonaherbergi
-        label: Ljós
+        entity: light.bedroom
+        label: Bedroom
         hold_action:
           action: dim
-          entity: light.ljos_hjonaherbergi
+          entity: light.bedroom
 ```
 
 ### The rest of the cascade
@@ -541,15 +541,15 @@ Filter keys: `profiles`, `domains`, `areas`, `devices`, `exclude_devices`,
 | **Device styling** ◆ | Pick a device, style just it or every device of its type, toggle style elements, and save the result as a reusable named style. The panel scopes itself to the selected device — its own sensor chips, the blocks it can render, energy controls only when it meters energy — with a **This device / All options** switch to fall back to the full surface |
 | **Views** ☰ | Add, reorder and filter views |
 | **Header** ◈ | Title, chips, gradient, colours, orbs, effects |
-| **Card & Theme** 🎨 | Live preview, tiles, card, colours, typography, and per-room styling behind a room picker |
+| **Card & Theme** 🎨 | Live preview, global **Chips & metrics** (room-header chips, energy window, sensor chips), tiles, card, colours, typography, and per-room styling behind a room picker |
 | **Graphs & Sensors** ∿ | Graph type and window, energy window, per-sensor colours and ranges, sensor chip groups |
 | **YAML** `</>` | Read-only view of the whole config with a Copy button |
 
 The **◆ Defaults** overlay sets the first-run look (view, theme, tile style,
-columns, tile size) and holds "Reset look", "Reset everything" and "Clear local
-tweaks". *Smart tile styles* and *Native controls* live in **Card & Theme →
-Tiles**, with the rest of the tile settings. The **Advanced** toggle reveals the
-deeper controls in every tab and is remembered per browser.
+columns, tile size) and holds "Reset look" and "Reset everything". *Smart tile
+styles* and *Native controls* live in **Card & Theme → Tiles**, with the rest of
+the tile settings. The **Advanced** toggle reveals the deeper controls in every
+tab and is remembered per browser.
 
 The theme picker carries two rolls: **🎲 Random** lands on a built-in preset, and
 **✨ Surprise me** generates a palette from a random hue — every text colour
