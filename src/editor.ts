@@ -2074,7 +2074,7 @@ export class HADeviceDashboardEditor extends LitElement {
   /** Schematic mock of one block for the layout canvas's live preview. */
   private _blockPreview(id: TileBlockId, accent: string): TemplateResult | typeof nothing {
     switch (id) {
-      case 'name_row': return html`<div class="tp-row tp-name-row"><div class="tp-dot" style="background:#4ade80"></div><span class="tp-tog" style="background:${accent}">ON</span><span class="tp-name">Ljós yfir vaska</span></div>`;
+      case 'name_row': return html`<div class="tp-row tp-name-row"><div class="tp-dot" style="background:#4ade80"></div><span class="tp-tog" style="background:${accent}">ON</span><span class="tp-name">Ceiling light</span></div>`;
       case 'sensors':  return html`<div class="tp-row tp-chips"><span class="tp-chip">4.1 W</span><span class="tp-chip">235 V</span><span class="tp-chip">44.6 °C</span><span class="tp-chip">−54 dBm</span></div>`;
       case 'graph':    return html`<div class="tp-row"><svg viewBox="0 0 200 28" preserveAspectRatio="none" style="width:100%;height:28px;display:block"><polygon points="0,24 25,20 50,22 75,15 100,17 125,11 150,13 175,7 200,5 200,28 0,28" fill="${accent}" fill-opacity="0.15"/><polyline points="0,24 25,20 50,22 75,15 100,17 125,11 150,13 175,7 200,5" fill="none" stroke="${accent}" stroke-width="1.5" stroke-linecap="round"/></svg></div>`;
       case 'dimmer':   return html`<div class="tp-row" style="gap:8px"><span class="tp-lbl">Brightness</span><div class="tp-strack"><div class="tp-sfill" style="width:68%;background:${accent}"></div></div><span class="tp-val">68%</span></div>`;

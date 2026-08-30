@@ -500,7 +500,7 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   /** Lovelace cards to render inside a specific room's section, above its device
    *  tiles. Keyed by area name — the "mixed in among the tiles" placement. */
   area_cards?: Record<string, LovelaceCardConfig[]>;
-  /** Area filter. undefined = all; [] = none; ['Eldhús'] = specific */
+  /** Area filter. undefined = all; [] = none; ['Kitchen'] = specific */
   areas?: string[];
   /** Device IDs to hide */
   hidden_devices?: string[];

@@ -94,7 +94,7 @@ function fleet() {
 
     'binary_sensor.bedroom_switch_input_2': ent('i4', 'shelly'),
     'binary_sensor.bedroom_switch_input_3': ent('i4', 'shelly'),
-    'event.bedroom_switch_hjon_ljos': ent('i4', 'shelly'),
+    'event.bedroom_switch_bedside_lamp': ent('i4', 'shelly'),
     'binary_sensor.bedroom_switch_restart_required': ent('i4', 'shelly'),
     'binary_sensor.bedroom_switch_cloud': ent('i4', 'shelly'),
     'sensor.bedroom_switch_uptime': ent('i4', 'shelly'),
@@ -125,7 +125,7 @@ function fleet() {
 
     'binary_sensor.bedroom_switch_input_2': st('off', { device_class: 'power', friendly_name: 'Bedroom switch Input 2' }),
     'binary_sensor.bedroom_switch_input_3': st('off', { device_class: 'power', friendly_name: 'Bedroom switch Input 3' }),
-    'event.bedroom_switch_hjon_ljos': st('2026-08-15T02:59:44Z', { device_class: 'button', event_type: 'single_push', friendly_name: 'Bedroom switch Bedside lamp' }),
+    'event.bedroom_switch_bedside_lamp': st('2026-08-15T02:59:44Z', { device_class: 'button', event_type: 'single_push', friendly_name: 'Bedroom switch Bedside lamp' }),
     'binary_sensor.bedroom_switch_restart_required': st('off', { device_class: 'problem', friendly_name: 'Bedroom switch Restart required' }),
     'binary_sensor.bedroom_switch_cloud': st('on', { device_class: 'connectivity', friendly_name: 'Bedroom switch Cloud' }),
     'sensor.bedroom_switch_uptime': st('1200', { friendly_name: 'Bedroom switch Uptime' }),
@@ -196,7 +196,7 @@ try {
   console.log('\ndetectInputChannels — Gen3 i4 (binary + renamed event)');
   const i4 = byName(uni, 'Bedroom switch');
   const ch4 = h.detectInputChannels(i4, hass.states);
-  ok('the renamed event channel is present', ch4.some(c => c.entityId === 'event.bedroom_switch_hjon_ljos'),
+  ok('the renamed event channel is present', ch4.some(c => c.entityId === 'event.bedroom_switch_bedside_lamp'),
     'this is the bug that hid an i4\'s only button');
   eq('finds all three channels', ch4.length, 3);
   ok('a rename survives', ch4.some(c => c.label === 'Bedside lamp'));

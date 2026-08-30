@@ -1247,7 +1247,7 @@ function channelNumber(entityId: string): number | null {
 }
 
 /** Row label: whatever HA calls the entity, minus the device-name prefix, so a
- *  renamed input ("Hjón ljós") keeps its name instead of being relabelled. */
+ *  renamed input ("Bedroom light") keeps its name instead of being relabelled. */
 function channelLabel(friendly: string, deviceName: string, num: number | null, entityId: string): string {
   let label = friendly.trim();
   const prefix = deviceName.trim();
