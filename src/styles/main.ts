@@ -2,6 +2,11 @@ import { css } from 'lit';
 
 export const mainCss = css`
 :host {
+      /* Fill the container width. Without this the element is display:inline and
+         collapses to its content width — fine inside a grid cell that constrains
+         it, but in the card-editor preview pane (no width constraint) it left a
+         black gap to the right. */
+      display: block;
       --sc-accent:          #c98a63;
       --sc-accent-glow:     rgba(201,138,99,0.30);
       --sc-graph-line:      var(--sc-accent);
