@@ -257,6 +257,15 @@ function e(e,t,i,s){var o,a=arguments.length,n=a<3?t:null===s?s=Object.getOwnPro
       background-image: none;          /* the room photo lives on the section, not each tile */
       opacity: 1;                      /* the glass scrim owns its own alpha */
     }
+    /* …but a per-device tile photo (device_styles[id].bg_image) is more specific
+       than the room layer, so it still shows — under its own scrim so text stays
+       readable over the section photo. */
+    .area-section[style*="--area-bg-image"] .tile[style*="--sc-tile-bg-image"]::after {
+      background-image: linear-gradient(rgba(15,17,23,0.68), rgba(15,17,23,0.68)), var(--sc-tile-bg-image);
+      background-size: cover, var(--sc-tile-bg-image-sz);
+      background-position: center, right center;
+      background-repeat: no-repeat;
+    }
     /* A soft dark gradient across the bottom of the photo grounds the tiles and
        lifts white text — applied to sharp mode (ambient is already darkened). */
     .area-section[style*="--area-bg-image"]:not(.area-bg-ambient)::before {
@@ -345,7 +354,7 @@ function e(e,t,i,s){var o,a=arguments.length,n=a<3?t:null===s?s=Object.getOwnPro
     .tile::after {
       content:''; position:absolute; inset:0; z-index:-1; pointer-events:none;
       background:var(--sc-tile-bg);
-      background-image:var(--sc-tile-bg-image); background-size:var(--sc-tile-bg-image-sz); background-position:center;
+      background-image:var(--sc-tile-bg-image); background-size:var(--sc-tile-bg-image-sz); background-position:center; background-repeat:no-repeat;
       opacity:var(--sc-tile-bg-opacity,1); transition:opacity 0.15s, background 0.15s;
     }
 
