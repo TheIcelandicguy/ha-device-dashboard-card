@@ -40,6 +40,9 @@ Frontend only: no custom integration, no Python, no helper entities.
 - **Views** — filtered tabs over the same fleet, each with its own layout overrides
 - **Deep styling cascade** — device → device-type → room → view → saved style →
   style preset → global, with eight built-in themes
+- **Import from Shelly Cloud** — coming from the Shelly app? One paste of your
+  cloud key pulls each room's photo and the official product image for every
+  device onto the matching tiles
 - **Embed your own cards** — any Lovelace card above, below, or inside a room
 - **Visual editor** — full GUI editor with an Advanced toggle and a read-only YAML tab
 
@@ -537,7 +540,7 @@ Filter keys: `profiles`, `domains`, `areas`, `devices`, `exclude_devices`,
 
 | Tab | What it holds |
 |---|---|
-| **Rooms & devices** ⌂ | Sort/visibility toolbar, room and device inclusion, Favourites, **Discovery** (mode, scope, integration and domain filters) and **Extra cards** (header/footer/room) |
+| **Rooms & devices** ⌂ | Sort/visibility toolbar, room and device inclusion, Favourites, **Discovery** (mode, scope, integration and domain filters), **Import from Shelly Cloud** (room photos + official product images, see below) and **Extra cards** (header/footer/room) |
 | **Device styling** ◆ | Pick a device, style just it or every device of its type, toggle style elements, and save the result as a reusable named style. The panel scopes itself to the selected device — its own sensor chips, the blocks it can render, energy controls only when it meters energy — with a **This device / All options** switch to fall back to the full surface |
 | **Views** ☰ | Add, reorder and filter views |
 | **Header** ◈ | Title, chips, gradient, colours, orbs, effects |
@@ -570,6 +573,25 @@ import as a JSON file so a setup can move between devices or survive a reset.
 
 Not every option has a control — see the YAML-only list in
 [`docs/tools/reference.html`](docs/tools/reference.html).
+
+### Import from Shelly Cloud
+
+**Rooms & devices → Import from Shelly Cloud.** Paste your cloud server and
+*Authorization cloud key* (both at control.shelly.cloud → user settings →
+Authorization cloud key) and fetch. The card reads your Shelly app setup —
+frontend-only, straight from the browser — and offers to write:
+
+- each cloud room's photo as that room's backdrop (`area_styles`, ambient mode);
+  by default only photos you uploaded yourself, with Shelly's generic stock
+  images behind an opt-in
+- Shelly's **official product image for every device** onto its tile
+  (`device_styles`, matched by MAC — no manual pairing)
+
+Cloud rooms pair with your HA areas by name automatically (accents ignored);
+anything that doesn't match gets a dropdown. The auth key is used for the one
+fetch and never saved. Imported images stay hosted on Shelly's cloud — a custom
+room photo's URL is unlisted but reachable by anyone holding the exact link, so
+swap in a local `/local/…` photo instead if that matters to you.
 
 ---
 

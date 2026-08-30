@@ -8,6 +8,12 @@ import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAni
 import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, setBlockInLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels, deviceRelevance,
   CONFIG_KEYS, LOVELACE_KEYS } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, detectTheme, type ThemePalette } from './themes';
+import {
+  normalizeCloudServer as sciNormalizeServer, fetchCloudLists as sciFetchLists,
+  matchCloudRooms as sciMatchRooms, matchCloudDevices as sciMatchDevices,
+  resolveCloudImage as sciResolveImage, isStockRoomImage as sciIsStockImage,
+  cloudMac as sciMac, type RegistryDeviceLike as SciRegistryDevice,
+} from './shelly-cloud-import';
 import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons';
 import { EDITOR_LAYOUT } from './editor-layout';
 import { HELP_CONCEPTS, HELP_RECIPES, HELP_INTRO, type HelpTopic } from './help';
@@ -240,6 +246,18 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _deviceSearch = '';
   @state() private _styleClipFeedback = '';   // transient feedback for image-upload errors
   @state() private _openDiscDropdown: string | null = null;  // Discovery: which hide-checklist dropdown is expanded
+  // ── Shelly Cloud import (all transient; the auth key never reaches the config) ──
+  @state() private _sciServer = '';
+  @state() private _sciKey = '';
+  @state() private _sciBusy = false;
+  @state() private _sciError = '';
+  @state() private _sciDone = '';
+  @state() private _sciData: import('./shelly-cloud-import').CloudLists | null = null;
+  @state() private _sciRoomMap: Record<number, string> = {};   // cloud room id → area name ('' = skip)
+  @state() private _sciOptRooms = true;
+  @state() private _sciOptDevices = true;
+  @state() private _sciOptStock = false;   // include Shelly's generic stock room images
+  @state() private _sciOptFull = true;     // full-size photos instead of thumbnails
   @state() private _iconPickerState: {
     currentValue: string | undefined;
     isOn: boolean;
@@ -1424,6 +1442,7 @@ export class HADeviceDashboardEditor extends LitElement {
 
     return html`
       ${this._renderDiscoverySection()}
+      ${this._renderCloudImportSection()}
       ${this._renderExtraCardsSection()}
       ${this._sec('rooms','⌂','rgba(74,222,128,0.1)','#4ade80','Rooms & devices', roomsBadge, roomBody)}
       ${sidePanel}`;
@@ -1521,6 +1540,140 @@ export class HADeviceDashboardEditor extends LitElement {
     const custom = ((window as unknown as { customCards?: Array<{ type: string; name?: string }> }).customCards) ?? [];
     for (const c of custom) opts.push({ value: `custom:${c.type}`, label: `${c.name || c.type} (custom)` });
     return opts;
+  }
+
+  // ── Import from Shelly Cloud ─────────────────────────────────────
+  // Pulls the user's control.shelly.cloud setup (room photos + official
+  // per-model product images) into area_styles / device_styles. The auth key
+  // is used for one fetch and cleared — it is never written into the config.
+
+  private async _sciFetch() {
+    const server = sciNormalizeServer(this._sciServer);
+    if (!server) { this._sciError = 'That does not look like a server address — e.g. shelly-59-eu.shelly.cloud'; return; }
+    if (!this._sciKey.trim()) { this._sciError = 'Paste your authorization cloud key first.'; return; }
+    this._sciBusy = true; this._sciError = ''; this._sciDone = ''; this._sciData = null;
+    try {
+      const data = await sciFetchLists(server, this._sciKey.trim());
+      this._sciData = data;
+      const auto = sciMatchRooms(data.rooms, this._getAreas().map(a => a.name));
+      const map: Record<number, string> = {};
+      for (const r of data.rooms) map[r.id] = auto.get(r.id) ?? '';
+      this._sciRoomMap = map;
+    } catch (e) {
+      this._sciError = e instanceof Error ? e.message : String(e);
+    } finally {
+      this._sciBusy = false;
+    }
+  }
+
+  private _sciApply() {
+    const data = this._sciData;
+    const server = sciNormalizeServer(this._sciServer);
+    if (!data || !server || !this._config) return;
+    let rooms = 0, devices = 0;
+    const updated: Record<string, unknown> = { ...this._config };
+
+    if (this._sciOptRooms) {
+      const areaStyles = { ...(this._config.area_styles ?? {}) } as Record<string, Record<string, unknown>>;
+      for (const room of data.rooms) {
+        const area = this._sciRoomMap[room.id];
+        if (!area || !room.image) continue;
+        if (!this._sciOptStock && sciIsStockImage(room.image)) continue;
+        const url = sciResolveImage(room.image, server, this._sciOptFull);
+        if (!url) continue;
+        areaStyles[area] = { ...(areaStyles[area] ?? {}), bg_image: url,
+          bg_image_mode: (areaStyles[area] as { bg_image_mode?: string } | undefined)?.bg_image_mode ?? 'ambient' };
+        rooms++;
+      }
+      if (Object.keys(areaStyles).length) updated['area_styles'] = areaStyles;
+    }
+
+    if (this._sciOptDevices) {
+      const registry = Object.values(((this.hass as unknown as { devices?: Record<string, SciRegistryDevice> })?.devices) ?? {});
+      const matches = sciMatchDevices(data.devices, registry);
+      const deviceStyles = { ...(this._config.device_styles ?? {}) } as Record<string, Record<string, unknown>>;
+      for (const dev of data.devices) {
+        const mac = sciMac(dev.id);
+        if (!mac || !dev.image) continue;
+        const url = sciResolveImage(dev.image, server);
+        const ids = matches.get(mac);
+        if (!url || !ids) continue;
+        for (const id of ids) {
+          deviceStyles[id] = { ...(deviceStyles[id] ?? {}), bg_image: url,
+            bg_image_size: (deviceStyles[id] as { bg_image_size?: string } | undefined)?.bg_image_size ?? 'contain' };
+        }
+        devices++;
+      }
+      if (Object.keys(deviceStyles).length) updated['device_styles'] = deviceStyles;
+    }
+
+    this._emitConfig(updated as HADeviceDashboardConfig);
+    this._sciDone = `Imported ${rooms} room photo${rooms === 1 ? '' : 's'} and product images for ${devices} device${devices === 1 ? '' : 's'}.`;
+    this._sciKey = '';        // credential is transient — drop it as soon as it has served
+    this._sciData = null;
+  }
+
+  private _renderCloudImportSection(): TemplateResult {
+    const data = this._sciData;
+    const areaNames = this._getAreas().map(a => a.name);
+    const registry = Object.values(((this.hass as unknown as { devices?: Record<string, SciRegistryDevice> })?.devices) ?? {});
+    const matchCount = data ? sciMatchDevices(data.devices, registry).size : 0;
+    const customRooms = data ? data.rooms.filter(r => r.image && !sciIsStockImage(r.image)).length : 0;
+
+    const body = html`
+      <div class="dp-hint-inline">Pull your Shelly app setup into this card: each room's photo and the official
+        product image for every device. Find both fields at <b>control.shelly.cloud → user settings →
+        Authorization cloud key</b>. The key is used once to read your rooms and is never saved.</div>
+      <div class="field">
+        <div class="field-lbl">Cloud server</div>
+        <input type="text" class="inline-text" placeholder="shelly-59-eu.shelly.cloud"
+          .value=${this._sciServer} @input=${(e: Event) => { this._sciServer = (e.target as HTMLInputElement).value; }}>
+      </div>
+      <div class="field">
+        <div class="field-lbl">Authorization cloud key</div>
+        <input type="password" class="inline-text" placeholder="Paste the key…" autocomplete="off"
+          .value=${this._sciKey} @input=${(e: Event) => { this._sciKey = (e.target as HTMLInputElement).value; }}>
+      </div>
+      <button class="btn-copy" ?disabled=${this._sciBusy} @click=${() => this._sciFetch()}>
+        ${this._sciBusy ? 'Fetching…' : '☁ Fetch my Shelly setup'}</button>
+      ${this._sciError ? html`<div class="input-err">${this._sciError}</div>` : nothing}
+      ${this._sciDone ? html`<div class="dp-hint-inline">✓ ${this._sciDone}</div>` : nothing}
+
+      ${data ? html`
+        <div class="dp-hint-inline" style="margin-top:8px">Found <b>${data.rooms.length}</b> rooms
+          (${customRooms} with a custom photo) and <b>${data.devices.length}</b> devices,
+          <b>${matchCount}</b> of them matched to Home Assistant devices. Pair each cloud room
+          with a room here — unmatched ones are skipped.</div>
+        ${data.rooms.map(room => html`
+          <div class="field" style="display:flex;align-items:center;gap:8px">
+            <span style="flex:1;min-width:0">${room.name}
+              ${room.image && !sciIsStockImage(room.image) ? ' 📷' : ''}</span>
+            <select class="inline-text" style="flex:1"
+              .value=${this._sciRoomMap[room.id] ?? ''}
+              @change=${(e: Event) => { this._sciRoomMap = { ...this._sciRoomMap, [room.id]: (e.target as HTMLSelectElement).value }; }}>
+              <option value="">— skip —</option>
+              ${areaNames.map(n => html`<option value=${n} ?selected=${this._sciRoomMap[room.id] === n}>${n}</option>`)}
+            </select>
+          </div>`)}
+        ${([
+          ['Room photos', this._sciOptRooms, (v: boolean) => { this._sciOptRooms = v; }],
+          ["Include Shelly's generic stock room images", this._sciOptStock, (v: boolean) => { this._sciOptStock = v; }],
+          ['Official product image on every device tile', this._sciOptDevices, (v: boolean) => { this._sciOptDevices = v; }],
+          ['Full-size photos (thumbnails when off)', this._sciOptFull, (v: boolean) => { this._sciOptFull = v; }],
+        ] as Array<[string, boolean, (v: boolean) => void]>).map(([lbl, val, set]) => html`
+          <div class="tog-row" style="border:none;padding:4px 0 0">
+            <div class="tog-lbl">${lbl}</div>
+            <label class="sw"><input type="checkbox" .checked=${val}
+              @change=${(e: Event) => set((e.target as HTMLInputElement).checked)}>
+              <span class="sw-t"></span><span class="sw-b"></span></label>
+          </div>`)}
+        <div class="dp-hint-inline">Images stay hosted on Shelly's cloud — nothing is copied into the config.
+          A custom room photo's URL is unlisted but not private: anyone with the exact link can view it.</div>
+        <button class="btn-copy" @click=${() => this._sciApply()}>⤵ Apply to this card</button>
+      ` : nothing}`;
+
+    return this._sec('cloud-import', '☁', 'rgba(62,161,245,0.12)', '#3ea1f5', 'Import from Shelly Cloud',
+      this._sciDone ? this._badge('imported', '#3ea1f5', 'rgba(62,161,245,0.12)') : nothing, body);
   }
 
   private _renderExtraCardsSection(): TemplateResult {

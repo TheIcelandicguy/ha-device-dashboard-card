@@ -128,6 +128,16 @@ Universal mode surfaces everything, including things that are not really devices
 3. Do the same in Hide entity types for whole domains such as update or camera.
 4. Still too much? Drop the scope from Everything to Real devices.
 
+### Import your Shelly app setup
+
+Coming from the Shelly app? The card can pull each room's photo and the official product image for every device from your Shelly Cloud account. The auth key is used for the one fetch and never saved; imported images stay hosted on Shelly's cloud.
+
+1. Get your key: control.shelly.cloud → user settings → Authorization cloud key. Note the server shown next to it.
+2. Rooms & devices → Import from Shelly Cloud → paste both → Fetch my Shelly setup.
+3. Pair any cloud rooms that did not auto-match with a room here (name matching ignores accents).
+4. Pick what to import — room photos, product images on tiles, full-size vs thumbnails — and Apply.
+5. A custom room photo's cloud URL is unlisted but not private. Swap in a /local/… photo later if that matters.
+
 ### Give one room its own look
 
 Room styling is keyed by the room name, so renaming an area in Home Assistant orphans it — the Conflicts panel will tell you.

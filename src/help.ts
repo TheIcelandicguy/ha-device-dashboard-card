@@ -149,6 +149,18 @@ export const HELP_RECIPES: HelpTopic[] = [
     ],
   },
   {
+    id: 'cloud-import',
+    title: 'Import your Shelly app setup',
+    body: ['Coming from the Shelly app? The card can pull each room\'s photo and the official product image for every device from your Shelly Cloud account. The auth key is used for the one fetch and never saved; imported images stay hosted on Shelly\'s cloud.'],
+    steps: [
+      'Get your key: control.shelly.cloud → user settings → Authorization cloud key. Note the server shown next to it.',
+      'Rooms & devices → Import from Shelly Cloud → paste both → Fetch my Shelly setup.',
+      'Pair any cloud rooms that did not auto-match with a room here (name matching ignores accents).',
+      'Pick what to import — room photos, product images on tiles, full-size vs thumbnails — and Apply.',
+      'A custom room photo\'s cloud URL is unlisted but not private. Swap in a /local/… photo later if that matters.',
+    ],
+  },
+  {
     id: 'room-style',
     title: 'Give one room its own look',
     body: ['Room styling is keyed by the room name, so renaming an area in Home Assistant orphans it — the Conflicts panel will tell you.'],

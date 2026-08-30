@@ -149,7 +149,7 @@ mkdirSync(OUT, { recursive: true });
 try {
   execFileSync(process.execPath, [
     join('node_modules', 'typescript', 'bin', 'tsc'),
-    'src/helpers.ts', 'src/cascade.ts', 'src/attention.ts', '--outDir', OUT,
+    'src/helpers.ts', 'src/cascade.ts', 'src/attention.ts', 'src/shelly-cloud-import.ts', '--outDir', OUT,
     '--module', 'commonjs', '--target', 'es2020', '--skipLibCheck', '--moduleResolution', 'node',
   ], { stdio: 'inherit' });
   // The project is "type": "module", which would make these .js files ESM.
@@ -526,6 +526,56 @@ try {
   eq('1.10 sorts above 1.9, not below', att.compareVersions('1.10.0', '1.9.9') > 0, true);
   eq('devices with no version are skipped',
     att.firmwareGroups([D('No version', [], undefined)]).length, 0);
+
+  console.log('\nshelly-cloud-import — server + image URL resolution');
+  const sci = req(join(process.cwd(), OUT, 'shelly-cloud-import.js'));
+  eq('bare host normalizes', sci.normalizeCloudServer('shelly-59-eu.shelly.cloud'), 'https://shelly-59-eu.shelly.cloud');
+  eq('device cloud-config paste (port + /jrpc) normalizes',
+    sci.normalizeCloudServer('shelly-59-eu.shelly.cloud:6022/jrpc'), 'https://shelly-59-eu.shelly.cloud');
+  eq('full URL paste normalizes', sci.normalizeCloudServer('https://shelly-1-eu.shelly.cloud/'), 'https://shelly-1-eu.shelly.cloud');
+  eq('garbage is rejected', sci.normalizeCloudServer('not a server'), undefined);
+  const SRV = 'https://shelly-59-eu.shelly.cloud';
+  eq('stock room image goes to the public CDN',
+    sci.resolveCloudImage('images/room_def/living_room_img_def_m.jpg', SRV),
+    'https://control.shelly.cloud/images/room_def/living_room_img_def_m.jpg');
+  eq('fullSize swaps _m for _l on stock images',
+    sci.resolveCloudImage('images/room_def/living_room_img_def_m.jpg', SRV, true),
+    'https://control.shelly.cloud/images/room_def/living_room_img_def_l.jpg');
+  eq('product image resolves (no size variants)',
+    sci.resolveCloudImage('images/device_images/SNSW-001P16EU.png', SRV, true),
+    'https://control.shelly.cloud/images/device_images/SNSW-001P16EU.png');
+  eq('custom upload goes to the user shard under /shelly_files/',
+    sci.resolveCloudImage('assets/user_images/hash/room/thumb_abc.jpg', SRV),
+    'https://shelly-59-eu.shelly.cloud/shelly_files/assets/user_images/hash/room/thumb_abc.jpg');
+  eq('fullSize drops the thumb_ prefix on custom uploads',
+    sci.resolveCloudImage('assets/user_images/hash/room/thumb_abc.jpg', SRV, true),
+    'https://shelly-59-eu.shelly.cloud/shelly_files/assets/user_images/hash/room/abc.jpg');
+  eq('unknown path shapes resolve to nothing', sci.resolveCloudImage('weird/thing.png', SRV), undefined);
+  ok('stock detector', sci.isStockRoomImage('images/room_def/x.jpg') && !sci.isStockRoomImage('assets/user_images/h/room/t.jpg'));
+
+  console.log('\nshelly-cloud-import — room + device matching');
+  const rooms = [
+    { id: 1, name: 'Stofa' }, { id: 2, name: 'Bílskúr' }, { id: 3, name: 'Hol' }, { id: 4, name: 'Wc' },
+  ];
+  const areas = ['Living Room', 'Bilskur', 'Hol'];
+  const rm = sci.matchCloudRooms(rooms, areas);
+  eq('exact name pairs', rm.get(3), 'Hol');
+  eq('accents are ignored (Bílskúr ↔ Bilskur)', rm.get(2), 'Bilskur');
+  eq('no match maps to undefined', rm.get(1), undefined);
+  eq('cloud MAC of a channel id strips the suffix', sci.cloudMac('d48afc7d9a2c_1'), 'd48afc7d9a2c');
+  eq('virtual-group ids are not MACs', sci.cloudMac('group-3'), undefined);
+  const registry = [
+    { id: 'ha1', connections: [['mac', 'AA:BB:CC:00:00:01']] },
+    { id: 'ha1shadow', identifiers: [['shelly', 'AABBCC000001']] },
+    { id: 'ha2', connections: [['mac', 'aa:bb:cc:00:00:02']] },
+    { id: 'other', identifiers: [['hue', 'abc']] },
+  ];
+  const dm = sci.matchCloudDevices(
+    [{ id: 'aabbcc000001' }, { id: 'aabbcc000002_1' }, { id: 'ffffff000000' }], registry);
+  eq('MAC matches every registry row that carries it (connection AND identifier)',
+    dm.get('aabbcc000001').sort(), ['ha1', 'ha1shadow']);
+  eq('channel-suffixed cloud id still matches', dm.get('aabbcc000002'), ['ha2']);
+  eq('unknown MACs are absent', dm.has('ffffff000000'), false);
 
 } finally {
   rmSync(OUT, { recursive: true, force: true });
