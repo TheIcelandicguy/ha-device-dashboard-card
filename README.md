@@ -375,12 +375,12 @@ They differ in reach, because reach is what the DOM allows:
   card-level palette colours in `style` — a view is the more specific layer — the
   same way picking a theme in the editor clears them. Non-colour keys in `style`
   (radius, gap, fonts, sizes, header geometry) are untouched.
-- A **room theme** repaints what the room's container encloses: tiles, text,
-  accent, online/offline/power and the room header — 14 of the 18 palette keys.
-  `card_bg`, `header_bg`, `header_text_color` and `header_orb_color` describe the
-  card's own background and header, which sit outside every room, so they are
-  skipped. A room's individual colour fields (`accentColor`, `tileBgColor`, …)
-  still override its theme key by key.
+- A **room theme** repaints what the room's container encloses: the room block's
+  background, tiles, text, accent, online/offline/power and the room header — 15
+  of the 18 palette keys. Only `header_bg`, `header_text_color` and
+  `header_orb_color` are skipped; they describe the *card's* header, which sits
+  outside every room. A room's individual colour fields (`bgColor`,
+  `accentColor`, `tileBgColor`, …) still override its theme key by key.
 
 ### `style` — global tokens
 

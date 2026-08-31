@@ -3064,6 +3064,7 @@ export class HADeviceDashboardEditor extends LitElement {
         ${sectionLbl('Tile appearance')}
         ${colorRow('Tile background', 'tileBgColor', '#1c1c1e')}
         ${this._adv(html`
+        ${colorRow('Room block background', 'bgColor', 'transparent')}
         ${colorRow('Tile border', 'tileBorderColor', 'rgba(255,255,255,0.07)')}
         ${slRow('Tile corner radius', 'tileBorderRadius', 0, 20, 1, 12, 'px')}
         ${slRow('Tile opacity', 'tileOpacity', 0, 100, 1, 100, '%')}

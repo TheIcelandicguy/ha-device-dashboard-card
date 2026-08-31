@@ -3006,12 +3006,17 @@ export class HADeviceDashboard extends LitElement {
   /**
    * Expand a room's `theme` into the room container's scoped CSS variables.
    *
-   * Only what the container encloses can be themed. Four of the palette's 18
-   * keys describe card-level surfaces that sit outside every room — `card_bg`
-   * and the three `header_*` keys are the card's own background and header — so
-   * they are deliberately skipped rather than emitted where they would do
-   * nothing (or worse, leak onto a child that happens to read the variable).
-   * A *view* theme has no such limit; it re-bases the whole card.
+   * Only what the container encloses can be themed. The three `header_*` keys
+   * describe the CARD's header, which sits outside every room, so they are
+   * skipped rather than emitted where they would do nothing (or worse, leak onto
+   * a child that happens to read the variable). A *view* theme has no such limit;
+   * it re-bases the whole card.
+   *
+   * `card_bg` does apply, as the room block's own background: the block is the
+   * surface this room's tiles sit on, so it is the room's equivalent of the card
+   * surface. Without it a themed room left its block transparent and a dark room
+   * theme read as dark tiles floating on the card's light background. An explicit
+   * `bgColor` on the room still overrides it — this runs first by design.
    *
    * Mirrors the same key → variable mapping as `_buildCardStyles`, including
    * accent's two derived variables, so a room theme and a card theme render
@@ -3021,6 +3026,7 @@ export class HADeviceDashboard extends LitElement {
     const theme = cascade.overrideTheme(undefined, areaStyle);
     if (!theme) return;
     const p = THEME_PRESETS[theme];
+    if (p.card_bg) styleObj['backgroundColor'] = p.card_bg;
     if (p.accent_color) {
       styleObj['--sc-accent']      = p.accent_color;
       styleObj['--sc-graph-line']  = p.accent_color;
@@ -3054,6 +3060,14 @@ export class HADeviceDashboard extends LitElement {
     // key by key — a room can take a preset and bend one colour out of it.
     this._applyAreaTheme(styleObj, areaStyle);
     if (areaStyle) {
+      // The room block's own background. Painted on the element, so it sits UNDER
+      // the ::before photo layer rather than competing with it — the old code made
+      // them exclusive (`bgImage ? … : bgColor`), which is why a colour plus a
+      // photo used to be an either/or. Dropped entirely in the 40cc8a4 refactor
+      // when that branch was rewritten for the new bg_image vars, and dead since:
+      // still typed, still documented in README and card-reference, rendering
+      // nothing. This restores it.
+      if (areaStyle.bgColor) styleObj['backgroundColor'] = areaStyle.bgColor;
       if (areaStyle.borderColor || areaStyle.borderWidth) {
         styleObj['border'] = `${areaStyle.borderWidth ?? 1}px ${areaStyle.borderStyle ?? 'solid'} ${areaStyle.borderColor ?? 'var(--divider-color)'}`;
       }

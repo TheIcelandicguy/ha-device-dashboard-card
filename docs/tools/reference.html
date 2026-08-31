@@ -284,7 +284,7 @@ const YAMLONLY = [
   ['style_presets','Record<TileStyle, StylePreset>','none','Per-tile-style presets (variant / sensors / tile_layout / elements) applied to every tile rendered in that style. Sits below device/area overrides in the cascade.','global'],
   ['style.button_shape / button_variant / button_size','ButtonShape / ButtonVariant / ButtonSize','pill / fill / md','Global ON/OFF button styling. Only the per-room equivalents (area_styles[name].button*) have editor controls.','global'],
   ['views[i].sort_by','SortBy','inherit','Per-view device sort order. The editor exposes sort_by globally only.','view'],
-  ['area_styles[name].bgColor','string','inherit','Room block background colour.','area'],
+  ['area_styles[name].bgColor','string','inherit','Room block background colour. Sits under the room backdrop photo, and overrides what a room theme paints there.','area'],
   ['area_styles[name].borderColor','string','inherit','Room block border colour (the editor exposes only its width and radius).','area'],
   ['area_styles[name].borderStyle','\'solid\' | \'dashed\' | \'dotted\'','solid','Room block border style.','area'],
   ['area_styles[name].headerBgDir','string','135deg','Direction of the room-header gradient.','area'],

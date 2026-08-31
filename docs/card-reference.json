@@ -246,7 +246,7 @@
       { "key": "views[i].sort_by", "type": "SortBy", "default": "inherit", "fn": "Per-view device sort order. The editor exposes sort_by globally only." }
     ],
     "area": [
-      { "key": "area_styles[name].bgColor", "type": "string", "default": "inherit", "fn": "Room block background colour." },
+      { "key": "area_styles[name].bgColor", "type": "string", "default": "inherit", "fn": "Room block background colour. Sits under the room backdrop photo, and overrides what a room `theme` paints there." },
       { "key": "area_styles[name].borderColor", "type": "string", "default": "inherit", "fn": "Room block border colour (the editor exposes only its width and radius)." },
       { "key": "area_styles[name].borderStyle", "type": "'solid' | 'dashed' | 'dotted'", "default": "solid", "fn": "Room block border style." },
       { "key": "area_styles[name].headerBgDir", "type": "string", "default": "135deg", "fn": "Direction of the room-header gradient." },
@@ -453,7 +453,7 @@
           { "control": "Energy shows", "fn": "Energy window for this room (Total / Today / Week / Month); the room-header Energy chip sums its devices over that window", "key": "area_styles[name].energy_period", "scope": "area", "default": "inherit", "advanced": false },
           { "control": "Sensor chips", "fn": "Whitelist of sensor chips for this room", "key": "area_styles[name].sensors", "scope": "area", "default": "inherit", "advanced": false },
           { "control": "Button shape / variant / size", "fn": "ON/OFF button style for this room", "key": "area_styles[name].buttonShape / buttonVariant / buttonSize", "scope": "area", "default": "pill / fill / md", "advanced": true },
-          { "control": "Colour theme", "fn": "Palette for this room — tiles, text, accent and room header. The card background and the card header are not inside a room, so those four palette keys are skipped. Individual room colours still override it", "key": "area_styles[name].theme", "scope": "area", "default": "inherit", "advanced": false },
+          { "control": "Colour theme", "fn": "Palette for this room — tiles, text, accent and room header. The card's own header is not inside a room, so those three palette keys are skipped; `card_bg` paints the room block. Individual room colours still override it", "key": "area_styles[name].theme", "scope": "area", "default": "inherit", "advanced": false },
           { "control": "Room reset ↺", "fn": "Clear this room's style block", "key": "area_styles[name] → del", "scope": "area", "default": "—", "advanced": false }
         ]}
       ]},

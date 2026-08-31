@@ -117,10 +117,11 @@ export interface AreaStyle {
    *  the palette", which is a card-level idea, so it is ignored here (the room
    *  falls through to the view/card theme).
    *
-   *  Four of the palette's 18 keys are card-level surfaces that no room contains
-   *  — `card_bg`, `header_bg`, `header_text_color`, `header_orb_color` — so they
-   *  are skipped when a room theme is expanded. The other 14 (tiles, text,
-   *  accent, online/offline/power, area header) scope to the room's container. */
+   *  Three of the palette's 18 keys describe the CARD's header — `header_bg`,
+   *  `header_text_color`, `header_orb_color` — which no room contains, so they
+   *  are skipped when a room theme is expanded. The other 15 scope to the room's
+   *  container, `card_bg` among them: it paints the room block, this room's
+   *  equivalent of the card surface. `bgColor` below still overrides that. */
   theme?: ThemePreset;
   // Background
   bgColor?: string;
