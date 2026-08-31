@@ -80,6 +80,8 @@ Picking a theme clears those overrides, so the editor offers to save your curren
 
 Older configs wrote the whole palette into `style`, which shadowed the theme and made switching it do nothing. Those are migrated automatically on load: a palette that exactly matches a preset collapses back to the theme name, while a partial palette is left alone as the genuine override it is.
 
+A **view** and a **room** can each take a theme of their own, resolved room → view → card. A view theme repaints the whole card, header included, while that view is showing, and outranks the colours in `style`. A room theme repaints what the room contains — tiles, text, accent, its own header — but not the card background or the card header, which no room encloses; the room's individual colour fields still override it key by key.
+
 ### Energy: totals versus windows
 
 By default the energy chip shows a device's lifetime total, straight from its own sensor. Switch it to Today, This week or This month and the card asks the recorder for consumption over that window instead — no helper entities required.
@@ -161,7 +163,7 @@ This mirrors the physical button rather than driving it — both paths keep work
 
 The theme picker can roll a look for you, and keep the ones you like as named palettes.
 
-1. ◆ Defaults → Colour theme.
+1. Card & Theme → Colour theme (also under ◆ Defaults).
 2. 🎲 Random lands on one of the built-in presets.
 3. ✨ Surprise me generates a palette from a random hue instead. Every text colour is contrast-checked against the surface behind it, so a roll is never unreadable.
 4. 💾 Save keeps the colours you are looking at under a name — including a preset you have tweaked. Saved palettes appear as ★ swatches in the picker; ✕ on a swatch forgets it.

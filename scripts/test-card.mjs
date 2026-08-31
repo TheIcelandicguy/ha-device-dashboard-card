@@ -360,6 +360,32 @@ try {
       cas.columnsFor({ columns: 3 }, { columns: 4 }, undefined),
       cas.columnsFor({ columns: 3 }, { columns: 4 }, { columns: 5 })], [3, 4, 5]);
 
+  console.log('\ncascade — theme');
+  eq('nothing set: the card theme stands',
+    cas.themeFor({ theme: 'warm_dusk' }, undefined, undefined), 'warm_dusk');
+  eq('a view re-bases the palette',
+    cas.themeFor({ theme: 'warm_dusk' }, { theme: 'midnight_purple' }, undefined), 'midnight_purple');
+  eq('a room beats the view',
+    cas.themeFor({ theme: 'warm_dusk' }, { theme: 'midnight_purple' }, { theme: 'nordic_warm' }), 'nordic_warm');
+  eq('a room theme alone beats the card',
+    cas.themeFor({ theme: 'warm_dusk' }, undefined, { theme: 'nordic_warm' }), 'nordic_warm');
+  eq('no theme anywhere is undefined, not a default',
+    cas.themeFor({}, undefined, undefined), undefined);
+  // 'custom' means "the colours in the card's `style` ARE the palette" — a card-level
+  // idea. A view/room carries no `style`, so it must fall through, not blank out.
+  eq("a view's 'custom' falls through to the card",
+    cas.themeFor({ theme: 'warm_dusk' }, { theme: 'custom' }, undefined), 'warm_dusk');
+  eq("a room's 'custom' falls through to the view",
+    cas.themeFor({ theme: 'warm_dusk' }, { theme: 'midnight_purple' }, { theme: 'custom' }), 'midnight_purple');
+  eq('the card may still be custom itself',
+    cas.themeFor({ theme: 'custom' }, undefined, undefined), 'custom');
+  eq('overrideTheme reports only what is BELOW the card',
+    [cas.overrideTheme(undefined, undefined),
+      cas.overrideTheme({ theme: 'midnight_purple' }, undefined),
+      cas.overrideTheme(undefined, { theme: 'nordic_warm' }),
+      cas.overrideTheme({ theme: 'custom' }, undefined)],
+    [undefined, 'midnight_purple', 'nordic_warm', undefined]);
+
   console.log('\ncascade — elements');
   eq('unset elements are shown', cas.elementVisible(cin({}), 'toggle'), true);
   eq('a preset can hide one', cas.elementVisible(cin({

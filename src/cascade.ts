@@ -17,7 +17,7 @@
  */
 import type {
   HADeviceDashboardConfig, HADevice, DeviceProfile, TileStyle, TileLayout,
-  ViewConfig, EnergyPeriod, CustomStyleDef, PowerMonitorVariant,
+  ViewConfig, EnergyPeriod, CustomStyleDef, PowerMonitorVariant, ThemePreset,
 } from './types';
 import { PROFILE_DEFAULT_BLOCKS, PROFILE_DEFAULT_SENSORS, profileDefaultTileStyle } from './helpers';
 
@@ -183,4 +183,44 @@ export function columnsFor(
   area?: { columns?: number },
 ): number {
   return area?.columns ?? view?.columns ?? config.columns ?? 3;
+}
+
+/**
+ * The palette override in force below the card, room first: room → view. Returns
+ * undefined when neither sets one and the card's own `theme` stands.
+ *
+ * 'custom' is not an override. It means "the colours in the card's `style` ARE
+ * the palette", which only makes sense at card level — a view and a room have no
+ * `style` object of their own to hold one — so it falls through rather than
+ * blanking the palette.
+ */
+export function overrideTheme(
+  view?: { theme?: ThemePreset },
+  area?: { theme?: ThemePreset },
+): Exclude<ThemePreset, 'custom'> | undefined {
+  // Per LAYER, not once over the winner: `area?.theme ?? view?.theme` would let a
+  // room's 'custom' swallow the view's real theme, since 'custom' is a value and
+  // ?? only skips undefined. Each layer either overrides or steps aside.
+  const pick = (t?: ThemePreset) => (t && t !== 'custom' ? t : undefined);
+  return pick(area?.theme) ?? pick(view?.theme);
+}
+
+/**
+ * Which palette applies, most specific first: room → view → card.
+ *
+ * Shorter than the other cascades on purpose — there is no device or profile
+ * layer, because the per-device colour override is a single `color` key, not a
+ * palette, and `ProfileStyle` deliberately carries only that same key.
+ *
+ * The result names a preset; expanding it into CSS variables is the renderer's
+ * job, and *where* it can be expanded differs by layer. A view theme reaches
+ * every variable including the card header; a room theme reaches only what the
+ * room's container encloses — see the note on `AreaStyle.theme`.
+ */
+export function themeFor(
+  config: HADeviceDashboardConfig,
+  view?: { theme?: ThemePreset },
+  area?: { theme?: ThemePreset },
+): ThemePreset | undefined {
+  return overrideTheme(view, area) ?? config.theme;
 }

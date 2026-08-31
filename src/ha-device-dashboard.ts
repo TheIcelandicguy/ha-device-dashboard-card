@@ -3,10 +3,10 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { styleMap } from 'lit/directives/style-map.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { HomeAssistant, fireEvent } from 'custom-card-helpers';
-import { HADeviceDashboardConfig, HADevice, TileBlockId, DeviceProfileResult, EntityAnimationType, TileStyle, PowerMonitorVariant, HassAttrs, ViewConfig, CustomStyleDef, TileLayout, EnergyPeriod, DetailHistoryRange, InputActionConfig, InputHoldConfig } from './types';
+import { HADeviceDashboardConfig, HADevice, TileBlockId, DeviceProfileResult, EntityAnimationType, TileStyle, PowerMonitorVariant, HassAttrs, ViewConfig, CustomStyleDef, TileLayout, EnergyPeriod, DetailHistoryRange, InputActionConfig, InputHoldConfig, AreaStyle } from './types';
 import type { LovelaceCardConfig } from 'custom-card-helpers';
 import { BUNDLED_FONT_CSS } from './fonts';
-import { THEME_PRESETS } from './themes';
+import { THEME_PRESETS, THEME_KEYS } from './themes';
 import { mainCss } from './styles/main';
 import { tilesCss } from './styles/tiles';
 import { detailCss } from './styles/detail';
@@ -128,10 +128,15 @@ export class HADeviceDashboard extends LitElement {
   // Card-level CSS var map — recomputed only when config changes.
   // Rebuilding this every render would re-stringify embedded data URLs
   // (card_bg_image / tile_bg_image), which can be ~500 KB each.
+  // Both caches key on the active VIEW as well as the config: a view can carry
+  // its own `theme`, so switching tabs changes the palette without the config
+  // object ever changing identity.
   private _cachedCardStyles: Record<string, string> | null = null;
   private _cardStylesConfigRef: HADeviceDashboardConfig | null = null;
+  private _cardStylesViewRef: string | null = null;
   private _cachedStyleTokens: NonNullable<HADeviceDashboardConfig['style']> | null = null;
   private _styleTokensConfigRef: HADeviceDashboardConfig | null = null;
+  private _styleTokensViewRef: string | null = null;
 
   private static readonly BRIGHTNESS_MAX = 255;
 
@@ -491,14 +496,31 @@ export class HADeviceDashboard extends LitElement {
    * colours are the theme" and applies no base.
    */
   private _styleTokens(): NonNullable<HADeviceDashboardConfig['style']> {
-    if (this._styleTokensConfigRef === this._config && this._cachedStyleTokens) {
+    const viewTheme = cascade.overrideTheme(this._getActiveView() ?? undefined);
+    const viewKey = viewTheme ?? null;
+    if (this._styleTokensConfigRef === this._config
+        && this._styleTokensViewRef === viewKey
+        && this._cachedStyleTokens) {
       return this._cachedStyleTokens;
     }
     const explicit = this._config.style ?? {};
-    const theme = this._config.theme;
-    const preset = theme && theme !== 'custom' ? THEME_PRESETS[theme] : undefined;
-    const tokens = preset ? { ...preset, ...explicit } : explicit;
+    let tokens: NonNullable<HADeviceDashboardConfig['style']>;
+    if (viewTheme) {
+      // A view theme RE-BASES the palette rather than sitting under `style`:
+      // the view is the more specific layer, so it wins on the palette keys, the
+      // same way picking a theme in the editor clears them out of `style`. Every
+      // non-palette key — radius, gap, fonts, sizes, header geometry — survives,
+      // because those are not colours and the view is not claiming them.
+      const kept = { ...explicit } as Record<string, unknown>;
+      for (const k of THEME_KEYS) delete kept[k];
+      tokens = { ...THEME_PRESETS[viewTheme], ...kept } as NonNullable<HADeviceDashboardConfig['style']>;
+    } else {
+      const theme = this._config.theme;
+      const preset = theme && theme !== 'custom' ? THEME_PRESETS[theme] : undefined;
+      tokens = preset ? { ...preset, ...explicit } : explicit;
+    }
     this._styleTokensConfigRef = this._config;
+    this._styleTokensViewRef = viewKey;
     this._cachedStyleTokens = tokens;
     return tokens;
   }
@@ -508,7 +530,10 @@ export class HADeviceDashboard extends LitElement {
    * Memoized against config identity — recomputed only when config changes.
    */
   private _buildCardStyles(): Record<string, string> {
-    if (this._cardStylesConfigRef === this._config && this._cachedCardStyles) {
+    const viewKey = cascade.overrideTheme(this._getActiveView() ?? undefined) ?? null;
+    if (this._cardStylesConfigRef === this._config
+        && this._cardStylesViewRef === viewKey
+        && this._cachedCardStyles) {
       return this._cachedCardStyles;
     }
     const st = this._styleTokens();
@@ -605,6 +630,7 @@ export class HADeviceDashboard extends LitElement {
     }
 
     this._cardStylesConfigRef = this._config;
+    this._cardStylesViewRef = cascade.overrideTheme(this._getActiveView() ?? undefined) ?? null;
     this._cachedCardStyles = s;
     return s;
   }
@@ -2977,6 +3003,44 @@ export class HADeviceDashboard extends LitElement {
     }
   }
 
+  /**
+   * Expand a room's `theme` into the room container's scoped CSS variables.
+   *
+   * Only what the container encloses can be themed. Four of the palette's 18
+   * keys describe card-level surfaces that sit outside every room — `card_bg`
+   * and the three `header_*` keys are the card's own background and header — so
+   * they are deliberately skipped rather than emitted where they would do
+   * nothing (or worse, leak onto a child that happens to read the variable).
+   * A *view* theme has no such limit; it re-bases the whole card.
+   *
+   * Mirrors the same key → variable mapping as `_buildCardStyles`, including
+   * accent's two derived variables, so a room theme and a card theme render
+   * identically.
+   */
+  private _applyAreaTheme(styleObj: Record<string, string>, areaStyle: AreaStyle | undefined): void {
+    const theme = cascade.overrideTheme(undefined, areaStyle);
+    if (!theme) return;
+    const p = THEME_PRESETS[theme];
+    if (p.accent_color) {
+      styleObj['--sc-accent']      = p.accent_color;
+      styleObj['--sc-graph-line']  = p.accent_color;
+      styleObj['--sc-accent-glow'] = `${p.accent_color}59`;
+    }
+    if (p.tile_bg)           styleObj['--sc-tile-bg']           = p.tile_bg;
+    if (p.tile_border)       styleObj['--sc-tile-border']       = p.tile_border;
+    if (p.tile_hover_bg)     styleObj['--sc-tile-hover-bg']     = p.tile_hover_bg;
+    if (p.tile_hover_shadow) styleObj['--sc-tile-hover-shad']   = p.tile_hover_shadow;
+    if (p.tile_sensor_bg)    styleObj['--sc-sensor-bg']         = p.tile_sensor_bg;
+    if (p.tile_exp_bg)       styleObj['--sc-tile-exp-bg']       = p.tile_exp_bg;
+    if (p.text_primary)      styleObj['--sc-text-primary']      = p.text_primary;
+    if (p.text_secondary)    styleObj['--sc-text-secondary']    = p.text_secondary;
+    if (p.text_muted)        styleObj['--sc-text-muted']        = p.text_muted;
+    if (p.online_color)      styleObj['--sc-online-color']      = p.online_color;
+    if (p.offline_color)     styleObj['--sc-offline-dot']       = p.offline_color;
+    if (p.power_color)       styleObj['--sc-power-color']       = p.power_color;
+    if (p.area_header_color) styleObj['--sc-area-header-color'] = p.area_header_color;
+  }
+
   private _renderAreaSection(area: string, devices: HADevice[]): TemplateResult {
     if (!devices.length) return html``;
     const label = area || 'No Area';
@@ -2986,6 +3050,9 @@ export class HADeviceDashboard extends LitElement {
     const cols = cascade.columnsFor(this._config, this._getActiveView() ?? undefined, areaStyle);
 
     const styleObj: Record<string, string> = {};
+    // A room theme goes in FIRST so the individual colour fields below still win
+    // key by key — a room can take a preset and bend one colour out of it.
+    this._applyAreaTheme(styleObj, areaStyle);
     if (areaStyle) {
       if (areaStyle.borderColor || areaStyle.borderWidth) {
         styleObj['border'] = `${areaStyle.borderWidth ?? 1}px ${areaStyle.borderStyle ?? 'solid'} ${areaStyle.borderColor ?? 'var(--divider-color)'}`;

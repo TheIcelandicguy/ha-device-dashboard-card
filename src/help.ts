@@ -92,6 +92,7 @@ export const HELP_CONCEPTS: HelpTopic[] = [
       'The **theme** is authoritative: every colour comes from the preset you pick. The `style` block holds only colours you deliberately changed on top.',
       'Picking a theme clears those overrides, so the editor offers to save your current colours first — they come back under a ★ Saved entry in the theme picker.',
       'Older configs wrote the whole palette into `style`, which shadowed the theme and made switching it do nothing. Those are migrated automatically on load: a palette that exactly matches a preset collapses back to the theme name, while a partial palette is left alone as the genuine override it is.',
+      'A **view** and a **room** can each take a theme of their own, resolved room → view → card. A view theme repaints the whole card, header included, while that view is showing, and outranks the colours in `style`. A room theme repaints what the room contains — tiles, text, accent, its own header — but not the card background or the card header, which no room encloses; the room\'s individual colour fields still override it key by key.',
     ],
   },
   {
@@ -188,7 +189,7 @@ export const HELP_RECIPES: HelpTopic[] = [
     title: 'Roll a colour scheme',
     body: ['The theme picker can roll a look for you, and keep the ones you like as named palettes.'],
     steps: [
-      '◆ Defaults → Colour theme.',
+      'Card & Theme → Colour theme (also under ◆ Defaults).',
       '🎲 Random lands on one of the built-in presets.',
       '✨ Surprise me generates a palette from a random hue instead. Every text colour is contrast-checked against the surface behind it, so a roll is never unreadable.',
       '💾 Save keeps the colours you are looking at under a name — including a preset you have tweaked. Saved palettes appear as ★ swatches in the picker; ✕ on a swatch forgets it.',

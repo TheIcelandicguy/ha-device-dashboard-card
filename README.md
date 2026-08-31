@@ -349,6 +349,39 @@ which shadowed the theme and made it decorative. Those are migrated on load: a
 `style` that matches a preset exactly is replaced by the `theme` name. A partial
 palette is left alone, since it is a genuine override.
 
+#### Per-view and per-room themes
+
+A view and a room can each carry their own `theme`, resolved **room → view →
+card**:
+
+```yaml
+theme: nordic_warm            # the card
+views:
+  - id: night
+    name: Night
+    theme: midnight_purple    # while this view is showing
+area_styles:
+  Bílskúr:
+    theme: dark_industrial    # this room, in every view
+```
+
+Both take **presets only**. `custom` means "the colours in `style` *are* the
+palette", and neither a view nor a room has a `style` of its own to hold one, so
+`custom` there is ignored and the next layer up applies.
+
+They differ in reach, because reach is what the DOM allows:
+
+- A **view theme** re-bases the whole card, header included. It outranks the
+  card-level palette colours in `style` — a view is the more specific layer — the
+  same way picking a theme in the editor clears them. Non-colour keys in `style`
+  (radius, gap, fonts, sizes, header geometry) are untouched.
+- A **room theme** repaints what the room's container encloses: tiles, text,
+  accent, online/offline/power and the room header — 14 of the 18 palette keys.
+  `card_bg`, `header_bg`, `header_text_color` and `header_orb_color` describe the
+  card's own background and header, which sit outside every room, so they are
+  skipped. A room's individual colour fields (`accentColor`, `tileBgColor`, …)
+  still override its theme key by key.
+
 ### `style` — global tokens
 
 | Group | Keys |

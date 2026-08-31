@@ -2957,6 +2957,31 @@ export class HADeviceDashboardEditor extends LitElement {
       </div>`;
   }
 
+  /** Palette override picker for a layer that has no `style` object of its own —
+   *  a view or a room. Presets plus "Inherit", and no 'custom': custom means "the
+   *  colours in the card's `style` ARE the palette", and neither layer has one to
+   *  hold, so the renderer ignores it there (see cascade.overrideTheme). */
+  private _themeOverrideSelect(
+    current: ThemePreset | undefined,
+    onPick: (v: ThemePreset | undefined) => void,
+    hint: string,
+  ): TemplateResult {
+    return html`
+      <div class="field">
+        <div class="field-lbl">Colour theme</div>
+        <select class="inline-text" style="width:100%"
+          @change=${(e: Event) => {
+            const val = (e.target as HTMLSelectElement).value;
+            onPick(val ? (val as ThemePreset) : undefined);
+          }}>
+          <option value="" ?selected=${!current || current === 'custom'}>Inherit</option>
+          ${THEME_ORDER.map(n => html`
+            <option value=${n} ?selected=${current === n}>${THEME_LABELS[n]}</option>`)}
+        </select>
+        <div class="hint" style="margin-top:4px">${hint}</div>
+      </div>`;
+  }
+
   private _renderRoomStylePanel(name: string): TemplateResult {
     const st: AreaStyle = this._config.area_styles?.[name] ?? {};
 
@@ -2988,6 +3013,14 @@ export class HADeviceDashboardEditor extends LitElement {
 
     return html`
       <div class="rsp-panel">
+        ${sectionLbl('Theme')}
+        ${this._themeOverrideSelect(
+          st.theme,
+          (t) => this._setAreaStyle(name, 'theme', t),
+          `Repaints this room's tiles, text, accent and header. The card background
+           and the card's own header keep the card theme — a room does not contain
+           them. Individual colours set below still win over this.`)}
+
         ${sectionLbl('Layout')}
         ${slRow('Columns', 'columns', 1, 6, 1, 3, '')}
         ${slRow('Tile gap', 'tileGap', 4, 24, 2, 10, 'px')}
@@ -3428,6 +3461,12 @@ export class HADeviceDashboardEditor extends LitElement {
                   </label>`)}
               </div>
             </div>
+
+            ${this._themeOverrideSelect(
+              v.theme,
+              (t) => setViewField('theme', t),
+              `Repaints the whole card — header included — while this view is showing.
+               Overrides the card theme and any colour set in Card & Theme → Colours.`)}
 
             ${this._adv(html`
             <div class="field">
@@ -3937,9 +3976,9 @@ export class HADeviceDashboardEditor extends LitElement {
       </div>
       ${this._renderThemeGrid()}
       <div class="hint" style="margin-top:8px">
-        A theme is card-wide — there is no per-view or per-room theme. Rooms
-        (Per-room styling, below) and devices can override individual colours on
-        top of it; Colours does the same for the whole card.
+        The card's palette. A view or a room can carry a theme of its own on top
+        — Views tab, and Per-room styling below — and rooms and devices can
+        override individual colours; Colours does that for the whole card.
       </div>`;
 
     return {
@@ -4398,9 +4437,16 @@ export class HADeviceDashboardEditor extends LitElement {
 
     // A palette written into `style` shadows the theme on every key it sets, so
     // `theme` only still describes the card while the two agree.
-    const styleKeys = c.style ?? {};
-    if (c.theme && c.theme !== 'custom' && Object.keys(styleKeys).length) {
-      const actual = detectTheme(styleKeys);
+    //
+    // Only PALETTE keys count. `style` also carries radius, gap, fonts and header
+    // geometry, which coexist with a theme perfectly happily — counting those
+    // raised this conflict against any themed card whose owner had ever touched a
+    // slider, because detectTheme() saw a non-empty style with no palette in it
+    // and reported 'custom'. Compare the EFFECTIVE palette for the same reason.
+    const styleKeys = (c.style ?? {}) as Record<string, unknown>;
+    const paletteOverrides = (THEME_KEYS as string[]).filter(k => styleKeys[k] !== undefined);
+    if (c.theme && c.theme !== 'custom' && paletteOverrides.length) {
+      const actual = detectTheme(this._effectivePalette() as NonNullable<HADeviceDashboardConfig['style']>);
       if (actual !== c.theme) {
         out.push({
           title: `Theme is set to "${THEME_LABELS[c.theme] ?? c.theme}" but the colours do not match it`,
@@ -4409,6 +4455,20 @@ export class HADeviceDashboardEditor extends LitElement {
           } instead. Re-pick a theme here to bring the two back in step.`,
         });
       }
+    }
+
+    // A view theme re-bases the palette below the card, so card-level colour work
+    // silently does not apply while that view is showing. That is the cascade
+    // working, but it is exactly the "another setting overrides this" surprise the
+    // panel exists to name.
+    const themedViews = (c.views ?? []).filter(v => v.theme && v.theme !== 'custom');
+    if (themedViews.length && paletteOverrides.length) {
+      out.push({
+        title: `${themedViews.length === 1 ? 'A view replaces' : `${themedViews.length} views replace`} the card's colours`,
+        detail: `${themedViews.map(v => v.name || v.id).join(', ')} carry their own theme, which outranks the ${
+          paletteOverrides.length} colour${paletteOverrides.length > 1 ? 's' : ''} set in Card & Theme → Colours (${
+          paletteOverrides.join(', ')}). Those apply only in views with no theme of their own.`,
+      });
     }
 
     if (c.smart_tile_styles && c.tile_style) {

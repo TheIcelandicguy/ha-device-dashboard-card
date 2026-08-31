@@ -18,7 +18,7 @@
     { "order": 1, "scope": "device", "path": "device_styles[id]" },
     { "order": 2, "scope": "device", "path": "profile_styles[type]", "note": "\"all relays\" — every device of one detected profile" },
     { "order": 3, "scope": "area",   "path": "area_styles[name]" },
-    { "order": 4, "scope": "view",   "path": "views[i]", "note": "layout overrides only (tile_style, variant, columns, tile_size, sort_by) — views take no part in the chip/element cascade" },
+    { "order": 4, "scope": "view",   "path": "views[i]", "note": "layout overrides (tile_style, variant, columns, tile_size, sort_by) plus a colour `theme` that re-bases the whole palette — views take no part in the chip cascade" },
     { "order": 5, "scope": "global", "path": "custom_styles[key]", "note": "the saved style a tile_style: 'custom:<key>' resolves to" },
     { "order": 6, "scope": "global", "path": "style_presets[style]", "note": "defaults for every tile rendered in one style" },
     { "order": 7, "scope": "global", "path": "top-level config" },
@@ -349,7 +349,8 @@
           { "control": "Name (tab label)", "fn": "Tab label text", "key": "views[i].name", "scope": "view", "default": "View N", "advanced": false },
           { "control": "Icon (mdi:*)", "fn": "View tab icon", "key": "views[i].icon", "scope": "view", "default": "none", "advanced": false },
           { "control": "Show Favourites section", "fn": "Enable the Favourites section on this view", "key": "views[i].show_favourites", "scope": "view", "default": "off", "advanced": false },
-          { "control": "Group by room", "fn": "Group devices by room (off → false)", "key": "views[i].show_rooms", "scope": "view", "default": "on", "advanced": false }
+          { "control": "Group by room", "fn": "Group devices by room (off → false)", "key": "views[i].show_rooms", "scope": "view", "default": "on", "advanced": false },
+          { "control": "Colour theme", "fn": "Palette while this view is showing — re-bases the whole card including the header, and outranks card-level `style` colours. Presets only; inherit = use the card theme", "key": "views[i].theme", "scope": "view", "default": "inherit", "advanced": false }
         ]},
         { "name": "Per-view filters", "controls": [
           { "control": "Profiles (+ All / None)", "fn": "Allow-list of device profiles", "key": "views[i].filter.profiles", "scope": "view", "default": "all", "advanced": false },
@@ -452,6 +453,7 @@
           { "control": "Energy shows", "fn": "Energy window for this room (Total / Today / Week / Month); the room-header Energy chip sums its devices over that window", "key": "area_styles[name].energy_period", "scope": "area", "default": "inherit", "advanced": false },
           { "control": "Sensor chips", "fn": "Whitelist of sensor chips for this room", "key": "area_styles[name].sensors", "scope": "area", "default": "inherit", "advanced": false },
           { "control": "Button shape / variant / size", "fn": "ON/OFF button style for this room", "key": "area_styles[name].buttonShape / buttonVariant / buttonSize", "scope": "area", "default": "pill / fill / md", "advanced": true },
+          { "control": "Colour theme", "fn": "Palette for this room — tiles, text, accent and room header. The card background and the card header are not inside a room, so those four palette keys are skipped. Individual room colours still override it", "key": "area_styles[name].theme", "scope": "area", "default": "inherit", "advanced": false },
           { "control": "Room reset ↺", "fn": "Clear this room's style block", "key": "area_styles[name] → del", "scope": "area", "default": "—", "advanced": false }
         ]}
       ]},

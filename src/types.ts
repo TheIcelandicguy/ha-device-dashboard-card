@@ -110,6 +110,18 @@ export interface GraphStyle {
 
 /** Per-area visual overrides */
 export interface AreaStyle {
+  /** Colour palette for this room, overriding the view's and the card's. The
+   *  most specific palette layer there is — the individual colour fields below
+   *  still override it key by key, so a room can take `nordic_warm` and bend one
+   *  colour. Only presets: 'custom' means "the colours in the card's `style` ARE
+   *  the palette", which is a card-level idea, so it is ignored here (the room
+   *  falls through to the view/card theme).
+   *
+   *  Four of the palette's 18 keys are card-level surfaces that no room contains
+   *  — `card_bg`, `header_bg`, `header_text_color`, `header_orb_color` — so they
+   *  are skipped when a room theme is expanded. The other 14 (tiles, text,
+   *  accent, online/offline/power, area header) scope to the room's container. */
+  theme?: ThemePreset;
   // Background
   bgColor?: string;
   /** Room backdrop photo (data: URL or /local/… path), behind this room's tiles. */
@@ -440,6 +452,14 @@ export interface ViewConfig {
   filter?: ViewFilter;
 
   // Layout / style overrides — applied between area_styles and defaults.
+  /** Colour palette while this view is showing, overriding the card's `theme`.
+   *  A view re-bases the whole palette: it outranks the card-level `style`
+   *  overrides on the 18 palette keys (a view is the more specific layer), while
+   *  leaving every non-palette key in `style` — radius, gap, fonts, sizes, header
+   *  geometry — untouched. That mirrors what applying a theme in the editor does.
+   *  Unlike a room theme this one reaches the card header too, since the header
+   *  belongs to the view being shown. Presets only; 'custom' is ignored. */
+  theme?: ThemePreset;
   tile_style?: TileStyle;
   power_monitor_variant?: PowerMonitorVariant;
   columns?: number;
