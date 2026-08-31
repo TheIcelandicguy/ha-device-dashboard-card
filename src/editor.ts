@@ -217,6 +217,7 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _expandedViewId: string | null = null;
   @state() private _openSections: Record<string, boolean> = {
     rooms: true,
+    theme: true,
     header: true, tiles: true, card: false, colors: false, typography: false,
     graphtype: true, graphcolors: false, graphranges: false,
     electrical: true, environmental: true, deviceinfo: false, alerts: false,
@@ -3927,7 +3928,22 @@ export class HADeviceDashboardEditor extends LitElement {
       <div class="field-lbl" style="margin-top:8px">Sensor chips</div>
       ${this._chipPicker(c.sensors, undefined, 'the default (all shown)', (next) => this._set('sensors', next))}`;
 
+    // The theme picker's home. It also still sits in the ◆ Defaults panel, but
+    // that is a collapsed toolbar popover — the tab named "Card & Theme" was the
+    // one place in the editor with no way to pick a theme.
+    const themeBody = html`
+      <div class="snap-row" style="justify-content:flex-end;margin-bottom:6px">
+        ${this._themeActions()}
+      </div>
+      ${this._renderThemeGrid()}
+      <div class="hint" style="margin-top:8px">
+        A theme is card-wide — there is no per-view or per-room theme. Rooms
+        (Per-room styling, below) and devices can override individual colours on
+        top of it; Colours does the same for the whole card.
+      </div>`;
+
     return {
+      theme:      { icon: '🎨', bg: 'rgba(244,96,30,0.1)',   fg: '#f4601e', label: 'Colour theme', badge: nothing, body: themeBody },
       header:     { icon: '◈', bg: 'rgba(99,102,241,0.1)',  fg: '#818cf8', label: 'Header',     badge: nothing, body: headerBody },
       lights:     { icon: '💡', bg: 'rgba(251,191,36,0.1)', fg: '#fbbf24', label: 'What counts as a light', badge: nothing, body: lightsBody },
       content:    { icon: '◫', bg: 'rgba(244,96,30,0.1)',   fg: '#f4601e', label: 'Chips & metrics', badge: nothing, body: contentBody },
@@ -4643,14 +4659,81 @@ export class HADeviceDashboardEditor extends LitElement {
     this._emitNow({ type: 'custom:ha-device-dashboard', ...factoryLook() } as HADeviceDashboardConfig);
   }
 
+  /** The 🎲 / ✨ / 💾 buttons that sit above the theme grid. Shared by the
+   *  ◆ Defaults panel (in its title row) and the Card & Theme tab's Colour theme
+   *  section, which puts them at the top of the body instead — a button in a
+   *  `_sec` header would bubble its click and toggle the section shut. */
+  private _themeActions(): TemplateResult {
+    return html`
+      <button class="sec-toolbar-btn" title="Land on a random preset"
+        @click=${() => this._rollTheme()}>🎲 Random</button>
+      <button class="sec-toolbar-btn" title="Generate a palette from a random hue, contrast-checked"
+        @click=${() => this._rollPalette()}>✨ Surprise me</button>
+      <button class="sec-toolbar-btn" title="Save the colours you are looking at"
+        @click=${() => { this._paletteNaming = !this._paletteNaming; }}>💾 Save</button>`;
+  }
+
+  /** Saved palettes + the preset swatches, with the active one lit.
+   *
+   *  What is "active" is detected from the EFFECTIVE palette — the preset behind
+   *  `theme` with `style` overrides on top — never from `style` alone. `style`
+   *  alone is what this used to read, and it disagreed with `_applyTheme` by
+   *  construction: applying a theme *clears* the palette keys out of `style` and
+   *  records the name in `theme`, so detecting on `style` reported `warm_dusk`
+   *  (the empty-style default) when style was bare, and 'custom' as soon as any
+   *  non-palette key like `tile_radius` was present. Either way the swatch you
+   *  just clicked did not light up. */
+  private _renderThemeGrid(): TemplateResult {
+    const effective = this._effectivePalette() as Record<string, unknown>;
+    const activeTheme = detectTheme(effective as NonNullable<HADeviceDashboardConfig['style']>);
+    const paletteActive = (pal: ThemePalette) =>
+      Object.entries(pal).every(([k, v]) => effective[k] === v);
+    return html`
+      ${this._paletteNaming ? html`
+        <div class="snap-row" style="margin-bottom:6px">
+          <input type="text" class="inline-text" style="flex:1" placeholder="Name these colours…"
+            .value=${this._paletteName}
+            @input=${(e: Event) => { this._paletteName = (e.target as HTMLInputElement).value; }}
+            @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') this._savePalette(this._paletteName); }}/>
+          <button class="sec-toolbar-btn" @click=${() => this._savePalette(this._paletteName)}>Save</button>
+        </div>` : nothing}
+      ${this._rolled ? html`<div class="cr-rolled">${this._rolled} — previous colours are under ★ Saved</div>` : nothing}
+      <div class="theme-grid">
+        ${Object.entries(this._palettes).map(([name, pal]) => html`
+          <div class="saved-wrap">
+            <button class="theme-swatch saved ${paletteActive(pal) ? 'on' : ''}"
+              title="Restore “${name}”" @click=${() => this._applyPalette(name)}>
+              <span class="ts-preview" style="background:${pal.card_bg ?? '#1e1a17'}">
+                <span class="ts-tile" style="background:${pal.tile_bg ?? 'rgba(255,255,255,.04)'};border:1px solid ${pal.tile_border ?? 'rgba(255,255,255,.08)'}"></span>
+                <span class="ts-accent" style="background:${pal.accent_color ?? '#c98a63'}"></span>
+              </span>
+              <span class="ts-name">★ ${name}</span>
+            </button>
+            <button class="saved-x" title="Forget “${name}”"
+              @click=${(e: Event) => { e.stopPropagation(); this._deletePalette(name); }}>✕</button>
+          </div>`)}
+        ${THEME_ORDER.map(name => {
+          const pal = THEME_PRESETS[name];
+          return html`
+            <button class="theme-swatch ${activeTheme === name ? 'on' : ''}" title=${THEME_LABELS[name]}
+              @click=${() => this._onPickTheme(name)}>
+              <span class="ts-preview" style="background:${pal.card_bg}">
+                <span class="ts-tile" style="background:${pal.tile_bg};border:1px solid ${pal.tile_border}"></span>
+                <span class="ts-accent" style="background:${pal.accent_color}"></span>
+              </span>
+              <span class="ts-name">${THEME_LABELS[name]}</span>
+            </button>`;
+        })}
+      </div>
+      ${activeTheme === 'custom'
+        ? html`<div class="hint">Custom — your colours don't match a preset. 💾 Save keeps them; picking a preset stashes them under ★ first.</div>`
+        : nothing}`;
+  }
+
   /** "Defaults" quick-setup panel: the four global defaults in one place. */
   private _renderDefaultsPanel(): TemplateResult {
     const c = this._config;
-    const sty = c.style ?? {};
     const views = c.views ?? [];
-    const activeTheme = detectTheme(sty);
-    const paletteActive = (pal: ThemePalette) =>
-      Object.entries(pal).every(([k, v]) => (sty as Record<string, unknown>)[k] === v);
     return html`
       <div class="defaults-panel">
         <div class="dp-grid">
@@ -4668,52 +4751,9 @@ export class HADeviceDashboardEditor extends LitElement {
             <div class="dp-title" style="display:flex;align-items:center;gap:6px">
               <span>Colour theme</span>
               <span class="sec-toolbar-spacer"></span>
-              <button class="sec-toolbar-btn" title="Land on a random preset"
-                @click=${() => this._rollTheme()}>🎲 Random</button>
-              <button class="sec-toolbar-btn" title="Generate a palette from a random hue, contrast-checked"
-                @click=${() => this._rollPalette()}>✨ Surprise me</button>
-              <button class="sec-toolbar-btn" title="Save the colours you are looking at"
-                @click=${() => { this._paletteNaming = !this._paletteNaming; }}>💾 Save</button>
+              ${this._themeActions()}
             </div>
-            ${this._paletteNaming ? html`
-              <div class="snap-row" style="margin-bottom:6px">
-                <input type="text" class="inline-text" style="flex:1" placeholder="Name these colours…"
-                  .value=${this._paletteName}
-                  @input=${(e: Event) => { this._paletteName = (e.target as HTMLInputElement).value; }}
-                  @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') this._savePalette(this._paletteName); }}/>
-                <button class="sec-toolbar-btn" @click=${() => this._savePalette(this._paletteName)}>Save</button>
-              </div>` : nothing}
-            ${this._rolled ? html`<div class="cr-rolled">${this._rolled} — previous colours are under ★ Saved</div>` : nothing}
-            <div class="theme-grid">
-              ${Object.entries(this._palettes).map(([name, pal]) => html`
-                <div class="saved-wrap">
-                  <button class="theme-swatch saved ${paletteActive(pal) ? 'on' : ''}"
-                    title="Restore “${name}”" @click=${() => this._applyPalette(name)}>
-                    <span class="ts-preview" style="background:${pal.card_bg ?? '#1e1a17'}">
-                      <span class="ts-tile" style="background:${pal.tile_bg ?? 'rgba(255,255,255,.04)'};border:1px solid ${pal.tile_border ?? 'rgba(255,255,255,.08)'}"></span>
-                      <span class="ts-accent" style="background:${pal.accent_color ?? '#c98a63'}"></span>
-                    </span>
-                    <span class="ts-name">★ ${name}</span>
-                  </button>
-                  <button class="saved-x" title="Forget “${name}”"
-                    @click=${(e: Event) => { e.stopPropagation(); this._deletePalette(name); }}>✕</button>
-                </div>`)}
-              ${THEME_ORDER.map(name => {
-                const pal = THEME_PRESETS[name];
-                return html`
-                  <button class="theme-swatch ${activeTheme === name ? 'on' : ''}" title=${THEME_LABELS[name]}
-                    @click=${() => this._onPickTheme(name)}>
-                    <span class="ts-preview" style="background:${pal.card_bg}">
-                      <span class="ts-tile" style="background:${pal.tile_bg};border:1px solid ${pal.tile_border}"></span>
-                      <span class="ts-accent" style="background:${pal.accent_color}"></span>
-                    </span>
-                    <span class="ts-name">${THEME_LABELS[name]}</span>
-                  </button>`;
-              })}
-            </div>
-            ${activeTheme === 'custom'
-              ? html`<div class="hint">Custom — your colours don't match a preset. 💾 Save keeps them; picking a preset stashes them under ★ first.</div>`
-              : nothing}
+            ${this._renderThemeGrid()}
           </div>
 
           <div class="dp-group">

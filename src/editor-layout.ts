@@ -53,11 +53,16 @@ export const EDITOR_LAYOUT: EditorTab[] = [
     { id: 'lights', label: 'What counts as a light' },
   ] },
   { id: 'card-theme', label: 'Card & Theme', icon: '🎨', sections: [
-    // Card-wide "what to show" defaults come first — decide content before styling.
+    // The tab's namesake goes first: picking a theme is the one move that changes
+    // every colour at once, so it belongs above the things that override it.
+    { id: 'theme',      label: 'Colour theme' },
+    // Then card-wide "what to show" defaults — decide content before styling.
     { id: 'content',    label: 'Chips & metrics' },
     { id: 'tiles',      label: 'Tiles' },
     { id: 'card',       label: 'Card',       advanced: true },
-    { id: 'colors',     label: 'Colours',    advanced: true },
+    // Colours is NOT advanced: it is where a theme gets adjusted, and hiding it
+    // behind the Advanced toggle left the theme itself looking unadjustable.
+    { id: 'colors',     label: 'Colours' },
     { id: 'typography', label: 'Typography', advanced: true },
     // Appended by the bespoke body (_renderRoomStyleSection), not the registry —
     // listed so the layout spec says where per-room styling actually lives.
