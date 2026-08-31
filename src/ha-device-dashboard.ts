@@ -3004,6 +3004,39 @@ export class HADeviceDashboard extends LitElement {
   }
 
   /**
+   * Header control that collapses every room at once, or reopens them.
+   *
+   * One button rather than two: with all rooms already shut, "collapse all" has
+   * nothing to do, so the button reads the current state and offers the move
+   * that is actually available. Mixed (some open, some shut) counts as open —
+   * the useful action there is to shut the rest.
+   *
+   * `areas` are the RAW area keys, matching what `_closedAreas` stores; the
+   * empty-string key ("No Area") is one of them, so it collapses like the rest.
+   */
+  private _renderCollapseAll(areas: string[]): TemplateResult {
+    const allClosed = areas.every(a => this._closedAreas.has(a));
+    return html`
+      <button class="collapse-all" title=${allClosed ? 'Expand every room' : 'Collapse every room'}
+        aria-label=${allClosed ? 'Expand every room' : 'Collapse every room'}
+        @click=${(e: Event) => {
+          e.stopPropagation();
+          if (allClosed) {
+            this._closedAreas = new Set();
+          } else {
+            this._closedAreas = new Set(areas);
+            // Collapsing hides the grid a chip drill-down hangs under, so it would
+            // otherwise orphan below a shut header — same reason the per-room
+            // toggle clears it.
+            this._areaChipOpen = null;
+          }
+        }}>
+        <span class="ca-chev ${allClosed ? '' : 'open'}">▼</span>
+        <span class="ca-lbl">${allClosed ? 'Expand all' : 'Collapse all'}</span>
+      </button>`;
+  }
+
+  /**
    * Expand a room's `theme` into the room container's scoped CSS variables.
    *
    * Only what the container encloses can be themed. The three `header_*` keys
@@ -3304,6 +3337,9 @@ export class HADeviceDashboard extends LitElement {
         <div class="dash-body">
           ${this._renderAttention(viewDevices)}
           ${showFavourites ? this._renderFavoritesSection(devices) : nothing}
+          ${showRooms && grouped.size > 0 && this._config.show_collapse_all !== false
+            ? html`<div class="rooms-toolbar">${this._renderCollapseAll([...grouped.keys()])}</div>`
+            : nothing}
           ${showRooms
             ? repeat([...grouped.entries()], ([area]) => area, ([area, areaDevices]) => this._renderAreaSection(area, areaDevices))
             : html`<div class="device-grid" style="--cols:${activeView?.columns ?? this._config.columns ?? 3}">

@@ -43,6 +43,7 @@
     "header_show_title": true,
     "header_show_stats": true,
     "header_show_cloud": false,
+    "show_collapse_all": true,
     "header_show_orbs": false,
     "header_chips": ["online", "offline", "power", "alerts"],
     "sensors": null,
@@ -404,6 +405,7 @@
           { "control": "Extra entities to count", "fn": "Individual entity ids counted as lights, for anything a label does not cover", "key": "light_entities", "scope": "global", "default": "none", "advanced": false }
         ]},
         { "name": "Tiles", "controls": [
+          { "control": "Collapse / expand all rooms", "fn": "A button in a small toolbar directly above the first room that shuts every room section at once, or reopens them. Only rendered when rooms are grouped and at least one room is shown", "key": "show_collapse_all", "scope": "global", "default": "shown", "advanced": false },
           { "control": "Smart tile styles", "fn": "Auto-pick a layout per device type where none is set", "key": "smart_tile_styles", "scope": "global", "default": "off", "advanced": false },
           { "control": "Native controls", "fn": "Render HA's own tiles for media players, fans, vacuums, locks and other domains this card doesn't draw itself. Off by default — each embeds a native element, so it costs render time on big media fleets.", "key": "delegate_controls", "scope": "global", "default": "off", "advanced": false },
           { "control": "Columns", "fn": "Grid column count (1–6)", "key": "columns", "scope": "global", "default": "3", "advanced": false },

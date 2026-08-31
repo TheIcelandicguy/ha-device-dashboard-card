@@ -165,6 +165,26 @@ export const mainCss = css`
 
 
     /* ── Cloud status chips ── */
+    /* Collapse/expand every room. Sits in the body directly above the first room
+       rather than in the card header: it acts on the rooms, so it belongs next to
+       them, and the header is the one row on the card that is already contested.
+       Right-aligned to the room blocks' own edge — the 10px matches
+       .area-section's horizontal margin so the two line up. */
+    .rooms-toolbar { display:flex; justify-content:flex-end; margin:2px 10px 0; }
+    .collapse-all {
+      display:inline-flex; align-items:center; gap:5px;
+      font-family:inherit; font-size:0.72em; font-weight:700;
+      padding:3px 10px; border-radius:20px; cursor:pointer;
+      color:var(--sc-text-secondary, #9ca3af);
+      background:var(--sc-tile-bg, rgba(255,255,255,0.04));
+      border:1px solid var(--sc-tile-border, rgba(255,255,255,0.08));
+      transition:all .15s;
+    }
+    .collapse-all:hover { color:var(--sc-text-primary, #e5e7eb); border-color:var(--sc-accent); }
+    .collapse-all:focus-visible { outline:2px solid var(--sc-accent); outline-offset:2px; }
+    .ca-chev { font-size:.85em; line-height:1; display:inline-block; transition:transform .25s; }
+    .ca-chev.open { transform:rotate(180deg); }
+
     .cloud-chips { display:flex; gap:5px; align-items:center; position:relative; z-index:1; flex-shrink:0; }
 
     .cloud-chip { font-size:0.72em; font-weight:700; padding:3px 10px; border-radius:20px; backdrop-filter:blur(4px); cursor:pointer; transition:all .15s; white-space:nowrap; }

@@ -564,6 +564,12 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   header_show_orbs?: boolean;          // default: follows `effects`
   /** Ambient visual effects: header orbs, pulse/glow animations, backdrop blur, hover shadows. Default: false */
   effects?: boolean;
+  /** The collapse/expand-all-rooms button, in a small toolbar row directly above
+   *  the first room. Default true, but it only renders where it would do
+   *  something: rooms grouped, and at least one room shown — a flat grid or a
+   *  Favourites-only view never shows it. Not a `header_*` option: it lives with
+   *  the rooms it controls, not in the card header. */
+  show_collapse_all?: boolean;         // default true
   /** Which stat chips the header shows, in order. Keys from HEADER_CHIP_DEFS
    *  (online, offline, power, energy, temperature, humidity, illuminance, rssi, alerts, updates).
    *  undefined = default set (online, offline, power, alerts). Every chip is clickable and

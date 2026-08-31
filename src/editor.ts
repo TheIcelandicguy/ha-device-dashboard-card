@@ -3958,7 +3958,17 @@ export class HADeviceDashboardEditor extends LitElement {
       </div>`;
 
     // Card-wide "what to show" defaults — the first thing to set in Card & Theme.
+    const collapseAllRow = html`
+      <div class="tog-row" style="border:none;padding:4px 0 0">
+        <div class="tog-lbl">Collapse / expand all rooms
+          <span class="dev-style-hint">a button above the first room; only when rooms are grouped</span></div>
+        <label class="sw"><input type="checkbox" .checked=${c.show_collapse_all !== false}
+          @change=${(e:Event) => this._set('show_collapse_all', (e.target as HTMLInputElement).checked ? undefined : false)}>
+          <span class="sw-t"></span><span class="sw-b"></span></label>
+      </div>`;
+
     const contentBody = html`
+      ${collapseAllRow}
       <div class="field-lbl">Room header chips</div>
       ${this._renderGlobalRoomHeaderChips()}
       <div class="field" style="margin-top:8px">

@@ -151,6 +151,7 @@ the machine-readable model that drives the editor defaults and the offline tools
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `columns` | number | `3` | Tile columns (1–6) |
+| `show_collapse_all` | boolean | `true` | Button above the first room that collapses every room at once, or reopens them. Only rendered when rooms are grouped and at least one room is shown |
 | `tile_size` | `sm` \| `md` \| `lg` | `md` | Tile size |
 | `sort_by` | `name` \| `power` \| `online` \| `area` | `name` | Device order. `area` groups by room name, then device name |
 | `tile_style` | TileStyle | `default` | Global default tile layout — see below |

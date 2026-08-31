@@ -1205,7 +1205,7 @@ export const CONFIG_KEYS: readonly string[] = [
   'hidden_entities', 'show_offline', 'title', 'columns', 'tile_size', 'sort_by', 'tile_style',
   'smart_tile_styles', 'power_monitor_variant', 'show_graphs', 'tile_layout', 'tile_opacity',
   'card_opacity', 'header_opacity', 'header_show_title', 'header_show_stats',
-  'header_show_cloud', 'header_show_orbs', 'effects', 'header_chips', 'area_header_chips', 'card_bg_image',
+  'header_show_cloud', 'header_show_orbs', 'effects', 'header_chips', 'area_header_chips', 'show_collapse_all', 'card_bg_image',
   'card_bg_image_size', 'show_power_bar', 'power_bar_max', 'show_entity_list', 'theme',
   'light_labels', 'light_entities',
   'show_attention', 'attention_battery', 'show_firmware_summary', 'include_beta_updates',

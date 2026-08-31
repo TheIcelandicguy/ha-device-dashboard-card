@@ -4,7 +4,7 @@ import './tiles/delegated-control';
 
 // Build marker — lets you confirm in the browser console which bundle HA loaded.
 // Bump the tag on each deploy so a stale cache is obvious at a glance.
-const BUILD_TAG = 'header-wrap-2026-08-31e';
+const BUILD_TAG = 'rooms-toolbar-2026-08-31f';
 // eslint-disable-next-line no-console
 console.info(
   `%c ha-device-dashboard %c ${BUILD_TAG} `,
