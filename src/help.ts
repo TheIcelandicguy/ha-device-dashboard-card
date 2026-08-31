@@ -158,6 +158,7 @@ export const HELP_RECIPES: HelpTopic[] = [
       'Pair any cloud rooms that did not auto-match with a room here (name matching ignores accents).',
       'Pick what to import — room photos, product images on tiles, full-size vs thumbnails — and Apply.',
       'A custom room photo\'s cloud URL is unlisted but not private. Swap in a /local/… photo later if that matters.',
+      'To invalidate a key you have shared or leaked, change your Shelly account password — the key only rotates with it.',
     ],
   },
   {

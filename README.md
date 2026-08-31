@@ -589,7 +589,8 @@ frontend-only, straight from the browser — and offers to write:
 
 Cloud rooms pair with your HA areas by name automatically (accents ignored);
 anything that doesn't match gets a dropdown. The auth key is used for the one
-fetch and never saved. Imported images stay hosted on Shelly's cloud — a custom
+fetch and never saved (note: Shelly only rotates that key when you change your
+account password). Imported images stay hosted on Shelly's cloud — a custom
 room photo's URL is unlisted but reachable by anyone holding the exact link, so
 swap in a local `/local/…` photo instead if that matters to you.
 
