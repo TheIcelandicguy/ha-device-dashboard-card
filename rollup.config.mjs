@@ -3,6 +3,7 @@ import typescript from '@rollup/plugin-typescript';
 import terser     from '@rollup/plugin-terser';
 import fs         from 'fs';
 import path       from 'path';
+import { spawnSync } from 'child_process';
 
 const dev = process.env.ROLLUP_WATCH === 'true';
 
@@ -17,6 +18,13 @@ function autoDeploy() {
         fs.mkdirSync(path.dirname(HA_DEST), { recursive: true });
         fs.copyFileSync(src, HA_DEST);
         console.log(`\x1b[32m[auto-deploy] → ${HA_DEST}\x1b[0m`);
+        // Copying the file is only half a deploy: HA's resource URL pins a `?v=`
+        // cache-buster, so without this the browser keeps serving the build it
+        // cached under the same URL. Not in watch mode — a rebuild per keystroke
+        // does not need a WebSocket round trip to HA each time.
+        if (!dev) {
+          spawnSync(process.execPath, ['scripts/bump-resource.mjs'], { stdio: 'inherit' });
+        }
       } catch (e) {
         console.warn(`\x1b[33m[auto-deploy] skipped: ${e.message}\x1b[0m`);
       }

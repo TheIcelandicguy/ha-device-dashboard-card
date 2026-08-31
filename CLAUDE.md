@@ -156,3 +156,17 @@ depth; this file is the fast orientation. Contributor workflow is in
 Builds copy to `Z:\www\community\ha-device-dashboard\`, so the HA Lovelace resource
 URL is `/local/community/ha-device-dashboard/ha-device-dashboard.js` (JavaScript
 Module). Hard-refresh HA after deploying.
+
+**Copying the file is only half a deploy.** The registered resource URL carries a
+`?v=` cache-buster, and overwriting the file does not change it — so the browser
+and HA's service worker keep serving the response they cached under that same URL.
+On 2026-08-31 a full day of builds reached `Z:` without one of them reaching the
+dashboard, and it read as "the feature didn't work". `npm run build` now runs
+`scripts/bump-resource.mjs`, which rewrites `?v=` to the current `BUILD_TAG` over
+HA's WebSocket API (Lovelace resources are not in the REST API). It needs
+`HA_TOKEN` (long-lived token; `HA_URL` defaults to `http://homeassistant.local:8123`)
+and is deliberately silent-and-successful without one — it prints the URL to set by
+hand instead. It is skipped in `npm run watch`. `npm run deploy:bump` runs it alone.
+
+So: if a change is definitely in `dist` but not on screen, check the console
+`BUILD_TAG` against the `?v=` on the resource before debugging the code.
