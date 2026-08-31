@@ -748,6 +748,9 @@ export class HADeviceDashboardEditor extends LitElement {
     if (this._flashTimer) { clearTimeout(this._flashTimer); this._flashTimer = null; }
     clearTimeout(this._styleClipTimer);
     clearTimeout(this._viewDeleteTimer);
+    // The cloud auth key is a credential — never let it outlive the editor.
+    this._sciKey = '';
+    this._sciData = null;
     // Tear down the dialog-sizing plumbing so it doesn't leak across editor opens.
     if (this._editorRAF != null) { cancelAnimationFrame(this._editorRAF); this._editorRAF = undefined; }
     this._editorLayoutTimers.forEach(t => clearTimeout(t));
@@ -1554,6 +1557,10 @@ export class HADeviceDashboardEditor extends LitElement {
     this._sciBusy = true; this._sciError = ''; this._sciDone = ''; this._sciData = null;
     try {
       const data = await sciFetchLists(server, this._sciKey.trim());
+      // The key's job ends here — the image URLs need no auth. Drop the
+      // credential the moment the fetch succeeds so it never lingers in
+      // memory while the user works through the mapping.
+      this._sciKey = '';
       this._sciData = data;
       const auto = sciMatchRooms(data.rooms, this._getAreas().map(a => a.name));
       const map: Record<number, string> = {};
@@ -1623,7 +1630,8 @@ export class HADeviceDashboardEditor extends LitElement {
     const body = html`
       <div class="dp-hint-inline">Pull your Shelly app setup into this card: each room's photo and the official
         product image for every device. Find both fields at <b>control.shelly.cloud → user settings →
-        Authorization cloud key</b>. The key is used once to read your rooms and is never saved.</div>
+        Authorization cloud key</b>. The key is sent once, directly to Shelly over HTTPS, then wiped —
+        it is never saved to the config or anywhere else.</div>
       <div class="field">
         <div class="field-lbl">Cloud server</div>
         <input type="text" class="inline-text" placeholder="shelly-59-eu.shelly.cloud"
@@ -1631,7 +1639,7 @@ export class HADeviceDashboardEditor extends LitElement {
       </div>
       <div class="field">
         <div class="field-lbl">Authorization cloud key</div>
-        <input type="password" class="inline-text" placeholder="Paste the key…" autocomplete="off"
+        <input type="password" class="inline-text" placeholder="Paste the key…" autocomplete="new-password"
           .value=${this._sciKey} @input=${(e: Event) => { this._sciKey = (e.target as HTMLInputElement).value; }}>
       </div>
       <button class="btn-copy" ?disabled=${this._sciBusy} @click=${() => this._sciFetch()}>
