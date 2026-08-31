@@ -86,8 +86,14 @@ export const mainCss = css`
     }
 
 
+    /* flex-wrap matters more than it looks: .dash-stats is flex-shrink:0 with
+       nowrap chips, and this row is overflow:hidden for the blurred orbs. With a
+       long header_chips list (11 is a real config) the stats row alone exceeds the
+       card, and anything after it — the collapse button, the cloud chips — was
+       silently clipped off the right edge rather than pushed to a second line. */
     .dash-header {
       position: relative; display: flex; align-items: center; gap:10px;
+      flex-wrap: wrap; row-gap: 8px;
       padding: var(--sc-header-padding, 16px) 18px; overflow: hidden;
       border-radius: var(--sc-header-radius, 0px);
       border-bottom: var(--sc-header-border-width, 0px) solid var(--sc-header-border-color, transparent);
@@ -126,7 +132,11 @@ export const mainCss = css`
     .dash-title::before { content: var(--sc-header-icon, '⚡'); }
 
 
-    .dash-stats { display:flex; gap:8px; align-items:center; position:relative; z-index:1; flex-shrink:0; }
+    /* Wraps for the same reason: 11 nowrap chips are wider than the card in a
+       sections-view column, and flex-shrink:0 means they cannot give any of it
+       back. Without this the chips past the edge are simply not rendered to the
+       user, with nothing to indicate they were dropped. */
+    .dash-stats { display:flex; gap:8px; align-items:center; position:relative; z-index:1; flex-shrink:0; flex-wrap:wrap; }
 
     .stat { font-size:0.78em; padding:3px 10px; border-radius:20px; font-weight:600; backdrop-filter:blur(4px); cursor:pointer; transition:all .15s; white-space:nowrap; }
 

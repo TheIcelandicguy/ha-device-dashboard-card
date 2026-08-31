@@ -84,8 +84,14 @@ function e(e,t,i,s){var o,a=arguments.length,n=a<3?t:null===s?s=Object.getOwnPro
     }
 
 
+    /* flex-wrap matters more than it looks: .dash-stats is flex-shrink:0 with
+       nowrap chips, and this row is overflow:hidden for the blurred orbs. With a
+       long header_chips list (11 is a real config) the stats row alone exceeds the
+       card, and anything after it — the collapse button, the cloud chips — was
+       silently clipped off the right edge rather than pushed to a second line. */
     .dash-header {
       position: relative; display: flex; align-items: center; gap:10px;
+      flex-wrap: wrap; row-gap: 8px;
       padding: var(--sc-header-padding, 16px) 18px; overflow: hidden;
       border-radius: var(--sc-header-radius, 0px);
       border-bottom: var(--sc-header-border-width, 0px) solid var(--sc-header-border-color, transparent);
@@ -124,7 +130,11 @@ function e(e,t,i,s){var o,a=arguments.length,n=a<3?t:null===s?s=Object.getOwnPro
     .dash-title::before { content: var(--sc-header-icon, '⚡'); }
 
 
-    .dash-stats { display:flex; gap:8px; align-items:center; position:relative; z-index:1; flex-shrink:0; }
+    /* Wraps for the same reason: 11 nowrap chips are wider than the card in a
+       sections-view column, and flex-shrink:0 means they cannot give any of it
+       back. Without this the chips past the edge are simply not rendered to the
+       user, with nothing to indicate they were dropped. */
+    .dash-stats { display:flex; gap:8px; align-items:center; position:relative; z-index:1; flex-shrink:0; flex-wrap:wrap; }
 
     .stat { font-size:0.78em; padding:3px 10px; border-radius:20px; font-weight:600; backdrop-filter:blur(4px); cursor:pointer; transition:all .15s; white-space:nowrap; }
 
@@ -5674,4 +5684,4 @@ function e(e,t,i,s){var o,a=arguments.length,n=a<3?t:null===s?s=Object.getOwnPro
   `,e([ve({attribute:!1})],Ps.prototype,"hass",void 0),e([ve()],Ps.prototype,"entity",void 0),e([ve({attribute:!1})],Ps.prototype,"features",void 0),e([fe()],Ps.prototype,"_el",void 0),Ps=e([he("hdd-delegated")],Ps);let Bs=class extends de{constructor(){super(...arguments),this._builtKey=""}willUpdate(e){const t=this.config?JSON.stringify(this.config):"";t&&t!==this._builtKey&&this._build(t)}updated(){this._el&&this.hass&&(this._el.hass=this.hass)}async _build(e){this._builtKey=e;try{const t=window.loadCardHelpers,i=t?await t():void 0;if(!i||JSON.stringify(this.config)!==e)return;const s=i.createCardElement(this.config);this.hass&&(s.hass=this.hass),this._el=s}catch{this._el=void 0}}render(){return this._el??Q}};Bs.styles=r`
     :host { display: block; }
     :host > * { width: 100%; }
-  `,e([ve({attribute:!1})],Bs.prototype,"hass",void 0),e([ve({attribute:!1})],Bs.prototype,"config",void 0),e([fe()],Bs.prototype,"_el",void 0),Bs=e([he("hdd-card")],Bs);console.info("%c ha-device-dashboard %c theme-cascade-2026-08-31c ","background:#c98a63;color:#1e1a17;font-weight:700;border-radius:3px 0 0 3px","background:#241f1b;color:#f3ece3;border-radius:0 3px 3px 0"),window.customCards=window.customCards||[],window.customCards.push({type:"ha-device-dashboard",name:"HA Device Dashboard",description:"Universal device fleet overview — Shelly, ZHA, Hue, ESPHome, Matter and more.",preview:!0,documentationURL:"https://github.com/TheIcelandicguy/ha-device-dashboard-card"});
+  `,e([ve({attribute:!1})],Bs.prototype,"hass",void 0),e([ve({attribute:!1})],Bs.prototype,"config",void 0),e([fe()],Bs.prototype,"_el",void 0),Bs=e([he("hdd-card")],Bs);console.info("%c ha-device-dashboard %c header-wrap-2026-08-31e ","background:#c98a63;color:#1e1a17;font-weight:700;border-radius:3px 0 0 3px","background:#241f1b;color:#f3ece3;border-radius:0 3px 3px 0"),window.customCards=window.customCards||[],window.customCards.push({type:"ha-device-dashboard",name:"HA Device Dashboard",description:"Universal device fleet overview — Shelly, ZHA, Hue, ESPHome, Matter and more.",preview:!0,documentationURL:"https://github.com/TheIcelandicguy/ha-device-dashboard-card"});
