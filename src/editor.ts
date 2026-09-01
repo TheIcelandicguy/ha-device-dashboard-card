@@ -3209,6 +3209,34 @@ export class HADeviceDashboardEditor extends LitElement {
           (val) => this._patchScope({ show_graphs: val }),
         ))}
 
+      ${this._designRow('Blocks', 'tile_layout',
+        this._renderLayoutCanvas(
+          v['tile_layout'] as TileLayout | undefined,
+          // The canvas needs something concrete to draw when this layer sets
+          // nothing, so hand it whatever is inherited — the layout the tiles
+          // actually have right now.
+          normalizeTileLayout(
+            (this._inheritedFrom('tile_layout')?.value as TileLayout | undefined)
+            ?? PROFILE_DEFAULT_BLOCKS.generic!)!,
+          (layout) => this._patchScope({ tile_layout: layout }),
+        ),
+        'Drag to reorder or drop into a row. Blocks only apply to the adaptive tile style.')}
+
+      ${(() => {
+        // Elements are per tile STYLE, so they only mean anything once a style
+        // that exposes them is in force at or above this layer.
+        const style = ((v['tile_style'] as TileStyle | undefined)
+          ?? (this._inheritedFrom('tile_style')?.value as TileStyle | undefined)
+          ?? 'default') as TileStyle;
+        // Comparing the returned TemplateResult against html`` would always be
+        // false — identity, not value — so ask the data instead.
+        if (!STYLE_ELEMENTS[style]) return nothing;
+        return this._designRow('Elements', 'elements', this._renderStyleElementToggles(
+          style,
+          (v['elements'] as Record<string, boolean> | undefined) ?? {},
+          (els) => this._patchScope({ elements: els })));
+      })()}
+
       ${this._designRow('Sensor chips', 'sensors',
         this._chipPicker(
           v['sensors'] as string[] | undefined,
@@ -3239,6 +3267,68 @@ export class HADeviceDashboardEditor extends LitElement {
               @click=${() => this._patchScope({ tile_size: sz })}>${['Small', 'Medium', 'Large'][i]}</span>`)}
         </div>`)}`;
 
+    /**
+     * Card chrome. At Global these are the card's own `style` keys, so the
+     * existing section bodies are reused verbatim — one editor per key, nothing
+     * to drift. At a view they write into `ViewConfig.style`, a deliberately
+     * small subset: the colours a view most often wants when it re-skins the
+     * card, not all seventeen.
+     */
+    const chromeBody = () => {
+      if (sc.kind === 'global') {
+        const reg = this._globalSectionDescriptors();
+        return html`
+          <div class="hint" style="margin-bottom:6px">
+            The card's own header, surface and type. Every layer below inherits these.
+          </div>
+          ${this._sec('design-chrome-header', '◈', 'rgba(99,102,241,0.1)', '#818cf8', 'Header', nothing, reg['header'].body)}
+          ${this._sec('design-chrome-card', '▢', 'rgba(129,140,248,0.1)', '#818cf8', 'Card', nothing, reg['card'].body)}
+          ${this._sec('design-chrome-type', 'T', 'rgba(251,191,36,0.1)', '#fbbf24', 'Typography', nothing, reg['typography'].body)}`;
+      }
+      const vs = (v['style'] ?? {}) as Record<string, string | number | undefined>;
+      const patchChrome = (key: string, val: string | number | undefined) => {
+        const next = { ...vs };
+        if (val === undefined) delete next[key]; else next[key] = val;
+        this._patchScope({ style: Object.keys(next).length ? next : undefined });
+      };
+      const chromeColor = (lbl: string, key: string, def: string) => html`
+        <div class="color-row">
+          <div class="color-preview-swatch" style="background:${(vs[key] as string) ?? def}"></div>
+          <span class="color-key">${lbl}</span>
+          <input type="color" .value=${(vs[key] as string) ?? def}
+            @input=${(e: Event) => patchChrome(key, (e.target as HTMLInputElement).value)}/>
+          ${vs[key] !== undefined
+            ? html`<button class="color-reset" @click=${() => patchChrome(key, undefined)}>↺</button>`
+            : nothing}
+        </div>`;
+      const setKeys = Object.keys(vs).length;
+      return html`
+        <div class="dsn-row ${setKeys ? 'set' : ''}">
+          <div class="dsn-row-hdr">
+            <span class="dsn-row-lbl">Header &amp; card surface</span>
+            ${setKeys
+              ? html`<span class="dsn-badge on">${setKeys} set here</span>
+                     <button class="dsn-reset" title="Drop this view's chrome overrides"
+                       @click=${() => this._patchScope({ style: undefined })}>↺</button>`
+              : html`<span class="dsn-badge">from Card</span>`}
+          </div>
+          ${chromeColor('Header gradient start', 'header_bg', '#1a1a2e')}
+          ${chromeColor('Header gradient end', 'header_bg2', '#0f3460')}
+          ${chromeColor('Header text', 'header_text_color', '#ffffff')}
+          ${chromeColor('Card background', 'card_bg', '#1c1c1e')}
+          <div class="field" style="margin-top:6px">
+            <div class="field-lbl">Header icon</div>
+            <input type="text" class="inline-text" maxlength="4" style="width:60px;text-align:center"
+              .value=${(vs['header_icon'] as string) ?? ''}
+              @change=${(e: Event) => patchChrome('header_icon', (e.target as HTMLInputElement).value.trim() || undefined)}/>
+          </div>
+          <div class="hint" style="margin-top:4px">
+            A view's theme already re-bases these; set one here only to bend a single
+            colour out of that theme.
+          </div>
+        </div>`;
+    };
+
     return html`
       <div class="dsn-panel">
         <div class="dsn-scope-hdr">
@@ -3249,8 +3339,7 @@ export class HADeviceDashboardEditor extends LitElement {
         </div>
         ${this._designFamily('tile', 'Tile — device → type → room → view → card', tileBody)}
         ${this._designFamily('container', 'Container — room → view → card', containerBody)}
-        ${this._designFamily('chrome', 'Card chrome — view → card', () => html`
-          <div class="hint">Header, card surface and typography still live in the Header and Card &amp; Theme tabs. They move here when those tabs retire.</div>`)}
+        ${this._designFamily('chrome', 'Card chrome — view → card', chromeBody)}
       </div>`;
   }
 
