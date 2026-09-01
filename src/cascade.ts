@@ -11,13 +11,27 @@
  * Nothing here touches `hass` or the DOM. The card keeps the viewer-local
  * overrides (localStorage) and memoisation; this owns the config layering.
  *
- * The layer sets are not identical between options, and that is deliberate
- * rather than sloppy — `sensors` has no view layer, `tile_style` puts the room
- * before the view. Each function documents its own order.
+ * Every option belongs to one of three FAMILIES, and the family fixes the ladder.
+ * The layer sets used to differ per option — `sensors` had no view layer, blocks
+ * had neither room nor view, `columns` had no device layer — which meant there
+ * were five ladders to learn and no way to state the rule. There are now three:
+ *
+ *   Tile        device → type → room → view → card
+ *               theme, colour, tile style + variant, blocks, chips, elements,
+ *               graphs, energy window. Anything drawn inside a tile.
+ *   Container   room → view → card
+ *               columns, tile size, gap. A grid needs something to hold it, so
+ *               there is no device layer — one device has no column count.
+ *   Card chrome view → card
+ *               header, card surface, typography. A room does not contain the
+ *               card's header, so it cannot set one.
+ *
+ * Saved looks (`custom_styles`, `style_presets`) are not a rung: they sit between
+ * the view and the card, as a side ladder any layer can point at.
  */
 import type {
   HADeviceDashboardConfig, HADevice, DeviceProfile, TileStyle, TileLayout,
-  ViewConfig, EnergyPeriod, CustomStyleDef, PowerMonitorVariant, ThemePreset,
+  ViewConfig, EnergyPeriod, CustomStyleDef, PowerMonitorVariant, ThemePreset, TileSize,
 } from './types';
 import { PROFILE_DEFAULT_BLOCKS, PROFILE_DEFAULT_SENSORS, profileDefaultTileStyle } from './helpers';
 
@@ -83,13 +97,15 @@ export function effectiveStyle(i: CascadeInput): TileStyle {
  * Customize panel both resolve through here, because when they had one each the
  * panel listed a different set than the tile drew.
  *
- * device → type → saved style → that style's preset → card → profile default.
- * A saved style's layout outranks the card-wide one: the card-wide value is the
- * least specific thing that can set this. Rooms have no tile_layout.
+ * Tile family: device → type → room → view → saved style → that style's preset
+ * → card → profile default. A saved style's layout outranks the card-wide one:
+ * the card-wide value is the least specific thing that can set this.
  */
 export function blockLayout(i: CascadeInput): TileLayout {
   return deviceStyle(i)?.tile_layout
     ?? profileStyle(i)?.tile_layout
+    ?? areaStyle(i)?.tile_layout
+    ?? i.view?.tile_layout
     ?? customDef(i)?.tile_layout
     ?? i.config.style_presets?.['default']?.tile_layout
     ?? i.config.tile_layout
@@ -99,8 +115,8 @@ export function blockLayout(i: CascadeInput): TileLayout {
 /**
  * Which sensor chips a device shows. `[]` is an explicit "none" and stops the
  * cascade; `undefined` means "inherit", and at the bottom it means "show all".
- * device → type → room → saved style → preset → card → profile default.
- * There is no view layer here.
+ * Tile family: device → type → room → view → saved style → preset → card →
+ * profile default.
  */
 export function sensorSelection(i: CascadeInput): string[] | undefined {
   const devSel = deviceStyle(i)?.sensors;
@@ -109,6 +125,8 @@ export function sensorSelection(i: CascadeInput): string[] | undefined {
   if (profSel !== undefined) return profSel;
   const areaSel = areaStyle(i)?.sensors;
   if (areaSel !== undefined) return areaSel;
+  const viewSel = i.view?.sensors;
+  if (viewSel !== undefined) return viewSel;
   const customSel = customDef(i)?.sensors;
   if (customSel !== undefined) return customSel;
   const presetSel = i.config.style_presets?.[effectiveStyle(i)]?.sensors;
@@ -131,6 +149,8 @@ export function showGraphs(i: CascadeInput): boolean {
   if (prof !== undefined) return prof;
   const area = areaStyle(i)?.show_graphs;
   if (area !== undefined) return area;
+  const view = i.view?.show_graphs;
+  if (view !== undefined) return view;
   return i.config.show_graphs ?? false;
 }
 
@@ -223,4 +243,42 @@ export function themeFor(
   area?: { theme?: ThemePreset },
 ): ThemePreset | undefined {
   return overrideTheme(view, area) ?? config.theme;
+}
+
+/**
+ * The palette a single TILE must paint for itself: the device's own theme, or
+ * its type's. Returns undefined when neither sets one — the usual case, and the
+ * cheap one, because the tile then simply inherits the room/view/card variables
+ * that are already in scope.
+ *
+ * Separate from `themeFor` because the answer is used differently. `themeFor`
+ * says which palette is in force; this says whether the renderer has work to do.
+ * Tile scope reaches 13 of the 19 palette keys — `card_bg`, the four `header_*`
+ * and `area_header_color` describe surfaces no tile contains.
+ */
+export function tileTheme(i: CascadeInput): Exclude<ThemePreset, 'custom'> | undefined {
+  const pick = (t?: ThemePreset) => (t && t !== 'custom' ? t : undefined);
+  return pick(deviceStyle(i)?.theme) ?? pick(profileStyle(i)?.theme);
+}
+
+/**
+ * Container family: room → view → card. Tile size had no resolver at all — it
+ * was read inline in the renderer, which is exactly why it never grew a room
+ * layer while everything around it did.
+ */
+export function tileSizeFor(
+  config: HADeviceDashboardConfig,
+  view?: ViewConfig,
+  area?: { tile_size?: TileSize },
+): TileSize {
+  return area?.tile_size ?? view?.tile_size ?? config.tile_size ?? 'md';
+}
+
+/** Container family: room → view → card. Undefined = the CSS default. */
+export function tileGapFor(
+  config: HADeviceDashboardConfig,
+  view?: ViewConfig,
+  area?: { tileGap?: number },
+): number | undefined {
+  return area?.tileGap ?? view?.tile_gap ?? config.style?.tile_gap;
 }

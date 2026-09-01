@@ -495,9 +495,20 @@ export class HADeviceDashboard extends LitElement {
    * written that way are folded back by `migrateConfig`. 'custom' means "these
    * colours are the theme" and applies no base.
    */
+  /** Cache key for anything derived from the active view's look: its theme plus
+   *  its card-chrome overrides. Both style caches use this, so they cannot
+   *  disagree about which view is in force. */
+  private _viewLookKey(): string {
+    const view = this._getActiveView();
+    return `${cascade.overrideTheme(view ?? undefined) ?? ''}|${view?.style ? JSON.stringify(view.style) : ''}`;
+  }
+
   private _styleTokens(): NonNullable<HADeviceDashboardConfig['style']> {
-    const viewTheme = cascade.overrideTheme(this._getActiveView() ?? undefined);
-    const viewKey = viewTheme ?? null;
+    const view = this._getActiveView();
+    const viewTheme = cascade.overrideTheme(view ?? undefined);
+    // Keyed on the view's whole look, not just its theme: two views with no
+    // theme but different header colours must not share an entry.
+    const viewKey = this._viewLookKey();
     if (this._styleTokensConfigRef === this._config
         && this._styleTokensViewRef === viewKey
         && this._cachedStyleTokens) {
@@ -518,6 +529,7 @@ export class HADeviceDashboard extends LitElement {
       const preset = paletteFor(this._config.theme);
       tokens = preset ? { ...preset, ...explicit } : explicit;
     }
+    if (view?.style) tokens = { ...tokens, ...view.style };
     this._styleTokensConfigRef = this._config;
     this._styleTokensViewRef = viewKey;
     this._cachedStyleTokens = tokens;
@@ -529,7 +541,7 @@ export class HADeviceDashboard extends LitElement {
    * Memoized against config identity — recomputed only when config changes.
    */
   private _buildCardStyles(): Record<string, string> {
-    const viewKey = cascade.overrideTheme(this._getActiveView() ?? undefined) ?? null;
+    const viewKey = this._viewLookKey();
     if (this._cardStylesConfigRef === this._config
         && this._cardStylesViewRef === viewKey
         && this._cachedCardStyles) {
@@ -629,7 +641,7 @@ export class HADeviceDashboard extends LitElement {
     }
 
     this._cardStylesConfigRef = this._config;
-    this._cardStylesViewRef = cascade.overrideTheme(this._getActiveView() ?? undefined) ?? null;
+    this._cardStylesViewRef = this._viewLookKey();
     this._cachedCardStyles = s;
     return s;
   }
@@ -2720,11 +2732,18 @@ export class HADeviceDashboard extends LitElement {
     const profile = this._profile(device);
     const profStyle = this._profileStyle(device);   // per-device-TYPE overrides ("all relays")
     const activeView = this._getActiveView();
-    const tileSize = activeView?.tile_size ?? this._config.tile_size ?? 'md';
+    const tileSize = cascade.tileSizeFor(
+      this._config, activeView ?? undefined,
+      device.area ? this._config.area_styles?.[device.area] : undefined);
 
     // Accent / border override
     const accentColor = this._config.device_styles?.[device.device_id]?.color ?? profStyle?.color;
     const tileStyleObj: Record<string, string> = {};
+    // A per-device (or per-type) theme paints the tile's own variables. Runs
+    // FIRST so the accent override below still wins, and so a device that sets
+    // no theme costs nothing — it just inherits the room/view/card variables
+    // already in scope.
+    this._applyTileTheme(tileStyleObj, this._cascade(device, profile));
     if (accentColor) {
       tileStyleObj['borderColor'] = accentColor;
       tileStyleObj['boxShadow']   = `0 0 12px ${accentColor}50`;
@@ -3078,6 +3097,42 @@ export class HADeviceDashboard extends LitElement {
     if (p.offline_color)     styleObj['--sc-offline-dot']       = p.offline_color;
     if (p.power_color)       styleObj['--sc-power-color']       = p.power_color;
     if (p.area_header_color) styleObj['--sc-area-header-color'] = p.area_header_color;
+  }
+
+  /**
+   * Expand a per-device or per-type `theme` into the tile's own CSS variables.
+   *
+   * The tile-scope subset: 13 of the 19 palette keys. `card_bg`, the four
+   * `header_*` and `area_header_color` describe the card's surfaces and its
+   * header, none of which a tile contains — emitting them here would either do
+   * nothing or leak onto a child that reads the variable.
+   *
+   * Mirrors `_applyAreaTheme` deliberately, including accent's two derived
+   * variables, so the same preset renders identically whether it was set on the
+   * card, the room, or this one tile.
+   */
+  private _applyTileTheme(styleObj: Record<string, string>, i: cascade.CascadeInput): void {
+    const theme = cascade.tileTheme(i);
+    if (!theme) return;
+    const p = paletteFor(theme);
+    if (!p) return;
+    if (p.accent_color) {
+      styleObj['--sc-accent']      = p.accent_color;
+      styleObj['--sc-graph-line']  = p.accent_color;
+      styleObj['--sc-accent-glow'] = `${p.accent_color}59`;
+    }
+    if (p.tile_bg)           styleObj['--sc-tile-bg']         = p.tile_bg;
+    if (p.tile_border)       styleObj['--sc-tile-border']     = p.tile_border;
+    if (p.tile_hover_bg)     styleObj['--sc-tile-hover-bg']   = p.tile_hover_bg;
+    if (p.tile_hover_shadow) styleObj['--sc-tile-hover-shad'] = p.tile_hover_shadow;
+    if (p.tile_sensor_bg)    styleObj['--sc-sensor-bg']       = p.tile_sensor_bg;
+    if (p.tile_exp_bg)       styleObj['--sc-tile-exp-bg']     = p.tile_exp_bg;
+    if (p.text_primary)      styleObj['--sc-text-primary']    = p.text_primary;
+    if (p.text_secondary)    styleObj['--sc-text-secondary']  = p.text_secondary;
+    if (p.text_muted)        styleObj['--sc-text-muted']      = p.text_muted;
+    if (p.online_color)      styleObj['--sc-online-color']    = p.online_color;
+    if (p.offline_color)     styleObj['--sc-offline-dot']     = p.offline_color;
+    if (p.power_color)       styleObj['--sc-power-color']     = p.power_color;
   }
 
   private _renderAreaSection(area: string, devices: HADevice[]): TemplateResult {

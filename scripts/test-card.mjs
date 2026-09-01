@@ -386,6 +386,58 @@ try {
       cas.overrideTheme({ theme: 'custom' }, undefined)],
     [undefined, 'midnight_purple', 'nordic_warm', undefined]);
 
+  console.log('\ncascade - family ladders (uniform within a family)');
+  // Tile family: device -> type -> room -> view -> card, for every option in it.
+  eq('blocks: a room now has a layer (it had none)',
+    cas.blockLayout(cin({ tile_layout: ['name_row'], area_styles: { Bedroom: { tile_layout: ['sensors'] } } })), ['sensors']);
+  eq('blocks: a view now has a layer too',
+    cas.blockLayout(cin({ tile_layout: ['name_row'] }, { id: 'v', name: 'V', tile_layout: ['graph'] })), ['graph']);
+  eq('blocks: the room still beats the view',
+    cas.blockLayout(cin({ area_styles: { Bedroom: { tile_layout: ['sensors'] } } },
+      { id: 'v', name: 'V', tile_layout: ['graph'] })), ['sensors']);
+  eq('blocks: the device beats them both',
+    cas.blockLayout(cin({ area_styles: { Bedroom: { tile_layout: ['sensors'] } },
+      device_styles: { dimmer: { tile_layout: ['badges'] } } }, { id: 'v', name: 'V', tile_layout: ['graph'] })), ['badges']);
+  eq('chips: a view now has a layer',
+    cas.sensorSelection(cin({ sensors: ['power'] }, { id: 'v', name: 'V', sensors: ['voltage'] })), ['voltage']);
+  eq('chips: the room still beats the view',
+    cas.sensorSelection(cin({ area_styles: { Bedroom: { sensors: ['current'] } } },
+      { id: 'v', name: 'V', sensors: ['voltage'] })), ['current']);
+  eq("chips: a view's explicit [] stops the cascade like any other layer",
+    cas.sensorSelection(cin({ sensors: ['power'] }, { id: 'v', name: 'V', sensors: [] })), []);
+  eq('graphs: a view now has a layer',
+    cas.showGraphs(cin({ show_graphs: false }, { id: 'v', name: 'V', show_graphs: true })), true);
+  eq('graphs: the room still beats the view',
+    cas.showGraphs(cin({ area_styles: { Bedroom: { show_graphs: false } } },
+      { id: 'v', name: 'V', show_graphs: true })), false);
+
+  // A tile paints its own palette only when the device or its TYPE sets one.
+  eq('tile theme: nothing set means no work for the renderer',
+    cas.tileTheme(cin({ theme: 'nordic_warm', area_styles: { Bedroom: { theme: 'brutalist' } } })), undefined);
+  eq('tile theme: a device sets one',
+    cas.tileTheme(cin({ device_styles: { dimmer: { theme: 'brutalist' } } })), 'brutalist');
+  eq('tile theme: a device TYPE sets one',
+    cas.tileTheme(cin({ profile_styles: { dimmer: { theme: 'teal_terminal' } } })), 'teal_terminal');
+  eq('tile theme: the device beats its type',
+    cas.tileTheme(cin({ device_styles: { dimmer: { theme: 'brutalist' } }, profile_styles: { dimmer: { theme: 'teal_terminal' } } })), 'brutalist');
+  eq("tile theme: 'custom' is not an override here either",
+    cas.tileTheme(cin({ device_styles: { dimmer: { theme: 'custom' } }, profile_styles: { dimmer: { theme: 'teal_terminal' } } })), 'teal_terminal');
+
+  // Container family: room -> view -> card. No device layer, by design.
+  eq('tile size: room beats view beats card',
+    [cas.tileSizeFor({ tile_size: 'sm' }, undefined, undefined),
+      cas.tileSizeFor({ tile_size: 'sm' }, { id: 'v', name: 'V', tile_size: 'md' }, undefined),
+      cas.tileSizeFor({ tile_size: 'sm' }, { id: 'v', name: 'V', tile_size: 'md' }, { tile_size: 'lg' })],
+    ['sm', 'md', 'lg']);
+  eq('tile size: unset anywhere is md', cas.tileSizeFor({}, undefined, undefined), 'md');
+  eq('tile gap: room beats view beats card',
+    [cas.tileGapFor({ style: { tile_gap: 4 } }, undefined, undefined),
+      cas.tileGapFor({ style: { tile_gap: 4 } }, { id: 'v', name: 'V', tile_gap: 8 }, undefined),
+      cas.tileGapFor({ style: { tile_gap: 4 } }, { id: 'v', name: 'V', tile_gap: 8 }, { tileGap: 12 })],
+    [4, 8, 12]);
+  eq('tile gap: unset anywhere is undefined, not a number',
+    cas.tileGapFor({}, undefined, undefined), undefined);
+
   console.log('\ncascade — elements');
   eq('unset elements are shown', cas.elementVisible(cin({}), 'toggle'), true);
   eq('a preset can hide one', cas.elementVisible(cin({

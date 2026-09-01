@@ -172,6 +172,11 @@ export interface AreaStyle {
   buttonShape?: ButtonShape;
   buttonVariant?: ButtonVariant;
   buttonSize?: ButtonSize;
+  /** Tile block order/visibility for this room. Blocks had no room layer at all
+   *  until the families were made uniform. */
+  tile_layout?: TileLayout;
+  /** Tile size for this room (Container family: room → view → card). */
+  tile_size?: TileSize;
   /** Sensor chip keys for tiles in this area. undefined = inherit global `sensors`. */
   sensors?: string[];
   /** Summary chip keys shown in this area's HEADER row (power/energy/temperature/
@@ -290,6 +295,12 @@ export type EntityAnimationType =
 
 /** Per-device visual overrides */
 export interface DeviceStyle {
+  /** Colour palette for this device's tile — the most specific palette layer.
+   *  Tile scope only: the six keys describing the card's own surfaces
+   *  (`card_bg`, the four `header_*`, `area_header_color`) are outside any tile,
+   *  so 13 of the 19 apply. `color` below still overrides the accent on top.
+   *  Presets and 'ha'; 'custom' is ignored, as at every layer below the card. */
+  theme?: ThemePreset;
   color?: string;             // accent colour override
   /** Per-tile background photo (data: URL or /local/… path). Overrides the global tile image. */
   bg_image?: string;
@@ -392,9 +403,12 @@ export type InputHoldConfig = InputGestureConfig;
  *  accept a dozen keys — bg_image, energy_period, energy_entity, tile_icon,
  *  entity_animations, input_actions — that no cascade ever reads at profile level.
  *  Widening this means teaching the matching resolver to look here too. */
+/** Per-device-type overrides — the whole Tile family, so the type layer can say
+ *  anything a device can. It used to be a narrower Pick, which is why widening it
+ *  meant teaching the resolvers first; they now all carry the type layer. */
 export type ProfileStyle = Pick<DeviceStyle,
-  'tile_style' | 'power_monitor_variant' | 'tile_layout' | 'sensors' | 'show_graphs' | 'elements'
-  | 'color' | 'energy_period'>;
+  'theme' | 'color' | 'tile_style' | 'power_monitor_variant' | 'tile_layout'
+  | 'sensors' | 'show_graphs' | 'elements' | 'energy_period'>;
 
 /** A user-defined, savable tile style. Renders as `base` with the saved config
  *  applied; assigned via `tile_style: 'custom:<key>'`. */
@@ -476,6 +490,26 @@ export interface ViewConfig {
   elements?: Record<string, boolean>;
   /** Energy window for this view (total / today / week / month). */
   energy_period?: EnergyPeriod;
+  /** Tile block order/visibility while this view is showing. */
+  tile_layout?: TileLayout;
+  /** Sensor chips for this view. An explicit (possibly empty) list is
+   *  authoritative, like every other layer of `sensors`. */
+  sensors?: string[];
+  /** Tile sparklines for this view. */
+  show_graphs?: boolean;
+  /** Gap between tiles in this view (Container family). */
+  tile_gap?: number;
+  /** Card-chrome overrides while this view is showing — header, card surface and
+   *  typography. The Card-chrome family is view → card, so this is the only layer
+   *  below the card that carries them; a room does not contain the card's header.
+   *  Applied over the palette the view's `theme` re-bases, so a view can take a
+   *  theme and still bend one header colour. */
+  style?: Pick<NonNullable<HADeviceDashboardConfig['style']>,
+    'card_bg' | 'card_radius' | 'font_family' | 'text_size_scale'
+    | 'header_bg' | 'header_bg2' | 'header_text_color' | 'header_orb_color'
+    | 'header_icon' | 'header_title_size' | 'header_radius' | 'header_padding'
+    | 'header_border_color' | 'header_border_width'
+    | 'header_stat_online' | 'header_stat_power' | 'header_stat_offline'>;
 }
 
 /** Full card config */

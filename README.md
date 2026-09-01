@@ -361,6 +361,26 @@ which shadowed the theme and made it decorative. Those are migrated on load: a
 `style` that matches a preset exactly is replaced by the `theme` name. A partial
 palette is left alone, since it is a genuine override.
 
+#### What can be set where
+
+Every design option belongs to one of three families, and the family fixes the
+ladder. Most specific wins.
+
+| Family | Ladder | Options |
+|---|---|---|
+| **Tile** | device -> device type -> room -> view -> card | `theme`, `color`, `tile_style`, `power_monitor_variant`, `tile_layout`, `sensors`, `show_graphs`, `elements`, `energy_period` |
+| **Container** | room -> view -> card | `columns`, `tile_size`, gap |
+| **Card chrome** | view -> card | header, card surface, typography |
+
+Container options have no device layer on purpose: one device has no column
+count. Card chrome has no room layer: a room does not contain the card's header.
+Saved looks (`custom_styles`, `style_presets`) are not a rung on the ladder --
+they sit between the view and the card, and any layer can point at one.
+
+A per-device or per-device-type `theme` reaches 13 of the 19 palette keys: the
+card surface, the four `header_*` keys and the room-header colour describe things
+no tile contains, so they are skipped.
+
 #### Per-view and per-room themes
 
 A view and a room can each carry their own `theme`, resolved **room → view →
