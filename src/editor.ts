@@ -3229,7 +3229,18 @@ export class HADeviceDashboardEditor extends LitElement {
     });
     const setCount = ALL_DESIGN_KEYS.filter(k => v[k] !== undefined).length;
 
-    const tileBody = () => html`
+    const tileBody = () => {
+      // The style in force at this layer decides which arranging surface is
+      // live: blocks shape only the adaptive tile, every other style is a
+      // monolithic renderer whose parts are toggled with Elements. Resolve it
+      // once, the same way for the Blocks and Elements rows, so the two can
+      // never disagree about which one applies.
+      const effStyle = (this._baseStyleOf(
+        (v['tile_style'] as TileStyle | undefined)
+        ?? (this._inheritedFrom('tile_style')?.value as TileStyle | undefined))
+        ?? 'default') as TileStyle;
+      const effLabel = TILE_STYLE_OPTIONS.find(o => o.v === effStyle)?.label ?? effStyle;
+      return html`
       ${this._designRow('Colour theme', 'theme',
         sc.kind === 'global'
           ? this._designGlobalSections(['theme'])
@@ -3251,30 +3262,36 @@ export class HADeviceDashboardEditor extends LitElement {
         ))}
 
       ${this._designRow('Blocks', 'tile_layout',
-        this._renderLayoutCanvas(
-          v['tile_layout'] as TileLayout | undefined,
-          // The canvas needs something concrete to draw when this layer sets
-          // nothing, so hand it whatever is inherited — the layout the tiles
-          // actually have right now.
-          normalizeTileLayout(
-            (this._inheritedFrom('tile_layout')?.value as TileLayout | undefined)
-            ?? PROFILE_DEFAULT_BLOCKS.generic!)!,
-          (layout) => this._patchScope({ tile_layout: layout }),
-        ),
-        'Drag to reorder or drop into a row. Blocks only apply to the adaptive tile style.')}
+        effStyle === 'default'
+          ? this._renderLayoutCanvas(
+              v['tile_layout'] as TileLayout | undefined,
+              // The canvas needs something concrete to draw when this layer sets
+              // nothing, so hand it whatever is inherited — the layout the tiles
+              // actually have right now.
+              normalizeTileLayout(
+                (this._inheritedFrom('tile_layout')?.value as TileLayout | undefined)
+                ?? PROFILE_DEFAULT_BLOCKS.generic!)!,
+              (layout) => this._patchScope({ tile_layout: layout }),
+            )
+          // Offering the drag canvas anyway would be a lie — the user arranges
+          // blocks, the tile ignores them. Say which style is in force instead.
+          : html`<div class="hint">
+              These tiles render as <b>${effLabel}</b>, which draws its own fixed
+              layout — blocks only shape the <b>Default</b> (adaptive) tile style.
+              Use Elements below to show or hide this style's parts, or switch
+              Tile style to Default to arrange blocks.
+            </div>`,
+        effStyle === 'default'
+          ? 'Drag to reorder or drop into a row. Blocks only apply to the adaptive tile style.'
+          : undefined)}
 
       ${(() => {
         // Elements are per tile STYLE, so they only mean anything once a style
-        // that exposes them is in force at or above this layer.
-        const style = ((v['tile_style'] as TileStyle | undefined)
-          ?? (this._inheritedFrom('tile_style')?.value as TileStyle | undefined)
-          ?? 'default') as TileStyle;
-        // Comparing the returned TemplateResult against html`` would always be
-        // false — identity, not value — so ask the data whether this style has
-        // any elements at all.
-        if (!STYLE_ELEMENTS[style]) return nothing;
+        // that exposes them is in force at or above this layer. `effStyle` has
+        // custom:<key> already unwrapped to the base style it renders as.
+        if (!STYLE_ELEMENTS[effStyle]) return nothing;
         return this._designRow('Elements', 'elements', this._renderStyleElementToggles(
-          style,
+          effStyle,
           (v['elements'] as Record<string, boolean> | undefined) ?? {},
           (els) => this._patchScope({ elements: els })));
       })()}
@@ -3292,6 +3309,7 @@ export class HADeviceDashboardEditor extends LitElement {
           v['energy_period'] as EnergyPeriod | undefined,
           (val) => this._patchScope({ energy_period: val }),
         ))}`;
+    };
 
     const containerBody = () => html`
       ${this._designRow('Columns', 'columns', html`
