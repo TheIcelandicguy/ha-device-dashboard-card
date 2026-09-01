@@ -10,7 +10,8 @@ import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, D
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, detectTheme, paletteFor, type ThemePalette } from './themes';
 import {
   GLOBAL_SCOPE, scopeCanSet, whyUnavailable, scopeKey, parseScopeKey, groupDevices,
-  scopeLabel, overrideCount, type DesignScope, type GroupBy, type DesignFamily,
+  scopeLabel, overrideCount, collectOverrides, ALL_DESIGN_KEYS,
+  type DesignScope, type GroupBy, type DesignFamily, type DesignOverride,
 } from './design-scope';
 import {
   normalizeCloudServer as sciNormalizeServer, fetchCloudLists as sciFetchLists,
@@ -238,6 +239,12 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _designGroupBy: GroupBy = 'room';
   @state() private _designOpenGroups: Set<string> = new Set();
   private _designScopeLoaded = false;
+  /** The ◆ n changes panel: what the config sets away from the default look. */
+  @state() private _changesOpen = false;
+  /** Reset-all is armed by the first click and fires on the second — it drops
+   *  every override in every scope, which is not something to do by mislanding a
+   *  click. Same pattern as "Reset everything" in the Defaults panel. */
+  @state() private _changesResetArmed = false;
   @state() private _expandedRoomStyle: Set<string> = new Set();
   @state() private _selectedDeviceId: string | null = null;
   /** Device-styling panel: false = only this device's own options, true = every
@@ -2926,6 +2933,95 @@ export class HADeviceDashboardEditor extends LitElement {
     return this._config.device_styles?.[d.device_id]?.profile ?? getDeviceProfile(d).type;
   }
 
+  /** Everything the config changes away from the default look. Compared against
+   *  the palette the card's own theme resolves to, so a themed card does not
+   *  report a permanent "change" simply for having a theme. */
+  private _designOverrides(): DesignOverride[] {
+    if (!this._config) return [];
+    return collectOverrides(
+      this._config,
+      paletteFor(this._config.theme) as Record<string, unknown> | undefined,
+    );
+  }
+
+  /** Drop one override, wherever it lives. */
+  private _clearOverride(o: DesignOverride): void {
+    const c = this._config;
+    switch (o.scope.kind) {
+      case 'global':
+        // A palette key lives inside `style`, not beside it.
+        if (o.palette || (c.style as Record<string, unknown> | undefined)?.[o.key] !== undefined) {
+          const next = { ...(c.style ?? {}) } as Record<string, unknown>;
+          delete next[o.key];
+          this._set('style', Object.keys(next).length ? next : undefined);
+        } else {
+          this._set(o.key, undefined);
+        }
+        return;
+      case 'view':   this._updateView(o.scope.id, { [o.key]: undefined } as Partial<ViewConfig>); return;
+      case 'room':   this._setAreaStyle(o.scope.name, o.key as keyof AreaStyle, undefined); return;
+      case 'type':   this._setProfileStyle(o.scope.profile, { [o.key]: undefined } as never); return;
+      case 'device': this._setDeviceStyle(o.scope.id, { [o.key]: undefined } as never); return;
+    }
+  }
+
+  /**
+   * "What have I actually customised?" — the same question a new user asks when
+   * they cannot tell what stays and what is overridden, answered in one list
+   * instead of by opening every scope.
+   */
+  private _renderChangesPanel(): TemplateResult {
+    const overrides = this._designOverrides();
+    const devs = this._allDevices();
+    const label = (o: DesignOverride) => scopeLabel(o.scope, {
+      viewName: (id) => (this._config.views ?? []).find(x => x.id === id)?.name || id,
+      deviceName: (id) => devs.find(d => d.device_id === id)?.name ?? id,
+    });
+    const groups = new Map<string, DesignOverride[]>();
+    for (const o of overrides) {
+      const k = label(o);
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k)!.push(o);
+    }
+    const short = (v: unknown) => {
+      const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+      return s.length > 42 ? `${s.slice(0, 42)}…` : s;
+    };
+
+    return html`
+      <div class="changes-panel">
+        ${overrides.length === 0
+          ? html`<div class="hint">Nothing is customised. Every tile, room and view is
+                 rendering the theme exactly as it ships.</div>`
+          : html`
+            <div class="changes-hdr">
+              <span>${overrides.length} setting${overrides.length > 1 ? 's' : ''} differ from the default look</span>
+              <span class="sec-toolbar-spacer"></span>
+              <button class="sec-toolbar-btn"
+                style=${this._changesResetArmed ? 'color:#f4601e;border-color:#f4601e' : ''}
+                title="Drop every one of these and return to the theme"
+                @click=${() => {
+                  if (!this._changesResetArmed) { this._changesResetArmed = true; return; }
+                  this._changesResetArmed = false;
+                  for (const o of overrides) this._clearOverride(o);
+                }}>${this._changesResetArmed
+                  ? `Click again to reset all ${overrides.length}`
+                  : '↺ Reset all'}</button>
+            </div>
+            ${[...groups.entries()].map(([scope, list]) => html`
+              <div class="changes-group">
+                <div class="changes-scope">${scope}<span class="dsn-count">${list.length}</span></div>
+                ${list.map(o => html`
+                  <div class="changes-row">
+                    <span class="changes-key">${o.key}${o.palette ? html`<span class="changes-pal">palette</span>` : nothing}</span>
+                    <span class="changes-val">${short(o.value)}</span>
+                    <button class="dsn-reset" title="Drop this one"
+                      @click=${() => this._clearOverride(o)}>↺</button>
+                  </div>`)}
+              </div>`)}`}
+      </div>`;
+  }
+
   /** Write a patch into whichever config block the current scope owns. One place,
    *  so a control never needs to know which layer it is being rendered at. */
   private _patchScope(patch: Record<string, unknown>): void {
@@ -3033,10 +3129,8 @@ export class HADeviceDashboardEditor extends LitElement {
     const c = this._config;
     const cur = scopeKey(this._designScope);
     const groups = groupDevices(this._allDevices(), this._designGroupBy, (d) => this._deviceProfile(d));
-    const COUNT_KEYS = ['theme', 'color', 'tile_style', 'power_monitor_variant', 'tile_layout',
-      'sensors', 'show_graphs', 'elements', 'energy_period', 'columns', 'tile_size', 'tileGap', 'tile_gap', 'style'];
     const badge = (scope: DesignScope) => {
-      const n = overrideCount(c, scope, COUNT_KEYS);
+      const n = overrideCount(c, scope, ALL_DESIGN_KEYS);
       return n ? html`<span class="dsn-count">${n}</span>` : nothing;
     };
     const chip = (scope: DesignScope, label: string, extra = '') => html`
@@ -3114,9 +3208,7 @@ export class HADeviceDashboardEditor extends LitElement {
       viewName: (id) => (this._config.views ?? []).find(x => x.id === id)?.name || id,
       deviceName: (id) => devs.find(d => d.device_id === id)?.name ?? id,
     });
-    const SET_KEYS = ['theme', 'color', 'tile_style', 'power_monitor_variant', 'tile_layout',
-      'sensors', 'show_graphs', 'elements', 'energy_period', 'columns', 'tile_size', 'tileGap', 'tile_gap'];
-    const setCount = SET_KEYS.filter(k => v[k] !== undefined).length;
+    const setCount = ALL_DESIGN_KEYS.filter(k => v[k] !== undefined).length;
 
     const tileBody = () => html`
       ${this._designRow('Colour theme', 'theme',
@@ -3269,6 +3361,7 @@ export class HADeviceDashboardEditor extends LitElement {
         ${this._designFamily('tile', 'Tile — device → type → room → view → card', tileBody)}
         ${this._designFamily('container', 'Container — room → view → card', containerBody)}
         ${this._designFamily('chrome', 'Card chrome — view → card', chromeBody)}
+        ${sc.kind === 'global' ? this._renderSavedLooks() : nothing}
         ${sc.kind === 'global' ? html`
           <div class="dsn-family">
             <div class="dsn-family-hdr">Card-wide — no layers under these</div>
@@ -3277,6 +3370,82 @@ export class HADeviceDashboardEditor extends LitElement {
               override them with, which is why they only appear at Global.
             </div>
             ${this._designGlobalSections(['content', 'tiles', 'electrical', 'environmental', 'deviceinfo', 'alerts'])}
+          </div>` : nothing}
+      </div>`;
+  }
+
+  /**
+   * Saved looks — a shelf, not a rung.
+   *
+   * `custom_styles`, `style_presets` and the ★ palettes are things you made and
+   * can point a layer at; they are not scopes and have no place on the ladder.
+   * They had no home of their own once Device styling retired, which is how a
+   * saved style became something you could create but never find again.
+   *
+   * Palettes are browser-local (localStorage, keyed on the card title) while the
+   * other two are config — the panel says so, because "why is my saved style on
+   * my phone but my palette isn't" is otherwise a mystery.
+   */
+  private _renderSavedLooks(): TemplateResult {
+    const c = this._config;
+    const styles = Object.entries(c.custom_styles ?? {});
+    const presets = Object.entries(c.style_presets ?? {});
+    const palettes = Object.entries(this._palettes);
+    if (!styles.length && !presets.length && !palettes.length) {
+      return html`
+        <div class="dsn-family off">
+          <div class="dsn-family-hdr">Saved looks</div>
+          <div class="hint">
+            Nothing saved yet. 💾 in the theme picker keeps the colours you are looking
+            at; "Save as style" on a device keeps its whole tile setup for reuse.
+          </div>
+        </div>`;
+    }
+    return html`
+      <div class="dsn-family">
+        <div class="dsn-family-hdr">Saved looks — point any layer at one</div>
+        ${styles.length ? html`
+          <div class="dsn-row">
+            <div class="dsn-row-hdr"><span class="dsn-row-lbl">Tile styles</span>
+              <span class="dsn-badge">in the config</span></div>
+            <div class="dsn-pick-row">
+              ${styles.map(([key, def]) => html`
+                <span class="dsn-chip">${def.label ?? key}
+                  <button class="saved-x" title="Forget this style and clear every tile using it"
+                    @click=${() => this._deleteCustomStyle(key)}>✕</button>
+                </span>`)}
+            </div>
+            <div class="hint" style="margin-top:4px">Assigned as the Tile style of any scope.</div>
+          </div>` : nothing}
+        ${presets.length ? html`
+          <div class="dsn-row">
+            <div class="dsn-row-hdr"><span class="dsn-row-lbl">Style presets</span>
+              <span class="dsn-badge">in the config</span></div>
+            <div class="dsn-pick-row">
+              ${presets.map(([style]) => html`<span class="dsn-chip">${style}</span>`)}
+            </div>
+            <div class="hint" style="margin-top:4px">
+              Defaults for one built-in tile style, applied wherever that style resolves —
+              between the view and the card.
+            </div>
+          </div>` : nothing}
+        ${palettes.length ? html`
+          <div class="dsn-row">
+            <div class="dsn-row-hdr"><span class="dsn-row-lbl">★ Palettes</span>
+              <span class="dsn-badge">this browser only</span></div>
+            <div class="dsn-pick-row">
+              ${palettes.map(([name]) => html`
+                <span class="dsn-chip">
+                  <button class="dsn-chip-apply" title="Apply these colours to the card"
+                    @click=${() => this._applyPalette(name)}>★ ${name}</button>
+                  <button class="saved-x" title="Forget this palette"
+                    @click=${() => this._deletePalette(name)}>✕</button>
+                </span>`)}
+            </div>
+            <div class="hint" style="margin-top:4px">
+              Kept in this browser, not in the config — they do not follow the dashboard
+              to another device, and are keyed to the card's title.
+            </div>
           </div>` : nothing}
       </div>`;
   }
@@ -5301,6 +5470,14 @@ export class HADeviceDashboardEditor extends LitElement {
           <button class="sec-toolbar-btn ${this._helpOpen ? 'active' : ''}"
             title="How the card fits together"
             @click=${() => { this._helpOpen = !this._helpOpen; }}>? Help</button>
+          ${(() => {
+            const n = this._designOverrides().length;
+            return html`
+              <button class="sec-toolbar-btn changes-btn ${this._changesOpen ? 'active' : ''} ${n ? 'lit' : ''}"
+                title=${n ? 'Everything this card changes from the default look' : 'Nothing is customised - the card is on its theme'}
+                @click=${() => { this._changesOpen = !this._changesOpen; this._changesResetArmed = false; }}>
+                ◆ ${n ? `${n} change${n > 1 ? 's' : ''}` : 'No changes'}</button>`;
+          })()}
           ${showSectionToggle ? html`
             <button class="sec-toolbar-btn"
               title=${allSectionsOpen ? 'Collapse everything on this tab' : 'Expand everything on this tab'}
@@ -5313,6 +5490,7 @@ export class HADeviceDashboardEditor extends LitElement {
         </div>
         ${this._snapMsg ? html`<div class="snap-msg">${this._snapMsg}</div>` : nothing}
         ${this._defaultsOpen ? this._renderDefaultsPanel() : nothing}
+        ${this._changesOpen ? this._renderChangesPanel() : nothing}
         ${this._helpOpen ? this._renderHelpPanel() : nothing}
         ${this._renderConflicts()}
         <div class="tab-body">
@@ -5444,6 +5622,22 @@ export class HADeviceDashboardEditor extends LitElement {
       justify-content:space-between; gap:8px; padding:5px 7px; background:var(--s2,var(--s1));
       border-bottom:1px solid var(--border); }
     .check-dd-count { font-size:10.5px; font-weight:600; color:var(--t3); }
+    /* ── ◆ n changes ── lit only when something differs from the theme, so a
+       card on its defaults says so plainly instead of showing a zero. */
+    .changes-btn.lit { color:var(--accent); border-color:var(--accent); }
+    .changes-panel { border:1px solid var(--border2); border-radius:10px; padding:10px 12px; margin:6px 0 2px;
+      display:flex; flex-direction:column; gap:8px; }
+    .changes-hdr { display:flex; align-items:center; gap:8px; font-size:.8em; font-weight:700; }
+    .changes-group { display:flex; flex-direction:column; gap:2px; }
+    .changes-scope { display:flex; align-items:center; gap:6px; font-size:.72em; text-transform:uppercase;
+      letter-spacing:.05em; color:var(--t3); margin-top:4px; }
+    .changes-row { display:flex; align-items:center; gap:8px; padding:2px 0 2px 12px; font-size:.8em; }
+    .changes-key { font-weight:600; min-width:150px; display:flex; align-items:center; gap:5px; }
+    .changes-pal { font-size:.75em; font-weight:400; padding:0 5px; border-radius:8px;
+      background:var(--accentbg); color:var(--accent); }
+    .changes-val { flex:1; color:var(--t3); font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.9em;
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
     /* ── Design tab (scope-first) ── */
     .dsn-picker { display:flex; flex-direction:column; gap:6px; }
     .dsn-pick-lbl { font-size:.7em; text-transform:uppercase; letter-spacing:.05em; color:var(--t3); margin-top:4px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
@@ -5457,6 +5651,8 @@ export class HADeviceDashboardEditor extends LitElement {
     .dsn-chip.browse { cursor:default; opacity:.7; }
     .dsn-chip.browse:hover { border-color:var(--border2); }
     .dsn-chip.dev { font-weight:400; }
+    .dsn-chip-apply { font-family:inherit; font-size:1em; font-weight:inherit; padding:0;
+      background:transparent; border:none; color:inherit; cursor:pointer; }
     /* How many keys this rung overrides — makes the tree show where
        customisation actually lives, without opening every scope to find out. */
     .dsn-count { font-size:.85em; font-weight:700; padding:0 5px; border-radius:8px;

@@ -172,3 +172,81 @@ export function overrideCount(config: HADeviceDashboardConfig, scope: DesignScop
   if (!block) return 0;
   return keys.filter(k => block[k] !== undefined).length;
 }
+
+/**
+ * The design keys a scope can hold, by family. One list, so the scope badges,
+ * the "n set here" header and the changes panel cannot disagree about what
+ * counts as customisation — they each had their own copy, which is how counts
+ * drift apart.
+ */
+export const DESIGN_KEYS = {
+  tile: ['theme', 'color', 'tile_style', 'power_monitor_variant', 'tile_layout',
+    'sensors', 'show_graphs', 'elements', 'energy_period'],
+  /** `tileGap` is AreaStyle's spelling of the same idea as `tile_gap`. */
+  container: ['columns', 'tile_size', 'tileGap', 'tile_gap'],
+  chrome: ['style'],
+} as const;
+
+export const ALL_DESIGN_KEYS: string[] = [
+  ...DESIGN_KEYS.tile, ...DESIGN_KEYS.container, ...DESIGN_KEYS.chrome,
+];
+
+/** One thing the config changes away from the built-in look. */
+export interface DesignOverride {
+  scope: DesignScope;
+  /** Config key, or a palette key when `palette` is true. */
+  key: string;
+  value: unknown;
+  /** True for a colour in `style` that differs from the theme it sits on —
+   *  those are overrides of the THEME rather than of a parent layer. */
+  palette?: boolean;
+}
+
+/**
+ * Everything the config sets away from the default look, across every scope.
+ *
+ * Answers "what have I actually customised?", which is the question a new user is
+ * really asking when they cannot tell what stays and what does not. Pure: the
+ * caller supplies the theme's palette, because resolving a theme name to colours
+ * belongs to themes.ts and dragging it in here would couple the two.
+ */
+export function collectOverrides(
+  config: HADeviceDashboardConfig,
+  themePalette: Record<string, unknown> | undefined,
+): DesignOverride[] {
+  const out: DesignOverride[] = [];
+  const push = (scope: DesignScope, block: Record<string, unknown> | undefined, keys: string[]) => {
+    if (!block) return;
+    for (const k of keys) if (block[k] !== undefined) out.push({ scope, key: k, value: block[k] });
+  };
+
+  // Card level: the design keys, minus `style` — its palette keys are compared
+  // against the theme below rather than counted wholesale, or every themed card
+  // would report one permanent "change".
+  push(GLOBAL_SCOPE, config as unknown as Record<string, unknown>,
+    ALL_DESIGN_KEYS.filter(k => k !== 'style' && k !== 'theme' && k !== 'tileGap'));
+
+  const style = (config.style ?? {}) as Record<string, unknown>;
+  for (const [k, v] of Object.entries(style)) {
+    if (v === undefined) continue;
+    // A palette key equal to the theme's is not a change; a non-palette key
+    // (radius, fonts, header geometry) always is, since no theme sets those.
+    const base = themePalette?.[k];
+    if (base !== undefined && base === v) continue;
+    out.push({ scope: GLOBAL_SCOPE, key: k, value: v, palette: base !== undefined });
+  }
+
+  for (const v of config.views ?? []) {
+    push({ kind: 'view', id: v.id }, v as unknown as Record<string, unknown>, ALL_DESIGN_KEYS);
+  }
+  for (const [name, block] of Object.entries(config.area_styles ?? {})) {
+    push({ kind: 'room', name }, block as unknown as Record<string, unknown>, ALL_DESIGN_KEYS);
+  }
+  for (const [profile, block] of Object.entries(config.profile_styles ?? {})) {
+    push({ kind: 'type', profile: profile as DeviceProfile }, block as unknown as Record<string, unknown>, ALL_DESIGN_KEYS);
+  }
+  for (const [id, block] of Object.entries(config.device_styles ?? {})) {
+    push({ kind: 'device', id }, block as unknown as Record<string, unknown>, ALL_DESIGN_KEYS);
+  }
+  return out;
+}

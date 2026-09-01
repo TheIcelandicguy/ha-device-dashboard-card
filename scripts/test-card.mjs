@@ -499,6 +499,35 @@ try {
   eq('a scope with nothing set counts zero',
     ds.overrideCount(cfg, sT, ['theme', 'columns']), 0);
 
+  console.log('\ndesign scope - what have I customised?');
+  const pal = { accent_color: '#c98a63', card_bg: '#1e1a17', text_primary: '#ece5dc' };
+  eq('a bare card has changed nothing', ds.collectOverrides({}, pal).length, 0);
+  // A themed card must not report a permanent "change" just for having a theme.
+  eq('palette keys equal to the theme are not changes',
+    ds.collectOverrides({ theme: 'warm_dusk', style: { accent_color: '#c98a63' } }, pal).length, 0);
+  eq('a palette key that differs IS a change',
+    ds.collectOverrides({ theme: 'warm_dusk', style: { accent_color: '#ff0000' } }, pal)
+      .map(o => [o.key, o.palette]), [['accent_color', true]]);
+  // Radius/fonts/header geometry are in `style` but no theme sets them, so they
+  // are always a deliberate change rather than a palette override.
+  eq('a non-palette style key is a change, and not a palette one',
+    ds.collectOverrides({ style: { tile_radius: 14 } }, pal).map(o => [o.key, !!o.palette]),
+    [['tile_radius', false]]);
+  eq('every scope is walked', ds.collectOverrides({
+    columns: 4,
+    views: [{ id: 'v', name: 'V', theme: 'ha' }],
+    area_styles: { Bedroom: { columns: 2, theme: 'brutalist' } },
+    profile_styles: { dimmer: { tile_style: 'light-control' } },
+    device_styles: { a: { color: '#fff' } },
+  }, pal).map(o => ds.scopeKey(o.scope) + '/' + o.key).sort(),
+    ['device:a/color', 'global/columns', 'room:Bedroom/columns', 'room:Bedroom/theme',
+      'type:dimmer/tile_style', 'view:v/theme']);
+  eq('the card theme itself is not counted as an override',
+    ds.collectOverrides({ theme: 'nordic_warm' }, pal).length, 0);
+  ok('the key list is shared, not copied',
+    ds.ALL_DESIGN_KEYS.includes('theme') && ds.ALL_DESIGN_KEYS.includes('columns')
+    && ds.ALL_DESIGN_KEYS.includes('style'));
+
   console.log('\ncascade — elements');
   eq('unset elements are shown', cas.elementVisible(cin({}), 'toggle'), true);
   eq('a preset can hide one', cas.elementVisible(cin({
