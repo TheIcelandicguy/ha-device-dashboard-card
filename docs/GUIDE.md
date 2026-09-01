@@ -60,7 +60,7 @@ A **block** is one row of content inside the `default` style only — name row, 
 
 ### Blocks, elements and chips — which one hides what
 
-**Blocks** reorder and hide the parts of the `default` tile. **Elements** show and hide the parts of every other style (its toggle, graph, secondary readings…). **Sensor chips** choose which measurements appear as little pills, in any style.
+**Blocks** reorder and hide the parts of the `default` tile. **Elements** show and hide the parts of every other style (its toggle, graph, secondary readings…) — and carry the odd placement choice, like "Chips in the name row" on the power-monitor and sensor styles, which moves the secondary readings up beside the device name. **Sensor chips** choose which measurements appear as little pills, in any style.
 
 The editor only offers what applies: pick a power-monitor style and the block grid disappears in favour of that style's elements.
 

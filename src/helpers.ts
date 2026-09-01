@@ -381,14 +381,19 @@ export function profileDefaultTileStyle(
  * / offline designer reads this to build the toggle grid. Ids must match the
  * literal strings the renderers pass to `showEl`. ('default' style toggles its
  * content via blocks / `tile_layout`, so it's not listed here.)
+ *
+ * `def: false` marks an opt-in element — off until a layer turns it on. Used
+ * for placement choices (header_chips moves the secondary chips into the name
+ * row) where "shown by default" would change every existing tile.
  */
-export const STYLE_ELEMENTS: Partial<Record<TileStyle, Array<{ id: string; label: string }>>> = {
+export const STYLE_ELEMENTS: Partial<Record<TileStyle, Array<{ id: string; label: string; def?: boolean }>>> = {
   'power-monitor': [
-    { id: 'toggle',     label: 'On/off button' },
-    { id: 'graph',      label: 'Sparkline graph' },
-    { id: 'secondary',  label: 'Secondary readings (V/A/kWh)' },
-    { id: 'uptime',     label: 'Uptime badge' },
-    { id: 'lower_body', label: 'Lower body (blocks)' },
+    { id: 'toggle',       label: 'On/off button' },
+    { id: 'graph',        label: 'Sparkline graph' },
+    { id: 'secondary',    label: 'Secondary readings (V/A/kWh)' },
+    { id: 'header_chips', label: 'Chips in the name row', def: false },
+    { id: 'uptime',       label: 'Uptime badge' },
+    { id: 'lower_body',   label: 'Lower body (blocks)' },
   ],
   'light-control': [
     { id: 'color_wheel', label: 'Colour wheel' },
@@ -416,6 +421,7 @@ export const STYLE_ELEMENTS: Partial<Record<TileStyle, Array<{ id: string; label
     { id: 'trend',         label: 'Trend arrow' },
     { id: 'graph',         label: 'Sparkline graph' },
     { id: 'secondary',     label: 'Secondary chips' },
+    { id: 'header_chips',  label: 'Chips in the name row', def: false },
   ],
   'input-control': [
     { id: 'name',         label: 'Name' },

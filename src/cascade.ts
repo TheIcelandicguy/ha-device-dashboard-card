@@ -156,17 +156,19 @@ export function showGraphs(i: CascadeInput): boolean {
 
 /**
  * Whether one part of the chosen tile style is shown.
- * device → type → room → view → saved style → preset → shown. Mirrors the
- * tile_style cascade, so a view that switches style can adjust its parts.
+ * device → type → room → view → saved style → preset → the element's own
+ * default. Mirrors the tile_style cascade, so a view that switches style can
+ * adjust its parts. `def` is true for plain show/hide elements; placement
+ * elements (header_chips) pass false so they are opt-in.
  */
-export function elementVisible(i: CascadeInput, id: string): boolean {
+export function elementVisible(i: CascadeInput, id: string, def = true): boolean {
   return deviceStyle(i)?.elements?.[id]
     ?? profileStyle(i)?.elements?.[id]
     ?? areaStyle(i)?.elements?.[id]
     ?? i.view?.elements?.[id]
     ?? customDef(i)?.elements?.[id]
     ?? i.config.style_presets?.[effectiveStyle(i)]?.elements?.[id]
-    ?? true;
+    ?? def;
 }
 
 /** Energy window: device → type → room → view → card → lifetime total. */

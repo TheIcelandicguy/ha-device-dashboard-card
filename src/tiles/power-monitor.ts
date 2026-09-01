@@ -14,6 +14,27 @@ export function renderPowerMonitorTile(ctx: TileCtx, variant: PowerMonitorVarian
   }
 }
 
+type PMSensors = ReturnType<TileCtx['tileSensors']>;
+
+/** The secondary readings as one chip strip — shared by every placement. */
+function pmChips(s: PMSensors, cls = 'ts-chips'): TemplateResult {
+  return html`<div class="${cls}">
+    ${s.voltage != null ? html`<span class="ts-chip">${s.voltage.toFixed(1)} V</span>` : nothing}
+    ${s.current != null ? html`<span class="ts-chip">${s.current.toFixed(2)} A</span>` : nothing}
+    ${s.energy  != null ? html`<span class="ts-chip">${s.energy.toFixed(2)} kWh</span>` : nothing}
+    ${s.temp    != null ? html`<span class="ts-chip">${s.temp.toFixed(1)} °C</span>` : nothing}
+    ${s.rssi    != null ? html`<span class="ts-chip">${s.rssi} dBm</span>` : nothing}
+  </div>`;
+}
+
+/** header_chips (opt-in element) moves the secondary readings into the name
+ *  row; the variant's own secondary placement then stands down — the chips
+ *  move, they don't duplicate. Gated on 'secondary' too, so hiding the
+ *  readings hides them wherever they sit. */
+function chipsInHeader(ctx: TileCtx): boolean {
+  return ctx.showEl('header_chips', false) && ctx.showEl('secondary');
+}
+
 function renderPMBigNumber(ctx: TileCtx): TemplateResult {
   const { device, isOn, accent, online, config, profile } = ctx;
   const s = ctx.tileSensors(device);
@@ -42,18 +63,13 @@ function renderPMBigNumber(ctx: TileCtx): TemplateResult {
       <div class="ts-hero-top">
         ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
         ${renderNameDot(device, online, 'ts-hero-name')}
+        ${chipsInHeader(ctx) ? pmChips(s, 'ts-chips ts-chips-hdr') : nothing}
       </div>
       <div class="ts-hero-num" style="color:${isOn ? accent : 'var(--sc-text-muted)'}">${s.power != null ? s.power.toFixed(s.power < 10 ? 1 : 0) : '—'}</div>
       <div class="ts-hero-unit">watts · ${isOn ? 'active' : 'idle'}</div>
       ${ctx.showEl('graph') ? html`<div class="ts-hero-spark"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:${H}px;display:block">${sparkSvg}</svg></div>` : nothing}
       <div class="ts-hero-foot">
-        ${ctx.showEl('secondary') ? html`<div class="ts-chips">
-          ${s.voltage != null ? html`<span class="ts-chip">${s.voltage.toFixed(1)} V</span>` : nothing}
-          ${s.current != null ? html`<span class="ts-chip">${s.current.toFixed(2)} A</span>` : nothing}
-          ${s.energy  != null ? html`<span class="ts-chip">${s.energy.toFixed(2)} kWh</span>` : nothing}
-          ${s.temp    != null ? html`<span class="ts-chip">${s.temp.toFixed(1)} °C</span>` : nothing}
-          ${s.rssi    != null ? html`<span class="ts-chip">${s.rssi} dBm</span>` : nothing}
-        </div>` : nothing}
+        ${ctx.showEl('secondary') && !chipsInHeader(ctx) ? pmChips(s) : nothing}
         ${ctx.showEl('uptime') ? html`<span class="ts-uptime">${s.uptime ? formatUptime(s.uptime) : ''}</span>` : nothing}
       </div>
       ${ctx.showEl('lower_body') ? ctx.renderTileLowerBody(device, profile) : nothing}
@@ -102,6 +118,7 @@ function renderPMGauge(ctx: TileCtx): TemplateResult {
       <div class="ts-ring-top" style="width:100%">
         ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
         ${renderNameDot(device, online, 'ts-ring-name')}
+        ${chipsInHeader(ctx) ? pmChips(s, 'ts-chips ts-chips-hdr') : nothing}
       </div>
       <svg viewBox="0 0 ${CX * 2} ${svgH}" style="width:100%;max-width:360px;height:auto;overflow:visible;display:block">
         ${rings.map((ring, i) => {
@@ -154,6 +171,7 @@ function renderPMGraph(ctx: TileCtx): TemplateResult {
       <div class="ts-spark-top">
         ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
         ${renderNameDot(device, online, 'ts-spark-name')}
+        ${chipsInHeader(ctx) ? pmChips(s, 'ts-chips ts-chips-hdr') : nothing}
       </div>
       ${ctx.showEl('graph') ? html`<div class="ts-spark-graph"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:${H}px;display:block;overflow:visible">${sparkBody}</svg></div>` : nothing}
       <div class="ts-spark-bottom">
@@ -161,7 +179,7 @@ function renderPMGraph(ctx: TileCtx): TemplateResult {
           <div class="ts-spark-big" style="color:${isOn ? accent : 'var(--sc-text-muted)'}">${s.power != null ? s.power.toFixed(s.power < 10 ? 1 : 0) : '—'}</div>
           <div class="ts-spark-sub">${isOn ? 'W · now' : 'W · idle'}</div>
         </div>
-        ${ctx.showEl('secondary') ? html`<div class="ts-spark-meta">
+        ${ctx.showEl('secondary') && !chipsInHeader(ctx) ? html`<div class="ts-spark-meta">
           ${s.voltage != null ? html`<div class="ts-spark-mrow">${s.voltage.toFixed(1)} <b>V</b></div>` : nothing}
           ${s.current != null ? html`<div class="ts-spark-mrow">${s.current.toFixed(2)} <b>A</b></div>` : nothing}
           ${s.energy  != null ? html`<div class="ts-spark-mrow">${s.energy.toFixed(2)} <b>kWh</b></div>` : nothing}
@@ -183,10 +201,11 @@ function renderPMCompact(ctx: TileCtx): TemplateResult {
         <div class="ts-hbar-left-bar" style="background:${isOn ? accent : 'rgba(255,255,255,0.07)'}"></div>
         <div class="ts-hbar-main">
           ${renderNameDot(device, online, 'ts-hbar-name')}
+          ${chipsInHeader(ctx) ? pmChips(s, 'ts-chips ts-chips-hdr') : nothing}
           <div class="ts-hbar-num" style="color:${isOn ? accent : 'var(--sc-text-muted)'}">${s.power != null ? s.power.toFixed(s.power < 10 ? 1 : 0) : '—'}</div>
           <div class="ts-hbar-unit">watts</div>
         </div>
-        ${ctx.showEl('secondary') ? html`<div class="ts-hbar-side">
+        ${ctx.showEl('secondary') && !chipsInHeader(ctx) ? html`<div class="ts-hbar-side">
           ${s.voltage != null ? html`<div class="ts-hbar-sstat"><div class="ts-hbar-sk">V</div><div class="ts-hbar-sv">${s.voltage.toFixed(0)}</div></div>` : nothing}
           ${s.current != null ? html`<div class="ts-hbar-sstat"><div class="ts-hbar-sk">A</div><div class="ts-hbar-sv">${s.current.toFixed(2)}</div></div>` : nothing}
           ${s.temp    != null ? html`<div class="ts-hbar-sstat"><div class="ts-hbar-sk">°C</div><div class="ts-hbar-sv">${s.temp.toFixed(1)}</div></div>` : nothing}
@@ -236,9 +255,10 @@ function renderPMTable(ctx: TileCtx): TemplateResult {
       <div class="ts-list-header">
         ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
         ${renderNameDot(device, online, 'ts-list-name')}
+        ${chipsInHeader(ctx) ? pmChips(s, 'ts-chips ts-chips-hdr') : nothing}
       </div>
       ${s.power   != null ? row('Power',   formatPower(s.power),         true) : nothing}
-      ${ctx.showEl('secondary') ? html`
+      ${ctx.showEl('secondary') && !chipsInHeader(ctx) ? html`
         ${s.voltage != null ? row('Voltage', `${s.voltage.toFixed(1)} V`)       : nothing}
         ${s.current != null ? row('Current', `${s.current.toFixed(3)} A`)       : nothing}
         ${s.energy  != null ? row(s.energyLabel, formatEnergy(s.energy))        : nothing}

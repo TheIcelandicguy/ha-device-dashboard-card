@@ -29,6 +29,9 @@ export const tilesCss = css`
     .ts-hero-foot { display:flex; align-items:center; justify-content:space-between; padding-top:6px; border-top:1px solid var(--sc-tile-border); margin-top:auto; }
 
     .ts-chips { display:flex; flex-wrap:wrap; gap:3px; }
+    /* header_chips placement: ride the name row's spare width, right-aligned,
+       and never push the name itself off the tile. */
+    .ts-chips-hdr { margin-left:auto; justify-content:flex-end; min-width:0; flex:0 1 auto; }
 
     .ts-chip { font-size:var(--fs-sm); padding:2px 6px; border-radius:4px; background:var(--sc-sensor-bg); border:1px solid var(--sc-tile-border); color:var(--sc-text-muted); }
 

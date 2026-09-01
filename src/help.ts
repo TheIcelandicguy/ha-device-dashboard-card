@@ -72,7 +72,7 @@ export const HELP_CONCEPTS: HelpTopic[] = [
     id: 'hiding',
     title: 'Blocks, elements and chips — which one hides what',
     body: [
-      '**Blocks** reorder and hide the parts of the `default` tile. **Elements** show and hide the parts of every other style (its toggle, graph, secondary readings…). **Sensor chips** choose which measurements appear as little pills, in any style.',
+      '**Blocks** reorder and hide the parts of the `default` tile. **Elements** show and hide the parts of every other style (its toggle, graph, secondary readings…) — and carry the odd placement choice, like "Chips in the name row" on the power-monitor and sensor styles, which moves the secondary readings up beside the device name. **Sensor chips** choose which measurements appear as little pills, in any style.',
       'The editor only offers what applies: pick a power-monitor style and the block grid disappears in favour of that style\'s elements.',
       'Design narrows to whatever scope you pick: choose one device and it offers only the chips that device can produce and the blocks it can render — an i4 offers only the chips it can actually produce and the blocks it can actually render. Flip **All options** at the top of that panel if you want the full surface back.',
     ],

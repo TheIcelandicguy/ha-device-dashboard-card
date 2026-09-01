@@ -48,10 +48,20 @@ export function renderSensorCardTile(ctx: TileCtx): TemplateResult {
       if (!s || s.state === 'unavailable' || s.state === 'unknown') return false;
       return !isNaN(parseFloat(s.state));
     }).slice(0, 4);
+    // header_chips (opt-in) moves the secondary chips into the name row; the
+    // bottom placement then stands down — they move, they don't duplicate.
+    const hdrChips = ctx.showEl('header_chips', false) && ctx.showEl('secondary');
+    const chipSpans = secEnts.map(e => {
+      const ss = hass.states[e.entity_id];
+      const v = parseFloat(ss?.state ?? '');
+      const u = (ss?.attributes as HassAttrs)?.unit_of_measurement ?? '';
+      return html`<span class="ts-chip">${isNaN(v) ? ss?.state : v.toFixed(1)} ${u}</span>`;
+    });
     return html`
       <div class="ts-sensor" style="--ts-accent:${accent}">
         <div class="ts-sensor-top">
           ${renderNameDot(device, online)}
+          ${hdrChips && secEnts.length ? html`<div class="ts-chips ts-chips-hdr">${chipSpans}</div>` : nothing}
           <span class="ts-sensor-dc">${dc}</span>
         </div>
         ${ctx.showEl('primary_value') ? html`<div class="ts-sensor-main">
@@ -65,13 +75,8 @@ export function renderSensorCardTile(ctx: TileCtx): TemplateResult {
         ${ctx.showEl('graph') ? html`<div class="ts-sensor-spark">
           ${ctx.renderSparklinesFiltered(device, ctx.getGraphEntities(device).filter(e => e.entityId === primaryEnt!.entity_id))}
         </div>` : nothing}
-        ${ctx.showEl('secondary') && secEnts.length ? html`<div class="ts-chips" style="margin-top:6px">
-          ${secEnts.map(e => {
-            const ss = hass.states[e.entity_id];
-            const v = parseFloat(ss?.state ?? '');
-            const u = (ss?.attributes as HassAttrs)?.unit_of_measurement ?? '';
-            return html`<span class="ts-chip">${isNaN(v) ? ss?.state : v.toFixed(1)} ${u}</span>`;
-          })}
+        ${ctx.showEl('secondary') && !hdrChips && secEnts.length ? html`<div class="ts-chips" style="margin-top:6px">
+          ${chipSpans}
         </div>` : nothing}
       </div>`;
   }

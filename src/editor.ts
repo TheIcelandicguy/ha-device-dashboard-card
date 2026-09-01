@@ -2399,9 +2399,11 @@ export class HADeviceDashboardEditor extends LitElement {
   ): TemplateResult {
     const els = STYLE_ELEMENTS[style];
     if (!els) return html``;
-    const setEl = (id: string, visible: boolean) => {
+    // An element back at its own default carries no override — most default to
+    // shown, opt-in placement elements (def: false) to hidden.
+    const setEl = (id: string, visible: boolean, def: boolean) => {
       const next = { ...cur };
-      if (visible) delete next[id]; else next[id] = false;
+      if (visible === def) delete next[id]; else next[id] = visible;
       apply(Object.keys(next).length ? next : undefined);
     };
     return html`
@@ -2412,8 +2414,8 @@ export class HADeviceDashboardEditor extends LitElement {
         ${els.map(el => html`
           <div class="tog-row" style="border:none;padding:3px 0">
             <div class="tog-lbl">${el.label}</div>
-            <label class="sw"><input type="checkbox" .checked=${cur[el.id] !== false}
-              @change=${(e: Event) => setEl(el.id, (e.target as HTMLInputElement).checked)}>
+            <label class="sw"><input type="checkbox" .checked=${cur[el.id] ?? el.def ?? true}
+              @change=${(e: Event) => setEl(el.id, (e.target as HTMLInputElement).checked, el.def ?? true)}>
               <span class="sw-t"></span><span class="sw-b"></span></label>
           </div>`)}
       </div>`;

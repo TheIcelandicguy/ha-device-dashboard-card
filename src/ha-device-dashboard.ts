@@ -2654,9 +2654,10 @@ export class HADeviceDashboard extends LitElement {
     const sw = getPrimarySwitch(device);
     const isOn = sw?.isOn ?? false;
     // Per-element visibility for this tile's style: device → area → style preset →
-    // visible. Renderers call showEl(id); an unset id defaults to shown.
+    // the element's default. Renderers call showEl(id); an unset id defaults to
+    // shown unless the call passes its own default (opt-in placement elements).
     const _cin = this._cascade(device, profile);
-    const showEl = (id: string): boolean => cascade.elementVisible(_cin, id);
+    const showEl = (id: string, def?: boolean): boolean => cascade.elementVisible(_cin, id, def);
     return {
       showEl,
       hass: this.hass,
