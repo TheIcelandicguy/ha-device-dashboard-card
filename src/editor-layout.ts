@@ -35,45 +35,41 @@ export const EDITOR_LAYOUT: EditorTab[] = [
   { id: 'devices', label: 'Rooms & devices', icon: '⌂', sections: [
     { id: 'rooms-toolbar', label: 'Rooms toolbar' },
     { id: 'discovery',     label: 'Discovery' },
+    // Not styling — it decides which entities COUNT as a light, which is about
+    // what a device is, not how it looks. It sat in the Header tab only because
+    // that tab existed; it belongs with discovery.
+    { id: 'lights',        label: 'What counts as a light' },
     { id: 'extra-cards',   label: 'Extra cards' },
-  ] },
-  // Redesign Phase 3 — everything for a device in one place (bespoke body).
-  { id: 'device-styling', label: 'Device styling', icon: '◆', sections: [
-    { id: 'device-panel', label: 'Per-device style panel' },
   ] },
   { id: 'views', label: 'Views', icon: '☰', sections: [
     { id: 'views-toolbar', label: 'Views toolbar' },
     { id: 'view-card',     label: 'Per-view card + filters' },
   ] },
-  // ── Redesign Phase 2: split the old "Layout & Style" tab by *what* is styled —
-  //    the header on its own, the card/tiles/theme look together. Both render via
-  //    _renderCustomTab from the global section registry (no bespoke body needed).
-  { id: 'header-styling', label: 'Header', icon: '◈', sections: [
-    { id: 'header', label: 'Header' },
-    { id: 'lights', label: 'What counts as a light' },
-  ] },
-  // Redesign Phase 2 — scope-first: pick WHERE you are editing, and one control
-  // list redraws for that layer. Built alongside Card & Theme / Device styling /
-  // Header, which it is intended to replace once it covers them.
+  // ── Redesign Phase 3 — Design replaces Card & Theme, Device styling and
+  //    Header. Those three tabs answered the same question ("how does this
+  //    look?") at different scopes, which is why styling felt scattered: the
+  //    editor grouped global settings by THING and everything below by SCOPE.
+  //    Design is scope-first — pick the layer, one control list redraws.
+  //
+  //    Their section BODIES are not gone; the registry still owns them and the
+  //    Design tab renders them at Global scope, where they belong. Only the tabs
+  //    were removed.
   { id: 'design', label: 'Design', icon: '◈', sections: [
     { id: 'design-scope',  label: 'Scope' },
     { id: 'design-panel',  label: 'Controls for the selected scope' },
-  ] },
-  { id: 'card-theme', label: 'Card & Theme', icon: '🎨', sections: [
-    // The tab's namesake goes first: picking a theme is the one move that changes
-    // every colour at once, so it belongs above the things that override it.
-    { id: 'theme',      label: 'Colour theme' },
-    // Then card-wide "what to show" defaults — decide content before styling.
-    { id: 'content',    label: 'Chips & metrics' },
-    { id: 'tiles',      label: 'Tiles' },
-    { id: 'card',       label: 'Card',       advanced: true },
-    // Colours is NOT advanced: it is where a theme gets adjusted, and hiding it
-    // behind the Advanced toggle left the theme itself looking unadjustable.
-    { id: 'colors',     label: 'Colours' },
-    { id: 'typography', label: 'Typography', advanced: true },
-    // Appended by the bespoke body (_renderRoomStyleSection), not the registry —
-    // listed so the layout spec says where per-room styling actually lives.
-    { id: 'room-panel', label: 'Per-room style panel' },
+    // Rendered by the bespoke body at GLOBAL scope only: the settings that have
+    // no ladder under them, plus the card chrome the retired tabs owned.
+    { id: 'theme',         label: 'Colour theme' },
+    { id: 'content',       label: 'Chips & metrics' },
+    { id: 'tiles',         label: 'Tiles' },
+    { id: 'electrical',    label: 'Sensor chips — Electrical' },
+    { id: 'environmental', label: 'Sensor chips — Environmental' },
+    { id: 'deviceinfo',    label: 'Sensor chips — Device info', advanced: true },
+    { id: 'alerts',        label: 'Sensor chips — Alerts',      advanced: true },
+    { id: 'header',        label: 'Header' },
+    { id: 'card',          label: 'Card',       advanced: true },
+    { id: 'colors',        label: 'Colours' },
+    { id: 'typography',    label: 'Typography', advanced: true },
   ] },
 
   // ── Graphs & Sensors — WIRED to this spec (phase 2 pilot). ──
@@ -83,10 +79,9 @@ export const EDITOR_LAYOUT: EditorTab[] = [
     { id: 'graphtype',     label: 'Graph Type' },
     { id: 'graphcolors',   label: 'Per-sensor Colors', advanced: true },
     { id: 'graphranges',   label: 'Sensor Min / Max',  advanced: true },
-    { id: 'electrical',    label: 'Electrical' },
-    { id: 'environmental', label: 'Environmental' },
-    { id: 'deviceinfo',    label: 'Device Info', advanced: true },
-    { id: 'alerts',        label: 'Alerts',      advanced: true },
+    // The four sensor-chip groups moved to Design: which chips a tile shows is a
+    // design decision with a full ladder under it, while graph type, colours and
+    // ranges are about how the data is drawn and stay here.
   ] },
 
   { id: 'yaml', label: 'YAML', icon: '</>', sections: [

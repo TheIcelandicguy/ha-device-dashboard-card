@@ -175,9 +175,7 @@ export class HADeviceDashboardEditor extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
   @state() private _config!: HADeviceDashboardConfig;
   @state() private _tab: string = 'devices';   // matches an EDITOR_LAYOUT tab id
-  @state() private _styleScope: 'device' | 'profile' = 'device';  // Device styling tab: this device vs all of type
-  @state() private _cardThemeRoom: string = '';                   // Card & Theme tab: selected room for per-room styling
-  @state() private _newStyleName: string = '';                    // Device styling tab: "Save as style" name input
+  @state() private _newStyleName: string = '';                    // Design tab: "Save as style" name input
   @state() private _renamingStyle: string | null = null;          // Saved-styles row: slug being renamed inline
   /** Editor-only preference (persisted in localStorage, never written to config):
    *  when false, power-user controls are hidden to keep the common path simple. */
@@ -1333,7 +1331,7 @@ export class HADeviceDashboardEditor extends LitElement {
             <span class="room-count" style="color:var(--amber)">${favDevices.length}</span>
             <button class="room-style-btn" title="Style Favourites →" @click=${(e:Event)=>{
               e.stopPropagation();
-              this._cardThemeRoom = 'Favourites'; this._tab = 'card-theme';
+              this._setDesignScope({ kind: 'room', name: 'Favourites' }); this._tab = 'design';
             }}>✎</button>
             ${hasFavStyle ? html`<button class="room-reset-btn" title="Set Favourites style to default"
               @click=${(e:Event)=>{e.stopPropagation();this._clearAreaStyle('Favourites');}}>↺</button>` : nothing}
@@ -1379,7 +1377,7 @@ export class HADeviceDashboardEditor extends LitElement {
                         @click=${(e:Event)=>{e.stopPropagation();this._clearDeviceStyle(dev.device_id);}}>↺</button>` : nothing}
                       <button class="room-style-btn" title="Style this device →" @click=${(e:Event) => {
                         e.stopPropagation();
-                        this._selectedDeviceId = dev.device_id; this._styleScope = 'device'; this._tab = 'device-styling';
+                        this._selectedDeviceId = dev.device_id; this._setDesignScope({ kind: 'device', id: dev.device_id }); this._tab = 'design';
                       }}>✎</button>
                     </div>`;
                 })}
@@ -1404,7 +1402,7 @@ export class HADeviceDashboardEditor extends LitElement {
               @click=${(e:Event)=>{e.stopPropagation();this._clearAreaStyle(areaKey);}}>↺</button>` : nothing}
             <button class="room-style-btn" title="Style this room →" @click=${(e:Event)=>{
               e.stopPropagation();
-              this._cardThemeRoom = areaKey; this._tab = 'card-theme';
+              this._setDesignScope({ kind: 'room', name: areaKey }); this._tab = 'design';
             }}>✎</button>
             <button class="room-expand-btn ${isExpanded ? 'open' : ''}" @click=${(e:Event)=>{
               e.stopPropagation();
@@ -1415,7 +1413,7 @@ export class HADeviceDashboardEditor extends LitElement {
           </div>
           ${isExpanded ? html`
             <div class="room-expanded">
-              <!-- Device list (room styling now lives in Card & Theme → Per-room styling) -->
+              <!-- Device list. ✎ jumps to Design with that device as the scope. -->
               <div class="room-devices">
                 ${devicesInArea.length ? devicesInArea.map(dev => {
                   const isHidden = hiddenDevices.includes(dev.device_id);
@@ -1448,7 +1446,7 @@ export class HADeviceDashboardEditor extends LitElement {
                         @click=${(e:Event)=>{e.stopPropagation();this._clearDeviceStyle(dev.device_id);}}>↺</button>` : nothing}
                       <button class="room-style-btn" title="Style this device →" @click=${(e: Event) => {
                         e.stopPropagation();
-                        this._selectedDeviceId = dev.device_id; this._styleScope = 'device'; this._tab = 'device-styling';
+                        this._selectedDeviceId = dev.device_id; this._setDesignScope({ kind: 'device', id: dev.device_id }); this._tab = 'design';
                       }}>✎</button>
                     </div>`;
                 }) : html`<div class="room-device-empty">No devices in this room</div>`}
@@ -1456,11 +1454,19 @@ export class HADeviceDashboardEditor extends LitElement {
             </div>` : nothing}`;
       })}`;
 
-    // Per-device styling now lives in the Device styling tab; the ✎ shortcuts jump there.
+    // Per-device styling lives in the Design tab; the ✎ shortcuts jump there
+    // with that device already selected as the scope.
     const sidePanel = nothing;
+
+    // "What counts as a light" came from the retired Header tab. It is not
+    // styling — it decides which entities ARE lights — so it belongs with
+    // discovery. This body is bespoke, so the section has to be rendered
+    // explicitly; listing it in EDITOR_LAYOUT alone renders nothing.
+    const lights = this._globalSectionDescriptors()['lights'];
 
     return html`
       ${this._renderDiscoverySection()}
+      ${lights ? this._sec('lights', lights.icon, lights.bg, lights.fg, lights.label, lights.badge, lights.body) : nothing}
       ${this._renderCloudImportSection()}
       ${this._renderExtraCardsSection()}
       ${this._sec('rooms','⌂','rgba(74,222,128,0.1)','#4ade80','Rooms & devices', roomsBadge, roomBody)}
@@ -2150,101 +2156,6 @@ export class HADeviceDashboardEditor extends LitElement {
         </div>` : nothing}`;
   }
 
-  /** Device styling tab — pick a device (grouped by room), then style it via the
-   *  shared device panel + per-style element toggles. (Redesign Phase 3.) */
-  private _renderDeviceStylingTab(): TemplateResult {
-    const devices = this._allDevices();
-    const byArea = new Map<string, typeof devices>();
-    for (const d of devices) { const a = d.area || '—'; if (!byArea.has(a)) byArea.set(a, []); byArea.get(a)!.push(d); }
-    const areas = [...byArea.keys()].sort((a, b) => a.localeCompare(b));
-    const sel = this._selectedDeviceId;
-    const selDev = sel ? devices.find(d => d.device_id === sel) : null;
-    const profile = selDev ? getDeviceProfile(selDev) : null;
-    const scope = this._styleScope;
-    const typeCount = profile ? devices.filter(d => getDeviceProfile(d).type === profile.type).length : 0;
-    const profLabel = profile ? (PROFILE_LABELS[profile.type] || profile.type) : '';
-
-    /** "Save this look as a named style" — same row for either scope. */
-    const saveStyleRow = (save: () => void): TemplateResult => html`
-      <div class="field" style="margin-top:12px;display:flex;gap:6px;align-items:center">
-        <input type="text" class="inline-text" placeholder="Save this look as a named style…" style="flex:1"
-          .value=${this._newStyleName}
-          @input=${(e: Event) => { this._newStyleName = (e.target as HTMLInputElement).value; }}
-          @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') save(); }}/>
-        <button class="btn-copy" title="Save as reusable style" @click=${save}>💾 Save style</button>
-      </div>`;
-
-    const deviceScopeBody = (): TemplateResult => {
-      const ds = this._config.device_styles?.[sel!] ?? {};
-      const style = (ds.tile_style ?? (this._config.smart_tile_styles && selDev ? profileDefaultTileStyle(profile!.type, selDev) : undefined) ?? 'default') as TileStyle;
-      return html`
-        ${this._renderDeviceStylePanel(sel!)}
-        ${this._renderStyleElementToggles(style, ds.elements ?? {}, e => this._setDeviceStyle(sel!, { elements: e }))}
-        ${saveStyleRow(() => this._saveDeviceAsStyle(sel!))}`;
-    };
-    const profileScopeBody = (): TemplateResult => {
-      const ps = this._config.profile_styles?.[profile!.type] ?? {};
-      // Mirror the render cascade: the per-profile recommendation only takes
-      // effect when smart_tile_styles is on. Assuming it unconditionally would
-      // show power-monitor element toggles for a relay that actually renders as
-      // a block tile.
-      const rawProfStyle = ps.tile_style
-        ?? (this._config.smart_tile_styles ? PROFILE_DEFAULT_TILE_STYLE[profile!.type] : undefined)
-        ?? this._config.tile_style;
-      const style = (this._baseStyleOf(rawProfStyle) ?? 'default') as TileStyle;
-      return html`
-        <div class="hint" style="margin:2px 2px 10px">Applies to all ${typeCount} ${profLabel} device${typeCount !== 1 ? 's' : ''}. A per-device setting still overrides.</div>
-        <div class="dev-style-panel">
-          <div class="field" style="margin-bottom:4px">
-            <div class="field-lbl">Tile layout style</div>
-            ${this._renderTileStylePicker(
-              ps.tile_style, ps.power_monitor_variant ?? 'big-number', PROFILE_DEFAULT_TILE_STYLE[profile!.type],
-              v => this._setProfileStyle(profile!.type, { tile_style: v }),
-              v => this._setProfileStyle(profile!.type, { power_monitor_variant: v }),
-              ps.show_graphs,
-              v => this._setProfileStyle(profile!.type, { show_graphs: v }))}
-          </div>
-          ${style === 'power-monitor' ? nothing : html`
-          <div class="tog-row" style="border:none;padding:6px 0 0">
-            <div class="tog-lbl">Sparkline graphs</div>
-            <div class="pill-grp">
-              ${([['inherit', undefined], ['on', true], ['off', false]] as const).map(([lbl, val]) => html`
-                <span class="pill ${(ps.show_graphs ?? 'x') === (val ?? 'x') ? 'on' : ''}"
-                  @click=${() => this._setProfileStyle(profile!.type, { show_graphs: val })}>${lbl}</span>`)}
-            </div>
-          </div>`}
-          ${this._renderStyleElementToggles(style, ps.elements ?? {}, e => this._setProfileStyle(profile!.type, { elements: e }))}
-          ${style === 'default'
-            ? this._renderLayoutCanvas(
-                ps.tile_layout,
-                this._config.tile_layout ?? PROFILE_DEFAULT_BLOCKS[profile!.type],
-                (l) => this._setProfileStyle(profile!.type, { tile_layout: l }))
-            : nothing}
-          ${saveStyleRow(() => this._saveProfileAsStyle(profile!.type))}
-        </div>`;
-    };
-
-    return html`
-      <div class="dev-styling-tab">
-        <div class="field" style="margin-bottom:8px">
-          <div class="field-lbl">Device to style</div>
-          <select class="inline-text" style="width:100%"
-            @change=${(e: Event) => { this._selectedDeviceId = (e.target as HTMLSelectElement).value || null; }}>
-            <option value="">— select a device —</option>
-            ${areas.map(a => html`<optgroup label=${a}>
-              ${byArea.get(a)!.map(d => html`<option value=${d.device_id} ?selected=${d.device_id === sel}>${d.name}</option>`)}
-            </optgroup>`)}
-          </select>
-        </div>
-        ${selDev && profile ? html`
-          <div class="pill-grp" style="margin-bottom:10px">
-            <span class="pill ${scope === 'device' ? 'on' : ''}" @click=${() => { this._styleScope = 'device'; }}>This device</span>
-            <span class="pill ${scope === 'profile' ? 'on' : ''}" @click=${() => { this._styleScope = 'profile'; }}>All ${profLabel}${typeCount !== 1 ? 's' : ''} (${typeCount})</span>
-          </div>
-          ${scope === 'device' ? deviceScopeBody() : profileScopeBody()}
-        ` : html`<div class="hint" style="margin:12px 2px">Pick a device above to style it.</div>`}
-      </div>`;
-  }
 
   /** Max blocks that can share one row before it gets too cramped to read. */
   private static readonly ROW_MAX = 3;
@@ -3175,6 +3086,25 @@ export class HADeviceDashboardEditor extends LitElement {
       </div>`;
   }
 
+  /**
+   * Render registry sections inside the Design panel. These are the bodies the
+   * retired Card & Theme / Header tabs owned: the registry still owns them, so
+   * there is exactly one editor per key and nothing to drift — only the tab that
+   * displayed them changed. Advanced-gated ids stay gated.
+   */
+  private _designGlobalSections(ids: string[]): TemplateResult {
+    const reg = this._globalSectionDescriptors();
+    const advanced = new Set(
+      EDITOR_LAYOUT.flatMap(t => t.sections.filter(s => s.advanced).map(s => s.id)),
+    );
+    return html`${ids.map(id => {
+      const d = reg[id];
+      if (!d) return nothing;
+      const sec = this._sec(`design-${id}`, d.icon, d.bg, d.fg, d.label, d.badge, d.body);
+      return advanced.has(id) ? this._adv(sec) : sec;
+    })}`;
+  }
+
   /** The controls for whichever scope is selected. */
   private _renderDesignPanel(): TemplateResult {
     const sc = this._designScope;
@@ -3191,7 +3121,7 @@ export class HADeviceDashboardEditor extends LitElement {
     const tileBody = () => html`
       ${this._designRow('Colour theme', 'theme',
         sc.kind === 'global'
-          ? html`<div class="hint">Global's palette is the theme picker in Card &amp; Theme — every layer below starts from it.</div>`
+          ? this._designGlobalSections(['theme'])
           : this._themeOverrideSelect(v['theme'] as ThemePreset | undefined,
             (t) => this._patchScope({ theme: t }),
             sc.kind === 'device' || sc.kind === 'type'
@@ -3229,7 +3159,8 @@ export class HADeviceDashboardEditor extends LitElement {
           ?? (this._inheritedFrom('tile_style')?.value as TileStyle | undefined)
           ?? 'default') as TileStyle;
         // Comparing the returned TemplateResult against html`` would always be
-        // false — identity, not value — so ask the data instead.
+        // false — identity, not value — so ask the data whether this style has
+        // any elements at all.
         if (!STYLE_ELEMENTS[style]) return nothing;
         return this._designRow('Elements', 'elements', this._renderStyleElementToggles(
           style,
@@ -3269,21 +3200,18 @@ export class HADeviceDashboardEditor extends LitElement {
 
     /**
      * Card chrome. At Global these are the card's own `style` keys, so the
-     * existing section bodies are reused verbatim — one editor per key, nothing
-     * to drift. At a view they write into `ViewConfig.style`, a deliberately
-     * small subset: the colours a view most often wants when it re-skins the
-     * card, not all seventeen.
+     * existing section bodies are reused verbatim — one editor per key, no
+     * second front-end to drift. At a view they write into `ViewConfig.style`,
+     * which is a deliberately small subset: the colours a view most often wants
+     * to change when it re-skins the card, not all seventeen.
      */
     const chromeBody = () => {
       if (sc.kind === 'global') {
-        const reg = this._globalSectionDescriptors();
         return html`
           <div class="hint" style="margin-bottom:6px">
             The card's own header, surface and type. Every layer below inherits these.
           </div>
-          ${this._sec('design-chrome-header', '◈', 'rgba(99,102,241,0.1)', '#818cf8', 'Header', nothing, reg['header'].body)}
-          ${this._sec('design-chrome-card', '▢', 'rgba(129,140,248,0.1)', '#818cf8', 'Card', nothing, reg['card'].body)}
-          ${this._sec('design-chrome-type', 'T', 'rgba(251,191,36,0.1)', '#fbbf24', 'Typography', nothing, reg['typography'].body)}`;
+          ${this._designGlobalSections(['header', 'card', 'colors', 'typography'])}`;
       }
       const vs = (v['style'] ?? {}) as Record<string, string | number | undefined>;
       const patchChrome = (key: string, val: string | number | undefined) => {
@@ -3331,6 +3259,7 @@ export class HADeviceDashboardEditor extends LitElement {
 
     return html`
       <div class="dsn-panel">
+        ${this._renderStylePreview()}
         <div class="dsn-scope-hdr">
           <span class="dsn-scope-name">${label}</span>
           ${setCount
@@ -3340,6 +3269,15 @@ export class HADeviceDashboardEditor extends LitElement {
         ${this._designFamily('tile', 'Tile — device → type → room → view → card', tileBody)}
         ${this._designFamily('container', 'Container — room → view → card', containerBody)}
         ${this._designFamily('chrome', 'Card chrome — view → card', chromeBody)}
+        ${sc.kind === 'global' ? html`
+          <div class="dsn-family">
+            <div class="dsn-family-hdr">Card-wide — no layers under these</div>
+            <div class="hint" style="margin-bottom:6px">
+              Settings that exist once for the whole card. There is nothing to
+              override them with, which is why they only appear at Global.
+            </div>
+            ${this._designGlobalSections(['content', 'tiles', 'electrical', 'environmental', 'deviceinfo', 'alerts'])}
+          </div>` : nothing}
       </div>`;
   }
 
@@ -3867,7 +3805,7 @@ export class HADeviceDashboardEditor extends LitElement {
               v.theme,
               (t) => setViewField('theme', t),
               `Repaints the whole card — header included — while this view is showing.
-               Overrides the card theme and any colour set in Card & Theme → Colours.`)}
+               Overrides the card theme and any colour set in Design → Colours.`)}
 
             ${this._adv(html`
             <div class="field">
@@ -3948,7 +3886,7 @@ export class HADeviceDashboardEditor extends LitElement {
   //  TAB: STYLE
   // ══════════════════════════════════════════════════════════════
 
-  /** Layout & Style section bodies, keyed by id — consumed by _renderStyleTab and
+  /** Style section bodies, keyed by id — consumed by the Design tab and
    *  by _renderCustomTab (so these sections can be moved into other/custom tabs). */
   private _layoutSectionDescriptors(): Record<string, SectionDesc> {
     const c = this._config;
@@ -4357,7 +4295,7 @@ export class HADeviceDashboardEditor extends LitElement {
         <div class="hint" style="margin-top:2px">For anything a label does not cover.</div>
       </div>`;
 
-    // Card-wide "what to show" defaults — the first thing to set in Card & Theme.
+    // Card-wide "what to show" defaults — the first thing to set, at Global scope.
     const collapseAllRow = html`
       <div class="tog-row" style="border:none;padding:4px 0 0">
         <div class="tog-lbl">Collapse / expand all rooms
@@ -4379,8 +4317,7 @@ export class HADeviceDashboardEditor extends LitElement {
       ${this._chipPicker(c.sensors, undefined, 'the default (all shown)', (next) => this._set('sensors', next))}`;
 
     // The theme picker's home. It also still sits in the ◆ Defaults panel, but
-    // that is a collapsed toolbar popover — the tab named "Card & Theme" was the
-    // one place in the editor with no way to pick a theme.
+    // that is a collapsed toolbar popover. Rendered by Design at Global scope.
     const themeBody = html`
       <div class="snap-row" style="justify-content:flex-end;margin-bottom:6px">
         ${this._themeActions()}
@@ -4404,9 +4341,10 @@ export class HADeviceDashboardEditor extends LitElement {
     };
   }
 
-  /** Layout & Style tab — copy/paste chrome + live preview, then its sections
-   *  (from EDITOR_LAYOUT via the shared loop). */
-  private _renderStyleTab(): TemplateResult {
+  /** The live preview: what the current colours, type and tile settings look
+   *  like. It outlived the Card & Theme tab it used to head, and now sits at the
+   *  top of the Design panel where the same settings are edited. */
+  private _renderStylePreview(): TemplateResult {
     const c = this._config;
     const sty: StyleCfg = c.style ?? {};
 
@@ -4476,30 +4414,9 @@ export class HADeviceDashboardEditor extends LitElement {
         <div class="sp-hint" style="color:${previewMuted}">Live preview — reflects current colour, typography, and tile settings</div>
       </div>`;
 
-    return html`
-      ${previewPreview}
-      ${this._renderTabSections('card-theme', this._globalSectionDescriptors())}
-      ${this._renderRoomStyleSection()}`;
+    return previewPreview;
   }
 
-  /** Relocated per-room styling (Redesign Phase 3c) — a room picker + the existing
-   *  room-style panel, now living under Card & Theme instead of Rooms & devices. */
-  private _renderRoomStyleSection(): TemplateResult {
-    const areas = this._getAreas().map(a => a.name);
-    const room = this._cardThemeRoom;
-    const body = html`
-      <div class="field" style="margin-bottom:8px">
-        <div class="field-lbl">Room</div>
-        <select class="inline-text" style="width:100%"
-          @change=${(e: Event) => { this._cardThemeRoom = (e.target as HTMLSelectElement).value; }}>
-          <option value="">— select a room —</option>
-          <option value="Favourites" ?selected=${room === 'Favourites'}>★ Favourites</option>
-          ${areas.map(a => html`<option value=${a} ?selected=${a === room}>${a}</option>`)}
-        </select>
-      </div>
-      ${room ? this._renderRoomStylePanel(room) : html`<div class="hint" style="margin:8px 2px">Pick a room to style its header, columns and tile look.</div>`}`;
-    return this._sec('room-style', '⌂', 'rgba(74,222,128,0.1)', '#4ade80', 'Per-room styling', nothing, body);
-  }
 
   /** Every movable global section, keyed by id — used to render custom tabs. */
   private _globalSectionDescriptors(): Record<string, SectionDesc> {
@@ -4877,7 +4794,7 @@ export class HADeviceDashboardEditor extends LitElement {
       out.push({
         title: `${themedViews.length === 1 ? 'A view replaces' : `${themedViews.length} views replace`} the card's colours`,
         detail: `${themedViews.map(v => v.name || v.id).join(', ')} carry their own theme, which outranks the ${
-          paletteOverrides.length} colour${paletteOverrides.length > 1 ? 's' : ''} set in Card & Theme → Colours (${
+          paletteOverrides.length} colour${paletteOverrides.length > 1 ? 's' : ''} set in Design → Colours (${
           paletteOverrides.join(', ')}). Those apply only in views with no theme of their own.`,
       });
     }
@@ -5131,7 +5048,7 @@ export class HADeviceDashboardEditor extends LitElement {
   }
 
   /** The 🎲 / ✨ / 💾 buttons that sit above the theme grid. Shared by the
-   *  ◆ Defaults panel (in its title row) and the Card & Theme tab's Colour theme
+   *  ◆ Defaults panel (in its title row) and the Design tab's Colour theme
    *  section, which puts them at the top of the body instead — a button in a
    *  `_sec` header would bubble its click and toggle the section shut. */
   private _themeActions(): TemplateResult {
@@ -5259,7 +5176,7 @@ export class HADeviceDashboardEditor extends LitElement {
             <div class="dp-title">Tile behaviour</div>
             <div class="dp-hint-inline">Smart tile styles and Native controls moved to Card &amp; Theme → Tiles, next to the rest of the tile settings.</div>
             <button class="sec-toolbar-btn" style="align-self:flex-start"
-              @click=${() => { this._gotoControl('card-theme', 'tiles', 'delegate_controls'); this._defaultsOpen = false; }}>Open Tiles →</button>
+              @click=${() => { this._gotoControl('design', 'design-tiles', 'delegate_controls'); this._defaultsOpen = false; }}>Open Tiles →</button>
           </div>
 
           <div class="dp-group">
@@ -5277,7 +5194,7 @@ export class HADeviceDashboardEditor extends LitElement {
               </div>
             </div>
             <button class="sec-toolbar-btn" style="align-self:flex-start"
-              @click=${() => { this._tab = 'card-theme'; this._defaultsOpen = false; }}>More tile settings →</button>
+              @click=${() => { this._tab = 'design'; this._defaultsOpen = false; }}>More tile settings →</button>
           </div>
 
           <div class="dp-group">
@@ -5310,7 +5227,7 @@ export class HADeviceDashboardEditor extends LitElement {
     // real section keys.
     const allTabSectionKeys: Record<string, string[]> = {};
     EDITOR_LAYOUT.forEach(t => { allTabSectionKeys[t.id] = t.sections.map(s => s.id); });
-    allTabSectionKeys['devices'] = ['rooms'];
+    allTabSectionKeys['devices'] = ['rooms', 'lights'];
     allTabSectionKeys['views']   = [];
     allTabSectionKeys['yaml']    = [];
     const tabSectionKeys: Record<string, string[]> = Object.fromEntries(
@@ -5404,10 +5321,8 @@ export class HADeviceDashboardEditor extends LitElement {
             // render their assigned global sections.
             const bodyFor: Record<string, () => TemplateResult> = {
               devices: () => this._renderDevicesTab(),
-              'device-styling': () => this._renderDeviceStylingTab(),
               views:   () => this._renderViewsTab(),
               design: () => this._renderDesignTab(),
-              'card-theme': () => this._renderStyleTab(),
               graphs:  () => this._renderGraphsSensorsTab(),
               yaml:    () => this._renderYamlTab(),
             };
