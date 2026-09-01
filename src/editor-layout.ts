@@ -52,6 +52,13 @@ export const EDITOR_LAYOUT: EditorTab[] = [
     { id: 'header', label: 'Header' },
     { id: 'lights', label: 'What counts as a light' },
   ] },
+  // Redesign Phase 2 — scope-first: pick WHERE you are editing, and one control
+  // list redraws for that layer. Built alongside Card & Theme / Device styling /
+  // Header, which it is intended to replace once it covers them.
+  { id: 'design', label: 'Design', icon: '◈', sections: [
+    { id: 'design-scope',  label: 'Scope' },
+    { id: 'design-panel',  label: 'Controls for the selected scope' },
+  ] },
   { id: 'card-theme', label: 'Card & Theme', icon: '🎨', sections: [
     // The tab's namesake goes first: picking a theme is the one move that changes
     // every colour at once, so it belongs above the things that override it.

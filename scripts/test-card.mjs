@@ -149,7 +149,8 @@ mkdirSync(OUT, { recursive: true });
 try {
   execFileSync(process.execPath, [
     join('node_modules', 'typescript', 'bin', 'tsc'),
-    'src/helpers.ts', 'src/cascade.ts', 'src/attention.ts', 'src/shelly-cloud-import.ts', '--outDir', OUT,
+    'src/helpers.ts', 'src/cascade.ts', 'src/attention.ts', 'src/shelly-cloud-import.ts',
+    'src/design-scope.ts', '--outDir', OUT,
     '--module', 'commonjs', '--target', 'es2020', '--skipLibCheck', '--moduleResolution', 'node',
   ], { stdio: 'inherit' });
   // The project is "type": "module", which would make these .js files ESM.
@@ -158,6 +159,7 @@ try {
   const req = createRequire(import.meta.url);
   const h = req(join(process.cwd(), OUT, 'helpers.js'));
   const cas = req(join(process.cwd(), OUT, 'cascade.js'));
+  const ds  = req(join(process.cwd(), OUT, 'design-scope.js'));
   const att = req(join(process.cwd(), OUT, 'attention.js'));
   const hass = fleet();
   const byName = (list, name) => list.find(d => d.name === name);
@@ -437,6 +439,65 @@ try {
     [4, 8, 12]);
   eq('tile gap: unset anywhere is undefined, not a number',
     cas.tileGapFor({}, undefined, undefined), undefined);
+
+  console.log('\ndesign scope - what each rung may set');
+  const sG = { kind: 'global' }, sV = { kind: 'view', id: 'v' }, sR = { kind: 'room', name: 'Bedroom' },
+        sT = { kind: 'type', profile: 'dimmer' }, sD = { kind: 'device', id: 'dimmer' };
+  eq('tile family reaches every rung',
+    [sG, sV, sR, sT, sD].map(s => ds.scopeCanSet(s, 'tile')), [true, true, true, true, true]);
+  eq('container stops at the room - a device has no grid',
+    [sG, sV, sR, sT, sD].map(s => ds.scopeCanSet(s, 'container')), [true, true, true, false, false]);
+  eq('chrome stops at the view - a room has no card header',
+    [sG, sV, sR, sT, sD].map(s => ds.scopeCanSet(s, 'chrome')), [true, true, false, false, false]);
+  ok('an unavailable family explains itself', !!ds.whyUnavailable(sD, 'container'));
+  eq('an available one has nothing to explain', ds.whyUnavailable(sR, 'container'), undefined);
+
+  console.log('\ndesign scope - keys survive a round trip');
+  eq('every kind round-trips', [sG, sV, sR, sT, sD].map(s => ds.scopeKey(s)),
+    ['global', 'view:v', 'room:Bedroom', 'type:dimmer', 'device:dimmer']);
+  const known = { views: ['v'], rooms: ['Bedroom'], types: ['dimmer'], devices: ['dimmer'] };
+  eq('a known key parses back', ds.parseScopeKey('room:Bedroom', known), sR);
+  // A persisted scope outlives what it names; reopening onto a deleted device
+  // would show controls writing into nothing.
+  eq('a room that no longer exists falls back to global',
+    ds.parseScopeKey('room:Attic', known), sG);
+  eq('a device that no longer exists falls back to global',
+    ds.parseScopeKey('device:gone', known), sG);
+  eq('junk falls back to global', ds.parseScopeKey('nonsense', known), sG);
+  eq('nothing stored falls back to global', ds.parseScopeKey(null, known), sG);
+
+  console.log('\ndesign scope - grouping the picker');
+  const devs = [
+    { device_id: 'a', name: 'Zeta lamp', area: 'Bedroom', integration: 'shelly' },
+    { device_id: 'b', name: 'Alpha lamp', area: 'Bedroom', integration: 'hue' },
+    { device_id: 'c', name: 'Hall relay', area: '', integration: 'shelly' },
+  ];
+  const prof = (d) => (d.device_id === 'c' ? 'relay' : 'dimmer');
+  const byRoom = ds.groupDevices(devs, 'room', prof);
+  eq('rooms group and sort, devices sorted inside',
+    byRoom.map(g => [g.label, g.devices.map(d => d.name)]),
+    [['Bedroom', ['Alpha lamp', 'Zeta lamp']], ['No room', ['Hall relay']]]);
+  eq('the empty area keeps its real key, not its label',
+    byRoom.find(g => g.label === 'No room').scope, { kind: 'room', name: '' });
+  eq('a room heading selects the room scope',
+    byRoom[0].scope, { kind: 'room', name: 'Bedroom' });
+  eq('a type heading selects the type scope',
+    ds.groupDevices(devs, 'type', prof).map(g => g.scope),
+    [{ kind: 'type', profile: 'dimmer' }, { kind: 'type', profile: 'relay' }]);
+  // Integration is a real property but not a rung, so its heading selects nothing.
+  eq('integration grouping is browse-only',
+    ds.groupDevices(devs, 'integration', prof).map(g => g.scope), [undefined, undefined]);
+
+  console.log('\ndesign scope - where a scope writes');
+  const cfg = { theme: 'nordic_warm', area_styles: { Bedroom: { theme: 'brutalist', columns: 2 } },
+                device_styles: { a: { color: '#fff' } }, views: [{ id: 'v', name: 'V', theme: 'ha' }] };
+  eq('a room block is found', ds.scopeBlock(cfg, sR).theme, 'brutalist');
+  eq('a view block is found', ds.scopeBlock(cfg, sV).theme, 'ha');
+  eq('an untouched scope has no block', ds.scopeBlock(cfg, sT), undefined);
+  eq('override counts drive the "n set here" badge',
+    ds.overrideCount(cfg, sR, ['theme', 'columns', 'sensors']), 2);
+  eq('a scope with nothing set counts zero',
+    ds.overrideCount(cfg, sT, ['theme', 'columns']), 0);
 
   console.log('\ncascade — elements');
   eq('unset elements are shown', cas.elementVisible(cin({}), 'toggle'), true);

@@ -9,6 +9,10 @@ import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, D
   CONFIG_KEYS, LOVELACE_KEYS } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, detectTheme, paletteFor, type ThemePalette } from './themes';
 import {
+  GLOBAL_SCOPE, scopeCanSet, whyUnavailable, scopeKey, parseScopeKey, groupDevices,
+  scopeLabel, overrideCount, type DesignScope, type GroupBy, type DesignFamily,
+} from './design-scope';
+import {
   normalizeCloudServer as sciNormalizeServer, fetchCloudLists as sciFetchLists,
   matchCloudRooms as sciMatchRooms, matchCloudDevices as sciMatchDevices,
   resolveCloudImage as sciResolveImage, isStockRoomImage as sciIsStockImage,
@@ -228,6 +232,14 @@ export class HADeviceDashboardEditor extends LitElement {
    *  expand/collapse-all so both agree on what a room row is. */
   private static readonly FAV_ROW_KEY = '★ Favourites';
   @state() private _expandedRooms: Set<string> = new Set();
+  /** Design tab: which layer is being edited. Persisted per card — being
+   *  dropped back on Global every time you reopen the editor mid-way through
+   *  styling one room is the kind of small friction that stops people using a
+   *  scope-first UI at all. */
+  @state() private _designScope: DesignScope = GLOBAL_SCOPE;
+  @state() private _designGroupBy: GroupBy = 'room';
+  @state() private _designOpenGroups: Set<string> = new Set();
+  private _designScopeLoaded = false;
   @state() private _expandedRoomStyle: Set<string> = new Set();
   @state() private _selectedDeviceId: string | null = null;
   /** Device-styling panel: false = only this device's own options, true = every
@@ -1874,6 +1886,7 @@ export class HADeviceDashboardEditor extends LitElement {
   }
 
   private _setDeviceStyle(deviceId: string, patch: Partial<{
+    theme: ThemePreset | undefined;
     color: string | undefined;
     tile_layout: TileLayout | undefined;
     profile: DeviceProfile | undefined;
@@ -1919,6 +1932,8 @@ export class HADeviceDashboardEditor extends LitElement {
   /** Per-device-TYPE style writer ("All relays") — mirrors _setDeviceStyle but on
    *  profile_styles[type]. A subset of DeviceStyle (no per-entity animations). */
   private _setProfileStyle(profileType: DeviceProfile, patch: Partial<{
+    theme: ThemePreset | undefined;
+    energy_period: EnergyPeriod | undefined;
     color: string | undefined;
     tile_layout: TileLayout | undefined;
     tile_style: TileStyle | undefined;
@@ -2958,6 +2973,294 @@ export class HADeviceDashboardEditor extends LitElement {
         </div>
         <div class="hint" style="margin-top:4px">Default summary chips for every room header. Power is on by default — toggle it off to drop it. A room can override this in Per-room styling below.</div>
       </div>`;
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  TAB: DESIGN  (Redesign Phase 2 — scope-first)
+  // ══════════════════════════════════════════════════════════════
+
+  /** Everything that currently exists, so a persisted scope naming something
+   *  since deleted falls back instead of writing into nothing. */
+  private _designKnown() {
+    const devs = this._allDevices();
+    return {
+      views: (this._config.views ?? []).map(v => v.id),
+      rooms: [...new Set(devs.map(d => d.area ?? ''))],
+      types: [...new Set(devs.map(d => this._deviceProfile(d)))],
+      devices: devs.map(d => d.device_id),
+    };
+  }
+
+  private _designScopeStorageKey(): string {
+    return `hdd:designScope:${this._config?.title ?? 'default'}`;
+  }
+
+  /** Hydrate the persisted scope once devices are known — parseScopeKey needs the
+   *  current lists to decide whether the stored scope still refers to anything. */
+  private _hydrateDesignScope(): void {
+    if (this._designScopeLoaded || !this.hass || !this._config) return;
+    this._designScopeLoaded = true;
+    try {
+      this._designScope = parseScopeKey(
+        localStorage.getItem(this._designScopeStorageKey()), this._designKnown());
+    } catch { /* privacy mode — Global is a fine default */ }
+  }
+
+  private _setDesignScope(scope: DesignScope): void {
+    this._designScope = scope;
+    try { localStorage.setItem(this._designScopeStorageKey(), scopeKey(scope)); } catch { /* ignore */ }
+  }
+
+  private _deviceProfile(d: ReturnType<typeof getAllDevices>[number]): DeviceProfile {
+    return this._config.device_styles?.[d.device_id]?.profile ?? getDeviceProfile(d).type;
+  }
+
+  /** Write a patch into whichever config block the current scope owns. One place,
+   *  so a control never needs to know which layer it is being rendered at. */
+  private _patchScope(patch: Record<string, unknown>): void {
+    const sc = this._designScope;
+    switch (sc.kind) {
+      case 'global':
+        for (const [k, v] of Object.entries(patch)) {
+          this._set(k, v);
+        }
+        return;
+      case 'view': this._updateView(sc.id, patch as Partial<ViewConfig>); return;
+      case 'room':
+        for (const [k, v] of Object.entries(patch)) {
+          this._setAreaStyle(sc.name, k as keyof AreaStyle,
+            v as string | number | boolean | string[] | undefined);
+        }
+        return;
+      case 'type': this._setProfileStyle(sc.profile, patch as never); return;
+      case 'device': this._setDeviceStyle(sc.id, patch as never); return;
+    }
+  }
+
+  /** What this scope currently sets. Reads only. */
+  private _scopeValues(): Record<string, unknown> {
+    const sc = this._designScope;
+    const c = this._config;
+    switch (sc.kind) {
+      case 'global': return c as unknown as Record<string, unknown>;
+      case 'view': return ((c.views ?? []).find(v => v.id === sc.id) ?? {}) as unknown as Record<string, unknown>;
+      case 'room': return (c.area_styles?.[sc.name] ?? {}) as unknown as Record<string, unknown>;
+      case 'type': return (c.profile_styles?.[sc.profile] ?? {}) as unknown as Record<string, unknown>;
+      case 'device': return (c.device_styles?.[sc.id] ?? {}) as unknown as Record<string, unknown>;
+    }
+  }
+
+  /**
+   * Where a key's value comes from when this scope does not set it — the layers
+   * ABOVE this one, most specific first. This is the whole point of the tab: a
+   * control saying "inherit" without saying from what is why the old editor was
+   * hard to reason about.
+   */
+  private _inheritedFrom(key: string): { label: string; value: unknown } | undefined {
+    const c = this._config;
+    const sc = this._designScope;
+    const chain: Array<{ label: string; block: Record<string, unknown> | undefined }> = [];
+    const dev = sc.kind === 'device' ? this._allDevices().find(d => d.device_id === sc.id) : undefined;
+    if (sc.kind === 'device' && dev) {
+      const prof = this._deviceProfile(dev);
+      chain.push({ label: `Type · ${prof}`, block: c.profile_styles?.[prof] as unknown as Record<string, unknown> });
+      chain.push({ label: `Room · ${dev.area || 'No room'}`, block: c.area_styles?.[dev.area ?? ''] as unknown as Record<string, unknown> });
+    }
+    if (sc.kind !== 'global' && sc.kind !== 'view') {
+      const av = (c.views ?? []).find(v => v.id === (c.default_view ?? c.views?.[0]?.id));
+      if (av) chain.push({ label: `View · ${av.name || av.id}`, block: av as unknown as Record<string, unknown> });
+    }
+    if (sc.kind !== 'global') chain.push({ label: 'Card', block: c as unknown as Record<string, unknown> });
+    for (const step of chain) {
+      const val = step.block?.[key];
+      if (val !== undefined) return { label: step.label, value: val };
+    }
+    return undefined;
+  }
+
+  /** One row: the control, where its value comes from, and how to drop it. */
+  private _designRow(label: string, key: string, control: TemplateResult, hint?: string): TemplateResult {
+    const setHere = this._scopeValues()[key] !== undefined;
+    const inherited = setHere ? undefined : this._inheritedFrom(key);
+    return html`
+      <div class="dsn-row ${setHere ? 'set' : ''}">
+        <div class="dsn-row-hdr">
+          <span class="dsn-row-lbl">${label}</span>
+          ${setHere
+            ? html`<span class="dsn-badge on">set here</span>
+                   <button class="dsn-reset" title="Drop this override and inherit again"
+                     @click=${() => this._patchScope({ [key]: undefined })}>↺</button>`
+            : html`<span class="dsn-badge">${inherited ? `from ${inherited.label}` : 'default'}</span>`}
+        </div>
+        ${control}
+        ${hint ? html`<div class="hint" style="margin-top:2px">${hint}</div>` : nothing}
+      </div>`;
+  }
+
+  /** A family block, or the reason this scope cannot set it. */
+  private _designFamily(family: DesignFamily, title: string, body: () => TemplateResult): TemplateResult {
+    if (!scopeCanSet(this._designScope, family)) {
+      return html`
+        <div class="dsn-family off">
+          <div class="dsn-family-hdr">${title}</div>
+          <div class="hint">${whyUnavailable(this._designScope, family)}</div>
+        </div>`;
+    }
+    return html`
+      <div class="dsn-family">
+        <div class="dsn-family-hdr">${title}</div>
+        ${body()}
+      </div>`;
+  }
+
+  /**
+   * The scope map: pick where you are editing by pointing at it. Grouped before
+   * expanded, because a flat list of a real fleet is unusable — and the groups
+   * double as layers, so a room heading selects the room itself.
+   */
+  private _renderDesignScopePicker(): TemplateResult {
+    const c = this._config;
+    const cur = scopeKey(this._designScope);
+    const groups = groupDevices(this._allDevices(), this._designGroupBy, (d) => this._deviceProfile(d));
+    const COUNT_KEYS = ['theme', 'color', 'tile_style', 'power_monitor_variant', 'tile_layout',
+      'sensors', 'show_graphs', 'elements', 'energy_period', 'columns', 'tile_size', 'tileGap', 'tile_gap', 'style'];
+    const badge = (scope: DesignScope) => {
+      const n = overrideCount(c, scope, COUNT_KEYS);
+      return n ? html`<span class="dsn-count">${n}</span>` : nothing;
+    };
+    const chip = (scope: DesignScope, label: string, extra = '') => html`
+      <button class="dsn-chip ${cur === scopeKey(scope) ? 'on' : ''} ${extra}"
+        @click=${() => this._setDesignScope(scope)}>${label}${badge(scope)}</button>`;
+
+    return html`
+      <div class="dsn-picker">
+        <div class="dsn-pick-row">${chip(GLOBAL_SCOPE, 'Global')}</div>
+
+        ${(c.views ?? []).length ? html`
+          <div class="dsn-pick-lbl">Views</div>
+          <div class="dsn-pick-row">
+            ${(c.views ?? []).map(v => chip({ kind: 'view', id: v.id }, v.name || v.id))}
+          </div>` : nothing}
+
+        <div class="dsn-pick-lbl">
+          Devices, grouped by
+          ${(['room', 'type', 'integration'] as GroupBy[]).map(g => html`
+            <button class="dsn-groupby ${this._designGroupBy === g ? 'on' : ''}"
+              @click=${() => { this._designGroupBy = g; }}>${g}</button>`)}
+        </div>
+        <div class="dsn-tree">
+          ${groups.map(g => {
+            const open = this._designOpenGroups.has(g.label);
+            return html`
+              <div class="dsn-group">
+                <div class="dsn-group-hdr">
+                  <button class="dsn-twisty" @click=${() => {
+                    const next = new Set(this._designOpenGroups);
+                    if (open) next.delete(g.label); else next.add(g.label);
+                    this._designOpenGroups = next;
+                  }}>${open ? '▾' : '▸'}</button>
+                  ${g.scope
+                    ? chip(g.scope, g.label, 'grp')
+                    : html`<span class="dsn-chip grp browse"
+                        title="An integration is not a styling layer — expand it to reach its devices">${g.label}</span>`}
+                  <span class="dsn-group-n">${g.devices.length}</span>
+                </div>
+                ${open ? html`
+                  <div class="dsn-group-body">
+                    ${g.devices.map(d => chip({ kind: 'device', id: d.id }, d.name, 'dev'))}
+                  </div>` : nothing}
+              </div>`;
+          })}
+        </div>
+      </div>`;
+  }
+
+  /** The controls for whichever scope is selected. */
+  private _renderDesignPanel(): TemplateResult {
+    const sc = this._designScope;
+    const v = this._scopeValues();
+    const devs = this._allDevices();
+    const label = scopeLabel(sc, {
+      viewName: (id) => (this._config.views ?? []).find(x => x.id === id)?.name || id,
+      deviceName: (id) => devs.find(d => d.device_id === id)?.name ?? id,
+    });
+    const SET_KEYS = ['theme', 'color', 'tile_style', 'power_monitor_variant', 'tile_layout',
+      'sensors', 'show_graphs', 'elements', 'energy_period', 'columns', 'tile_size', 'tileGap', 'tile_gap'];
+    const setCount = SET_KEYS.filter(k => v[k] !== undefined).length;
+
+    const tileBody = () => html`
+      ${this._designRow('Colour theme', 'theme',
+        sc.kind === 'global'
+          ? html`<div class="hint">Global's palette is the theme picker in Card &amp; Theme — every layer below starts from it.</div>`
+          : this._themeOverrideSelect(v['theme'] as ThemePreset | undefined,
+            (t) => this._patchScope({ theme: t }),
+            sc.kind === 'device' || sc.kind === 'type'
+              ? 'Repaints this tile only — 13 of the 19 palette keys. The card surface and header are not inside a tile.'
+              : 'Repaints everything this layer contains.'))}
+
+      ${this._designRow('Tile style', 'tile_style',
+        this._renderTileStylePicker(
+          v['tile_style'] as TileStyle | undefined,
+          (v['power_monitor_variant'] as PowerMonitorVariant) ?? 'big-number',
+          undefined,
+          (val) => this._patchScope({ tile_style: val }),
+          (val) => this._patchScope({ power_monitor_variant: val }),
+          v['show_graphs'] as boolean | undefined,
+          (val) => this._patchScope({ show_graphs: val }),
+        ))}
+
+      ${this._designRow('Sensor chips', 'sensors',
+        this._chipPicker(
+          v['sensors'] as string[] | undefined,
+          this._inheritedFrom('sensors')?.value as string[] | undefined,
+          this._inheritedFrom('sensors')?.label ?? 'the default (all shown)',
+          (next) => this._patchScope({ sensors: next }),
+        ))}
+
+      ${this._designRow('Energy window', 'energy_period',
+        this._renderEnergyPeriodPicker(
+          v['energy_period'] as EnergyPeriod | undefined,
+          (val) => this._patchScope({ energy_period: val }),
+        ))}`;
+
+    const containerBody = () => html`
+      ${this._designRow('Columns', 'columns', html`
+        <div class="sl-row">
+          <input type="range" min="1" max="6" step="1" style="flex:1;accent-color:#f4601e"
+            .value=${String((v['columns'] as number) ?? (this._inheritedFrom('columns')?.value as number) ?? 3)}
+            @input=${(e: Event) => this._patchScope({ columns: parseInt((e.target as HTMLInputElement).value, 10) })}/>
+          <span class="sl-val">${(v['columns'] as number) ?? (this._inheritedFrom('columns')?.value as number) ?? 3}</span>
+        </div>`)}
+
+      ${this._designRow('Tile size', 'tile_size', html`
+        <div class="pill-grp">
+          ${(['sm', 'md', 'lg'] as const).map((sz, i) => html`
+            <span class="pill ${v['tile_size'] === sz ? 'on' : ''}"
+              @click=${() => this._patchScope({ tile_size: sz })}>${['Small', 'Medium', 'Large'][i]}</span>`)}
+        </div>`)}`;
+
+    return html`
+      <div class="dsn-panel">
+        <div class="dsn-scope-hdr">
+          <span class="dsn-scope-name">${label}</span>
+          ${setCount
+            ? html`<span class="dsn-badge on">${setCount} set here</span>`
+            : html`<span class="dsn-badge">nothing set — all inherited</span>`}
+        </div>
+        ${this._designFamily('tile', 'Tile — device → type → room → view → card', tileBody)}
+        ${this._designFamily('container', 'Container — room → view → card', containerBody)}
+        ${this._designFamily('chrome', 'Card chrome — view → card', () => html`
+          <div class="hint">Header, card surface and typography still live in the Header and Card &amp; Theme tabs. They move here when those tabs retire.</div>`)}
+      </div>`;
+  }
+
+  private _renderDesignTab(): TemplateResult {
+    this._hydrateDesignScope();
+    return html`
+      ${this._sec('design-scope', '◈', 'rgba(129,140,248,0.1)', '#818cf8',
+        'Scope — what am I editing?', nothing, this._renderDesignScopePicker())}
+      ${this._sec('design-panel', '◉', 'rgba(244,96,30,0.1)', '#f4601e',
+        'Controls', nothing, this._renderDesignPanel())}`;
   }
 
   /** Palette override picker for a layer that has no `style` object of its own —
@@ -5014,6 +5317,7 @@ export class HADeviceDashboardEditor extends LitElement {
               devices: () => this._renderDevicesTab(),
               'device-styling': () => this._renderDeviceStylingTab(),
               views:   () => this._renderViewsTab(),
+              design: () => this._renderDesignTab(),
               'card-theme': () => this._renderStyleTab(),
               graphs:  () => this._renderGraphsSensorsTab(),
               yaml:    () => this._renderYamlTab(),
@@ -5136,6 +5440,49 @@ export class HADeviceDashboardEditor extends LitElement {
       justify-content:space-between; gap:8px; padding:5px 7px; background:var(--s2,var(--s1));
       border-bottom:1px solid var(--border); }
     .check-dd-count { font-size:10.5px; font-weight:600; color:var(--t3); }
+    /* ── Design tab (scope-first) ── */
+    .dsn-picker { display:flex; flex-direction:column; gap:6px; }
+    .dsn-pick-lbl { font-size:.7em; text-transform:uppercase; letter-spacing:.05em; color:var(--t3); margin-top:4px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+    .dsn-pick-row { display:flex; flex-wrap:wrap; gap:4px; }
+    .dsn-chip { display:inline-flex; align-items:center; gap:5px; font-family:inherit; font-size:.75em; font-weight:600;
+      padding:3px 9px; border-radius:20px; cursor:pointer; color:var(--text);
+      background:var(--bg2); border:1px solid var(--border2); transition:all .15s; }
+    .dsn-chip:hover { border-color:var(--accent); }
+    .dsn-chip.on { border-color:var(--accent); background:var(--accentbg); color:var(--accent); }
+    .dsn-chip.grp { font-weight:700; }
+    .dsn-chip.browse { cursor:default; opacity:.7; }
+    .dsn-chip.browse:hover { border-color:var(--border2); }
+    .dsn-chip.dev { font-weight:400; }
+    /* How many keys this rung overrides — makes the tree show where
+       customisation actually lives, without opening every scope to find out. */
+    .dsn-count { font-size:.85em; font-weight:700; padding:0 5px; border-radius:8px;
+      background:var(--accent); color:#fff; }
+    .dsn-groupby { font-family:inherit; font-size:.9em; text-transform:none; letter-spacing:0;
+      padding:1px 7px; border-radius:10px; cursor:pointer; color:var(--t3);
+      background:transparent; border:1px solid var(--border2); }
+    .dsn-groupby.on { color:var(--accent); border-color:var(--accent); }
+    .dsn-tree { display:flex; flex-direction:column; gap:2px; max-height:280px; overflow-y:auto; }
+    .dsn-group-hdr { display:flex; align-items:center; gap:6px; }
+    .dsn-twisty { font-family:inherit; font-size:.8em; width:18px; padding:0; cursor:pointer;
+      background:transparent; border:none; color:var(--t3); }
+    .dsn-group-n { font-size:.7em; color:var(--t3); }
+    .dsn-group-body { display:flex; flex-wrap:wrap; gap:4px; padding:4px 0 6px 24px; }
+    .dsn-panel { display:flex; flex-direction:column; gap:10px; }
+    .dsn-scope-hdr { display:flex; align-items:center; gap:8px; padding-bottom:6px; border-bottom:1px solid var(--border2); }
+    .dsn-scope-name { font-weight:800; font-size:1.05em; }
+    .dsn-badge { font-size:.7em; padding:2px 7px; border-radius:10px; background:var(--bg2); color:var(--t3); }
+    .dsn-badge.on { background:var(--accentbg); color:var(--accent); font-weight:700; }
+    .dsn-family { border:1px solid var(--border2); border-radius:8px; padding:8px 10px; }
+    .dsn-family.off { opacity:.65; }
+    .dsn-family-hdr { font-size:.72em; text-transform:uppercase; letter-spacing:.05em; color:var(--t3); margin-bottom:6px; }
+    .dsn-row { padding:6px 0; border-top:1px solid var(--border2); }
+    .dsn-row:first-of-type { border-top:none; }
+    .dsn-row-hdr { display:flex; align-items:center; gap:6px; margin-bottom:4px; }
+    .dsn-row-lbl { font-size:.85em; font-weight:600; flex:1; }
+    .dsn-reset { font-family:inherit; font-size:.8em; padding:0 5px; cursor:pointer;
+      background:transparent; border:1px solid var(--border2); border-radius:6px; color:var(--t3); }
+    .dsn-reset:hover { color:var(--accent); border-color:var(--accent); }
+
     .theme-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
     .theme-swatch { display:flex; flex-direction:column; align-items:center; gap:4px; padding:5px 3px; border:1px solid var(--border2); border-radius:6px; background:transparent; cursor:pointer; transition:all .15s; }
     .theme-swatch:hover { border-color:var(--accent); }
