@@ -239,7 +239,7 @@
       { "key": "graph_line_color", "type": "string", "default": "per-sensor default", "fn": "Global fallback sparkline colour, under graph_sensor_colors[key]." },
       { "key": "show_entity_list", "type": "boolean", "default": "true", "fn": "The All Entities section of the expanded detail sheet. false hides the whole section (hidden_entities trims it item by item)." },
       { "key": "graph_style.bar_radius", "type": "number", "default": "1.5", "fn": "Corner radius of the bars when graph_style.type is 'bar'." },
-      { "key": "theme", "type": "ThemePreset", "default": "'warm_dusk' (seeded by getStubConfig)", "fn": "Palette base under `style` — every colour `style` omits comes from the preset. The editor sets it when you pick a theme, but also writes the full palette into `style`, so hand-written YAML is where it earns its keep. 'custom' applies no base." },
+      { "key": "theme", "type": "ThemePreset", "default": "'warm_dusk' (seeded by getStubConfig)", "fn": "Palette base under `style` — every colour `style` omits comes from the preset. Picking a theme CLEARS the palette out of `style`, so `theme` stays authoritative. 'custom' applies no base (the colours in `style` are the theme); 'ha' applies no palette either but points every colour at Home Assistant's own theme variables, so the card follows the active HA theme including light/dark. Also settable per view and per room." },
       { "key": "style_presets", "type": "Record<TileStyle, StylePreset>", "default": "none", "fn": "Per-tile-style presets (variant / sensors / tile_layout / elements) applied to every tile rendered in that style. Sits below device/area overrides in the cascade." },
       { "key": "style.button_shape / button_variant / button_size", "type": "ButtonShape / ButtonVariant / ButtonSize", "default": "pill / fill / md", "fn": "Global ON/OFF button styling. Only the per-room equivalents (area_styles[name].button*) have editor controls." }
     ],
@@ -512,7 +512,7 @@
       "groups": [
         { "name": "Defaults panel", "controls": [
           { "control": "Default view", "fn": "Which view loads first", "key": "default_view", "scope": "global", "default": "first view", "advanced": false },
-          { "control": "Colour theme", "fn": "Apply one of 7 preset palettes over style", "key": "style.* (palette keys)", "scope": "global", "default": "warm_dusk", "advanced": false },
+          { "control": "Colour theme", "fn": "Apply one of 8 preset palettes, or Follow HA to take every colour from the active Home Assistant theme", "key": "theme", "scope": "global", "default": "warm_dusk", "advanced": false },
           { "control": "★ Saved palettes", "fn": "One swatch per palette saved in this browser — click to restore, ✕ to forget. Restoring writes the colours to style and sets theme: custom.", "key": "style.* + localStorage", "scope": "global", "default": "none", "advanced": false },
           { "control": "💾 Save (colours)", "fn": "Save the colours currently rendering — the preset behind `theme` plus any style overrides — as a named palette in this browser", "key": "localStorage", "scope": "local", "default": "—", "advanced": false },
           { "control": "🎲 Random / ✨ Surprise me", "fn": "Roll a colour scheme — a random built-in preset, or a palette generated from a random hue with every text colour contrast-checked (WCAG 7:1 primary, 4.5:1 secondary). Current colours are stashed under ★ Saved first.", "key": "theme / style.*", "scope": "global", "default": "—", "advanced": false },

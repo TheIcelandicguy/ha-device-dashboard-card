@@ -7,7 +7,7 @@ import { HomeAssistant, fireEvent, LovelaceCardConfig } from 'custom-card-helper
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout, EnergyPeriod, InputActionConfig } from './types';
 import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, setBlockInLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels, deviceRelevance,
   CONFIG_KEYS, LOVELACE_KEYS } from './helpers';
-import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, detectTheme, type ThemePalette } from './themes';
+import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, detectTheme, paletteFor, type ThemePalette } from './themes';
 import {
   normalizeCloudServer as sciNormalizeServer, fetchCloudLists as sciFetchLists,
   matchCloudRooms as sciMatchRooms, matchCloudDevices as sciMatchDevices,
@@ -575,9 +575,7 @@ export class HADeviceDashboardEditor extends LitElement {
    *  capture that preset, not an empty object. */
   private _effectivePalette(): ThemePalette {
     const sty = (this._config.style ?? {}) as Record<string, unknown>;
-    const theme = this._config.theme;
-    const base = theme && theme !== 'custom' ? THEME_PRESETS[theme] : undefined;
-    const pal: Record<string, unknown> = { ...(base ?? {}) };
+    const pal: Record<string, unknown> = { ...(paletteFor(this._config.theme) ?? {}) };
     for (const k of THEME_KEYS) if (sty[k] !== undefined) pal[k] = sty[k];
     return pal as ThemePalette;
   }
@@ -2980,6 +2978,7 @@ export class HADeviceDashboardEditor extends LitElement {
             onPick(val ? (val as ThemePreset) : undefined);
           }}>
           <option value="" ?selected=${!current || current === 'custom'}>Inherit</option>
+          <option value="ha" ?selected=${current === 'ha'}>${THEME_LABELS.ha}</option>
           ${THEME_ORDER.map(n => html`
             <option value=${n} ?selected=${current === n}>${THEME_LABELS[n]}</option>`)}
         </select>
@@ -4465,7 +4464,7 @@ export class HADeviceDashboardEditor extends LitElement {
     // and reported 'custom'. Compare the EFFECTIVE palette for the same reason.
     const styleKeys = (c.style ?? {}) as Record<string, unknown>;
     const paletteOverrides = (THEME_KEYS as string[]).filter(k => styleKeys[k] !== undefined);
-    if (c.theme && c.theme !== 'custom' && paletteOverrides.length) {
+    if (c.theme && c.theme !== 'custom' && c.theme !== 'ha' && paletteOverrides.length) {
       const actual = detectTheme(this._effectivePalette() as NonNullable<HADeviceDashboardConfig['style']>);
       if (actual !== c.theme) {
         out.push({
@@ -4765,7 +4764,11 @@ export class HADeviceDashboardEditor extends LitElement {
    *  just clicked did not light up. */
   private _renderThemeGrid(): TemplateResult {
     const effective = this._effectivePalette() as Record<string, unknown>;
-    const activeTheme = detectTheme(effective as NonNullable<HADeviceDashboardConfig['style']>);
+    // 'ha' resolves to var() references, not colours, so detectTheme could never
+    // recognise it — it is read from the config rather than inferred.
+    const activeTheme: ThemePreset = this._config.theme === 'ha'
+      ? 'ha'
+      : detectTheme(effective as NonNullable<HADeviceDashboardConfig['style']>);
     const paletteActive = (pal: ThemePalette) =>
       Object.entries(pal).every(([k, v]) => effective[k] === v);
     return html`
@@ -4792,6 +4795,15 @@ export class HADeviceDashboardEditor extends LitElement {
             <button class="saved-x" title="Forget “${name}”"
               @click=${(e: Event) => { e.stopPropagation(); this._deletePalette(name); }}>✕</button>
           </div>`)}
+        <button class="theme-swatch ${activeTheme === 'ha' ? 'on' : ''}"
+          title="Take every colour from the Home Assistant theme that is active"
+          @click=${() => this._onPickTheme('ha')}>
+          <span class="ts-preview" style="background:var(--primary-background-color,#fafafa)">
+            <span class="ts-tile" style="background:var(--ha-card-background,var(--card-background-color,#fff));border:1px solid var(--divider-color,rgba(0,0,0,.12))"></span>
+            <span class="ts-accent" style="background:var(--primary-color,#03a9f4)"></span>
+          </span>
+          <span class="ts-name">${THEME_LABELS.ha}</span>
+        </button>
         ${THEME_ORDER.map(name => {
           const pal = THEME_PRESETS[name];
           return html`

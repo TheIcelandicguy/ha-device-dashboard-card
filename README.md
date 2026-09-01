@@ -337,7 +337,18 @@ theme: nordic_warm
 ```
 
 `warm_dusk` (default), `shelly_blue`, `dark_industrial`, `teal_terminal`, `brutalist`,
-`frosted_light`, `nordic_warm`, `midnight_purple`, `custom`.
+`frosted_light`, `nordic_warm`, `midnight_purple`, `custom`, `ha`.
+
+```yaml
+theme: ha        # follow whatever Home Assistant theme is active
+```
+
+`ha` is not a palette of its own: every colour becomes a reference to one of HA's
+theme variables (`--primary-color`, `--ha-card-background`, `--primary-text-color`,
+`--divider-color`, `--app-header-background-color` …), so the card repaints itself
+when you switch HA theme or flip light/dark — no reload, nothing to keep in sync.
+It works at every layer, so one view or one room can follow HA while the rest of
+the card keeps its own palette. Anything you set in `style` still overrides it.
 
 The theme is **authoritative**: every colour comes from the preset, and `style`
 holds only the colours you deliberately override. Picking a theme in the editor
@@ -378,10 +389,10 @@ They differ in reach, because reach is what the DOM allows:
   (radius, gap, fonts, sizes, header geometry) are untouched.
 - A **room theme** repaints what the room's container encloses: the room block's
   background, tiles, text, accent, online/offline/power and the room header — 15
-  of the 18 palette keys. Only `header_bg`, `header_text_color` and
-  `header_orb_color` are skipped; they describe the *card's* header, which sits
-  outside every room. A room's individual colour fields (`bgColor`,
-  `accentColor`, `tileBgColor`, …) still override its theme key by key.
+  of the 19 palette keys. Only the four `header_*` keys are skipped; they
+  describe the *card's* header, which sits outside every room. A room's
+  individual colour fields (`bgColor`, `accentColor`, `tileBgColor`, …) still
+  override its theme key by key.
 
 ### `style` — global tokens
 

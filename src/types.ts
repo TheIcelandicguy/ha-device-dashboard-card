@@ -87,7 +87,11 @@ export type EnergyPeriod  = 'total' | 'today' | 'week' | 'month';
 /** Device sort order. 'area' groups by room name, then by device name inside it. */
 export type SortBy        = 'name' | 'power' | 'online' | 'area';
 export type BoxShadow     = 'none' | 'soft' | 'medium' | 'strong';
-export type ThemePreset   = 'warm_dusk' | 'shelly_blue' | 'dark_industrial' | 'teal_terminal' | 'brutalist' | 'frosted_light' | 'nordic_warm' | 'midnight_purple' | 'custom';
+/** A colour palette. The eight named presets, plus two that are not palettes:
+ *  'custom' means the colours in `style` ARE the theme (no base applied), and
+ *  'ha' points every colour at Home Assistant's own theme variables, so the
+ *  card follows whatever HA theme is active, light/dark included. */
+export type ThemePreset   = 'warm_dusk' | 'shelly_blue' | 'dark_industrial' | 'teal_terminal' | 'brutalist' | 'frosted_light' | 'nordic_warm' | 'midnight_purple' | 'custom' | 'ha';
 
 /** Global graph display settings */
 export interface SensorRange {
@@ -117,11 +121,12 @@ export interface AreaStyle {
    *  the palette", which is a card-level idea, so it is ignored here (the room
    *  falls through to the view/card theme).
    *
-   *  Three of the palette's 18 keys describe the CARD's header — `header_bg`,
-   *  `header_text_color`, `header_orb_color` — which no room contains, so they
-   *  are skipped when a room theme is expanded. The other 15 scope to the room's
-   *  container, `card_bg` among them: it paints the room block, this room's
-   *  equivalent of the card surface. `bgColor` below still overrides that. */
+   *  Four of the palette's 19 keys describe the CARD's header — `header_bg`,
+   *  `header_bg2`, `header_text_color`, `header_orb_color` — which no room
+   *  contains, so they are skipped when a room theme is expanded. The other 15
+   *  scope to the room's container, `card_bg` among them: it paints the room
+   *  block, this room's equivalent of the card surface. `bgColor` below still
+   *  overrides that. */
   theme?: ThemePreset;
   // Background
   bgColor?: string;
@@ -455,7 +460,7 @@ export interface ViewConfig {
   // Layout / style overrides — applied between area_styles and defaults.
   /** Colour palette while this view is showing, overriding the card's `theme`.
    *  A view re-bases the whole palette: it outranks the card-level `style`
-   *  overrides on the 18 palette keys (a view is the more specific layer), while
+   *  overrides on all 19 palette keys (a view is the more specific layer), while
    *  leaving every non-palette key in `style` — radius, gap, fonts, sizes, header
    *  geometry — untouched. That mirrors what applying a theme in the editor does.
    *  Unlike a room theme this one reaches the card header too, since the header

@@ -76,6 +76,8 @@ For the stragglers a label does not cover, name entities directly in the same pa
 
 The **theme** is authoritative: every colour comes from the preset you pick. The `style` block holds only colours you deliberately changed on top.
 
+**Follow HA** is the exception: instead of a palette it points every colour at Home Assistant’s own theme variables, so the card matches whatever HA theme is active and follows it into light or dark. Available per card, per view and per room like any other theme.
+
 Picking a theme clears those overrides, so the editor offers to save your current colours first — they come back under a ★ Saved entry in the theme picker.
 
 Older configs wrote the whole palette into `style`, which shadowed the theme and made switching it do nothing. Those are migrated automatically on load: a palette that exactly matches a preset collapses back to the theme name, while a partial palette is left alone as the genuine override it is.

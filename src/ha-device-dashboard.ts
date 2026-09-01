@@ -6,7 +6,7 @@ import { HomeAssistant, fireEvent } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, HADevice, TileBlockId, DeviceProfileResult, EntityAnimationType, TileStyle, PowerMonitorVariant, HassAttrs, ViewConfig, CustomStyleDef, TileLayout, EnergyPeriod, DetailHistoryRange, InputActionConfig, InputHoldConfig, AreaStyle } from './types';
 import type { LovelaceCardConfig } from 'custom-card-helpers';
 import { BUNDLED_FONT_CSS } from './fonts';
-import { THEME_PRESETS, THEME_KEYS } from './themes';
+import { THEME_KEYS, paletteFor } from './themes';
 import { mainCss } from './styles/main';
 import { tilesCss } from './styles/tiles';
 import { detailCss } from './styles/detail';
@@ -513,10 +513,9 @@ export class HADeviceDashboard extends LitElement {
       // because those are not colours and the view is not claiming them.
       const kept = { ...explicit } as Record<string, unknown>;
       for (const k of THEME_KEYS) delete kept[k];
-      tokens = { ...THEME_PRESETS[viewTheme], ...kept } as NonNullable<HADeviceDashboardConfig['style']>;
+      tokens = { ...paletteFor(viewTheme), ...kept } as NonNullable<HADeviceDashboardConfig['style']>;
     } else {
-      const theme = this._config.theme;
-      const preset = theme && theme !== 'custom' ? THEME_PRESETS[theme] : undefined;
+      const preset = paletteFor(this._config.theme);
       tokens = preset ? { ...preset, ...explicit } : explicit;
     }
     this._styleTokensConfigRef = this._config;
@@ -3039,7 +3038,7 @@ export class HADeviceDashboard extends LitElement {
   /**
    * Expand a room's `theme` into the room container's scoped CSS variables.
    *
-   * Only what the container encloses can be themed. The three `header_*` keys
+   * Only what the container encloses can be themed. The four `header_*` keys
    * describe the CARD's header, which sits outside every room, so they are
    * skipped rather than emitted where they would do nothing (or worse, leak onto
    * a child that happens to read the variable). A *view* theme has no such limit;
@@ -3058,7 +3057,8 @@ export class HADeviceDashboard extends LitElement {
   private _applyAreaTheme(styleObj: Record<string, string>, areaStyle: AreaStyle | undefined): void {
     const theme = cascade.overrideTheme(undefined, areaStyle);
     if (!theme) return;
-    const p = THEME_PRESETS[theme];
+    const p = paletteFor(theme);
+    if (!p) return;
     if (p.card_bg) styleObj['backgroundColor'] = p.card_bg;
     if (p.accent_color) {
       styleObj['--sc-accent']      = p.accent_color;

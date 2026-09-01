@@ -7,7 +7,7 @@ export type ThemePalette = Partial<NonNullable<HADeviceDashboardConfig['style']>
  *  everything else (radius, font, sizes) is left alone. `dark_industrial` is the
  *  ship default and is deliberately identical to the runtime fallback colours in
  *  `_buildCardStyles`, so a fresh card with no `theme` renders as this preset. */
-export const THEME_PRESETS: Record<Exclude<ThemePreset, 'custom'>, ThemePalette> = {
+export const THEME_PRESETS: Record<Exclude<ThemePreset, 'custom' | 'ha'>, ThemePalette> = {
   // ── Ship default — subtle & warm: muted terracotta on warm charcoal
   //    (== runtime CSS-default colours, so a fresh card renders as this) ──
   warm_dusk: {
@@ -188,12 +188,13 @@ export const THEME_PRESETS: Record<Exclude<ThemePreset, 'custom'>, ThemePalette>
 };
 
 /** Display order + labels for the theme picker. */
-export const THEME_ORDER: Array<Exclude<ThemePreset, 'custom'>> = [
+export const THEME_ORDER: Array<Exclude<ThemePreset, 'custom' | 'ha'>> = [
   'warm_dusk', 'shelly_blue', 'dark_industrial', 'teal_terminal', 'brutalist',
   'frosted_light', 'nordic_warm', 'midnight_purple',
 ];
 
 export const THEME_LABELS: Record<ThemePreset, string> = {
+  ha: 'Follow HA',
   warm_dusk: 'Warm Dusk',
   shelly_blue: 'Shelly Blue',
   dark_industrial: 'Dark Industrial',
@@ -207,6 +208,57 @@ export const THEME_LABELS: Record<ThemePreset, string> = {
 
 /** The ship default preset — a card with no `theme` set renders as this. */
 export const DEFAULT_THEME: Exclude<ThemePreset, 'custom'> = 'warm_dusk';
+
+/**
+ * "Follow Home Assistant" — not a palette but a set of REFERENCES to HA's own
+ * theme variables. Every value here ends up assigned to a CSS custom property,
+ * so `var(...)` resolves at paint time: switch HA theme, or flip light/dark, and
+ * the card repaints with it. No listener, no re-render, nothing to keep in sync.
+ *
+ * Mapped by HA's surface roles rather than by name. The page behind HA's cards is
+ * --primary-background-color and a card is --ha-card-background; this card's
+ * TILES are what read as cards, so tile_bg takes the card colour and card_bg the
+ * page colour. Getting that pair backwards makes every tile vanish into the card.
+ *
+ * Each var carries a literal fallback, so a minimal HA theme that omits one of
+ * these does not leave a colour empty.
+ */
+export const HA_THEME_PALETTE: ThemePalette = {
+  accent_color:      'var(--primary-color, #03a9f4)',
+  card_bg:           'var(--primary-background-color, #fafafa)',
+  tile_bg:           'var(--ha-card-background, var(--card-background-color, #fff))',
+  tile_border:       'var(--divider-color, rgba(0,0,0,0.12))',
+  tile_hover_bg:     'var(--secondary-background-color, rgba(0,0,0,0.04))',
+  tile_hover_shadow: 'rgba(0,0,0,0.25)',
+  tile_sensor_bg:    'var(--secondary-background-color, rgba(0,0,0,0.04))',
+  tile_exp_bg:       'var(--secondary-background-color, rgba(0,0,0,0.04))',
+  text_primary:      'var(--primary-text-color, #212121)',
+  text_secondary:    'var(--secondary-text-color, #727272)',
+  text_muted:        'var(--disabled-text-color, #bdbdbd)',
+  // Both gradient stops take the same value on purpose: HA's own header is flat,
+  // and a gradient invented here would not follow any theme.
+  header_bg:         'var(--app-header-background-color, var(--primary-color, #03a9f4))',
+  header_bg2:        'var(--app-header-background-color, var(--primary-color, #03a9f4))',
+  header_text_color: 'var(--app-header-text-color, var(--text-primary-color, #fff))',
+  header_orb_color:  'var(--accent-color, #ff9800)',
+  online_color:      'var(--success-color, #4caf50)',
+  offline_color:     'var(--error-color, #f44336)',
+  power_color:       'var(--warning-color, #ff9800)',
+  area_header_color: 'var(--primary-text-color, #212121)',
+};
+
+/**
+ * The palette a theme name resolves to, for every consumer — card variables,
+ * room-theme expansion, the editor's effective palette.
+ *
+ * Two cases are not a `THEME_PRESETS` lookup and each caller needs both:
+ * 'custom' has no palette at all (the colours in `style` ARE the theme), and
+ * 'ha' is the variable-reference set above rather than a stored one.
+ */
+export function paletteFor(theme: ThemePreset | undefined): ThemePalette | undefined {
+  if (!theme || theme === 'custom') return undefined;
+  return theme === 'ha' ? HA_THEME_PALETTE : THEME_PRESETS[theme];
+}
 
 /** The colour keys a palette covers (all presets share this key set). Used to
  *  snapshot the current colours when saving a custom theme before overwriting. */
