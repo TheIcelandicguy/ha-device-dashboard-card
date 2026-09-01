@@ -1323,6 +1323,27 @@ export class HADeviceDashboard extends LitElement {
   /** Compound key for graph data cache: entityId::hours */
   private _gk(entityId: string, hours: number): string { return `${entityId}::${hours}`; }
 
+  /** History series with the live state appended as a final "now" point.
+   *  The 24h series is statistics rows — 5-minute MEANS — and the cache holds
+   *  them for up to 5 minutes, so a graph's end always sits slightly behind
+   *  (and smoothed away from) the live reading the sensor chips show: the same
+   *  device read 64.4 °C on its chip and 64.2 °C at the end of its graph.
+   *  Pinning the line's end to the live state makes the graph's value label
+   *  agree with the rest of the tile. Returns a fresh array; the cache is
+   *  never mutated. */
+  private _withLivePoint(
+    entityId: string,
+    points: Array<{ t: number; v: number }> | undefined,
+  ): Array<{ t: number; v: number }> | undefined {
+    if (!points?.length) return points;
+    const v = parseFloat(this.hass.states[entityId]?.state ?? '');
+    if (isNaN(v)) return points;
+    // Stamped "now", not last_updated: the value is what the sensor reads at
+    // render time, even when its last state change is older than the series.
+    const t = Date.now();
+    return t > points[points.length - 1].t ? [...points, { t, v }] : points;
+  }
+
   private _requestGraphData(entityId: string, hours?: number) {
     const h = hours ?? this._config.graph_hours ?? 24;
     const key = this._gk(entityId, h);
@@ -1699,7 +1720,7 @@ export class HADeviceDashboard extends LitElement {
     // Key each row by entityId so Lit tracks row identity across renders as
     // history arrives (loading → data).
     const rowData = entities.map((e) => {
-      const points = this._graphData.get(this._gk(e.entityId, graphHours));
+      const points = this._withLivePoint(e.entityId, this._graphData.get(this._gk(e.entityId, graphHours)));
       this._requestGraphData(e.entityId, graphHours);  // no-op if already fetched/fetching
       return { e, points };
     });
@@ -2582,7 +2603,8 @@ export class HADeviceDashboard extends LitElement {
       return s && (s.attributes as HassAttrs)?.device_class === 'power';
     });
     if (!powerEnt) return [];
-    return this._graphData.get(this._gk(powerEnt.entity_id, this._config.graph_hours ?? 24)) ?? [];
+    return this._withLivePoint(powerEnt.entity_id,
+      this._graphData.get(this._gk(powerEnt.entity_id, this._config.graph_hours ?? 24))) ?? [];
   }
   // ── Style resolution helpers ─────────────────────────────────────────────
 
@@ -2710,7 +2732,7 @@ export class HADeviceDashboard extends LitElement {
       handleScenePress: (d) => this._handleScenePress(d),
       adjustTrvTemp: (trv, dir) => this._adjustTrvTemp(trv, dir),
       requestGraphData: (id, h) => this._requestGraphData(id, h),
-      getGraphPoints: (id, h) => this._graphData.get(this._gk(id, h)) ?? [],
+      getGraphPoints: (id, h) => this._withLivePoint(id, this._graphData.get(this._gk(id, h))) ?? [],
       rgbToHex: (r, g, b) => this._rgbToHex(r, g, b),
       setBrightness: (id, pct) => this._setBrightness(id, pct),
       setColor: (id, hex, w, rgbw) => this._setColor(id, hex, w, rgbw),
