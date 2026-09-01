@@ -29,11 +29,22 @@ export const HELP_CONCEPTS: HelpTopic[] = [
     ],
   },
   {
+    id: 'design-scopes',
+    title: 'Where a setting lives',
+    body: [
+      'Everything about how the card looks is in one tab: **Design**. It is *scope-first* — you pick **where** you are editing, and the same control list redraws for that layer. Global, a view, a room, a device type, or one device.',
+      'Pick the scope in the map at the top. Devices are grouped by room, type or integration; room and type headings are clickable because they are layers you can style, while an integration is only a way to find a device. The number on a chip is how many settings that layer overrides, so you can see where customisation lives without opening everything.',
+      'Every control says where its value is coming from — **set here**, with a ↺ to drop it, or **from Room · Kitchen** / **from Card**. Most specific wins, always.',
+      'What you can set depends on the layer, and the tab says why. There are three groups. **Tile** settings — theme, colour, tile style, blocks, chips, graphs, energy window — can be set anywhere: device, type, room, view, card. **Container** settings — columns, tile size, gap — stop at the room, because a grid needs something to hold it and one device has no column count. **Card chrome** — the header, the card surface, typography — only a view or the card can set, because a room does not contain the card\'s header.',
+      'Global also holds the settings that have nothing under them at all: the theme picker, chips & metrics, tiles, the sensor-chip groups, and the card\'s own header and type.',
+    ],
+  },
+  {
     id: 'content-defaults',
     title: 'Global defaults vs. per-room overrides',
     body: [
-      'The **Chips & metrics** section at the top of Card & Theme sets three things card-wide: which chips each room header shows, which window the energy readout totals (Total / Today / Week / Month), and which sensor chips appear on tiles. Treat it as the first stop — decide what data is on show, then style it.',
-      'These are *defaults*. Every room and device inherits them, but any room or device can override any of them — in Per-room styling or Device styling — and the moment it does, it stops listening to the global. A global toggle only moves scopes that are still inheriting: turning a chip on globally will **not** turn it on in a room that has set its own chips, and turning it off will not turn it off there.',
+      'The **Chips & metrics** section in Design (at Global scope) sets three things card-wide: which chips each room header shows, which window the energy readout totals (Total / Today / Week / Month), and which sensor chips appear on tiles. Treat it as the first stop — decide what data is on show, then style it.',
+      'These are *defaults*. Every room and device inherits them, but any room or device can override any of them — by picking that room or device as the scope in Design — and the moment it does, it stops listening to the global. A global toggle only moves scopes that are still inheriting: turning a chip on globally will **not** turn it on in a room that has set its own chips, and turning it off will not turn it off there.',
       'Each picker tells you which state it is in. **Inheriting from …** means a global change still reaches it; **Custom selection** means it is pinned to its own value. Setting a room or device to an empty selection is itself a custom choice ("show none"), not the same as inheriting.',
       'To hand control back to the global default, use that scope\'s reset — `↺ Default` for room header chips, `↺ Inherit` for the chip pickers. Room header chips resolve room → global → built-in; energy and sensor chips also allow a per-device override (and, for sensor chips, a per-type one) in front of the room.',
     ],
@@ -63,7 +74,7 @@ export const HELP_CONCEPTS: HelpTopic[] = [
     body: [
       '**Blocks** reorder and hide the parts of the `default` tile. **Elements** show and hide the parts of every other style (its toggle, graph, secondary readings…). **Sensor chips** choose which measurements appear as little pills, in any style.',
       'The editor only offers what applies: pick a power-monitor style and the block grid disappears in favour of that style\'s elements.',
-      'The Device styling panel goes further and narrows to the device in front of you — an i4 offers only the chips it can actually produce and the blocks it can actually render. Flip **All options** at the top of that panel if you want the full surface back.',
+      'Design narrows to whatever scope you pick: choose one device and it offers only the chips that device can produce and the blocks it can render — an i4 offers only the chips it can actually produce and the blocks it can actually render. Flip **All options** at the top of that panel if you want the full surface back.',
     ],
   },
   {
@@ -168,7 +179,7 @@ export const HELP_RECIPES: HelpTopic[] = [
     title: 'Give one room its own look',
     body: ['Room styling is keyed by the room name, so renaming an area in Home Assistant orphans it — the Conflicts panel will tell you.'],
     steps: [
-      'Card & Theme → scroll to the room picker at the bottom.',
+      'Design → Scope → pick the room (or expand it to reach one device).',
       'Pick the room, then set its colours, tile style, columns or backdrop.',
       'Anything you leave alone keeps inheriting from the card-wide settings.',
     ],
@@ -178,7 +189,7 @@ export const HELP_RECIPES: HelpTopic[] = [
     title: 'Make an i3 / i4 button control a light',
     body: ['This mirrors the physical button rather than driving it — both paths keep working independently.'],
     steps: [
-      'Device styling → pick the switch → Input actions.',
+      'Design → Scope → expand a room → pick the switch → Input actions.',
       'For a channel, choose "Toggle entity" and enter the light, e.g. light.hall. Several entities work too, comma separated.',
       'Set "On hold" to "Dim the light while held" for a dimmer. Hold brightens, release, hold again darkens.',
       'Optionally set a double-tap action, or point the Dropdown field at a select entity such as select.wled_preset.',
@@ -190,7 +201,7 @@ export const HELP_RECIPES: HelpTopic[] = [
     title: 'Roll a colour scheme',
     body: ['The theme picker can roll a look for you, and keep the ones you like as named palettes.'],
     steps: [
-      'Card & Theme → Colour theme (also under ◆ Defaults).',
+      'Design → Colour theme. Global sets the card; pick a view, room, type or device first to set one just there.',
       '🎲 Random lands on one of the built-in presets.',
       '✨ Surprise me generates a palette from a random hue instead. Every text colour is contrast-checked against the surface behind it, so a roll is never unreadable.',
       '💾 Save keeps the colours you are looking at under a name — including a preset you have tweaked. Saved palettes appear as ★ swatches in the picker; ✕ on a swatch forgets it.',
@@ -213,7 +224,7 @@ export const HELP_RECIPES: HelpTopic[] = [
     title: 'Show media players, locks, fans and vacuums',
     body: ['The card does not draw these itself; it can embed Home Assistant\'s own controls for them.'],
     steps: [
-      'Card & Theme → Tiles → turn on Native controls.',
+      'Design → Tiles (Global scope) → turn on Native controls.',
       'It is off by default because each one embeds a native element, which costs render time on a large media fleet.',
       'The controls appear as the "Native controls" block on the default tile style.',
     ],

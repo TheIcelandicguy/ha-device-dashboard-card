@@ -300,7 +300,7 @@ const YAMLONLY = [
 
 const TABS = [
   {id:'devices', icon:'⌂', label:'Rooms & devices',
-   note:'Auto-lists your HA areas as collapsible sections. The toolbar sets card-wide sort/visibility; rooms and devices are included or hidden here. Styling has moved out — per-device to the Device styling tab, per-room to Card & Theme.',
+   note:'Auto-lists your HA areas as collapsible sections. The toolbar sets card-wide sort/visibility; rooms and devices are included or hidden here. Styling has moved out to the Design tab: pick a room or device as the scope and the controls redraw for that layer.',
    groups:[
     {name:'Rooms toolbar', rows:[
       ['Sort','Device sort order for the whole card (Name / Power / Online / Room)','sort_by','global','\'name\'',0],
@@ -331,7 +331,7 @@ const TABS = [
     ]},
    ]},
 
-  {id:'device-styling', icon:'◆', label:'Device styling',
+  {id:'design', icon:'◈', label:'Design — scope picker + per-layer controls',
    note:'Everything for one device in one place. Pick a device, then style just that device or every device of its detected type; either look can be saved as a reusable named style.',
    groups:[
     {name:'Scope', rows:[
@@ -404,8 +404,8 @@ const TABS = [
     ]},
    ]},
 
-  {id:'header-styling', icon:'◈', label:'Header',
-   note:'The card header on its own tab. Renders from the global section registry — no bespoke body.',
+  {id:'design-chrome', icon:'◈', label:'Design — card chrome',
+   note:'The card header, surface and typography. Rendered by the Design tab at Global scope, and as a small subset at view scope (ViewConfig.style).',
    groups:[
     {name:'Header', rows:[
       ['Card title','Header title text','title','global','none',0],
@@ -428,7 +428,7 @@ const TABS = [
     ]},
    ]},
 
-  {id:'card-theme', icon:'🎨', label:'Card & Theme',
+  {id:'design-global', icon:'◈', label:'Design — Global scope',
    note:'Card-wide look, with a live preview strip on top. Tiles is basic; Card, Colours and Typography are advanced-only. Per-room styling lives here too, behind a room picker. Theme presets write the palette into style AND record the name in `theme`; the picker highlights whatever detectTheme reads back out of the colours. The card uses `theme` as a palette base under style, so hand-written YAML can set a theme without listing colours.',
    groups:[
     {name:'Card', rows:[
@@ -556,10 +556,10 @@ const TABS = [
       ['🎲 Random / ✨ Surprise me','Roll a colour scheme — a random built-in preset, or a palette generated from a random hue with every text colour contrast-checked (WCAG 7:1 primary, 4.5:1 secondary). Current colours are stashed under ★ Saved first.','theme / style.*','global','—',0],
       ['Default tile style (+ ↺)','Global default tile layout style','tile_style','global','adaptive',0],
       ['Power-monitor variant','Sub-variant for the default tile style','power_monitor_variant','global','big-number',0],
-      ['Open Tiles →','Jump to Card & Theme → Tiles, where Smart tile styles and Native controls now live','none','local','—',0],
+      ['Open Tiles →','Jump to Design → Tiles (Global scope), where Smart tile styles and Native controls live','none','local','—',0],
       ['Default columns','Default grid columns','columns','global','3',0],
       ['Default tile size','Default tile size','tile_size','global','md',0],
-      ['More tile settings →','Jump to the Card & Theme tab','none','local','—',0],
+      ['More tile settings →','Jump to the Design tab','none','local','—',0],
       ['Reset look','Restore the built-in default look (factoryLook), keeping rooms, devices, views, favourites and discovery settings','FACTORY_DEFAULTS keys','global','—',0],
       ['Reset everything','Wipe the whole card back to factory (two-click armed)','whole config','global','—',0],
     ]},

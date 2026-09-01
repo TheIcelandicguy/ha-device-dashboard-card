@@ -134,7 +134,7 @@ const MASTER = {
   'views-toolbar':{label:'Views toolbar',movable:false,count:2},
   'view-card':{label:'Per-view card + filters',movable:false,count:17},
   'yaml-pane':{label:'YAML output',movable:false,count:2},
-  // movable / global — Header + Card & Theme
+  // movable / global — rendered by Design at Global scope
   'header':{label:'Header',movable:true,count:17},
   'lights':{label:'What counts as a light',movable:true,count:2},
   'tiles':{label:'Tiles',movable:true,count:11},
@@ -152,12 +152,13 @@ const MASTER = {
 };
 
 function shipped(){ return [
-  {id:'devices',label:'Rooms & devices',icon:'⌂',sections:[s('rooms-toolbar'),s('discovery'),s('extra-cards')]},
-  {id:'device-styling',label:'Device styling',icon:'◆',sections:[s('device-panel')]},
+  {id:'devices',label:'Rooms & devices',icon:'⌂',sections:[s('rooms-toolbar'),s('discovery'),s('lights'),s('extra-cards')]},
   {id:'views',label:'Views',icon:'☰',sections:[s('views-toolbar'),s('view-card')]},
-  {id:'header-styling',label:'Header',icon:'◈',sections:[s('header'),s('lights')]},
-  {id:'card-theme',label:'Card & Theme',icon:'🎨',sections:[s('tiles'),s('card',1),s('colors',1),s('typography',1),s('room-panel')]},
-  {id:'graphs',label:'Graphs & Sensors',icon:'∿',sections:[s('graphtype'),s('graphcolors',1),s('graphranges',1),s('electrical'),s('environmental'),s('deviceinfo',1),s('alerts',1)]},
+  // Design replaced Device styling, Header and Card & Theme. Its body is bespoke
+  // (scope picker + per-layer controls); the sections after design-panel are the
+  // registry bodies it renders at GLOBAL scope only.
+  {id:'design',label:'Design',icon:'◈',sections:[s('design-scope'),s('design-panel'),s('theme'),s('content'),s('tiles'),s('electrical'),s('environmental'),s('deviceinfo',1),s('alerts',1),s('header'),s('card',1),s('colors'),s('typography',1)]},
+  {id:'graphs',label:'Graphs & Sensors',icon:'∿',sections:[s('graphtype'),s('graphcolors',1),s('graphranges',1)]},
   {id:'yaml',label:'YAML',icon:'</>',sections:[s('yaml-pane')]},
 ];}
 function s(id,adv,coll){ return {id,advanced:!!adv,collapsed:!!coll}; }

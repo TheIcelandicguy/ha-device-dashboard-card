@@ -38,8 +38,9 @@ Frontend only: no custom integration, no Python, no helper entities.
 - **Energy windows** — every energy chip can show the lifetime total or consumption
   today / this week / this month, computed from recorder statistics (no helpers)
 - **Views** — filtered tabs over the same fleet, each with its own layout overrides
-- **Deep styling cascade** — device → device-type → room → view → saved style →
-  style preset → global, with eight built-in themes
+- **Deep styling cascade** — three family ladders (tile: device → type → room →
+  view → card; container: room → view → card; chrome: view → card), eight built-in
+  themes plus **Follow HA**, all edited from one scope-first **Design** tab
 - **Import from Shelly Cloud** — coming from the Shelly app? One paste of your
   cloud key pulls each room's photo and the official product image for every
   device onto the matching tiles
@@ -175,7 +176,7 @@ the machine-readable model that drives the editor defaults and the offline tools
 | `header_show_orbs` | boolean | follows `effects` | Header glow orbs |
 | `effects` | boolean | `false` | Ambient effects — orbs, pulse/glow, backdrop blur, hover shadows |
 | `header_chips` | string[] | `[online, offline, power, alerts]` | Which stat chips appear on the card's top (fleet-summary) header, in order. Every chip is clickable and opens a high-to-low device list |
-| `area_header_chips` | string[] | `[power, energy, voltage, current, temperature]` | Global default for the summary chips each **room** header shows. A per-room `header_chips` (under `area_styles`) overrides it. Set it in Card & Theme → Chips & metrics |
+| `area_header_chips` | string[] | `[power, energy, voltage, current, temperature]` | Global default for the summary chips each **room** header shows. A per-room `header_chips` (under `area_styles`) overrides it. Set it in Design → Chips & metrics (Global scope) |
 
 Header chip keys: `online`, `offline`, `power`, `energy`, `temperature`, `humidity`,
 `illuminance`, `lights`, `rssi`, `alerts`, `updates`.
@@ -605,19 +606,40 @@ Filter keys: `profiles`, `domains`, `areas`, `devices`, `exclude_devices`,
 
 | Tab | What it holds |
 |---|---|
-| **Rooms & devices** ⌂ | Sort/visibility toolbar, room and device inclusion, Favourites, **Discovery** (mode, scope, integration and domain filters), **Import from Shelly Cloud** (room photos + official product images, see below) and **Extra cards** (header/footer/room) |
-| **Device styling** ◆ | Pick a device, style just it or every device of its type, toggle style elements, and save the result as a reusable named style. The panel scopes itself to the selected device — its own sensor chips, the blocks it can render, energy controls only when it meters energy — with a **This device / All options** switch to fall back to the full surface |
+| **Rooms & devices** ⌂ | Sort/visibility toolbar, room and device inclusion, Favourites, **Discovery** (mode, scope, integration and domain filters), **What counts as a light**, **Import from Shelly Cloud** (room photos + official product images, see below) and **Extra cards** (header/footer/room) |
 | **Views** ☰ | Add, reorder and filter views |
-| **Header** ◈ | Title, chips, gradient, colours, orbs, effects |
-| **Card & Theme** 🎨 | Live preview, global **Chips & metrics** (room-header chips, energy window, sensor chips), tiles, card, colours, typography, and per-room styling behind a room picker |
-| **Graphs & Sensors** ∿ | Graph type and window, energy window, per-sensor colours and ranges, sensor chip groups |
+| **Design** ◈ | Everything about how the card looks, at every layer — see below |
+| **Graphs & Sensors** ∿ | Graph type and window, per-sensor colours and ranges |
 | **YAML** `</>` | Read-only view of the whole config with a Copy button |
 
+### The Design tab
+
+Design is **scope-first**: you pick *where* you are editing and one control list
+redraws for that layer. It replaced three tabs — Card & Theme, Device styling and
+Header — which between them answered the same question ("how does this look?") at
+different scopes, with global settings grouped by *thing* and everything below
+grouped by *scope*.
+
+**Scope** is a map of the card: `Global`, your views, then devices grouped by
+**room**, **type** or **integration**. Room and type headings are themselves
+clickable, because they are layers; an integration heading is not — it is a real
+property of a device but not a rung on any ladder. Each chip carries a count of
+how many keys that layer overrides, so the tree shows where customisation lives.
+The selected scope is remembered per card.
+
+**Controls** are grouped by the three families above, with the ladder printed in
+each heading. Every row says where its value comes from — `set here` with a reset,
+or `from Room · Kitchen` / `from Card`. A family a scope cannot set is shown
+greyed *with the reason*, rather than hidden.
+
+At **Global** the panel also holds the settings that have no layers under them at
+all: the theme picker, chips & metrics, tiles, the sensor-chip groups, and the
+card's own header, surface and typography.
+
 The **◆ Defaults** overlay sets the first-run look (view, theme, tile style,
-columns, tile size) and holds "Reset look" and "Reset everything". *Smart tile
-styles* and *Native controls* live in **Card & Theme → Tiles**, with the rest of
-the tile settings. The **Advanced** toggle reveals the deeper controls in every
-tab and is remembered per browser.
+columns, tile size) and holds "Reset look" and "Reset everything". The
+**Advanced** toggle reveals the deeper controls in every tab and is remembered per
+browser.
 
 The theme picker carries two rolls: **🎲 Random** lands on a built-in preset, and
 **✨ Surprise me** generates a palette from a random hue — every text colour

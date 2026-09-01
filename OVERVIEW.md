@@ -276,13 +276,23 @@ the taller history graphs with a 24 h / 7 d / 30 d range selector.
 
 ### Editor — `editor.ts` + `editor-layout.ts`
 
-The GUI editor is organised into accordion tabs (Rooms & devices, Device styling,
-Views, Header, Card & Theme, Graphs & Sensors, and a read-only YAML tab), with an
+The GUI editor is organised into accordion tabs — **Rooms & devices**, **Views**,
+**Design**, **Graphs & Sensors**, and a read-only **YAML** tab — with an
 **Advanced** toggle that reveals advanced controls and a **Defaults** overlay for
-the first-run look (theme, default tile style, columns, smart styles). Structure is
-being migrated to the data-driven `EDITOR_LAYOUT` spec (the Graphs tab is wired to
-it first). Editor and card must keep the `CDN_FONT_FAMILIES` / `FONT_OPTIONS` lists
-in sync.
+the first-run look (theme, default tile style, columns, smart styles).
+
+**Design** is scope-first and replaced three earlier tabs (Card & Theme, Device
+styling, Header). You pick a scope — Global, a view, a room, a device type, or one
+device — from a grouped map, and one control list redraws for that layer. Controls
+are grouped by the three families in `cascade.ts`, each row naming where its value
+comes from, and a family a scope cannot set is shown greyed with the reason. The
+scope model is `design-scope.ts` (pure, tested); the section bodies the retired
+tabs owned are still in the registry and rendered by Design at Global scope.
+
+Structure is being migrated to the data-driven `EDITOR_LAYOUT` spec (the Graphs tab
+is wired to it first; the others render bespoke bodies and must render registry
+sections explicitly). Editor and card must keep the `CDN_FONT_FAMILIES` /
+`FONT_OPTIONS` lists in sync.
 
 ---
 

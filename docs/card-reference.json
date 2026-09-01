@@ -266,7 +266,7 @@
 
   "editorTabs": [
     { "id": "devices", "icon": "⌂", "label": "Rooms & devices",
-      "note": "Auto-lists your HA areas as collapsible sections. The toolbar sets card-wide sort/visibility; rooms and devices are included or hidden here. Styling has moved out — per-device to the Device styling tab, per-room to Card & Theme.",
+      "note": "Auto-lists your HA areas as collapsible sections. The toolbar sets card-wide sort/visibility; rooms and devices are included or hidden here. Styling has moved out to the Design tab: pick a room or device there and the controls redraw for that layer.",
       "groups": [
         { "name": "Rooms toolbar", "controls": [
           { "control": "Sort", "fn": "Device sort order for the whole card (Name / Power / Online / Room)", "key": "sort_by", "scope": "global", "default": "'name'", "advanced": false },
@@ -296,7 +296,7 @@
           { "control": "Card configuration (YAML)", "fn": "Native ha-yaml-editor over the card object. The visual card editor is deliberately NOT embedded — nested, its events hijack HA's edit-card dialog.", "key": "the card config object", "scope": "global", "default": "—", "advanced": false }
         ]}
       ]},
-    { "id": "device-styling", "icon": "◆", "label": "Device styling",
+    { "id": "design", "icon": "◈", "label": "Design — scope picker + per-layer controls",
       "note": "Everything for one device in one place. Pick a device, then style just that device or every device of its detected type; either look can be saved as a reusable named style.",
       "groups": [
         { "name": "Scope", "controls": [
@@ -368,7 +368,7 @@
           { "control": "Tile size", "fn": "Override tile size (inherit clears)", "key": "views[i].tile_size", "scope": "view", "default": "inherit", "advanced": true }
         ]}
       ]},
-    { "id": "header-styling", "icon": "◈", "label": "Header",
+    { "id": "design-chrome", "icon": "◈", "label": "Design — card chrome (Global/view scope)",
       "note": "The card header on its own tab. Renders from the global section registry — no bespoke body.",
       "groups": [
         { "name": "Header", "controls": [
@@ -391,7 +391,7 @@
           { "control": "Background opacity", "fn": "Header background opacity", "key": "header_opacity", "scope": "global", "default": "100%", "advanced": true }
         ]}
       ]},
-    { "id": "card-theme", "icon": "🎨", "label": "Card & Theme",
+    { "id": "design-global", "icon": "◈", "label": "Design — Global scope",
       "note": "Card-wide look, with a live preview strip on top. Tiles is basic; Card, Colours and Typography are advanced-only. Per-room styling lives here too, behind a room picker. Theme presets write the palette into style AND record the name in `theme`; the picker highlights whatever detectTheme reads back out of the colours. The card uses `theme` as a palette base under style, so hand-written YAML can set a theme without listing colours.",
       "groups": [
         { "name": "Card", "controls": [
@@ -518,10 +518,10 @@
           { "control": "🎲 Random / ✨ Surprise me", "fn": "Roll a colour scheme — a random built-in preset, or a palette generated from a random hue with every text colour contrast-checked (WCAG 7:1 primary, 4.5:1 secondary). Current colours are stashed under ★ Saved first.", "key": "theme / style.*", "scope": "global", "default": "—", "advanced": false },
           { "control": "Default tile style (+ ↺)", "fn": "Global default tile layout style", "key": "tile_style", "scope": "global", "default": "adaptive", "advanced": false },
           { "control": "Power-monitor variant", "fn": "Sub-variant for the default tile style", "key": "power_monitor_variant", "scope": "global", "default": "big-number", "advanced": false },
-          { "control": "Open Tiles →", "fn": "Jump to Card & Theme → Tiles, where Smart tile styles and Native controls now live", "key": "none", "scope": "local", "default": "—", "advanced": false },
+          { "control": "Open Tiles →", "fn": "Jump to Design → Tiles (Global scope), where Smart tile styles and Native controls live", "key": "none", "scope": "local", "default": "—", "advanced": false },
           { "control": "Default columns", "fn": "Default grid columns", "key": "columns", "scope": "global", "default": "3", "advanced": false },
           { "control": "Default tile size", "fn": "Default tile size", "key": "tile_size", "scope": "global", "default": "md", "advanced": false },
-          { "control": "More tile settings →", "fn": "Jump to the Card & Theme tab", "key": "none", "scope": "local", "default": "—", "advanced": false },
+          { "control": "More tile settings →", "fn": "Jump to the Design tab", "key": "none", "scope": "local", "default": "—", "advanced": false },
           { "control": "Reset look", "fn": "Restore the built-in default look (factoryLook), keeping rooms, devices, views, favourites and discovery settings", "key": "FACTORY_DEFAULTS keys", "scope": "global", "default": "—", "advanced": false },
           { "control": "Reset everything", "fn": "Wipe the whole card back to factory (two-click armed)", "key": "whole config", "scope": "global", "default": "—", "advanced": false }
         ]},

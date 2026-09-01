@@ -55,9 +55,14 @@ depth; this file is the fast orientation. Contributor workflow is in
 
 - `src/ha-device-dashboard.ts` (~3.6k lines) — main card: config, hass wiring, device
   grouping, header, graph fetch, CSS-var building.
-- `src/editor.ts` (~5.1k lines) — GUI editor. Mid-refactor toward the data-driven
-  `EDITOR_LAYOUT` spec in `src/editor-layout.ts`; only the Graphs & Sensors tab is
-  fully wired to it, other tabs still render from bespoke methods.
+- `src/editor.ts` (~5.2k lines) — GUI editor. Five tabs: Rooms & devices, Views,
+  **Design**, Graphs & Sensors, YAML. Mid-refactor toward the data-driven
+  `EDITOR_LAYOUT` spec in `src/editor-layout.ts`; only Graphs & Sensors is fully
+  wired to it, the rest render from bespoke methods.
+- `src/design-scope.ts` — the Design tab's scope model as pure functions: what
+  each rung may set (`scopeCanSet` + `whyUnavailable`), key round-tripping for
+  persistence, and how devices are grouped for the picker. No DOM, no `hass`;
+  tested by `npm run test:card`.
 - `src/helpers.ts` — discovery (`getAllDevices`), `getDeviceProfile`, defaults,
   `migrateConfig`.
 - `src/tiles/` — one render fn per tile style (`power-monitor`, `light-control`,
@@ -104,19 +109,38 @@ depth; this file is the fast orientation. Contributor workflow is in
   controls for long-tail domains (lock/media/fan/vacuum) via
   `src/tiles/delegated-control.ts`; it's off by default because each embeds a
   native tile element, which costs real render time on large media fleets.
-- **Resolution cascade** for style/layout: device → device-type (profile) → area/
-  room → view → global → built-in default. All of it comes from config (YAML) —
-  the editor is the single source of truth. (There used to be a viewer-local
-  in-view Customize layer on top via `localStorage`; it was removed because it
-  silently shadowed the config, and could return later as an opt-in advanced
-  feature.)
+- **Three family ladders, not one cascade.** Every visual option belongs to a
+  family and the family fixes the layers — this replaced five ragged ladders that
+  could not be stated as a rule:
+  - **Tile** — device → type → room → view → card. theme, colour, tile style +
+    variant, blocks, chips, elements, graphs, energy window.
+  - **Container** — room → view → card. columns, tile size, gap. No device layer:
+    a grid needs something to hold it, and one device has no column count.
+  - **Card chrome** — view → card. header, card surface, typography. No room
+    layer: a room does not contain the card's header.
+
+  Saved looks (`custom_styles`, `style_presets`) are not a rung — they sit between
+  view and card as a side ladder. All of it comes from config (YAML) — the editor
+  is the single source of truth. (There used to be a viewer-local in-view
+  Customize layer on top via `localStorage`; it was removed because it silently
+  shadowed the config, and could return later as an opt-in advanced feature.)
+- **The editor's Design tab is scope-first** and replaced Card & Theme, Device
+  styling and Header. Their section *bodies* still live in the registry
+  (`_globalSectionDescriptors`); Design renders them at Global scope. One editor
+  per key — do not add a second front-end for a setting that already has one.
 - **Every cascade lives in `src/cascade.ts`, as pure functions.** The card's
   `_rawStyle` / `_blockLayout` / `_sensorSelection` / `_showGraphs` / `showEl` /
   `_energyPeriod` are thin wrappers that add memoisation. They were methods until
   the renderer and the editor drifted apart unnoticed; pure functions are testable
-  (`npm run test:card`). The layer sets differ per option on purpose — `sensors`
-  has no view layer, `tile_style` puts the room before the view — and each function
-  says so.
+  (`npm run test:card`). Each function documents which family it belongs to, and
+  the family is the layer set — if you find yourself adding a layer to one option
+  only, you are re-creating the ragged ladders that were removed.
+- **`EDITOR_LAYOUT` is only load-bearing for tabs with no bespoke body.** Graphs &
+  Sensors renders from the spec; `devices`, `views` and `design` render their own
+  markup and ignore the section list. Adding a section to the spec for one of
+  those documents an intention and renders nothing — which is exactly how "What
+  counts as a light" disappeared for one build during the Design migration. Render
+  it explicitly in the tab body as well.
 - **Blocks resolve in exactly one place — `cascade.blockLayout()`.** The renderer and the
   editor's Customize panel used to each have their own cascade; they disagreed whenever
   `profile_styles` / `custom_styles` / `style_presets` set a layout, so the panel
