@@ -317,6 +317,14 @@ export class HADeviceDashboardEditor extends LitElement {
   private _gotoControl(tab: string, section: string, ctl: string): void {
     this._tab = tab;
     this._defaultsOpen = false;
+    // The registry sections (design-tiles, design-header, …) only render at
+    // Global scope — jumping to one while a device is selected would land on
+    // nothing, so re-base the scope first. The two structural sections belong
+    // to every scope and must not reset it.
+    if (tab === 'design' && section.startsWith('design-')
+        && section !== 'design-scope' && section !== 'design-panel') {
+      this._setDesignScope(GLOBAL_SCOPE);
+    }
     this._openSections = { ...this._openSections, [section]: true };
     this._flashControl = ctl;
     if (this._flashTimer) clearTimeout(this._flashTimer);
@@ -329,10 +337,21 @@ export class HADeviceDashboardEditor extends LitElement {
   }
 
   private _onEditorGoto = (e: Event): void => {
-    const d = (e as CustomEvent).detail as { tab?: string; section?: string; flash?: string } | undefined;
+    const d = (e as CustomEvent).detail as
+      { tab?: string; section?: string; flash?: string; device?: string } | undefined;
+    if (d?.device) { this._gotoDevice(d.device); return; }
     if (!d?.tab || !d.section || !d.flash) return;
     this._gotoControl(d.tab, d.section, d.flash);
   };
+
+  /** Jump to one device's Design scope. Dispatched by the card's edit-dialog
+   *  preview when a tile is tapped there — same landing as the ✎ shortcut in
+   *  Rooms & devices. */
+  private _gotoDevice(deviceId: string): void {
+    this._selectedDeviceId = deviceId;
+    this._setDesignScope({ kind: 'device', id: deviceId });
+    this._gotoControl('design', 'design-panel', 'design-scope');
+  }
 
   // ── Card snapshots ──────────────────────────────────────────────
   // A named copy of the whole card config, so a look can be restored after an
@@ -3352,7 +3371,7 @@ export class HADeviceDashboardEditor extends LitElement {
     return html`
       <div class="dsn-panel">
         ${this._renderStylePreview()}
-        <div class="dsn-scope-hdr">
+        <div class="dsn-scope-hdr ${this._flashControl === 'design-scope' ? 'ctl-flash' : ''}" data-ctl="design-scope">
           <span class="dsn-scope-name">${label}</span>
           ${setCount
             ? html`<span class="dsn-badge on">${setCount} set here</span>`

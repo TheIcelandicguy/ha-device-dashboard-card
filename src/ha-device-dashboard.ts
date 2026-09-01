@@ -2832,6 +2832,16 @@ export class HADeviceDashboard extends LitElement {
     const start = this._lpStart;
     this._lpStart = null;
     if (!start) return; // cancelled by move, pointercancel, or a down on a control
+    // In HA's edit-dialog preview a tap jumps to this device in the editor
+    // (Design tab, device scope) instead of opening the detail sheet: the sheet
+    // barely fits the preview pane, and a tap there means "edit this one".
+    // Controls on the tile are exempt above, so toggles stay testable.
+    if (this.preview || this.hasAttribute('data-edit-preview')) {
+      window.dispatchEvent(new CustomEvent('hdd-editor-goto', {
+        detail: { device: device.device_id },
+      }));
+      return;
+    }
     this._detailDevice = device.device_id;
     this._detailHistoryRange = 24;
   }
@@ -3483,7 +3493,7 @@ export class HADeviceDashboard extends LitElement {
       ? html`<button class="dn-link" @click=${(e: Event) => {
           e.stopPropagation();
           window.dispatchEvent(new CustomEvent('hdd-editor-goto', {
-            detail: { tab: 'card-theme', section: 'tiles', flash: 'delegate_controls' },
+            detail: { tab: 'design', section: 'design-tiles', flash: 'delegate_controls' },
           }));
         }}>Native controls</button>`
       : html`<b>Native controls</b>`;
