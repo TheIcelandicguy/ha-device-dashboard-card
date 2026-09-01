@@ -214,7 +214,9 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _palettes: Record<string, ThemePalette> = {};
   @state() private _paletteNaming = false;
   @state() private _paletteName = '';
-  @state() private _expandedViewId: string | null = null;
+  /** Views open in the editor. A Set rather than one id: 'expand all' needs it,
+   *  and comparing two views' filters side by side was awkward without it. */
+  @state() private _expandedViewIds: Set<string> = new Set();
   @state() private _openSections: Record<string, boolean> = {
     rooms: true,
     theme: true,
@@ -222,6 +224,9 @@ export class HADeviceDashboardEditor extends LitElement {
     graphtype: true, graphcolors: false, graphranges: false,
     electrical: true, environmental: true, deviceinfo: false, alerts: false,
   };
+  /** Key of the Favourites row in `_expandedRooms`, shared with the toolbar's
+   *  expand/collapse-all so both agree on what a room row is. */
+  private static readonly FAV_ROW_KEY = '★ Favourites';
   @state() private _expandedRooms: Set<string> = new Set();
   @state() private _expandedRoomStyle: Set<string> = new Set();
   @state() private _selectedDeviceId: string | null = null;
@@ -1305,7 +1310,7 @@ export class HADeviceDashboardEditor extends LitElement {
         </div>
       </div>
       ${(c.favorites?.length) ? (() => {
-        const FAV_KEY = '★ Favourites';
+        const FAV_KEY = HADeviceDashboardEditor.FAV_ROW_KEY;
         const favDevices = (c.favorites ?? [])
           .map(id => allDiscovered.find(d => d.device_id === id))
           .filter(Boolean) as Array<{device_id:string;name:string;area?:string}>;
@@ -3198,7 +3203,7 @@ export class HADeviceDashboardEditor extends LitElement {
     const newView: ViewConfig = { id: `view_${n}`, name: `View ${n}` };
     this._set('views', [...existing, newView]);
     this._flushConfig();   // structural change — apply immediately
-    this._expandedViewId = newView.id;
+    this._expandedViewIds = new Set([...this._expandedViewIds, newView.id]);
   }
 
   /** Returns an error message if the pattern is set but not a valid RegExp, else null. */
@@ -3329,7 +3334,7 @@ export class HADeviceDashboardEditor extends LitElement {
     allDevices: Array<{ device_id: string; name: string; area?: string }>,
     byId: Map<string, ReturnType<typeof getAllDevices>[number]>,
   ): TemplateResult {
-    const expanded = this._expandedViewId === v.id;
+    const expanded = this._expandedViewIds.has(v.id);
     const filter = v.filter ?? {};
     const selectedDevices = new Set(filter.devices ?? []);
     const excludedDevices = new Set(filter.exclude_devices ?? []);
@@ -3340,7 +3345,11 @@ export class HADeviceDashboardEditor extends LitElement {
 
     return html`
       <div class="view-card ${expanded ? 'expanded' : ''}">
-        <div class="view-card-hdr" @click=${() => this._expandedViewId = expanded ? null : v.id}>
+        <div class="view-card-hdr" @click=${() => {
+          const next = new Set(this._expandedViewIds);
+          if (expanded) next.delete(v.id); else next.add(v.id);
+          this._expandedViewIds = next;
+        }}>
           <span class="view-card-icon">${v.icon ? html`<ha-icon .icon=${v.icon}></ha-icon>` : '☰'}</span>
           <span class="view-card-name">${v.name || v.id}</span>
           <span class="view-card-id">#${v.id}</span>
@@ -3368,7 +3377,7 @@ export class HADeviceDashboardEditor extends LitElement {
                   if ((this._config.views ?? []).some(x => x.id === newId)) { alert('ID already in use'); return; }
                   this._updateView(v.id, { id: newId });
                   if (this._config.default_view === v.id) this._set('default_view', newId);
-                  this._expandedViewId = newId;
+                  { const next = new Set(this._expandedViewIds); next.delete(v.id); next.add(newId); this._expandedViewIds = next; }
                 }}/>
             </div>`)}
             <div class="field">
@@ -4912,7 +4921,35 @@ export class HADeviceDashboardEditor extends LitElement {
       for (const k of curKeys) next[k] = open;
       this._openSections = next;
     };
-    const showSectionToggle = curKeys.length > 1;
+    // What "expand all" means depends on the tab: most tabs are collapsible
+    // SECTIONS, but Views is a list of view cards and Rooms & devices a list of
+    // room rows, each with their own open-state. Gating on sections alone left
+    // the two longest lists in the editor — 27 views here — without the control.
+    const roomRowKeys = () => [
+      HADeviceDashboardEditor.FAV_ROW_KEY,
+      ...new Set(this._allDevices().map(d => d.area ?? '')),
+    ];
+    const expandable: { keys: string[]; isOpen: (k: string) => boolean; setAll: (open: boolean) => void } =
+      this._tab === 'views'
+        ? {
+          keys: (this._config.views ?? []).map(v => v.id),
+          isOpen: (k) => this._expandedViewIds.has(k),
+          setAll: (open) => { this._expandedViewIds = open ? new Set((this._config.views ?? []).map(v => v.id)) : new Set(); },
+        }
+        : this._tab === 'devices'
+          ? {
+            keys: roomRowKeys(),
+            isOpen: (k) => this._expandedRooms.has(k),
+            setAll: (open) => { this._expandedRooms = open ? new Set(roomRowKeys()) : new Set(); },
+          }
+          : { keys: curKeys, isOpen: (k) => !!this._openSections[k], setAll: setAllSections };
+
+    // One state-aware button rather than a pair, matching the card's own
+    // collapse/expand control: with everything already open, "expand all" is a
+    // no-op, so the button offers the move that is actually available. Mixed
+    // counts as not-all-open, so the first click finishes opening the tab.
+    const allSectionsOpen = expandable.keys.length > 0 && expandable.keys.every(expandable.isOpen);
+    const showSectionToggle = expandable.keys.length > 1;
     const tabIdx = tabs.findIndex(t => t.id === this._tab);
     return html`
       <div class="shell">
@@ -4943,12 +4980,14 @@ export class HADeviceDashboardEditor extends LitElement {
           <button class="sec-toolbar-btn ${this._helpOpen ? 'active' : ''}"
             title="How the card fits together"
             @click=${() => { this._helpOpen = !this._helpOpen; }}>? Help</button>
+          ${showSectionToggle ? html`
+            <button class="sec-toolbar-btn"
+              title=${allSectionsOpen ? 'Collapse everything on this tab' : 'Expand everything on this tab'}
+              @click=${() => expandable.setAll(!allSectionsOpen)}>
+              ${allSectionsOpen ? '▸ Collapse all' : '▾ Expand all'}</button>
+          ` : nothing}
 
           <span class="sec-toolbar-spacer"></span>
-          ${showSectionToggle ? html`
-            <button class="sec-toolbar-btn" title="Expand all sections" @click=${() => setAllSections(true)}>▾ Expand all</button>
-            <button class="sec-toolbar-btn" title="Collapse all sections" @click=${() => setAllSections(false)}>▸ Collapse all</button>
-          ` : nothing}
           ${this._renderSnapshotControls()}
         </div>
         ${this._snapMsg ? html`<div class="snap-msg">${this._snapMsg}</div>` : nothing}
