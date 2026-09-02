@@ -237,6 +237,7 @@ export const tilesCss = css`
     .ts-key.holdable { touch-action:none;user-select:none;-webkit-user-select:none }
     .ts-key-label { font-size:13px;font-weight:700;line-height:1.15;
       overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100% }
+    .ts-key-dim { color:var(--ts-accent);font-weight:700;font-variant-numeric:tabular-nums }
     .ts-key-sub { font-size:11px;color:var(--sc-text-secondary);
       overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100% }
     .ts-key-age { font-size:10px;color:var(--sc-text-muted) }

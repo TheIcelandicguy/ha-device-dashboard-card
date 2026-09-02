@@ -70,13 +70,13 @@ Design narrows to whatever scope you pick: choose one device and it offers only 
 
 ### Input devices have no output
 
-A Shelly i3, i4 or UNI is a wall switch: it reports presses and controls nothing by itself. Nothing in Home Assistant can make it emit a press, so the card cannot "push" a channel for you.
+An input is one of two things, and the card reads which from Home Assistant. A **button** input is momentary — it reports presses (single, double, long) on an `event` entity, and its row shows the last press and how long ago. A **switch** input is steady — it reports its position on a `binary_sensor`, and its row shows an ON/OFF pill. Relays have inputs too: a Plus 1PM's "Input 0" is the wall switch wired to it.
 
-What it can do is run the same thing the physical button runs. Give a channel an action and its row becomes a key: tap toggles an entity or runs a script, hold dims the target light (alternating direction each hold, like a wall dimmer), double-tap runs a second action, and an optional dropdown exposes a `select` entity such as WLED presets.
+An input that is wired to an output on its own device (`input_0` → `switch_0`) needs no setup: tapping its row toggles that output, and the row lights with the output's state. That is the one thing the physical input does that Home Assistant can replay.
 
-A key that toggles something lights up while that thing is on, so the tile doubles as a status display. A key that runs a script stays neutral — the card cannot know a script's state and will not pretend to.
+A Shelly i3, i4 or UNI has no output of its own — it reports presses and controls nothing by itself, so the card cannot "push" a channel for you. What it can do is run the same thing the physical button runs. In Design, pick the device as the scope and use **Input actions**: give a channel an action and its row becomes a key — tap toggles an entity or runs a script, hold dims the target light (alternating direction each hold, like a wall dimmer), double-tap runs a second action, and an optional dropdown exposes a `select` entity such as WLED presets.
 
-Channels you have not wired stay as read-only status rows showing the last event and when it fired, so a half-configured switch shows both.
+A key that toggles something lights up while that thing is on, so the tile doubles as a status display. A key that runs a script stays neutral — the card cannot know a script's state and will not pretend to. Channels you have not wired stay as status rows; tapping one opens its press history.
 
 ### What counts as a light
 
@@ -167,13 +167,16 @@ Room styling is keyed by the room name, so renaming an area in Home Assistant or
 
 ### Make an i3 / i4 button control a light
 
-This mirrors the physical button rather than driving it — both paths keep working independently.
+The card only reacts to taps on the screen — it cannot give the wall button a job. The physical press is handled by the Shelly's own action/script or by a Home Assistant automation, and which of those you have decides the setup.
+
+A relay with its own output (a 1PM, a Dimmer) needs none of this: its input toggles its own relay by default.
 
 1. Design → Scope → expand a room → pick the switch → Input actions.
-2. For a channel, choose "Toggle entity" and enter the light, e.g. light.hall. Several entities work too, comma separated.
-3. Set "On hold" to "Dim the light while held" for a dimmer. Hold brightens, release, hold again darkens.
-4. Optionally set a double-tap action, or point the Dropdown field at a select entity such as select.wled_preset.
-5. If the switch does not show a keypad, its tile style is set elsewhere — set Device type "Input" to the Inputs style, or use the per-type panel.
+2. No automation, Shelly handles the wall itself: choose "Toggle entity" and enter the light, e.g. light.hall. Several entities work too, comma separated.
+3. An automation already reacts to the button (a Shelly "Button N single push" device trigger): choose "Replay the press" instead — the row fires the same event the wall does, the automation runs, and nothing is configured twice. Hold and double tap can replay long and double pushes the same way.
+4. Set "On hold" to "Dim the light while held" for a dimmer. Hold brightens, release, hold again darkens.
+5. Optionally set a double-tap action, or point the Dropdown field at a select entity such as select.wled_preset.
+6. If the switch does not show a keypad, its tile style is set elsewhere — set Device type "Input" to the Inputs style, or use the per-type panel.
 
 ### Roll a colour scheme
 

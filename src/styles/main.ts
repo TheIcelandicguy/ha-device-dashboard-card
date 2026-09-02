@@ -33,7 +33,9 @@ export const mainCss = css`
       --sc-text-secondary:  #b3a596;
       --sc-text-muted:      #7e7265;
       --sc-text-value:      #f5efe7;
-      --sc-text-detail:     #cabfb2;
+      /* Derived from the themed text tiers, not a fixed beige: a constant read
+         as light-on-white under the Follow-HA light theme (the V/A strip). */
+      --sc-text-detail:     color-mix(in srgb, var(--sc-text-primary) 70%, var(--sc-text-secondary));
       --sc-tog-off-bg:      rgba(255,255,255,0.08);
       --sc-tog-off-border:  rgba(255,255,255,0.10);
       --sc-update-color:    #f59e0b;
@@ -883,35 +885,40 @@ export const mainCss = css`
 
     .type-badge,.gen-badge,.int-badge-tile { font-size:10px; font-weight:600; letter-spacing:.03em; padding:2px 5px; border-radius:4px; line-height:1.4; white-space:nowrap; }
 
-    .type-relay       { background:rgba(99,102,241,.25);  color:#a5b4fc; }
+    /* Badge text is the hue mixed 55/45 with the theme's primary text, so the
+       same rule reads as a pastel on a dark tile and as a deep tint on a light
+       one — fixed pastels vanished on the Follow-HA light theme. */
+    .type-badge, .gen-badge { --bd: #9ca3af; background:color-mix(in srgb, var(--bd) 22%, transparent); color:color-mix(in srgb, var(--bd) 55%, var(--sc-text-primary)); }
 
-    .type-dimmer      { background:rgba(234,179,8,.20);   color:#fde047; }
+    .type-relay       { --bd:#6366f1; }
 
-    .type-rgb         { background:rgba(236,72,153,.22);  color:#f9a8d4; }
+    .type-dimmer      { --bd:#eab308; }
 
-    .type-plug        { background:rgba(34,197,94,.20);   color:#86efac; }
+    .type-rgb         { --bd:#ec4899; }
 
-    .type-cover       { background:rgba(14,165,233,.20);  color:#7dd3fc; }
+    .type-plug        { --bd:#22c55e; }
 
-    .type-energy      { background:rgba(245,158,11,.22);  color:#fcd34d; }
+    .type-cover       { --bd:#0ea5e9; }
 
-    .type-sensor      { background:rgba(20,184,166,.20);  color:#5eead4; }
+    .type-energy      { --bd:#f59e0b; }
 
-    .type-input       { background:rgba(168,85,247,.20);  color:#d8b4fe; }
+    .type-sensor      { --bd:#14b8a6; }
 
-    .type-climate     { background:rgba(239,68,68,.22);   color:#fca5a5; }
+    .type-input       { --bd:#a855f7; }
 
-    .gen-1   { background:rgba(107,114,128,.25); color:#9ca3af; }
+    .type-climate     { --bd:#ef4444; }
 
-    .gen-2   { background:rgba(59,130,246,.22);  color:#93c5fd; }
+    .gen-1   { --bd:#6b7280; }
 
-    .gen-3   { background:rgba(34,197,94,.20);   color:#86efac; }
+    .gen-2   { --bd:#3b82f6; }
 
-    .gen-4   { background:rgba(168,85,247,.20);  color:#d8b4fe; }
+    .gen-3   { --bd:#22c55e; }
 
-    .gen-ble { background:rgba(6,182,212,.20);   color:#67e8f9; }
+    .gen-4   { --bd:#a855f7; }
 
-    .int-badge-tile { background:rgba(255,255,255,.06); color:var(--sc-text-muted); }
+    .gen-ble { --bd:#06b6d4; }
+
+    .int-badge-tile { background:color-mix(in srgb, var(--sc-text-muted) 12%, transparent); color:var(--sc-text-muted); }
 
     .tile-ui-link { font-size:11px; font-weight:700; color:var(--sc-accent); text-decoration:none; padding:1px 4px; border-radius:4px; opacity:.75; transition:opacity .15s; }
 
@@ -950,9 +957,12 @@ export const mainCss = css`
 
     .dim-slider:disabled { opacity:.3; }
 
-    .dim-slider::-webkit-slider-runnable-track { height:4px; border-radius:2px; background:var(--sc-tile-border); }
+    /* The track is mixed from the muted text colour, not the tile border: a theme
+       that follows HA maps the border to --divider-color at 12% alpha, which made
+       the track invisible on both light and dark surfaces. */
+    .dim-slider::-webkit-slider-runnable-track { height:4px; border-radius:2px; background:color-mix(in srgb, var(--sc-text-muted) 35%, transparent); }
 
-    .dim-slider::-moz-range-track { height:4px; border-radius:2px; background:var(--sc-tile-border); border:none; }
+    .dim-slider::-moz-range-track { height:4px; border-radius:2px; background:color-mix(in srgb, var(--sc-text-muted) 35%, transparent); border:none; }
 
     .dim-slider::-webkit-slider-thumb {
       -webkit-appearance:none; appearance:none; width:14px; height:14px; border-radius:50%;
@@ -1072,7 +1082,13 @@ export const mainCss = css`
 
     .tile-inputs { display:flex; flex-direction:column; gap:5px; }
 
-    .input-row { display:flex; align-items:center; gap:8px; padding:5px 8px; border-radius:8px; border:1px solid rgba(255,255,255,.06); background:rgba(255,255,255,.04); transition:all .15s; }
+    /* The row wraps: name · status · age on the first line, and the action
+       button + dropdown chip as ONE unit that drops to its own right-aligned
+       line when the tile is narrow — on a phone they were squeezed into the
+       corner with the chip clipped off the tile. */
+    .input-row { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; padding:5px 8px; border-radius:8px; border:1px solid rgba(255,255,255,.06); background:rgba(255,255,255,.04); transition:all .15s; }
+    .input-row-act { display:flex; align-items:center; gap:6px; margin-left:auto; max-width:100%; min-width:0; }
+    .input-row-act:empty { display:none; }
 
     .input-row.active { background:color-mix(in srgb,var(--sc-accent) 15%,transparent); border-color:color-mix(in srgb,var(--sc-accent) 35%,transparent); }
 
@@ -1083,10 +1099,16 @@ export const mainCss = css`
     .input-btn-dot { width:8px; height:8px; border-radius:2px; background:rgba(129,140,248,0.5); flex-shrink:0; }
 
     .input-row.btn-mode { border-color:rgba(129,140,248,0.18); }
+    .input-row.tappable { cursor:pointer; }
+    .input-row.tappable:hover { background:color-mix(in srgb, var(--sc-text-muted) 12%, transparent); }
+    /* A switch-kind input reads as a state, not an event: a small pill that
+       lights with the accent while the input is closed. */
+    .input-row.sw-mode .input-row-event { padding:1px 7px; border-radius:999px; font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; background:color-mix(in srgb, var(--sc-text-muted) 18%, transparent); }
+    .input-row.sw-mode .input-row-event.is-on { background:color-mix(in srgb, var(--sc-accent) 25%, transparent); color:var(--sc-accent); }
 
-    .input-row-name { font-size:13px; font-weight:600; color:var(--sc-text-primary); min-width:60px; }
+    .input-row-name { font-size:13px; font-weight:600; color:var(--sc-text-primary); min-width:0; max-width:55%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
-    .input-row-event { flex:1; font-size:12px; color:var(--sc-text-secondary); text-transform:capitalize; }
+    .input-row-event { flex:1 1 auto; min-width:0; font-size:12px; color:var(--sc-text-secondary); text-transform:capitalize; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
     .input-row-time { font-size:11px; color:var(--sc-text-muted); white-space:nowrap; }
     /* Delegate notice: the setting name is a link only inside the editor preview. */
@@ -1096,7 +1118,7 @@ export const mainCss = css`
     .dn-link:hover { filter:brightness(1.15); }
     /* Action button on an input row — i3/i4 inputs have no output of their own,
        so this runs the action assigned to the channel. */
-    .input-act { max-width:40%; padding:3px 9px; border-radius:999px; cursor:pointer;
+    .input-act { max-width:60%; min-width:0; padding:3px 9px; border-radius:999px; cursor:pointer;
       font:inherit; font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden;
       text-overflow:ellipsis; flex-shrink:0;
       color:var(--sc-accent); background:color-mix(in srgb,var(--sc-accent) 14%,transparent);
@@ -1107,8 +1129,17 @@ export const mainCss = css`
     /* Holdable rows must not scroll or select the label while being held. */
     .input-act.holdable { touch-action:none; user-select:none; -webkit-user-select:none;
       border-style:dashed; }
+    /* A ramping hold: solid accent ring that breathes, and the label becomes
+       ▲ / ▼ + the brightness percentage (see renderInputAction). */
+    .input-act.dimming, .ts-key.dimming { border-style:solid; border-color:var(--sc-accent, var(--ts-accent));
+      color:var(--sc-accent, var(--ts-accent)); font-variant-numeric:tabular-nums;
+      animation:hdd-dim-pulse .7s ease-in-out infinite alternate; }
+    @keyframes hdd-dim-pulse {
+      from { box-shadow:0 0 0 0 color-mix(in srgb, var(--sc-accent, var(--ts-accent)) 55%, transparent); }
+      to   { box-shadow:0 0 0 5px transparent; }
+    }
     /* Dropdown chip on an input row — a select entity's options (WLED presets…). */
-    .input-sel { max-width:38%; padding:3px 4px 3px 8px; border-radius:999px; cursor:pointer;
+    .input-sel { max-width:60%; min-width:0; padding:3px 4px 3px 8px; border-radius:999px; cursor:pointer;
       font:inherit; font-size:11px; font-weight:600; flex-shrink:0;
       color:var(--sc-text-secondary); background:rgba(255,255,255,.06);
       border:1px solid rgba(255,255,255,.14); appearance:none;

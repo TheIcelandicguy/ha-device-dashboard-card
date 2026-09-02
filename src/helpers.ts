@@ -1291,6 +1291,79 @@ function channelNumber(entityId: string): number | null {
   return m ? parseInt(m[1], 10) : null;
 }
 
+/** Which of an input event entity's `event_types` stand for a tap, a double tap
+ *  and a hold. Gen2+ reports `single_push` / `double_push` / `long_push`; Gen1
+ *  reports `single` / `double` / `long`. `btn_down` / `btn_up` are edges, not
+ *  presses, and are never picked. */
+export function shellyClickTypes(
+  eventTypes: readonly string[] | undefined,
+): { single?: string; double?: string; long?: string } {
+  const pick = (re: RegExp) => (eventTypes ?? []).find(t => re.test(t));
+  return {
+    single: pick(/^single(_push)?$/),
+    double: pick(/^double(_push)?$/),
+    long: pick(/^long(_push)?$/),
+  };
+}
+
+/** The input number as Shelly's device triggers count it — "Button 1" is 1.
+ *  The registry unique_id is authoritative when known: Gen2+ `MAC-input:2` is
+ *  the 0-based component id (→ 3), Gen1 `MAC-sensor_1-2` already ends in the
+ *  1-based channel. Without it the entity id has to do, and HA names inputs
+ *  0-based on Gen2+ (`input_3` is the fourth) but 1-based on Gen1. An input
+ *  with no number at all is a single-input device: channel 1. */
+export function shellyInputChannel(entityId: string, gen: DeviceGen, uniqueId?: string | null): number {
+  if (uniqueId) {
+    const rpc = uniqueId.match(/-input:(\d+)$/);
+    if (rpc) return parseInt(rpc[1], 10) + 1;
+    const blk = uniqueId.match(/-(\d+)$/);
+    if (blk) return parseInt(blk[1], 10);
+  }
+  const n = channelNumber(entityId);
+  if (n == null) return 1;
+  return gen === 1 ? n : n + 1;
+}
+
+/** The device's Shelly hostname (`shellyplusi4-083af2009ec0`), which the
+ *  integration puts in a click event's `device` field, read off any un-renamed
+ *  entity id on the device. Best effort — device triggers match on device_id;
+ *  this only serves hand-written event triggers keyed on the hostname. */
+export function shellyHostname(device: HADevice): string | undefined {
+  for (const e of device.entities) {
+    const m = e.entity_id.match(/^[a-z_]+\.(shelly[a-z0-9]*_[0-9a-f]{6,12})_/);
+    if (m) return m[1].replace('_', '-');
+  }
+  return undefined;
+}
+
+/** Channel number of an OUTPUT entity — `switch_0`, `relay_1`, `light_0`,
+ *  `channel_2` (Gen1 names its relays by channel too). */
+function outputChannelNumber(entityId: string): number | null {
+  const m = entityId.match(/(?:switch|relay|light|channel)[_\s]*(\d+)/i);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+/** The relay/light on the same device that an input is wired to. A device with
+ *  ONE output (a 1PM, a Dimmer 2 with its up/down pair) wires every input to it;
+ *  a multi-output device (2PM, 2.5) pairs by channel number — `input_0` drives
+ *  `switch_0`. Config switches (the i4's "dimmer_control") carry an entity
+ *  category and never count as outputs, so input-only hardware pairs nothing. */
+function pairedOutput(device: HADevice, inputNum: number | null): string | undefined {
+  // Input-only hardware wires its inputs to nothing — a script-made virtual
+  // switch on an i4 must not be mistaken for "the" output.
+  const profile = getDeviceProfile(device).type;
+  if (profile === 'input' || profile === 'uni') return undefined;
+  const outputs = device.entities.filter(e => (e.domain === 'switch' || e.domain === 'light')
+    && !e.entity_category);
+  if (!outputs.length) return undefined;
+  if (outputs.length === 1) return outputs[0].entity_id;
+  if (inputNum != null) {
+    const byNum = outputs.find(e => outputChannelNumber(e.entity_id) === inputNum);
+    if (byNum) return byNum.entity_id;
+  }
+  return undefined;
+}
+
 /** Row label: whatever HA calls the entity, minus the device-name prefix, so a
  *  renamed input ("Bedroom light") keeps its name instead of being relabelled. */
 function channelLabel(friendly: string, deviceName: string, num: number | null, entityId: string): string {
@@ -1340,9 +1413,11 @@ export function detectInputChannels(
       label: channelLabel((st?.attributes?.friendly_name as string) ?? '', device.name, num, e.entity_id),
       isOn: st?.state === 'on',
       isButton: !!ev,
+      kind: ev ? 'button' : 'switch',
       channel: num ?? 0,
       lastEvent: evType ?? null,
       lastChanged: st?.last_changed ?? null,
+      output: pairedOutput(device, num),
       _sort: num ?? 50 + i,
     });
   });
@@ -1356,10 +1431,12 @@ export function detectInputChannels(
       label: channelLabel((st?.attributes?.friendly_name as string) ?? '', device.name, num, e.entity_id),
       isOn: false,
       isButton: true,
+      kind: 'button',
       channel: num ?? 0,
       lastEvent: (st?.attributes?.event_type as string | undefined) ?? null,
       // An event entity's state IS the timestamp of the last press.
       lastChanged: st?.last_changed ?? live,
+      output: pairedOutput(device, num),
       _sort: num ?? 50 + i,
     });
   });

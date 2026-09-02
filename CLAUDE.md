@@ -178,6 +178,19 @@ depth; this file is the fast orientation. Contributor workflow is in
   the delegate notice dispatches `{tab, section, flash}`. Jumping to a `design-*`
   registry section re-bases the scope to Global transiently and opens the
   `design-panel` ancestor accordion.
+- **Input actions run on the screen, never on the wall.** An input channel is a
+  `button` (event entity) or a `switch` (steady binary_sensor); an input paired to
+  an output on its own device (`pairedOutput` in `helpers.ts`) toggles it with no
+  config. Input-only hardware (i3/i4/UNI) gets what `input_actions` says: `toggle`
+  / `perform-action` / `more-info` drive targets directly, and `press` replays the
+  physical push by firing `shelly.click` (device_id, 1-based button number, click
+  type) so existing Shelly *device-trigger* automations run unchanged. The button
+  number comes from the registry unique_id via `config/entity_registry/get`
+  (`shellyInputChannel`) because a renamed input's entity id no longer says which
+  button it is; Gen2+ ids are 0-based, Gen1 are 1-based. Automations on the
+  `event.*` entity itself never see a replay (that entity is fed by the device),
+  and `fire_event` needs an admin login. None of this makes the wall button do
+  anything — that stays with Shelly's own actions or an HA automation.
 - **Graphs end at the live reading.** `_seriesWithLive` appends the current state
   as a final point (stamped `last_updated`, memoised so unchanged renders return
   the identical array), flagged `live: true` and excluded from y-autoscale and

@@ -70,6 +70,12 @@ function fleet() {
       name: 'Shelly 2.5 Channel 2', manufacturer: 'Shelly', model: 'Shelly 2.5',
       configuration_url: 'http://10.0.0.14', via_device_id: 'relay', area_id: 'hall',
     },
+    // A Plus 1PM: one switch-kind input wired to its relay (input_0 ↔ switch_0).
+    pm1: {
+      name: 'Oven relay', manufacturer: 'Shelly', model: 'Shelly Plus 1PM',
+      configuration_url: 'http://10.0.0.15', area_id: 'kitchen',
+      connections: [['mac', 'aa:bb:cc:00:00:05']], identifiers: [['shelly', 'AABBCC000005']],
+    },
     // Something that is not Shelly at all.
     hue: { name: 'Hue lamp', manufacturer: 'Signify', model: 'LCT001', area_id: 'hall' },
     phone: { name: 'Pixel', manufacturer: 'Google', model: 'Pixel 8', area_id: 'hall' },
@@ -102,6 +108,11 @@ function fleet() {
     'switch.relay_1': ent('relay', 'shelly'),
     'switch.relay_2': ent('relayCh2', 'shelly'),
 
+    'binary_sensor.oven_relay_input_0_input': ent('pm1', 'shelly'),
+    'switch.oven_relay_switch_0': ent('pm1', 'shelly'),
+    'button.oven_relay_reboot': ent('pm1', 'shelly', { entity_category: 'config' }),
+    'sensor.oven_relay_switch_0_power': ent('pm1', 'shelly'),
+
     'light.hue': ent('hue', 'hue'),
 
     'sensor.phone_battery': ent('phone', 'mobile_app'),
@@ -132,6 +143,11 @@ function fleet() {
 
     'switch.relay_1': st('on', { friendly_name: 'Shelly 2.5 Channel 1' }),
     'switch.relay_2': st('off', { friendly_name: 'Shelly 2.5 Channel 2' }),
+
+    'binary_sensor.oven_relay_input_0_input': st('off', { friendly_name: 'Oven relay Input 0' }),
+    'switch.oven_relay_switch_0': st('on', { friendly_name: 'Oven relay' }),
+    'button.oven_relay_reboot': st('unknown', { device_class: 'restart', friendly_name: 'Oven relay Restart' }),
+    'sensor.oven_relay_switch_0_power': st('12.5', { device_class: 'power', unit_of_measurement: 'W', friendly_name: 'Oven relay power' }),
     'light.hue': st('off', { friendly_name: 'Hue lamp' }),
     'sensor.phone_battery': st('72', { device_class: 'battery', friendly_name: 'Pixel Battery' }),
     'update.bare_firmware': st('off', { friendly_name: 'Bare device Firmware' }),
@@ -169,7 +185,7 @@ try {
   ok('drops non-Shelly integrations', !byName(shelly, 'Hue lamp'));
   ok('drops the device_pulse shadow', shelly.filter(d => d.name === 'Bedroom dimmer').length === 1);
   eq('keeps exactly the Shelly devices', shelly.map(d => d.name).sort(),
-    ['Bare device', 'Bedroom dimmer', 'Bedroom switch', 'Garage switch', 'Shelly 2.5']);
+    ['Bare device', 'Bedroom dimmer', 'Bedroom switch', 'Garage switch', 'Oven relay', 'Shelly 2.5']);
 
   console.log('\ngetAllDevices — universal mode');
   const uni = h.getAllDevices(hass, { universal: true, scope: 'all' });
@@ -204,6 +220,34 @@ try {
   ok('a rename survives', ch4.some(c => c.label === 'Bedside lamp'));
   eq('binary input labels are not shifted', ch4.filter(c => c.label.startsWith('Input')).map(c => c.label), ['Input 2', 'Input 3']);
   ok('restart_required is not treated as an input', !ch4.some(c => c.entityId.includes('restart')));
+  eq('an event-only channel is a button', ch3[0].kind, 'button');
+  eq('a binary-only channel is a switch', ch4.find(c => c.label === 'Input 2').kind, 'switch');
+  ok('input-only hardware pairs no output', ch4.every(c => c.output === undefined));
+
+  console.log('\ndetectInputChannels — Plus 1PM (input wired to its relay)');
+  const pm1 = byName(uni, 'Oven relay');
+  const chPm = h.detectInputChannels(pm1, hass.states);
+  eq('one channel', chPm.length, 1);
+  eq('it is a switch-kind input', chPm[0].kind, 'switch');
+  eq('paired with switch_0 by channel number', chPm[0].output, 'switch.oven_relay_switch_0');
+  ok('the reboot button is never mistaken for an output', chPm[0].output !== 'button.oven_relay_reboot');
+
+  console.log('\npress replay — shelly.click event pieces');
+  const gen2Types = ['double_push', 'btn_up', 'triple_push', 'single_push', 'btn_down', 'long_push'];
+  eq('Gen2 click types', h.shellyClickTypes(gen2Types), { single: 'single_push', double: 'double_push', long: 'long_push' });
+  eq('Gen1 click types', h.shellyClickTypes(['single', 'double', 'long', 'single_long', 'long_single', 'triple']),
+    { single: 'single', double: 'double', long: 'long' });
+  eq('edges are never a press', h.shellyClickTypes(['btn_down', 'btn_up']), { single: undefined, double: undefined, long: undefined });
+  eq('Gen2 unique_id is 0-based → Button N+1', h.shellyInputChannel('event.rofi_i_stofu_bordstofuljos', 2, '083AF2009EC0-input:1'), 2);
+  eq('Gen1 unique_id already ends in the 1-based channel', h.shellyInputChannel('event.garage_switch_input_2', 1, 'AABBCC-sensor_1-2'), 2);
+  eq('Gen2 entity id is 0-based', h.shellyInputChannel('event.shellyplusi4_083af2009ec0_input_3', 2), 4);
+  eq('Gen1 entity id is 1-based', h.shellyInputChannel('event.shellyix3_aabbcc_input_3', 1), 3);
+  eq('an unnumbered input is a single-input device', h.shellyInputChannel('event.shellyplus1_abcdef123456_input', 2), 1);
+  eq('hostname from an un-renamed entity id',
+    h.shellyHostname({ entities: [{ entity_id: 'event.rofi_i_stofu_ljos_stofa' }, { entity_id: 'sensor.shellyplusi4_083af2009ec0_rssi' }] }),
+    'shellyplusi4-083af2009ec0');
+  eq('Gen1 hostnames carry a 6-hex id', h.shellyHostname({ entities: [{ entity_id: 'sensor.shellyix3_a4cf12_rssi' }] }), 'shellyix3-a4cf12');
+  eq('no hostname when every entity is renamed', h.shellyHostname({ entities: [{ entity_id: 'event.hall_switch_input_1' }] }), undefined);
 
   console.log('\ndeviceRelevance');
   const rel4 = h.deviceRelevance(i4, hass.states);

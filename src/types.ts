@@ -347,9 +347,20 @@ export interface DeviceStyle {
 }
 
 /** An action bound to one input channel. `perform-action` covers scripts and
- *  scenes too — they are just `script.x` / `scene.turn_on` service calls. */
+ *  scenes too — they are just `script.x` / `scene.turn_on` service calls.
+ *
+ *  `press` replays the physical press instead of copying its wiring: it fires
+ *  the `shelly.click` event the integration fires for a real push, so every
+ *  automation with a Shelly button device trigger runs unchanged (tap =
+ *  single push, hold = long push, double tap = double push). Automations that
+ *  trigger on the `event.*` entity itself do not see it — that entity is fed
+ *  by the device, not the bus — and firing events needs an admin login. */
 export interface InputActionConfig {
-  action: 'perform-action' | 'toggle' | 'more-info' | 'none';
+  action: 'press' | 'perform-action' | 'toggle' | 'more-info' | 'none';
+  /** `press`: the button number as the automation editor counts it ("Button 1"
+   *  = 1). Worked out from the entity registry by default; set it only when a
+   *  hand-renamed input on an unusual model resolves to the wrong button. */
+  channel?: number;
   /** `perform-action`: the service to call, e.g. 'script.hall_lights' or
    *  'light.turn_on'. A bare `script.foo` is called as-is (no `.turn_on`). */
   perform_action?: string;
@@ -379,7 +390,9 @@ export interface InputActionConfig {
  *  one calls `select.select_option`. */
 export interface InputSelectChipConfig {
   entity: string;
-  /** Chip label prefix. Default: just the current option. */
+  /** Chip label prefix, shown as "<label>: <current option>". Default: the
+   *  select entity's own name with its device name stripped — a WLED preset
+   *  chip reads "Preset: Boot master on". Set to '' to show the option alone. */
   label?: string;
 }
 
@@ -388,7 +401,9 @@ export interface InputSelectChipConfig {
  *  brighten, release, hold again to darken, which is how a Shelly-linked dimmer
  *  behaves at the wall — and so only applies to `hold_action`. */
 export interface InputGestureConfig {
-  action: 'dim' | 'perform-action' | 'toggle' | 'more-info' | 'none';
+  /** `press` replays the matching physical gesture — a long push on hold, a
+   *  double push on double tap — through the same `shelly.click` event. */
+  action: 'dim' | 'press' | 'perform-action' | 'toggle' | 'more-info' | 'none';
   /** Light to dim, or the action's target. Defaults to the tap action's entity. */
   entity?: string | string[];
   perform_action?: string;

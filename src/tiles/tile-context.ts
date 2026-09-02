@@ -55,14 +55,30 @@ export interface GraphEntity { entityId: string; label: string; dc: string; unit
  *  drawn like any other, but excluded from auto-scaling and peak dots so an
  *  instantaneous spike can't flatten a series of statistic means. */
 export interface SparkPoint { t: number; v: number; live?: boolean }
+/** One physical input on a Shelly (or similar) device.
+ *
+ *  `kind` is what HA's entity shape says the input IS: a momentary **button**
+ *  reports presses on an `event` entity (single/double/long push); a steady
+ *  **switch** reports its position on a `binary_sensor`. A device with both for
+ *  one channel is a button — the event is the richer signal.
+ *
+ *  `output` is the relay/light on the SAME device that shares the input's
+ *  channel number (`input_0` ↔ `switch_0`): the output the input is wired to.
+ *  With it, an unconfigured row can still do the obvious thing — toggle that
+ *  output — instead of being a dead status line. Input-only hardware (i3/i4,
+ *  UNI) has no output, so it stays undefined there. */
 export interface InputChannel {
   entityId: string;
   label: string;
   isOn: boolean;
+  /** Kept for renderers that only care about momentary vs steady. Equals kind === 'button'. */
   isButton: boolean;
+  kind: 'button' | 'switch';
   channel: number;
   lastEvent: string | null;
   lastChanged: string | null;
+  /** Entity id of the paired output on this device, when one exists. */
+  output?: string;
 }
 export interface FirmwareInfo { entityId: string; current: string; newVersion: string | undefined }
 /** Visual tier for tile chip rendering. Defaults to 'primary' when unset. */
@@ -146,6 +162,9 @@ export interface TileCtx {
   getInputActionLabel: (d: HADevice, ch: InputChannel) => string | null;
   /** True when the channel also has a press-and-hold action (e.g. hold to dim). */
   inputHasHold: (d: HADevice, ch: InputChannel) => boolean;
+  /** Live hold-to-dim feedback for this channel while a hold is ramping:
+   *  direction and the brightness the ramp is at. Null when not dimming. */
+  getInputDimFeedback: (ch: InputChannel) => { dir: 1 | -1; pct: number } | null;
   /** Live state of the channel's toggle target, for keypad lit/off styling.
    *  `null` = unknowable (the action isn't a toggle), so the key stays neutral. */
   getInputActionState: (d: HADevice, ch: InputChannel) => 'on' | 'off' | 'unavailable' | null;

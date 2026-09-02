@@ -313,12 +313,22 @@ audio-reactive set is matched by name as well. Hidden with the `effects` element
 
 #### `input-control` — the i3/i4 keypad
 
-Input hardware has no output of its own, so a channel becomes a key only once it
-has an action bound (see `input_actions` below). Channels without one stay
-compact status rows beneath the keys, which is why a half-configured device shows
-both. A key that toggles an entity lights up while that entity is on, dims when
-it is off, and goes dashed when the target is unavailable; a key that runs a
-script stays neutral, since the card can't know a script's "state".
+The card reads each input for what it is. A **button** input reports presses on
+an `event` entity (single / double / long push) and its row shows the last press
+and how long ago; a **switch** input reports its position on a `binary_sensor`
+and its row shows an ON/OFF pill. Both kinds appear on relays too — a Plus 1PM's
+"Input 0" is the wall switch wired to it.
+
+What a tap does: an input that is **wired to an output on its own device**
+(`input_0` ↔ `switch_0`) toggles that output by default and lights with its
+state — no setup. Input-only hardware (i3, i4, UNI) has no output, so a channel
+becomes a key only once it has an action bound (**Design → the device's scope →
+Input actions**, or `input_actions` below); until then the row opens the
+channel's press history on tap. Channels without an action stay compact status
+rows beneath the keys, which is why a half-configured device shows both. A key
+that toggles an entity lights up while that entity is on, dims when it is off,
+and goes dashed when the target is unavailable; a key that runs a script stays
+neutral, since the card can't know a script's "state".
 
 Elements (`elements:`): `name`, `keypad`, `input_rows`, `target_state`,
 `last_event`.
@@ -531,6 +541,21 @@ channel the action its physical button is wired to and the tile row becomes a
 button that runs it. Keys are the channel's `entity_id` (what the editor writes);
 a bare channel number also works in hand-written YAML.
 
+**Which one do I want?** The card only reacts to taps on the screen — it cannot
+give the wall button a job. When you press the real i4, either the Shelly's own
+device-side action/script or a Home Assistant automation has to turn that into
+"light on". So there are two setups:
+
+- **No automation.** Shelly's own wiring handles the wall; the card handles the
+  screen with `toggle` (or `perform-action`) plus `hold_action: { action: dim }`.
+  Two separate paths driving the same light, nothing to build in HA.
+- **An automation already reacts to the button.** Use `action: press` below. The
+  tile fires the same event the wall button fires, the automation runs, and one
+  place defines what the button does.
+
+A relay with its own output (a 1PM, a Dimmer) needs neither: its input toggles
+its own relay by default.
+
 ```yaml
 device_styles:
   0123456789abcdef0123456789abcdef:   # the device's device_id
@@ -548,6 +573,28 @@ device_styles:
 
 `action: none` (or no entry) leaves the row as a read-only status row: name, last
 event type, and how long ago it fired.
+
+#### `action: press` — replay the press, keep your automations
+
+If automations already react to the button, do not wire the light a second time:
+`press` fires the same `shelly.click` event the integration fires for a real
+push, with the same `device_id`, `channel` and `click_type`, so every automation
+with a Shelly button device trigger ("Button 3 single push") runs unchanged. A
+tap replays a single push; `hold_action: { action: press }` replays a long push
+and `double_tap_action: { action: press }` a double push.
+
+```yaml
+      event.shellyplusi4_083af2009ec0_input_3:
+        action: press
+        hold_action: { action: press }
+```
+
+The button number comes from the entity registry, so a renamed input still maps
+to the right trigger; `channel: 3` overrides it if a model counts differently.
+Two limits: automations that trigger on the `event.*` entity itself (an
+`event.received` or state trigger) do not see a replayed press, because that
+entity is fed by the device rather than the event bus — and firing events needs
+an admin login, so a non-admin dashboard user gets a notice instead.
 
 `entity` also takes a list, so one channel can drive several targets:
 `entity: [light.wled_segment_1, light.wled]`. A `dim` hold seeds its ramp from
@@ -567,6 +614,10 @@ tile row only has tap and hold:
         select_chip:
           entity: select.wled_preset
 ```
+
+The chip reads `<name>: <current option>` — "Preset: Boot master on" — where
+the name is the select entity's own, minus its device's name. Set
+`select_chip.label` to rename it, or to `''` to show only the option.
 
 `double_tap_action` mirrors a double push — Shelly's own dimmer script uses
 double = on at 100%. It takes the same shape as `hold_action` minus `dim`.

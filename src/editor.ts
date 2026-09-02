@@ -227,7 +227,15 @@ export class HADeviceDashboardEditor extends LitElement {
     header: true, tiles: true, card: false, colors: false, typography: false,
     graphtype: true, graphcolors: false, graphranges: false,
     electrical: true, environmental: true, deviceinfo: false, alerts: false,
+    // The Design tab IS these two — landing on two collapsed bars read as empty.
+    'design-scope': true, 'design-panel': true,
   };
+  /** HA's entity picker is lazy-loaded; true once _ensureHaPickers got it. */
+  @state() private _haPickersReady = false;
+  /** Input actions: search every entity, or only this device's. null = auto
+   *  (a device with its own controllable entities starts narrow; input-only
+   *  hardware, whose targets live on OTHER devices, starts wide). */
+  @state() private _iaAllEntities: boolean | null = null;
   /** Key of the Favourites row in `_expandedRooms`, shared with the toolbar's
    *  expand/collapse-all so both agree on what a room row is. */
   private static readonly FAV_ROW_KEY = '★ Favourites';
@@ -674,6 +682,7 @@ export class HADeviceDashboardEditor extends LitElement {
     // siblings — so a window event is the channel. Fired by the delegate notice.
     window.addEventListener('hdd-editor-goto', this._onEditorGoto);
     this._loadSnapshots();
+    void this._ensureHaPickers();
     this._editorRAF = requestAnimationFrame(() => {
       const root1 = this.getRootNode() as ShadowRoot;
       const cardElementEditor = root1?.host as HTMLElement | null;
@@ -3075,7 +3084,6 @@ export class HADeviceDashboardEditor extends LitElement {
 
     return html`
       <div class="dsn-panel">
-        ${this._renderStylePreview()}
         <div class="dsn-scope-hdr ${this._flashControl === 'design-scope' ? 'ctl-flash' : ''}" data-ctl="design-scope">
           <span class="dsn-scope-name">${label}</span>
           ${setCount
@@ -3085,6 +3093,7 @@ export class HADeviceDashboardEditor extends LitElement {
         ${this._designFamily('tile', 'Tile — device → type → room → view → card', tileBody)}
         ${this._designFamily('container', 'Container — room → view → card', containerBody)}
         ${this._designFamily('chrome', 'Card chrome — view → card', chromeBody)}
+        ${sc.kind === 'device' ? this._renderInputActionsBlock(sc.id) : nothing}
         ${sc.kind === 'room' ? html`
           <div class="dsn-family">
             <div class="dsn-family-hdr">Room chrome — this room only</div>
@@ -3216,6 +3225,254 @@ export class HADeviceDashboardEditor extends LitElement {
             <option value=${n} ?selected=${current === n}>${THEME_LABELS[n]}</option>`)}
         </select>
         <div class="hint" style="margin-top:4px">${hint}</div>
+      </div>`;
+  }
+
+  /** HA lazy-loads its pickers with the first editor that needs them. Opening
+   *  the entities card's own config element pulls ha-entity-picker in — the
+   *  same trick other custom cards use — so Input actions can offer a
+   *  searchable picker instead of a bare text field. */
+  private async _ensureHaPickers(): Promise<void> {
+    if (customElements.get('ha-entity-picker')) { this._haPickersReady = true; return; }
+    try {
+      const loader = (window as unknown as { loadCardHelpers?: () => Promise<any> }).loadCardHelpers;
+      const helpers = loader ? await loader() : undefined;
+      const el = helpers?.createCardElement({ type: 'entities', entities: [] });
+      await el?.constructor?.getConfigElement?.();
+    } catch { /* fall back to text inputs */ }
+    this._haPickersReady = !!customElements.get('ha-entity-picker');
+  }
+
+  private _entityName(id: string): string {
+    return (this.hass?.states[id]?.attributes as { friendly_name?: string })?.friendly_name ?? id;
+  }
+
+  /**
+   * Entity field for Input actions. A `multi` field shows the chosen entities
+   * as removable chips above ONE picker that adds another; a single field is
+   * just the picker holding its value. HA's picker brings fuzzy search and is
+   * scoped to this device's entities unless "all entities" is on; if it never
+   * loaded, a text input with the device's entities as suggestions. Stores a
+   * bare string for one entity so simple configs stay simple.
+   */
+  private _entityField(
+    value: string | string[] | undefined,
+    onChange: (next: string | string[] | undefined) => void,
+    opts: { deviceEntities: string[]; scopeAll: boolean; placeholder: string; multi?: boolean; note?: string },
+  ): TemplateResult {
+    const list = Array.isArray(value) ? value : value ? [value] : [];
+    const commit = (next: string[]) => {
+      const clean = [...new Set(next.map(x => x.trim()).filter(Boolean))];
+      onChange(clean.length > 1 ? clean : (clean[0] || undefined));
+    };
+    if (!this._haPickersReady) {
+      const listId = `hdd-ents-${(opts.deviceEntities[0] ?? 'x').replace(/\W/g, '')}`;
+      return html`
+        <input type="text" class="inline-text" style="width:100%" list=${listId}
+          placeholder=${opts.placeholder} .value=${list.join(', ')}
+          @change=${(e: Event) => commit((e.target as HTMLInputElement).value.split(','))}/>
+        <datalist id=${listId}>${opts.deviceEntities.map(id => html`<option value=${id}></option>`)}</datalist>`;
+    }
+    const include = opts.scopeAll ? undefined : opts.deviceEntities;
+    // No `.label`: HA renders it as a loose line above the field, which broke
+    // the grid's alignment. The grid's label column says what the field is;
+    // a default or caveat goes in a small note beneath instead.
+    const picker = (val: string, onPick: (v: string) => void) => html`
+      <ha-entity-picker class="ia-picker" .hass=${this.hass} .value=${val}
+        .includeEntities=${include} allow-custom-entity
+        @value-changed=${(e: CustomEvent) => { e.stopPropagation(); onPick(String(e.detail?.value ?? '').trim()); }}
+      ></ha-entity-picker>`;
+    const note = opts.note ? html`<div class="ia-note">${opts.note}</div>` : nothing;
+    if (!opts.multi) return html`${picker(list[0] ?? '', v => commit(v ? [v] : []))}${note}`;
+    // The "add" picker is re-keyed on the list so it comes back empty after a
+    // pick — re-rendering with the same '' value would leave the choice showing.
+    return html`
+      ${list.length ? html`
+        <div class="ia-chips">
+          ${list.map(id => html`
+            <span class="ia-chip" title=${id}>${this._entityName(id)}
+              <button class="ia-chip-x" title="Remove" @click=${() => commit(list.filter(x => x !== id))}>×</button>
+            </span>`)}
+        </div>` : nothing}
+      ${keyed(list.join('|'), picker('', v => { if (v) commit([...list, v]); }))}
+      ${note}`;
+  }
+
+  /**
+   * Input actions — what tapping an input channel's row or key does. Rendered
+   * by the Design tab at device scope: `input_actions` is a device-only key with
+   * no ladder, and this form lost its editor surface when the Device styling
+   * panel was retired (binding a channel had become YAML-only, which is why the
+   * i3/i4 tile read as useless).
+   *
+   * One card per channel: the action picker on the header line, then a fixed-
+   * label grid for that action's settings. A channel wired to an output on its
+   * own device already toggles that output by default (see the card's
+   * _inputAction), so the picker names that default rather than pretending
+   * "none" is the resting state.
+   */
+  private _renderInputActionsBlock(deviceId: string): TemplateResult {
+    const dev = this._allDevices().find(d => d.device_id === deviceId);
+    const chans = dev ? detectInputChannels(dev, this.hass.states as any) : [];
+    if (!chans.length) return html``;
+    const devStyle: DeviceStyle = this._config.device_styles?.[deviceId] ?? {};
+    const acts: Record<string, InputActionConfig> = devStyle.input_actions ?? {};
+    const entText = (e?: string | string[]) => Array.isArray(e) ? e.join(', ') : (e ?? '');
+    const setAct = (key: string, patch: Partial<InputActionConfig> | null) => {
+      const next: Record<string, InputActionConfig> = { ...acts };
+      if (!patch) delete next[key];
+      else next[key] = { ...(next[key] ?? { action: 'none' }), ...patch } as InputActionConfig;
+      this._setDeviceStyle(deviceId, { input_actions: Object.keys(next).length ? next : undefined });
+    };
+    const devEnts = dev ? dev.entities.map(e => e.entity_id) : [];
+    // Input-only hardware's targets live on other devices, so it starts wide.
+    // Config/diagnostic entities (an i4's "dimmer control" switch) are not
+    // controls in this sense.
+    const hasOwnControls = (dev?.entities ?? []).some(e => !e.entity_category
+      && /^(switch|light|cover|climate|fan|valve|lock|media_player)\./.test(e.entity_id));
+    const scopeAll = this._iaAllEntities ?? !hasOwnControls;
+    const field = (value: string | string[] | undefined, apply: (v: string | string[] | undefined) => void,
+      placeholder: string, multi = true, note?: string) =>
+      this._entityField(value, apply, { deviceEntities: devEnts, scopeAll, placeholder, multi, note });
+    const one = (v: string | string[] | undefined) => Array.isArray(v) ? v[0] : v;
+
+    return html`
+      <div class="dsn-family">
+        <div class="dsn-family-hdr">Input actions — this device only</div>
+        <div class="hint" style="margin-bottom:6px">
+          What a tap on each input's row or key does. A <b>button</b> input reports
+          presses; a <b>switch</b> input reports its position. An input wired to a
+          relay on this device toggles that relay by default — input-only hardware
+          (i3/i4, UNI) has no output, so give its channels the action the physical
+          button is wired to and the rows become keys.
+        </div>
+        <div class="field" style="margin-bottom:8px">
+          <div class="field-lbl">Entity search covers</div>
+          <div class="pill-grp">
+            <span class="pill ${!scopeAll ? 'on' : ''}" @click=${() => { this._iaAllEntities = false; }}>This device's entities</span>
+            <span class="pill ${scopeAll ? 'on' : ''}" @click=${() => { this._iaAllEntities = true; }}>All entities</span>
+          </div>
+          <div class="dp-hint-inline">${this._haPickersReady
+            ? 'Type to search — names, rooms and entity ids all match.'
+            : 'Home Assistant\'s picker has not loaded; type entity ids, comma-separated for several.'}</div>
+        </div>
+        ${chans.map(ch => {
+          // Cast, not annotate: an annotated const is narrowed to its initializer's
+          // type, and the index type has no `undefined`, which made 'default'
+          // unreachable to the checker.
+          const cur = (acts[ch.entityId] ?? acts[String(ch.channel)]) as InputActionConfig | undefined;
+          const kind = (cur?.action ?? 'default') as InputActionConfig['action'] | 'default';
+          const configured = kind !== 'default' && kind !== 'none';
+          const dbl = cur?.double_tap_action;
+          // Only a Shelly button has a `shelly.click` to replay; a steady switch
+          // input never fires one, and other vendors' inputs use other events.
+          const canPress = ch.kind === 'button' && !!dev?.isShelly;
+          const defaultLabel = ch.output
+            ? `— default: toggles ${this._entityName(ch.output)} —`
+            : '— none: row shows the press history —';
+          return html`
+            <div class="ia-ch ${configured ? 'set' : ''}">
+              <div class="ia-ch-hdr">
+                <span class="ia-ch-name" title="${ch.entityId} · ${ch.kind}">${ch.label}
+                  <span class="dev-style-hint">${ch.kind}</span></span>
+                <select class="inline-text" style="flex:1"
+                  @change=${(e: Event) => {
+                    const v = (e.target as HTMLSelectElement).value;
+                    if (v === 'default') setAct(ch.entityId, null);
+                    else setAct(ch.entityId, { action: v as InputActionConfig['action'] });
+                  }}>
+                  <option value="default" ?selected=${kind === 'default'}>${defaultLabel}</option>
+                  ${ch.output ? html`<option value="none" ?selected=${kind === 'none'}>— status only, no tap action —</option>` : nothing}
+                  ${canPress ? html`<option value="press" ?selected=${kind === 'press'}>Replay the press — runs your automations</option>` : nothing}
+                  <option value="perform-action" ?selected=${kind === 'perform-action'}>Run script / service</option>
+                  <option value="toggle" ?selected=${kind === 'toggle'}>Toggle entity</option>
+                  <option value="more-info" ?selected=${kind === 'more-info'}>Show more-info</option>
+                </select>
+              </div>
+              ${configured ? html`
+                <div class="ia-grid">
+                  ${kind === 'perform-action' ? html`
+                    <span class="ia-lbl">Service</span>
+                    <input type="text" class="inline-text" placeholder="script.hall_lights — or light.turn_on"
+                      .value=${cur?.perform_action ?? ''}
+                      @change=${(e: Event) => setAct(ch.entityId, { perform_action: (e.target as HTMLInputElement).value.trim() || undefined })}/>
+                    <span class="ia-lbl">Target</span>
+                    <div>${field(cur?.entity, v => setAct(ch.entityId, { entity: v }), 'Target entity — optional')}</div>` : nothing}
+                  ${kind === 'toggle' ? html`
+                    <span class="ia-lbl">Toggles</span>
+                    <div>${field(cur?.entity, v => setAct(ch.entityId, { entity: v }), 'Entity to toggle')}</div>` : nothing}
+                  ${kind === 'more-info' ? html`
+                    <span class="ia-lbl">Shows</span>
+                    <div>${field(cur?.entity, v => setAct(ch.entityId, { entity: v }), 'Entity to show', false,
+                      `Empty = this channel (${ch.entityId})`)}</div>` : nothing}
+                  ${kind === 'press' ? html`
+                    <div class="ia-hint">Fires the same <code>shelly.click</code> event as the wall button — device_id,
+                      button number, click type — so every automation with a Shelly device trigger on this button runs
+                      as-is, nothing configured twice. Automations that trigger on the event entity itself do not see
+                      it, and firing events needs an admin login.</div>
+                    ${this._advanced ? html`
+                      <span class="ia-lbl">Button</span>
+                      <input type="number" class="inline-text" min="1" max="8" style="max-width:90px"
+                        placeholder="auto" .value=${cur?.channel != null ? String(cur.channel) : ''}
+                        title="Button number as the automation editor counts it. Empty = read from the entity registry."
+                        @change=${(e: Event) => {
+                          const n = parseInt((e.target as HTMLInputElement).value, 10);
+                          setAct(ch.entityId, { channel: Number.isFinite(n) && n > 0 ? n : undefined });
+                        }}/>` : nothing}` : nothing}
+
+                  <span class="ia-lbl">On hold</span>
+                  <select class="inline-text"
+                    @change=${(e: Event) => {
+                      const v = (e.target as HTMLSelectElement).value as 'none' | 'press' | 'dim';
+                      setAct(ch.entityId, { hold_action: v === 'none' ? undefined : { action: v } });
+                    }}>
+                    <option value="none" ?selected=${(cur?.hold_action?.action ?? 'none') === 'none'}>— nothing —</option>
+                    ${canPress ? html`<option value="press" ?selected=${cur?.hold_action?.action === 'press'}>Replay a long push</option>` : nothing}
+                    <option value="dim" ?selected=${cur?.hold_action?.action === 'dim'}>Dim the light while held</option>
+                  </select>
+                  ${cur?.hold_action?.action === 'dim' ? html`
+                    <span class="ia-lbl">Dims</span>
+                    <div>${field(cur.hold_action.entity,
+                      v => setAct(ch.entityId, { hold_action: { ...(cur.hold_action ?? { action: 'dim' }), entity: v } }),
+                      'Light to dim', false,
+                      entText(cur.entity) ? `Empty = the tap target (${entText(cur.entity)})` : undefined)}</div>
+                    <div class="ia-hint">Hold brightens; release and hold again darkens — it alternates each hold.</div>` : nothing}
+
+                  <span class="ia-lbl">Double tap</span>
+                  <select class="inline-text"
+                    @change=${(e: Event) => {
+                      const v = (e.target as HTMLSelectElement).value as InputActionConfig['action'];
+                      setAct(ch.entityId, { double_tap_action: v === 'none' ? undefined : { action: v } });
+                    }}>
+                    <option value="none" ?selected=${(dbl?.action ?? 'none') === 'none'}>— nothing —</option>
+                    ${canPress ? html`<option value="press" ?selected=${dbl?.action === 'press'}>Replay a double push</option>` : nothing}
+                    <option value="perform-action" ?selected=${dbl?.action === 'perform-action'}>Run script / service</option>
+                    <option value="toggle" ?selected=${dbl?.action === 'toggle'}>Toggle entity</option>
+                  </select>
+                  ${dbl?.action === 'perform-action' ? html`
+                    <span class="ia-lbl">Service</span>
+                    <input type="text" class="inline-text" placeholder="light.turn_on"
+                      .value=${dbl.perform_action ?? ''}
+                      @change=${(e: Event) => setAct(ch.entityId, { double_tap_action: {
+                        ...dbl, perform_action: (e.target as HTMLInputElement).value.trim() || undefined } })}/>`
+                  : dbl?.action === 'toggle' ? html`
+                    <span class="ia-lbl">Toggles</span>
+                    <div>${field(dbl.entity,
+                      v => setAct(ch.entityId, { double_tap_action: { ...dbl, entity: v } }),
+                      'Entity to toggle', true,
+                      entText(cur?.entity) ? `Empty = the tap target (${entText(cur?.entity)})` : undefined)}</div>`
+                  : nothing}
+                  ${dbl && dbl.action !== 'none' ? html`
+                    <div class="ia-hint">A double tap delays the single tap by ~250ms on this channel so the two can be told apart.</div>` : nothing}
+
+                  ${this._advanced ? html`
+                    <span class="ia-lbl">Dropdown</span>
+                    <div>${field(cur?.select_chip?.entity,
+                      v => { const id = one(v); setAct(ch.entityId, { select_chip: id ? { entity: id } : undefined }); },
+                      'A select entity — WLED presets, say (optional)', false)}</div>` : nothing}
+                </div>` : nothing}
+            </div>`;
+        })}
       </div>`;
   }
 
@@ -4219,82 +4476,6 @@ export class HADeviceDashboardEditor extends LitElement {
       colors:     { icon: '◐', bg: 'rgba(244,96,30,0.12)',  fg: '#f4601e', label: 'Colours',    badge: nothing, body: colorsBody },
       typography: { icon: 'T', bg: 'rgba(251,191,36,0.1)',  fg: '#fbbf24', label: 'Typography', badge: nothing, body: typogBody },
     };
-  }
-
-  /** The live preview: what the current colours, type and tile settings look
-   *  like. It outlived the Card & Theme tab it used to head, and now sits at the
-   *  top of the Design panel where the same settings are edited. */
-  private _renderStylePreview(): TemplateResult {
-    const c = this._config;
-    const sty: StyleCfg = c.style ?? {};
-
-    // Live preview — reads current style tokens so changes appear immediately.
-    const previewAccent   = sty.accent_color     ?? '#f4601e';
-    const previewCardBg   = sty.card_bg          ?? '#1c1c1e';
-    const previewTileBg   = sty.tile_bg          ?? '#1c1c1e';
-    const previewTileBr   = sty.tile_border      ?? '#2a2a30';
-    const previewTileHov  = sty.tile_hover_bg    ?? 'rgba(255,255,255,0.07)';
-    const previewSensBg   = sty.tile_sensor_bg   ?? 'rgba(255,255,255,0.04)';
-    const previewText1    = sty.text_primary     ?? '#e5e7eb';
-    const previewText2    = sty.text_secondary   ?? '#9ca3af';
-    const previewMuted    = sty.text_muted       ?? '#6b7280';
-    const previewOnline   = sty.online_color     ?? '#4ade80';
-    const previewOffline  = sty.offline_color    ?? '#ef4444';
-    const previewHdrBg1   = sty.header_bg        ?? '#1a1a2e';
-    const previewHdrBg2   = sty.header_bg2       ?? '#0f3460';
-    const previewHdrTx    = sty.header_text_color ?? '#ffffff';
-    const previewHdrOrb   = sty.header_orb_color ?? '#3b82f6';
-    const previewHdrTsz   = sty.header_title_size ?? 1.1;
-    const previewHdrPad   = sty.header_padding   ?? 16;
-    const previewHdrBrW   = sty.header_border_width ?? 0;
-    const previewHdrBrC   = sty.header_border_color ?? '#4ade80';
-    const previewHdrOnl   = sty.header_stat_online  ?? '#4ade80';
-    const previewHdrPow   = sty.header_stat_power   ?? '#fb923c';
-    const previewFont     = sty.font_family ? `'${sty.font_family}', sans-serif` : 'inherit';
-    const previewScale    = sty.text_size_scale ?? 1;
-    const previewRadius   = sty.tile_radius ?? 12;
-    const previewBrW      = sty.tile_border_width ?? 1;
-    const previewHdrRad   = sty.header_radius ?? 0;
-    const hdrBorder       = previewHdrBrW > 0 ? `${previewHdrBrW}px solid ${previewHdrBrC}` : 'none';
-    const previewPreview = html`
-      <div class="style-preview" style="font-family:${previewFont};background:${previewCardBg}">
-        <div class="sp-header"
-          style="background:linear-gradient(135deg,${previewHdrBg1},${previewHdrBg2});color:${previewHdrTx};border-radius:${previewHdrRad}px;padding:${Math.round(previewHdrPad*0.55)}px 12px;border-bottom:${hdrBorder};position:relative;overflow:hidden">
-          <span class="sp-h-orb" style="background:radial-gradient(circle,${previewHdrOrb} 0%,transparent 70%)"></span>
-          <span class="sp-h-title" style="font-size:${(previewHdrTsz*previewScale).toFixed(2)}em;position:relative;z-index:1">${sty.header_icon ?? '⚡'} ${c.title ?? 'Shelly'}</span>
-          <span class="sp-h-stat" style="color:${previewHdrOnl};position:relative;z-index:1">● 12 on</span>
-          <span class="sp-h-stat" style="color:${previewHdrPow};position:relative;z-index:1">42 W</span>
-        </div>
-        <div class="sp-tile"
-          style="background:${previewTileBg};border:${previewBrW}px solid ${previewTileBr};border-radius:${previewRadius}px">
-          <div class="sp-row" style="color:${previewText1};font-size:${(13*previewScale).toFixed(0)}px">
-            <span class="sp-dot" style="background:${previewOnline}"></span>
-            Lampi
-            <span class="sp-tog" style="background:${previewAccent}">ON</span>
-          </div>
-          <div class="sp-row sp-chips" style="color:${previewText2};font-size:${(10*previewScale).toFixed(0)}px">
-            <span class="sp-chip" style="background:${previewSensBg}">4.1 W</span>
-            <span class="sp-chip" style="background:${previewSensBg}">235 V</span>
-            <span class="sp-chip" style="background:${previewSensBg}">44.6 °C</span>
-          </div>
-          <svg viewBox="0 0 200 22" preserveAspectRatio="none" style="width:100%;height:22px;display:block">
-            <polygon points="0,18 25,14 50,16 75,9 100,11 125,5 150,7 175,3 200,1 200,22 0,22"
-              fill="${previewAccent}" fill-opacity="0.15"/>
-            <polyline points="0,18 25,14 50,16 75,9 100,11 125,5 150,7 175,3 200,1"
-              fill="none" stroke="${previewAccent}" stroke-width="1.5" stroke-linecap="round"/>
-          </svg>
-        </div>
-        <div class="sp-tile"
-          style="background:${previewTileHov};border:${previewBrW}px solid ${previewTileBr};border-radius:${previewRadius}px">
-          <div class="sp-row" style="color:${previewText1};font-size:${(13*previewScale).toFixed(0)}px">
-            <span class="sp-dot" style="background:${previewOffline}"></span>
-            <span style="color:${previewMuted}">Offline tile (hover state)</span>
-          </div>
-        </div>
-        <div class="sp-hint" style="color:${previewMuted}">Live preview — reflects current colour, typography, and tile settings</div>
-      </div>`;
-
-    return previewPreview;
   }
 
 
@@ -5315,7 +5496,7 @@ export class HADeviceDashboardEditor extends LitElement {
     .dp-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; }
     .dp-group { display:flex; flex-direction:column; gap:8px; background:var(--s2); border:1px solid var(--border); border-radius:8px; padding:10px; }
     .dp-title { font-size:11px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; color:var(--t2); display:flex; align-items:center; gap:8px; }
-    .dp-hint-inline { font-size:10px; font-weight:400; text-transform:none; letter-spacing:0; color:var(--t3); }
+    .dp-hint-inline { font-size:12px; line-height:1.4; font-weight:400; text-transform:none; letter-spacing:0; color:var(--t2); }
     .check-dd-btn { display:flex; align-items:center; justify-content:space-between; width:100%; gap:8px;
       font-size:12px; color:var(--text); background:var(--s2); border:1px solid var(--border); border-radius:6px;
       padding:7px 10px; cursor:pointer; text-align:left; }
@@ -5351,9 +5532,9 @@ export class HADeviceDashboardEditor extends LitElement {
 
     /* ── Design tab (scope-first) ── */
     .dsn-picker { display:flex; flex-direction:column; gap:6px; }
-    .dsn-pick-lbl { font-size:.7em; text-transform:uppercase; letter-spacing:.05em; color:var(--t3); margin-top:4px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+    .dsn-pick-lbl { font-size:.82em; text-transform:uppercase; letter-spacing:.05em; color:var(--t3); margin-top:4px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
     .dsn-pick-row { display:flex; flex-wrap:wrap; gap:4px; }
-    .dsn-chip { display:inline-flex; align-items:center; gap:5px; font-family:inherit; font-size:.75em; font-weight:600;
+    .dsn-chip { display:inline-flex; align-items:center; gap:5px; font-family:inherit; font-size:.86em; font-weight:600;
       padding:3px 9px; border-radius:20px; cursor:pointer; color:var(--text);
       background:var(--bg2); border:1px solid var(--border2); transition:all .15s; }
     .dsn-chip:hover { border-color:var(--accent); }
@@ -5376,12 +5557,12 @@ export class HADeviceDashboardEditor extends LitElement {
     .dsn-group-hdr { display:flex; align-items:center; gap:6px; }
     .dsn-twisty { font-family:inherit; font-size:.8em; width:18px; padding:0; cursor:pointer;
       background:transparent; border:none; color:var(--t3); }
-    .dsn-group-n { font-size:.7em; color:var(--t3); }
+    .dsn-group-n { font-size:.8em; color:var(--t3); }
     .dsn-group-body { display:flex; flex-wrap:wrap; gap:4px; padding:4px 0 6px 24px; }
     .dsn-panel { display:flex; flex-direction:column; gap:10px; }
     .dsn-scope-hdr { display:flex; align-items:center; gap:8px; padding-bottom:6px; border-bottom:1px solid var(--border2); }
     .dsn-scope-name { font-weight:800; font-size:1.05em; }
-    .dsn-badge { font-size:.7em; padding:2px 7px; border-radius:10px; background:var(--bg2); color:var(--t3); }
+    .dsn-badge { font-size:.78em; padding:2px 7px; border-radius:10px; background:var(--bg2); color:var(--t3); }
     .dsn-badge.on { background:var(--accentbg); color:var(--accent); font-weight:700; }
     .dsn-family { border:1px solid var(--border2); border-radius:8px; padding:8px 10px; }
     .dsn-family.off { opacity:.65; }
@@ -5460,7 +5641,7 @@ export class HADeviceDashboardEditor extends LitElement {
     /* ── Field labels ── */
     .field { margin-bottom:12px; }
     .field:last-child { margin-bottom:0; }
-    .field-lbl { font-size:11px; font-weight:600; letter-spacing:0.04em; color:var(--t2); text-transform:uppercase; margin-bottom:7px; }
+    .field-lbl { font-size:12px; font-weight:600; letter-spacing:0.04em; color:var(--t2); text-transform:uppercase; margin-bottom:7px; }
     .field-note { font-size:9px; font-weight:400; color:var(--t3); text-transform:none; letter-spacing:0; float:right; }
     .field-hint { font-size:10px; color:var(--t3); margin-top:4px; }
     .empty-hint { font-size:11px; color:var(--t3); font-style:italic; }
@@ -5503,7 +5684,9 @@ export class HADeviceDashboardEditor extends LitElement {
     .chip-picker-grp-lbl { font-size:10px; font-weight:600; letter-spacing:.04em; }
 
     /* ── Hint line ── */
-    .hint { font-size:11px; color:var(--t3); font-style:italic; }
+    /* Helper text sits next to HA's 14px chrome; 11px italic muted was the
+       single most common "I can't read the editor" complaint. */
+    .hint { font-size:12.5px; line-height:1.45; color:var(--t2); font-style:normal; }
     .rooms-note { display:flex; gap:8px; align-items:flex-start; font-size:11px; line-height:1.5;
       color:var(--t2); background:var(--s3); border:1px solid var(--border); border-left:3px solid var(--amber, #f0a020);
       border-radius:6px; padding:8px 10px; margin-bottom:8px; }
@@ -5616,12 +5799,29 @@ export class HADeviceDashboardEditor extends LitElement {
 
     /* Flat room style panel */
     .rsp-panel { padding:10px 12px; display:flex; flex-direction:column; gap:4px; background:var(--bg); }
+    /* Input actions: one card per channel — name + action picker on the header
+       line, then a two-column grid (fixed label column) for its settings, so
+       the sub-rows line up instead of floating. Chosen entities are chips above
+       ONE picker that adds another; HA's picker brings its own field chrome. */
+    .ia-ch { border:1px solid var(--border); border-radius:8px; padding:8px 10px; margin-bottom:8px; background:var(--s1); }
+    .ia-ch.set { border-color:color-mix(in srgb, var(--accent) 45%, var(--border)); }
+    .ia-ch-hdr { display:flex; align-items:center; gap:10px; }
+    .ia-ch-name { flex:0 0 34%; font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .ia-grid { display:grid; grid-template-columns:84px minmax(0,1fr); gap:6px 10px; align-items:center; margin-top:8px; }
+    .ia-lbl { font-size:11.5px; color:var(--t2); }
+    .ia-hint { grid-column:1 / -1; font-size:11.5px; color:var(--t2); margin:-2px 0 2px; }
+    .ia-note { font-size:11px; color:var(--t3); margin-top:3px; }
+    .ia-chips { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:4px; }
+    .ia-chip { display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:2px 6px 2px 9px; border-radius:999px; background:var(--s2); border:1px solid var(--border); }
+    .ia-chip-x { border:none; background:transparent; color:var(--t3); cursor:pointer; font-size:14px; line-height:1; padding:0 2px; }
+    .ia-chip-x:hover { color:var(--text); }
+    .ia-picker { display:block; width:100%; }
     .rsp-section-lbl { font-size:9px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--accent); margin:8px 0 4px; padding-bottom:4px; border-bottom:1px solid var(--border); }
     .rsp-section-lbl:first-child { margin-top:0; }
     .fav-btn { background:none; border:none; cursor:pointer; font-size:13px; color:var(--t3); padding:0 2px; line-height:1; transition:color .15s,transform .15s; flex-shrink:0; }
     .fav-btn:hover { color:var(--amber); transform:scale(1.2); }
     .fav-btn.on { color:var(--amber); }
-    .dev-style-hint { font-size:9px; color:var(--t3); font-weight:400; letter-spacing:.04em; text-transform:none; }
+    .dev-style-hint { font-size:11px; color:var(--t3); font-weight:400; letter-spacing:.04em; text-transform:none; }
 
     /* Sensor range table */
     .range-table { display:flex; flex-direction:column; gap:2px; }
@@ -5801,17 +6001,6 @@ export class HADeviceDashboardEditor extends LitElement {
     .view-dev-area { font-size:10px; color:var(--t3); }
 
     /* ── Live style preview (Style tab top) ── */
-    .style-preview { margin:0 0 14px; padding:10px; background:var(--s2); border:1px solid var(--border); border-radius:10px; display:flex; flex-direction:column; gap:8px; }
-    .sp-header { display:flex; align-items:center; gap:10px; border-radius:6px; }
-    .sp-h-orb { position:absolute; width:60px; height:60px; left:-10px; top:-20px; border-radius:50%; opacity:.6; filter:blur(8px); pointer-events:none; }
-    .sp-h-title { font-weight:600; flex:1; }
-    .sp-h-stat { font-size:11px; font-weight:600; }
-    .sp-tile { padding:8px 10px; display:flex; flex-direction:column; gap:6px; }
-    .sp-row { display:flex; align-items:center; gap:6px; }
-    .sp-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
-    .sp-tog { margin-left:auto; font-size:10px; font-weight:700; padding:2px 8px; border-radius:4px; color:#fff; }
-    .sp-chips { gap:5px; flex-wrap:wrap; }
-    .sp-chip { background:rgba(255,255,255,0.06); padding:2px 7px; border-radius:8px; }
     .sp-hint { font-size:10px; color:var(--t3); text-align:center; opacity:0.8; }
 
     /* ── Tile style picker (per-room) ── */

@@ -3,6 +3,41 @@
 All notable changes to HA Device Dashboard. Versions are git tags; HACS
 installs from them.
 
+## Unreleased
+
+### Inputs that do something
+
+- **Replay the press.** `input_actions[...].action: press` fires the same
+  `shelly.click` event the wall button does (device_id, button number, click
+  type), so automations with a Shelly device trigger run unchanged instead of
+  being re-wired inside the card. Hold and double tap replay long and double
+  pushes. The button number is read from the entity registry, so renamed inputs
+  still map correctly; `channel:` overrides it.
+- **Buttons and switches are told apart.** An input channel is a `button`
+  (momentary, reports presses) or a `switch` (steady, reports its position); the
+  row's status reads "single push · 2m ago" or On/Off instead of a dash.
+- **Paired outputs toggle by default.** An input wired to a relay on its own
+  device (a 1PM's Input 0 → Switch 0, a dimmer's up/down pair) toggles that
+  output with no configuration. Input-only hardware gets no default.
+- **Unbound rows open more-info** — the press history for a button, the state
+  log for a switch — instead of doing nothing.
+- **Hold-to-dim shows its ramp** — the key reads ▲ 62% while it climbs, with a
+  pulsing ring, and clears on release.
+- **Rows wrap on narrow tiles** so the action button and dropdown chip drop to
+  their own line instead of cramming into the corner.
+- **Dropdown chips name themselves** — "Preset: Boot master on" rather than the
+  bare option; `select_chip.label` still overrides.
+
+### Editor
+
+- **Input actions get Home Assistant's entity picker** — search by name, room
+  or entity id, scoped to the device's own entities or everything, with the
+  chosen targets shown as removable chips. Each channel is a card with the action
+  in its header and a labelled grid beneath it.
+- **Larger helper text** throughout the Design tab and Controls; the live tile
+  preview under the style picker is gone (the edit dialog's preview does that
+  job).
+
 ## v1.1.0 — 2026-09-02
 
 The editor-redesign release: 55 commits since v1.0.0.

@@ -36,7 +36,7 @@ import {
   formatPower, formatEnergy, formatVoltage, formatCurrent, formatTemp,
   formatUptime, formatApparentPower, formatReactivePower,
   formatFrequency, formatHumidity, formatIlluminance, formatPpm, formatPercent,
-  detectInputChannels,
+  detectInputChannels, detectShellyGen, shellyClickTypes, shellyInputChannel, shellyHostname,
 } from './helpers';
 import { renderAnimSvg } from './anim-icons';
 
@@ -1002,31 +1002,69 @@ export class HADeviceDashboard extends LitElement {
     return detectInputChannels(device, this.hass.states as any);
   }
 
-  /** The action bound to an input channel, if any. Keyed by entity_id (what the
-   *  editor writes); a channel number is accepted for hand-written YAML. */
+  /** The action bound to an input channel. Keyed by entity_id (what the editor
+   *  writes); a channel number is accepted for hand-written YAML.
+   *
+   *  With nothing configured, an input that is wired to an output on its own
+   *  device (a relay's Input 0 → Switch 0) defaults to toggling that output —
+   *  the one thing the physical input does that HA can replay — so the row is
+   *  useful before anyone opens the editor. An explicit `action: none` keeps a
+   *  row status-only. Input-only hardware has no output and gets no default. */
   private _inputAction(device: HADevice, ch: InputChannel): InputActionConfig | null {
     const map = this._config.device_styles?.[device.device_id]?.input_actions;
-    if (!map) return null;
-    const cfg = map[ch.entityId] ?? map[String(ch.channel)];
-    return cfg && cfg.action !== 'none' ? cfg : null;
+    const cfg = map?.[ch.entityId] ?? map?.[String(ch.channel)];
+    if (cfg) return cfg.action !== 'none' ? cfg : null;
+    if (ch.output) return { action: 'toggle', entity: ch.output };
+    return null;
   }
 
   /** Label for the channel's action button — the target's friendly name where we
    *  can resolve one, so a row reads "Hall lights" rather than "script.turn_on". */
-  private _inputActionLabel(cfg: InputActionConfig): string {
+  private _inputActionLabel(cfg: InputActionConfig, device?: HADevice, ch?: InputChannel): string {
     if (cfg.label) return cfg.label;
+    // A replayed press IS the channel — the key wears the button's own name.
+    if (cfg.action === 'press') return ch?.label ?? 'Press';
     const entities = entityList(cfg.entity);
     const target = cfg.action === 'perform-action' && cfg.perform_action?.split('.').length === 2
       && !cfg.perform_action.endsWith('.turn_on') && !cfg.perform_action.endsWith('.turn_off')
       ? cfg.perform_action
       : entities[0];
-    const friendly = target ? (this.hass.states[target]?.attributes as HassAttrs)?.friendly_name : undefined;
+    let friendly = target ? (this.hass.states[target]?.attributes as HassAttrs)?.friendly_name : undefined;
+    // HA's friendly name is "<device> <entity>"; on the device's own tile the
+    // device half is noise ("Oven relay Oven relay"). Keep the entity half,
+    // and fall back to the device name when the entity IS the device.
+    if (friendly && device) {
+      const prefix = device.name.trim().toLowerCase();
+      if (prefix && friendly.toLowerCase().startsWith(prefix)) {
+        friendly = friendly.slice(prefix.length).trim() || device.name;
+      }
+    }
     const base = (friendly as string) ?? target ?? cfg.perform_action ?? 'Run';
     // Several targets on one channel: name the first, count the rest.
     return entities.length > 1 ? `${base} +${entities.length - 1}` : base;
   }
 
-  /** The select-entity dropdown chip on a channel row, if configured. */
+  /** An entity's name without its own device's name in front — HA's friendly
+   *  name is "<device> <entity>", so `select.wled_tv_room_preset` is "WLED tv
+   *  room Preset" and the half worth showing is "Preset". Falls back to the full
+   *  friendly name, then the entity id. */
+  private _entityShortName(entityId: string): string {
+    const friendly = (this.hass.states[entityId]?.attributes as HassAttrs)?.friendly_name as string | undefined;
+    if (!friendly) return entityId;
+    const reg = (this.hass as unknown as { entities?: Record<string, { device_id?: string }>;
+      devices?: Record<string, { name_by_user?: string; name?: string }> });
+    const dev = reg.devices?.[reg.entities?.[entityId]?.device_id ?? ''];
+    const devName = (dev?.name_by_user ?? dev?.name ?? '').trim().toLowerCase();
+    if (devName && friendly.toLowerCase().startsWith(devName)) {
+      return friendly.slice(devName.length).trim() || friendly;
+    }
+    return friendly;
+  }
+
+  /** The select-entity dropdown chip on a channel row, if configured. The chip
+   *  is labelled with the select's own name ("Preset") unless the config names
+   *  it: a chip reading only "Boot master on" said what was chosen but not what
+   *  it was choosing. */
   private _inputSelectChip(device: HADevice, ch: InputChannel): {
     entity: string; label?: string; options: string[]; current: string;
   } | null {
@@ -1036,7 +1074,7 @@ export class HADeviceDashboard extends LitElement {
     if (!st) return null;
     const options = ((st.attributes as HassAttrs)?.options as string[] | undefined) ?? [];
     if (!options.length) return null;
-    return { entity: cfg.entity, label: cfg.label, options, current: st.state };
+    return { entity: cfg.entity, label: cfg.label ?? this._entityShortName(cfg.entity), options, current: st.state };
   }
 
   /** Hold-to-dim state. Brightness is tracked locally rather than re-read from
@@ -1053,6 +1091,9 @@ export class HADeviceDashboard extends LitElement {
   private _dimDirs = new Map<string, 1 | -1>();
   /** Set once a hold has acted, so the click that follows it is swallowed. */
   private _holdFired = false;
+  /** What the ramp is doing right now, for the row/key being held: nothing on
+   *  screen moved while a light dimmed, so a hold read as "is it working?". */
+  @state() private _dimFeedback: { key: string; dir: 1 | -1; pct: number } | null = null;
 
   private _startInputHold(device: HADevice, ch: InputChannel, _e: Event): void {
     const cfg = this._inputAction(device, ch);
@@ -1060,10 +1101,10 @@ export class HADeviceDashboard extends LitElement {
     if (!cfg || !hold || hold.action === 'none') return;
     this._holdFired = false;
     if (this._holdTimer) clearTimeout(this._holdTimer);
-    this._holdTimer = window.setTimeout(() => this._beginInputHold(ch, cfg, hold), 400);
+    this._holdTimer = window.setTimeout(() => this._beginInputHold(device, ch, cfg, hold), 400);
   }
 
-  private _beginInputHold(ch: InputChannel, cfg: InputActionConfig, hold: InputHoldConfig): void {
+  private _beginInputHold(device: HADevice, ch: InputChannel, cfg: InputActionConfig, hold: InputHoldConfig): void {
     this._holdTimer = null;
     this._holdFired = true;
 
@@ -1073,7 +1114,7 @@ export class HADeviceDashboard extends LitElement {
         entity: hold.entity ?? cfg.entity,
         perform_action: hold.perform_action,
         data: hold.data,
-      }, ch);
+      }, device, ch, 'long');
       return;
     }
 
@@ -1094,6 +1135,7 @@ export class HADeviceDashboard extends LitElement {
     const tick = () => {
       if (!this._dimEntity) return;
       this._dimLevel = Math.max(MIN_DIM, Math.min(255, this._dimLevel + dir * step));
+      this._dimFeedback = { key: ch.entityId, dir, pct: Math.round((this._dimLevel / 255) * 100) };
       this.hass.callService('light', 'turn_on', { entity_id: this._dimTargets, brightness: this._dimLevel });
       // Hitting an end stops the ramp; the release still flips direction, so the
       // next hold walks back the other way.
@@ -1116,6 +1158,7 @@ export class HADeviceDashboard extends LitElement {
       this._dimTargets = [];
     }
     this._stopDim();
+    this._dimFeedback = null;
   }
 
   /** Live state of a channel's toggle target, for the keypad's lit/off styling.
@@ -1150,7 +1193,7 @@ export class HADeviceDashboard extends LitElement {
 
     const dbl = cfg.double_tap_action;
     // No double action to disambiguate against: fire now, no added latency.
-    if (!dbl || dbl.action === 'none') { this._performAction(cfg, ch); return; }
+    if (!dbl || dbl.action === 'none') { this._performAction(cfg, device, ch); return; }
 
     const pending = this._tapTimers.get(ch.entityId);
     if (pending != null) {
@@ -1161,12 +1204,12 @@ export class HADeviceDashboard extends LitElement {
         entity: dbl.entity ?? cfg.entity,
         perform_action: dbl.perform_action,
         data: dbl.data,
-      }, ch);
+      }, device, ch, 'double');
       return;
     }
     this._tapTimers.set(ch.entityId, window.setTimeout(() => {
       this._tapTimers.delete(ch.entityId);
-      this._performAction(cfg, ch);
+      this._performAction(cfg, device, ch);
     }, DOUBLE_TAP_MS));
   }
 
@@ -1175,8 +1218,16 @@ export class HADeviceDashboard extends LitElement {
     this._tapTimers.clear();
   }
 
-  private _performAction(cfg: InputActionConfig | InputHoldConfig, ch: InputChannel): void {
-
+  private _performAction(
+    cfg: InputActionConfig | InputHoldConfig,
+    device: HADevice,
+    ch: InputChannel,
+    gesture: 'single' | 'double' | 'long' = 'single',
+  ): void {
+    if (cfg.action === 'press') {
+      void this._replayPress(device, ch, gesture);
+      return;
+    }
     if (cfg.action === 'more-info') {
       fireEvent(this as any, 'hass-more-info' as any,
         { entityId: entityList(cfg.entity)[0] ?? ch.entityId } as any);
@@ -1195,6 +1246,55 @@ export class HADeviceDashboard extends LitElement {
       const targets = entityList(cfg.entity);
       if (targets.length) data.entity_id = targets;
       this.hass.callService(domain, service, data);
+    }
+  }
+
+  /** Registry unique_id of an entity, fetched once per entity. The registry
+   *  read needs an admin login — so does firing events, so `press` has one
+   *  audience either way. */
+  private _uniqueIds = new Map<string, Promise<string | null>>();
+  private _uniqueId(entityId: string): Promise<string | null> {
+    let p = this._uniqueIds.get(entityId);
+    if (!p) {
+      p = ((this.hass as any).callWS({ type: 'config/entity_registry/get', entity_id: entityId }) as Promise<{ unique_id?: string }>)
+        .then(r => r?.unique_id ?? null)
+        .catch(() => null);
+      this._uniqueIds.set(entityId, p);
+    }
+    return p;
+  }
+
+  /** Replay a physical press. Fires the `shelly.click` event the integration
+   *  fires for a real push, with the same device_id / channel / click_type, so
+   *  every automation with a Shelly button device trigger runs unchanged — the
+   *  card is a remote for the wall switch, not a second copy of its wiring.
+   *  The channel comes from the registry unique_id (a renamed input's entity
+   *  id no longer says which button it is), falling back to the entity id. */
+  private async _replayPress(device: HADevice, ch: InputChannel, gesture: 'single' | 'double' | 'long'): Promise<void> {
+    const eventTypes = (this.hass.states[ch.entityId]?.attributes as HassAttrs)?.event_types as string[] | undefined;
+    const clickType = shellyClickTypes(eventTypes)[gesture];
+    if (!clickType) {
+      fireEvent(this as any, 'hass-notification' as any,
+        { message: `${ch.label}: this input reports no ${gesture} press to replay` } as any);
+      return;
+    }
+    const gen = detectShellyGen(device.model ?? '');
+    const channel = this._inputAction(device, ch)?.channel
+      ?? shellyInputChannel(ch.entityId, gen, await this._uniqueId(ch.entityId));
+    const data: Record<string, unknown> = {
+      device_id: device.device_id,
+      channel,
+      click_type: clickType,
+      generation: gen === 1 ? 1 : 2,
+    };
+    const host = shellyHostname(device);
+    if (host) data.device = host;
+    try {
+      await (this.hass as any).callWS({ type: 'fire_event', event_type: 'shelly.click', event_data: data });
+    } catch (err) {
+      console.warn('[ha-device-dashboard] could not replay press', err);
+      fireEvent(this as any, 'hass-notification' as any,
+        { message: 'Replaying a press needs an admin login — Home Assistant refused the event' } as any);
     }
   }
 
@@ -2661,7 +2761,20 @@ export class HADeviceDashboard extends LitElement {
   }
 
   private _handleScenePress(device: HADevice): void {
-    const buttonEnts = device.entities.filter(e => e.domain === 'button');
+    // Only buttons that DO something for the user. Every Shelly also carries a
+    // Restart button (device_class restart, entity_category config) — pressing
+    // "all buttons" on a relay rebooted it. With nothing safe to press, the tap
+    // opens the detail sheet instead of silently doing nothing.
+    const SERVICE_CLASSES = new Set(['restart', 'identify', 'update']);
+    const buttonEnts = device.entities.filter(e => e.domain === 'button'
+      && !e.entity_category
+      && !SERVICE_CLASSES.has(String((this.hass.states[e.entity_id]?.attributes as HassAttrs)?.device_class ?? ''))
+      && !/_(reboot|restart|identify)$/.test(e.entity_id));
+    if (!buttonEnts.length) {
+      this._detailDevice = device.device_id;
+      this._detailHistoryRange = 24;
+      return;
+    }
     for (const e of buttonEnts) {
       this.hass.callService('button', 'press', { entity_id: e.entity_id });
     }
@@ -2740,7 +2853,11 @@ export class HADeviceDashboard extends LitElement {
       getInputChannels: memo((d) => this._getInputChannels(d)),
       getInputActionLabel: (d, ch) => {
         const cfg = this._inputAction(d, ch);
-        return cfg ? this._inputActionLabel(cfg) : null;
+        return cfg ? this._inputActionLabel(cfg, d, ch) : null;
+      },
+      getInputDimFeedback: (ch) => {
+        const f = this._dimFeedback;
+        return f && f.key === ch.entityId ? { dir: f.dir, pct: f.pct } : null;
       },
       inputHasHold: (d, ch) => {
         const hold = this._inputAction(d, ch)?.hold_action;
@@ -2862,7 +2979,11 @@ export class HADeviceDashboard extends LitElement {
    *  tile card). */
   private static readonly _TILE_CONTROL_SEL =
     'button, a, input, select, textarea, hdd-delegated, ' +
-    '.ts-light-wheel, .trv-dial-svg, .valve-interactive, .tile-trv-dial';
+    '.ts-light-wheel, .trv-dial-svg, .valve-interactive, .tile-trv-dial, ' +
+    // An unbound input row opens its own more-info on click; the tile must not
+    // ALSO open the detail sheet on the same tap (click stopPropagation cannot
+    // reach the tile's pointer handlers).
+    '.input-row.tappable';
 
   private _tileTapIsControl(e: Event): boolean {
     const t = e.target as Element | null;

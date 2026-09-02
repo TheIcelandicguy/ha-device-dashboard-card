@@ -42,13 +42,24 @@ export function renderInputRow(
   device: HADevice,
   ch: InputChannel,
 ): TemplateResult {
+  const hasAction = ctx.getInputActionLabel(device, ch) != null;
+  // A button reports its last press ("single push · 21h ago"); a switch reports
+  // its position. Neither is a dash — a row that only ever said "—" was the
+  // reason input tiles read as broken.
+  const status = ch.kind === 'button'
+    ? (ch.lastEvent ? ch.lastEvent.replace(/_/g, ' ') : 'no press yet')
+    : (ch.isOn ? 'On' : 'Off');
+  // With no action to run, the row itself opens the entity's more-info — a
+  // button's press history, a switch's state log — instead of doing nothing.
+  const open = hasAction ? undefined : (e: Event) => { e.stopPropagation(); ctx.fireMoreInfo(ch.entityId); };
   return html`
-    <div class="input-row ${ch.isButton ? 'btn-mode' : ch.isOn ? 'active' : ''}">
+    <div class="input-row ${ch.isButton ? 'btn-mode' : 'sw-mode'} ${ch.isOn ? 'active' : ''} ${open ? 'tappable' : ''}"
+      title=${open ? 'Show history' : ''} @click=${open}>
       <span class="${ch.isButton ? 'input-btn-dot' : 'input-row-dot'}"></span>
       <span class="input-row-name">${ch.label}</span>
-      <span class="input-row-event">${ch.lastEvent ? ch.lastEvent.replace(/_/g, ' ') : '—'}</span>
+      <span class="input-row-event ${ch.kind === 'switch' ? (ch.isOn ? 'is-on' : 'is-off') : ''}">${status}</span>
       <span class="input-row-time">${ctx.timeAgo(ch.lastChanged)}</span>
-      ${renderInputAction(ctx, device, ch)}
+      <span class="input-row-act">${renderInputAction(ctx, device, ch)}</span>
     </div>`;
 }
 
@@ -65,13 +76,16 @@ export function renderInputAction(
   if (!label) return chip ? renderInputSelectChip(ctx, chip) : nothing;
   const hold = ctx.inputHasHold(device, ch);
   const end = () => ctx.endInputHold();
+  // While a hold ramps, the button shows the ramp instead of its label —
+  // direction and where the light is — so a hold visibly does something.
+  const dim = ctx.getInputDimFeedback(ch);
   return html`
-    <button class="input-act ${hold ? 'holdable' : ''}"
+    <button class="input-act ${hold ? 'holdable' : ''} ${dim ? 'dimming' : ''}"
       title=${hold ? `${label} — hold to dim` : label}
       @click=${(e: Event) => ctx.runInputAction(device, ch, e)}
       @pointerdown=${(e: Event) => ctx.startInputHold(device, ch, e)}
       @pointerup=${end} @pointerleave=${end} @pointercancel=${end}
-      >${label}</button>
+      >${dim ? `${dim.dir > 0 ? '▲' : '▼'} ${dim.pct}%` : label}</button>
     ${chip ? renderInputSelectChip(ctx, chip) : nothing}`;
 }
 
@@ -91,7 +105,7 @@ export function renderInputSelectChip(
         ctx.setInputSelectOption(chip.entity, (e.target as HTMLSelectElement).value);
       }}>
       ${chip.options.map(o => html`
-        <option value=${o} ?selected=${o === chip.current}>${chip.label ? `${chip.label} ${o}` : o}</option>`)}
+        <option value=${o} ?selected=${o === chip.current}>${chip.label ? `${chip.label}: ${o}` : o}</option>`)}
     </select>`;
 }
 

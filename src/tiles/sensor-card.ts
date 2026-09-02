@@ -42,10 +42,15 @@ export function renderSensorCardTile(ctx: TileCtx): TemplateResult {
       const avgOld = pts.slice(0, half).reduce((a, p) => a + p.v, 0) / half;
       trend = avgNew - avgOld;
     }
+    // Secondary chips are MEASUREMENTS: a numeric state with a unit, from a
+    // primary (non-diagnostic) sensor. Without the unit test a firmware
+    // version like "20260311-…" parsed to a "2026.0" chip.
     const secEnts = device.entities.filter(e => {
       if (e.entity_id === primaryEnt!.entity_id || e.domain !== 'sensor') return false;
+      if (e.entity_category) return false;
       const s = hass.states[e.entity_id];
       if (!s || s.state === 'unavailable' || s.state === 'unknown') return false;
+      if (!(s.attributes as HassAttrs)?.unit_of_measurement) return false;
       return !isNaN(parseFloat(s.state));
     }).slice(0, 4);
     // header_chips (opt-in) moves the secondary chips into the name row; the

@@ -70,18 +70,22 @@ function renderKey(ctx: TileCtx, device: HADevice, ch: InputChannel): TemplateRe
   // The channel's own name is only worth a second line when it says something
   // the action label doesn't — otherwise the key would read "Stokkur / Stokkur".
   const sub = ch.label && ch.label.toLowerCase() !== label.toLowerCase() ? ch.label : '';
+  // While a hold ramps, the key's second line shows the ramp — direction and
+  // where the light is — so a hold visibly does something.
+  const dim = ctx.getInputDimFeedback(ch);
 
   return html`
     <button
-      class="ts-key ${state ? `is-${state}` : 'is-neutral'} ${holdable ? 'holdable' : ''}"
+      class="ts-key ${state ? `is-${state}` : 'is-neutral'} ${holdable ? 'holdable' : ''} ${dim ? 'dimming' : ''}"
       title=${holdable ? `${label} — hold to dim` : label}
       @click=${(e: Event) => ctx.runInputAction(device, ch, e)}
       @pointerdown=${(e: Event) => ctx.startInputHold(device, ch, e)}
       @pointerup=${end} @pointerleave=${end} @pointercancel=${end}>
       <span class="ts-key-pip"></span>
       <span class="ts-key-label">${label}</span>
-      ${sub && ctx.showEl('target_state') ? html`<span class="ts-key-sub">${sub}</span>` : nothing}
-      ${ctx.showEl('last_event') && ch.lastChanged
+      ${dim ? html`<span class="ts-key-sub ts-key-dim">${dim.dir > 0 ? '▲' : '▼'} ${dim.pct}%</span>`
+        : sub && ctx.showEl('target_state') ? html`<span class="ts-key-sub">${sub}</span>` : nothing}
+      ${!dim && ctx.showEl('last_event') && ch.lastChanged
         ? html`<span class="ts-key-age">${ctx.timeAgo(ch.lastChanged)}</span>` : nothing}
     </button>`;
 }
