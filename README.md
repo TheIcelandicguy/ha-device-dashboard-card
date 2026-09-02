@@ -51,6 +51,10 @@ Frontend only: no custom integration, no Python, no helper entities.
 
 ## Installation
 
+**Requires** Home Assistant **2024.8 or newer** (declared in `hacs.json`).
+Developed and tested against HA 2026.8; if you hit trouble on an older
+version, please say which version in the issue.
+
 ### HACS
 
 1. HACS → **Custom repositories**
