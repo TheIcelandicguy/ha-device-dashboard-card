@@ -3085,6 +3085,16 @@ export class HADeviceDashboardEditor extends LitElement {
         ${this._designFamily('tile', 'Tile — device → type → room → view → card', tileBody)}
         ${this._designFamily('container', 'Container — room → view → card', containerBody)}
         ${this._designFamily('chrome', 'Card chrome — view → card', chromeBody)}
+        ${sc.kind === 'room' ? html`
+          <div class="dsn-family">
+            <div class="dsn-family-hdr">Room chrome — this room only</div>
+            <div class="hint" style="margin-bottom:6px">
+              The room block's own dressing — backdrop photo, header colours,
+              borders, header chips, button shapes. These exist once per room,
+              so there is no ladder under them.
+            </div>
+            ${this._renderRoomChromeBody(sc.name)}
+          </div>` : nothing}
         ${sc.kind === 'global' ? this._renderSavedLooks() : nothing}
         ${sc.kind === 'global' ? html`
           <div class="dsn-family">
@@ -3209,7 +3219,15 @@ export class HADeviceDashboardEditor extends LitElement {
       </div>`;
   }
 
-  private _renderRoomStylePanel(name: string): TemplateResult {
+  /** The room block's own dressing — backdrop photo, chrome colours, header
+   *  chips, button shapes. Rendered by the Design tab at room scope: these are
+   *  AreaStyle keys that exist only per room (no ladder under them), and they
+   *  lost their editor surface when the Rooms styling panel was retired —
+   *  "importable but not editable" (Shelly Cloud writes bg_image) was a trap.
+   *  Settings the Design panel already owns at room scope — theme, columns,
+   *  graphs, sensor chips, energy window — are deliberately absent here: one
+   *  editor per key. */
+  private _renderRoomChromeBody(name: string): TemplateResult {
     const st: AreaStyle = this._config.area_styles?.[name] ?? {};
 
     const colorRow = (label: string, key: keyof AreaStyle, def: string) => {
@@ -3240,27 +3258,8 @@ export class HADeviceDashboardEditor extends LitElement {
 
     return html`
       <div class="rsp-panel">
-        ${sectionLbl('Theme')}
-        ${this._themeOverrideSelect(
-          st.theme,
-          (t) => this._setAreaStyle(name, 'theme', t),
-          `Repaints this room's tiles, text, accent and header. The card background
-           and the card's own header keep the card theme — a room does not contain
-           them. Individual colours set below still win over this.`)}
-
         ${sectionLbl('Layout')}
-        ${slRow('Columns', 'columns', 1, 6, 1, 3, '')}
         ${slRow('Tile gap', 'tileGap', 4, 24, 2, 10, 'px')}
-
-        ${sectionLbl('Graphs')}
-        <div class="field">
-          <div class="field-lbl">Show graphs</div>
-          <div class="pill-grp">
-            ${([['Inherit', undefined], ['On', true], ['Off', false]] as Array<[string, boolean | undefined]>).map(([lbl, val]) => html`
-              <span class="pill ${st.show_graphs === val ? 'on' : ''}"
-                @click=${() => this._setAreaStyle(name, 'show_graphs', val)}>${lbl}</span>`)}
-          </div>
-        </div>
 
         ${this._renderBgImagePicker(
           'Room background photo', `room-bg-${name}`, st.bg_image, st.bg_image_size,
@@ -3307,18 +3306,6 @@ export class HADeviceDashboardEditor extends LitElement {
 
         ${sectionLbl('Room header chips')}
         ${this._renderRoomHeaderChips(name, st)}
-        <div class="field" style="margin-top:6px">
-          <div class="field-lbl">Energy shows</div>
-          ${this._renderEnergyPeriodPicker(st.energy_period, (v) => this._setAreaStyle(name, 'energy_period', v), true)}
-        </div>
-
-        ${sectionLbl('Sensor chips')}
-        ${this._chipPicker(
-          st.sensors,
-          this._config.sensors,
-          'global',
-          (next) => this._setAreaStyle(name, 'sensors', next),
-        )}
 
         ${this._adv(html`
         ${sectionLbl('ON / OFF buttons')}

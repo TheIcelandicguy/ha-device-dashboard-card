@@ -4092,6 +4092,16 @@ function e(e,t,i,s){var o,a=arguments.length,r=a<3?t:null===s?s=Object.getOwnPro
             colour out of that theme.
           </div>
         </div>`})}
+        ${"room"===e.kind?q`
+          <div class="dsn-family">
+            <div class="dsn-family-hdr">Room chrome — this room only</div>
+            <div class="hint" style="margin-bottom:6px">
+              The room block's own dressing — backdrop photo, header colours,
+              borders, header chips, button shapes. These exist once per room,
+              so there is no ladder under them.
+            </div>
+            ${this._renderRoomChromeBody(e.name)}
+          </div>`:K}
         ${"global"===e.kind?this._renderSavedLooks():K}
         ${"global"===e.kind?q`
           <div class="dsn-family">
@@ -4168,7 +4178,7 @@ function e(e,t,i,s){var o,a=arguments.length,r=a<3?t:null===s?s=Object.getOwnPro
             <option value=${t} ?selected=${e===t}>${Le[t]}</option>`)}
         </select>
         <div class="hint" style="margin-top:4px">${i}</div>
-      </div>`}_renderRoomStylePanel(e){const t=this._config.area_styles?.[e]??{},i=(i,s,o)=>{const a=t[s]??o;return q`
+      </div>`}_renderRoomChromeBody(e){const t=this._config.area_styles?.[e]??{},i=(i,s,o)=>{const a=t[s]??o;return q`
         <div class="color-row">
           <div class="color-preview-swatch" style="background:${a}"></div>
           <span class="color-key">${i}</span>
@@ -4184,22 +4194,8 @@ function e(e,t,i,s){var o,a=arguments.length,r=a<3?t:null===s?s=Object.getOwnPro
           <span class="sl-val">${c}${l}</span>
         </div>`},o=e=>q`<div class="rsp-section-lbl">${e}</div>`;return q`
       <div class="rsp-panel">
-        ${o("Theme")}
-        ${this._themeOverrideSelect(t.theme,t=>this._setAreaStyle(e,"theme",t),"Repaints this room's tiles, text, accent and header. The card background\n           and the card's own header keep the card theme — a room does not contain\n           them. Individual colours set below still win over this.")}
-
         ${o("Layout")}
-        ${s("Columns","columns",1,6,1,3,"")}
         ${s("Tile gap","tileGap",4,24,2,10,"px")}
-
-        ${o("Graphs")}
-        <div class="field">
-          <div class="field-lbl">Show graphs</div>
-          <div class="pill-grp">
-            ${[["Inherit",void 0],["On",!0],["Off",!1]].map(([i,s])=>q`
-              <span class="pill ${t.show_graphs===s?"on":""}"
-                @click=${()=>this._setAreaStyle(e,"show_graphs",s)}>${i}</span>`)}
-          </div>
-        </div>
 
         ${this._renderBgImagePicker("Room background photo",`room-bg-${e}`,t.bg_image,t.bg_image_size,t=>this._setAreaStyle(e,"bg_image",t),t=>this._setAreaStyle(e,"bg_image_size",t),()=>["bg_image","bg_image_size","bg_image_mode","bg_image_pos"].forEach(t=>this._setAreaStyle(e,t,void 0)),{maxDim:1600,showFit:"sharp"===(t.bg_image_mode??"sharp"),extra:q`
               <div class="field-lbl" style="margin-top:8px">Backdrop mode
@@ -4236,13 +4232,6 @@ function e(e,t,i,s){var o,a=arguments.length,r=a<3?t:null===s?s=Object.getOwnPro
 
         ${o("Room header chips")}
         ${this._renderRoomHeaderChips(e,t)}
-        <div class="field" style="margin-top:6px">
-          <div class="field-lbl">Energy shows</div>
-          ${this._renderEnergyPeriodPicker(t.energy_period,t=>this._setAreaStyle(e,"energy_period",t),!0)}
-        </div>
-
-        ${o("Sensor chips")}
-        ${this._chipPicker(t.sensors,this._config.sensors,"global",t=>this._setAreaStyle(e,"sensors",t))}
 
         ${this._adv(q`
         ${o("ON / OFF buttons")}
@@ -5757,4 +5746,4 @@ function e(e,t,i,s){var o,a=arguments.length,r=a<3?t:null===s?s=Object.getOwnPro
   `,e([ve({attribute:!1})],Ws.prototype,"hass",void 0),e([ve()],Ws.prototype,"entity",void 0),e([ve({attribute:!1})],Ws.prototype,"features",void 0),e([fe()],Ws.prototype,"_el",void 0),Ws=e([he("hdd-delegated")],Ws);let Us=class extends de{constructor(){super(...arguments),this._builtKey=""}willUpdate(e){const t=this.config?JSON.stringify(this.config):"";t&&t!==this._builtKey&&this._build(t)}updated(){this._el&&this.hass&&(this._el.hass=this.hass)}async _build(e){this._builtKey=e;try{const t=window.loadCardHelpers,i=t?await t():void 0;if(!i||JSON.stringify(this.config)!==e)return;const s=i.createCardElement(this.config);this.hass&&(s.hass=this.hass),this._el=s}catch{this._el=void 0}}render(){return this._el??K}};Us.styles=n`
     :host { display: block; }
     :host > * { width: 100%; }
-  `,e([ve({attribute:!1})],Us.prototype,"hass",void 0),e([ve({attribute:!1})],Us.prototype,"config",void 0),e([fe()],Us.prototype,"_el",void 0),Us=e([he("hdd-card")],Us);console.info("%c ha-device-dashboard %c review-fixes-2026-09-02a ","background:#c98a63;color:#1e1a17;font-weight:700;border-radius:3px 0 0 3px","background:#241f1b;color:#f3ece3;border-radius:0 3px 3px 0"),window.customCards=window.customCards||[],window.customCards.push({type:"ha-device-dashboard",name:"HA Device Dashboard",description:"Universal device fleet overview — Shelly, ZHA, Hue, ESPHome, Matter and more.",preview:!0,documentationURL:"https://github.com/TheIcelandicguy/ha-device-dashboard-card"});
+  `,e([ve({attribute:!1})],Us.prototype,"hass",void 0),e([ve({attribute:!1})],Us.prototype,"config",void 0),e([fe()],Us.prototype,"_el",void 0),Us=e([he("hdd-card")],Us);console.info("%c ha-device-dashboard %c room-chrome-2026-09-02a ","background:#c98a63;color:#1e1a17;font-weight:700;border-radius:3px 0 0 3px","background:#241f1b;color:#f3ece3;border-radius:0 3px 3px 0"),window.customCards=window.customCards||[],window.customCards.push({type:"ha-device-dashboard",name:"HA Device Dashboard",description:"Universal device fleet overview — Shelly, ZHA, Hue, ESPHome, Matter and more.",preview:!0,documentationURL:"https://github.com/TheIcelandicguy/ha-device-dashboard-card"});
