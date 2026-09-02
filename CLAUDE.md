@@ -55,7 +55,7 @@ depth; this file is the fast orientation. Contributor workflow is in
 
 - `src/ha-device-dashboard.ts` (~3.6k lines) — main card: config, hass wiring, device
   grouping, header, graph fetch, CSS-var building.
-- `src/editor.ts` (~5.2k lines) — GUI editor. Five tabs: Rooms & devices, Views,
+- `src/editor.ts` (~5.8k lines) — GUI editor. Five tabs: Rooms & devices, Views,
   **Design**, Graphs & Sensors, YAML. Mid-refactor toward the data-driven
   `EDITOR_LAYOUT` spec in `src/editor-layout.ts`; only Graphs & Sensors is fully
   wired to it, the rest render from bespoke methods.
@@ -70,7 +70,9 @@ depth; this file is the fast orientation. Contributor workflow is in
   keypad, `scene-button`, `block-tile` for the `default` adaptive tile) +
   `delegated-control.ts` (native HA controls for long-tail domains) +
   `tile-context.ts` (`TileCtx`) + `tile-parts.ts` (shared fragments: name row,
-  input channel row, input action button, effect picker).
+  input channel row, input action button, effect picker, and `chipsInHeader()` —
+  the one predicate for the opt-in header_chips placement, so power-monitor and
+  sensor-card can never disagree about when chips move into the name row).
 - `src/palette.ts` — the theme picker's 🎲 / ✨ rolls: a random preset, or a
   palette generated from a random hue with WCAG floors enforced per colour. Pure
   (no DOM/hass), tested by `npm run test:palette`.
@@ -145,11 +147,42 @@ depth; this file is the fast orientation. Contributor workflow is in
   editor's Customize panel used to each have their own cascade; they disagreed whenever
   `profile_styles` / `custom_styles` / `style_presets` set a layout, so the panel
   rebased a toggle onto a layout that wasn't in force. Order is device → profile →
-  custom style → style preset → global → profile default: a *saved style's* layout
-  now outranks the global one, since the global is the least specific thing there is.
-- **`profile_styles` is `ProfileStyle`, not `DeviceStyle`** — only tile_style,
-  power_monitor_variant, tile_layout, sensors, show_graphs, elements and color are
-  read at the per-type layer. Widening it means teaching the matching resolver first.
+  room → view → custom style → style preset (the `'default'` key, hardcoded — the
+  other resolvers use `effectiveStyle`) → global → profile default: a *saved
+  style's* layout outranks the global one, since the global is the least specific
+  thing there is.
+- **`profile_styles` is `ProfileStyle`, not `DeviceStyle`** — only theme, color,
+  tile_style, power_monitor_variant, tile_layout, sensors, show_graphs, elements
+  and energy_period are read at the per-type layer. Widening it means teaching the
+  matching resolver first.
+- **Elements can be default-off.** `STYLE_ELEMENTS` entries may carry `def: false`
+  (opt-in placements — `header_chips`, "Chips in the name row", on power-monitor
+  and sensor-card). `cascade.elementDefault()` is the only reader of that flag;
+  renderers call `showEl(id)` with no literal, so a call site cannot flip the
+  default. "Unset elements are shown" is therefore no longer universally true.
+- **Global element toggles live in `style_presets[<style>].elements`** — there is
+  no top-level `elements` config key, and the cascade never reads one. The editor
+  routes the `elements` key through `_setGlobalElements` at Global scope, and
+  `migrateConfig` relocates a stray top-level key into the right preset. Note the
+  element id `header_chips` is unrelated to the top-level `header_chips` (fleet
+  header chips) and `area_styles[room].header_chips` (room-header chips) keys —
+  same string, three meanings.
+- **Room scope has a fourth block: "Room chrome — this room only"**
+  (`_renderRoomChromeBody`): backdrop photo, tile gap, tile/room-block colours,
+  room header colours, per-room header chips, button shapes — AreaStyle keys that
+  exist once per room, no ladder. It is the pruned survivor of the retired Rooms
+  styling panel; everything with a ladder stayed in the family rows above it.
+- **The card and editor talk over the `hdd-editor-goto` window event.** A tile tap
+  in the edit-dialog preview dispatches `{device}` (cancelable — the editor
+  preventDefault()s; with no listener the tap falls back to the detail sheet), and
+  the delegate notice dispatches `{tab, section, flash}`. Jumping to a `design-*`
+  registry section re-bases the scope to Global transiently and opens the
+  `design-panel` ancestor accordion.
+- **Graphs end at the live reading.** `_seriesWithLive` appends the current state
+  as a final point (stamped `last_updated`, memoised so unchanged renders return
+  the identical array), flagged `live: true` and excluded from y-autoscale and
+  peak/min dots — the chip and the graph label agree without a spike rescaling
+  the day's history.
 - **`theme` is authoritative; `style` holds only deliberate overrides.** The editor
   used to write the whole palette into `style`, which shadowed the theme on every
   key — so the theme label was decorative and hand-editing it did nothing.

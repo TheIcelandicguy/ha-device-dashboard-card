@@ -35,7 +35,8 @@ visual (GUI) config editor.
 - **Card type string:** `custom:ha-device-dashboard`
 - **Custom elements:** `ha-device-dashboard` (the card) and
   `ha-device-dashboard-editor` (its visual editor), registered from `src/index.ts`.
-- **Package:** `ha-device-dashboard`, version **2.0.0**, MIT, author `TheIcelandicguy`.
+- **Package:** `ha-device-dashboard`, version **1.0.0** (`package.json` — release
+  tags on GitHub run ahead of it), MIT, author `TheIcelandicguy`.
 - **Stack:** Lit 3, TypeScript 5, bundled with Rollup to a single ES-module file
   `dist/ha-device-dashboard.js` (minified with terser for production).
 - **Focus:** Strongly Shelly-oriented, but no longer Shelly-limited. Discovery runs
@@ -63,9 +64,9 @@ in the default Shelly mode only Shelly/BTHome devices appear (see §7).
 - **Delegated native controls** — `delegate_controls` renders HA's own control
   elements for long-tail domains (lock, media, fan, vacuum …). Off by default
   because each embeds a native tile element, a real render cost on large fleets.
-- **Device profiles** — 13 profiles (relay, plug, dimmer, rgb, climate/TRV, cover,
-  valve, energy, sensor, input, uni, wall_display, generic), each with a badge, a
-  default sensor-chip set, and a default tile block order.
+- **Device profiles** — 15 profiles (relay, plug, dimmer, rgb, climate/TRV, cover,
+  valve, energy, sensor, input, uni, wall_display, lock, media, generic), each with
+  a badge, a default sensor-chip set, and a default tile block order.
 - **All generations** — Gen1, Gen2, Gen3, Gen4, and BLE.
 - **Room grouping** — devices grouped by HA area into collapsible sections; extra
   `name_groups` sections can be built from device-name prefixes.
@@ -84,7 +85,9 @@ in the default Shelly mode only Shelly/BTHome devices appear (see §7).
   and taller history graphs.
 - **Sparkline history graphs** — per-metric labeled line/area/bar graphs with time
   axis, peak/min markers, tick grid, and hover tooltip; window configurable
-  (1–168 h).
+  (1–168 h). Every series ends at the sensor's **live** reading (a memoised "now"
+  point excluded from auto-scaling and peak dots), so the graph label always
+  agrees with the tile's chips.
 - **Header stats** — clickable header chips (online/offline/power/energy/temp/
   humidity/light/rssi/alerts/updates) that open high-to-low device drill-downs.
 - **Power bar** — optional mini wattage indicator at the tile bottom.
@@ -98,8 +101,13 @@ in the default Shelly mode only Shelly/BTHome devices appear (see §7).
 - **Animated status icons** — a large library of SVG animation presets (flame,
   snowflake, fan, pulse, bolt, bulb, water, sun, moon, wind, bell, thermometer,
   battery, star, wave …) assignable per device/entity for on/off states.
-- **Per-scope styling cascade** — device → device-type (profile) → area/room →
-  view → global → built-in default.
+- **Per-scope styling cascade** — three families with fixed ladders
+  (`src/cascade.ts`): **Tile** (device → type → room → view → card — theme,
+  colour, tile style + variant, blocks, chips, elements, graphs, energy window),
+  **Container** (room → view → card — columns, tile size, gap), **Card chrome**
+  (view → card — header, card surface, typography). Saved looks
+  (`custom_styles`, `style_presets`) are a side ladder between view and card,
+  not a rung.
 - **Responsive** — works in HA Sections view using CSS container queries; a
   mobile-optimised editor layout.
 - **Visual editor** — full GUI editor (accordion tabs) with no YAML required; a
@@ -184,14 +192,13 @@ well commented, and the only file guaranteed to match the shipped behaviour.
 
 `docs/card-reference.json` is the machine-readable model that drives editor
 defaults and the offline HTML tools in `docs/tools/` (defaults, first-run values,
-the 13 profiles, themes, tile blocks, header chips, and every editor control with
+the 15 profiles, themes, tile blocks, header chips, and every editor control with
 its config key, scope, default and advanced flag) — but it lags `types.ts`, so
 check it against the type rather than trusting it alone.
 
-> Note: the top-level option table in `README.md` lists a few legacy keys
-> (`include_all`, `hide_shelly`, `view_mode`, `tile_click`, `show_glow`) that are
-> **not** part of the v2 `HADeviceDashboardConfig` type. Don't use the README as an
-> option reference at all.
+> `README.md` was resynced with `types.ts` (2026-08-19, and again 2026-09-02) and
+> is a fair summary — but `src/types.ts` remains the authority for the option
+> surface whenever the two disagree.
 
 ---
 
@@ -204,20 +211,33 @@ src/
   index.ts              Entry point — imports the card + editor, registers
                         the <ha-device-dashboard> custom card metadata,
                         prints a BUILD_TAG marker to the console.
-  ha-device-dashboard.ts  The main card LitElement (~3k lines): config, hass
+  ha-device-dashboard.ts  The main card LitElement (~3.6k lines): config, hass
                         wiring, device grouping, header, tiles, detail sheet,
                         graph fetching, CSS-var/style building.
   editor.ts             The visual editor LitElement
-                        <ha-device-dashboard-editor> (~3.8k lines): accordion
+                        <ha-device-dashboard-editor> (~5.8k lines): accordion
                         tabs, live preview, YAML export.
   editor-layout.ts      Data-driven EDITOR_LAYOUT — tabs/sections spec that the
                         editor renders from (section-registry refactor).
+  cascade.ts            EVERY resolution cascade as pure functions — the three
+                        families (Tile / Container / Card chrome), style +
+                        custom-style + legacy-alias resolution, blockLayout,
+                        elementVisible + elementDefault, sensorSelection,
+                        showGraphs, energyPeriod. Tested by test:card.
+  design-scope.ts       The Design tab's scope model as pure functions
+                        (scopeCanSet, scope keys, device grouping, override
+                        collection). Tested by test:card.
   types.ts              All config + data model types (single source of truth
                         for options); HADeviceDashboardConfig.
   helpers.ts            Device discovery (getAllDevices), profile detection,
-                        tile-block/sensor/graph constants and defaults, value
-                        formatters, config migration.
-  themes.ts             THEME_PRESETS (7 palettes) + apply/detect helpers.
+                        tile-block/sensor/graph constants and defaults
+                        (incl. STYLE_ELEMENTS with per-element defaults),
+                        value formatters, config migration.
+  help.ts               The ? Help content; docs/GUIDE.md is generated from it.
+  palette.ts            Random theme/palette rolls with WCAG floors (test:palette).
+  attention.ts          The needs-attention summary logic.
+  shelly-cloud-import.ts  Shelly Cloud room/device matching for the importer.
+  themes.ts             THEME_PRESETS (8 palettes) + apply/detect helpers.
   anim-icons.ts         SVG animated status-icon library + renderer.
   fonts.ts              Bundled offline @font-face CSS (BUNDLED_FONT_CSS).
   tiles/                Per-style tile renderers (see below).
@@ -256,6 +276,7 @@ Each tile style is a standalone render function called by the main card:
 - `climate-control.ts` — TRV / wall-display thermostat dial.
 - `cover-control.ts` — blind/shutter/roller graphic + open/stop/close.
 - `sensor-card.ts` — big primary value + sparkline + trend badge.
+- `input-control.ts` — the i3/i4 channel keypad.
 - `scene-button.ts` — large tappable icon button (input/generic).
 - `block-tile.ts` — the `default` adaptive block-grid tile (name_row, sensors,
   graph, dimmer, cover/valve/trv controls, relay/input channels, power_bar,
@@ -263,7 +284,9 @@ Each tile style is a standalone render function called by the main card:
 - `delegated-control.ts` — native HA control elements for long-tail domains
   (lock/media/fan/vacuum/…), used by the `delegated_controls` block when
   `delegate_controls` is on. Imported directly from `src/index.ts`.
-- `tile-parts.ts` — shared sub-components used across tiles.
+- `tile-parts.ts` — shared sub-components used across tiles, including
+  `chipsInHeader()`, the single predicate for the opt-in `header_chips`
+  ("Chips in the name row") placement on power-monitor and sensor-card.
 - `tile-context.ts` — the `TileCtx` type and helper interfaces (SensorChip,
   TrvInfo, CoverInfo, GraphEntity, FirmwareInfo, VirtualControl, …) passed into
   every renderer.
@@ -287,7 +310,15 @@ device — from a grouped map, and one control list redraws for that layer. Cont
 are grouped by the three families in `cascade.ts`, each row naming where its value
 comes from, and a family a scope cannot set is shown greyed with the reason. The
 scope model is `design-scope.ts` (pure, tested); the section bodies the retired
-tabs owned are still in the registry and rendered by Design at Global scope.
+tabs owned are still in the registry and rendered by Design at Global scope. Two
+scopes carry ladder-less extras: Global holds the card-wide sections, and a room
+holds **Room chrome — this room only** (backdrop photo, tile gap, room-block and
+header colours, per-room header chips, button shapes). The Blocks canvas only
+renders when the scope's effective style is the adaptive one — otherwise a notice
+names the style in force and points at Elements. Tapping a device tile in the
+edit-dialog's live preview jumps to that device's scope (a cancelable
+`hdd-editor-goto` window event; with no editor listening the tap opens the
+detail sheet as usual).
 
 Structure is being migrated to the data-driven `EDITOR_LAYOUT` spec (the Graphs tab
 is wired to it first; the others render bespoke bodies and must render registry
@@ -341,7 +372,7 @@ runtime defaults from `docs/card-reference.json` where applicable.
 | `tile_style` | TileStyle | `default` | Global default tile style (lowest in cascade). |
 | `smart_tile_styles` | boolean | `false` | Auto-pick a style per device profile when none set. |
 | `power_monitor_variant` | variant | `big-number` | Default power-monitor sub-variant. |
-| `show_graphs` | boolean | `true` | Master switch for tile sparklines. |
+| `show_graphs` | boolean | `false` | Master switch for tile sparklines — off by default, tiles are lean and graphs are opt-in. |
 | `tile_layout` | TileLayout | all visible | Ordered/visible tile content blocks. |
 | `tile_opacity` / `card_opacity` / `header_opacity` | number | `100` | Background transparency for tiles / card / header. |
 | `header_show_title` / `header_show_stats` / `header_show_cloud` | boolean | `true`/`true`/`false` | Header sections. |
@@ -388,12 +419,23 @@ runtime defaults from `docs/card-reference.json` where applicable.
 
 ### The resolution cascade
 
-Most style/layout options can be set at several scopes; the effective value
-resolves in order: **device → device-type (profile) → area/room → view → global →
-built-in profile default**. Everything comes from config — the editor is the
-single source of truth. (An earlier viewer-local `localStorage` override layer for
-in-view "what to show" tweaks was removed; it may return as an opt-in advanced
-feature.)
+Every visual option belongs to one of three **families**, and the family fixes
+the ladder (`src/cascade.ts`, pure functions, tested):
+
+- **Tile** — device → type → room → view → card. Theme, colour, tile style +
+  variant, blocks, chips, elements, graphs, energy window.
+- **Container** — room → view → card. Columns, tile size, gap.
+- **Card chrome** — view → card. Header, card surface, typography.
+
+Saved looks (`custom_styles`, `style_presets`) sit between view and card as a
+side ladder any layer can point at. The terminus differs per option: blocks end
+at the per-profile default, chips at the per-profile set, graphs at `false`,
+energy at the lifetime total — and **elements end at their own `STYLE_ELEMENTS`
+default**, which is visible unless the entry declares `def: false` (opt-in
+placements like `header_chips`). Everything comes from config — the editor is
+the single source of truth. (An earlier viewer-local `localStorage` override
+layer for in-view "what to show" tweaks was removed; it may return as an opt-in
+advanced feature.)
 
 ---
 
@@ -430,17 +472,18 @@ passes in. `getAllDevices(hass)` in `helpers.ts`:
 ### Profiles, grouping and rendering
 
 - `getDeviceProfile()` derives a **profile** (relay/plug/dimmer/rgb/climate/cover/
-  valve/energy/sensor/input/uni/wall_display/generic) and **generation** from the
-  device's entity domains and Shelly model, producing a badge label. Profiles are
-  cached per device.
+  valve/energy/sensor/input/uni/wall_display/lock/media/generic) and **generation**
+  from the device's entity domains and Shelly model, producing a badge label.
+  Profiles are cached per device.
 - Devices are grouped into collapsible **area** sections (plus any `name_groups`
   and a Favourites section), filtered/sorted per the config and active view.
 - Each device renders as a tile in the resolved **tile style**. With
   `smart_tile_styles`, each profile maps to a default style (relay/plug/energy →
-  `power-monitor`, dimmer/rgb → `light-control`, climate/wall_display →
-  `climate-control`, cover → `cover-control`, sensor → `sensor-card`, input →
-  `scene-button`); otherwise the adaptive `default` block tile is used with the
-  per-profile block order.
+  `power-monitor`, dimmer/rgb → `light-control`, climate → `climate-control`,
+  cover → `cover-control`, sensor → `sensor-card`, input/uni → `input-control`;
+  a wall_display gets `climate-control` only when it exposes a climate entity);
+  otherwise the adaptive `default` block tile is used with the per-profile block
+  order.
 - **Sensor chips** are chosen per profile (overridable by the `sensors` cascade).
   Controls call HA services through `hass` (toggle, set brightness, cover/valve
   position, climate setpoint, etc.).
@@ -517,9 +560,8 @@ reference/` contains Shelly API / HA-integration reference notes.
   ESPHome / Matter, but `mode` defaults to `shelly`, so out of the box only
   Shelly/BTHome devices appear. Profile detection and tile styling remain far
   richer for Shelly than for anything else.
-- **Doc drift.** `README.md`'s option table still lists legacy keys (`include_all`,
-  `hide_shelly`, `view_mode`, `tile_click`, `show_glow`) that are not in the v2
-  `HADeviceDashboardConfig`, and `docs/card-reference.json` lags `src/types.ts`.
+- **Doc drift.** Most of `docs/` is hand-synced and lags `src/types.ts` between
+  sweeps (`npm run check:docs` catches part of it, not all).
   **`src/types.ts` is the only always-current source** — check the JSON against it
   rather than the other way round.
 - **Editor refactor in progress.** The editor is migrating to the data-driven

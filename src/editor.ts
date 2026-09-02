@@ -5054,7 +5054,7 @@ export class HADeviceDashboardEditor extends LitElement {
 
           <div class="dp-group">
             <div class="dp-title">Tile behaviour</div>
-            <div class="dp-hint-inline">Smart tile styles and Native controls moved to Card &amp; Theme → Tiles, next to the rest of the tile settings.</div>
+            <div class="dp-hint-inline">Smart tile styles and Native controls live in Design → Tiles, next to the rest of the tile settings.</div>
             <button class="sec-toolbar-btn" style="align-self:flex-start"
               @click=${() => { this._gotoControl('design', 'design-tiles', 'delegate_controls'); this._defaultsOpen = false; }}>Open Tiles →</button>
           </div>

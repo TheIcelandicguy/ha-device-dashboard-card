@@ -135,7 +135,7 @@ export function sensorSelection(i: CascadeInput): string[] | undefined {
   return PROFILE_DEFAULT_SENSORS[i.profile];
 }
 
-/** Sparklines on/off: device → type → room → card → off. No view layer.
+/** Sparklines on/off: device → type → room → view → card → off (Tile family).
  *  Default is OFF — tiles are lean out of the box and graphs are opt-in (the
  *  power tiles' Display picker, or a global/room/device show_graphs). This
  *  governs the getGraphEntities-based sparklines: the power

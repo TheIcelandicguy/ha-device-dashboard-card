@@ -118,6 +118,26 @@ if (seBlock) {
   }
 }
 
+// ── reference.html: guard the drift classes that slipped past this gate ──
+// It inlines its own copy of every table and nothing regenerates it, so check
+// the two things that actually went stale: element rows claiming the old
+// "all visible" default (elements can be def: false now), and the retired
+// per-room panel ("Room picker") coming back from an old sync.
+{
+  const refHtml = read('docs/tools/reference.html');
+  const refJson = read('docs/card-reference.json');
+  for (const [name, text] of [['reference.html', refHtml], ['card-reference.json', refJson]]) {
+    for (const line of text.split('\n')) {
+      if (line.includes('.elements') && line.includes('all visible')) {
+        note(name, `an .elements row still claims "all visible" — elements default per STYLE_ELEMENTS (def: false = opt-in): ${line.trim().slice(0, 90)}…`);
+      }
+    }
+    if (/behind a room picker|Room picker'/.test(text)) {
+      note(name, 'describes the retired per-room panel ("Room picker") — room styling lives in Design → room scope');
+    }
+  }
+}
+
 // ── header chips + themes ──
 const chipKeys = [...helpers.matchAll(/\{ key: '(\w+)',\s+label: '[^']*',\s+agg:/g)].map((m) => m[1]);
 if (!setEq(chipKeys, ref.headerChips.map((c) => c.key))) note('card-reference.headerChips', 'differs from HEADER_CHIP_DEFS');

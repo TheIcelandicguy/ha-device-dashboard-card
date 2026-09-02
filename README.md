@@ -159,7 +159,7 @@ the machine-readable model that drives the editor defaults and the offline tools
 | `power_monitor_variant` | variant | `big-number` | Sub-variant when the style resolves to `power-monitor` |
 | `smart_tile_styles` | boolean | `false` | Tiles with no explicit style fall to a per-profile default (relay → power monitor, dimmer → light control, sensor → sensor card …) instead of the adaptive tile |
 | `tile_layout` | block[] | all visible | Order and visibility of tile blocks — see below |
-| `show_graphs` | boolean | `false` | Master switch for tile sparklines — off by default, so tiles stay lean. Turn it on globally, per room/device, or per power tile via the Display picker (Circles / Graphs / Both) |
+| `show_graphs` | boolean | `false` | Master switch for tile sparklines — off by default, so tiles stay lean. Turn it on globally, per view, room, type or device, or per power tile via the Display picker (Circles / Graphs / Both). Every graph line ends at the sensor's **live** reading (appended as a final "now" point so the graph label always agrees with the tile's chips); that live point deliberately doesn't move the y-axis or the peak/min dots, so a momentary spike can't flatten a day of history |
 | `show_power_bar` | boolean | `false` | Mini usage bar at the bottom of a tile |
 | `power_bar_max` | number | `2000` | Watts that read as 100% on that bar |
 | `tile_opacity` / `card_opacity` / `header_opacity` | number | `100` | Background opacity, 0–100 |
@@ -245,7 +245,8 @@ the override never renders next to the raw values it stands in for.
 | Device info | `cloud`, `rssi`, `uptime`, `ip`, `ssid`, `battery`, `fw_version`, `mac` |
 | Alerts | `overtemp`, `overpower`, `motion`, `door`, `flood`, `smoke`, `vibration` |
 
-Device-info chips are hidden by default on every profile.
+Device-info chips are hidden by default on every profile that has a curated
+default set; the `generic` profile has none, so it shows everything detected.
 
 ---
 
@@ -318,6 +319,26 @@ script stays neutral, since the card can't know a script's "state".
 Elements (`elements:`): `name`, `keypad`, `input_rows`, `target_state`,
 `last_event`.
 
+### Style elements (`elements`)
+
+Every non-default style exposes **elements** — show/hide switches for its parts
+(the editor lists them under Design → Elements for whatever style is in force).
+Elements are visible unless switched off, with one class of exception: **opt-in
+placement elements**, which default to *off* until a layer enables them. There is
+one today — `header_chips` ("Chips in the name row") on the `power-monitor` and
+`sensor-card` styles, which moves the secondary readings (V / A / kWh / °C / dBm)
+up beside the device name instead of their usual spot. It still respects the
+`secondary` element: hide the readings and they are gone from both placements.
+(Don't confuse the element id with the top-level `header_chips` option — that one
+picks the card header's fleet chips.)
+
+```yaml
+profile_styles:
+  plug:
+    elements:
+      header_chips: true   # every plug carries its readings in the name row
+```
+
 ### Tile blocks (`tile_layout`)
 
 Only used by the `default` style. List blocks to reorder them; omit one to hide it.
@@ -326,6 +347,11 @@ Nest arrays to put blocks side by side: `[[name_row], [sensors, graph]]`.
 `name_row`, `sensors`, `graph`, `dimmer`, `cover_controls`, `trv_control`,
 `valve_controls`, `input_channels`, `relay_channels`, `power_bar`,
 `virtual_controls`, `delegated_controls`, `badges`.
+
+The editor enforces this visibly: when the scope you're editing renders a
+non-default style, the Blocks drag canvas is replaced by a notice naming the
+style in force and pointing you at its Elements instead — dragging blocks a
+power monitor would ignore used to save silently and do nothing.
 
 ---
 
@@ -399,8 +425,9 @@ area_styles:
 ```
 
 Both take **presets only**. `custom` means "the colours in `style` *are* the
-palette", and neither a view nor a room has a `style` of its own to hold one, so
-`custom` there is ignored and the next layer up applies.
+palette"; a room has no `style` of its own, and a view's `style` holds only a
+small chrome subset rather than a full palette, so `custom` at either layer is
+ignored and the next layer up applies.
 
 They differ in reach, because reach is what the DOM allows:
 
@@ -446,6 +473,9 @@ area_styles:
 | Key | Type | Description |
 |---|---|---|
 | `columns` | number | Tile columns in this room |
+| `theme` | preset name | Per-room theme — see *Per-view and per-room themes* above |
+| `tile_layout` | block[] | Block order/visibility for adaptive tiles in this room |
+| `tile_size` | `sm` \| `md` \| `lg` | Tile size for this room |
 | `bgColor` | string | Room block background |
 | `bg_image` | string | Room backdrop photo (URL, `/local/…` or data URL) |
 | `bg_image_size` | `cover` \| `contain` \| `stretch` | How it fits |
@@ -463,8 +493,13 @@ area_styles:
 | `sensors` | string[] | Chip whitelist for tiles in this room |
 | `header_chips` | string[] | Room header summary chips — `power`, `energy`, `voltage`, `current`, `temperature`, `humidity`, `co2`, `illuminance`, `battery`, `rssi`. Default: power, energy, voltage, current, temperature. Only chips whose sensor exists in the room render |
 | `show_graphs` | boolean | Sparkline override |
-| `elements` | map | Per-element visibility for the tile style |
+| `elements` | map | Per-element visibility for the tile style (visible unless the element declares `def: false`, like `header_chips`) |
 | `energy_period` | EnergyPeriod | Energy window for this room |
+
+In the editor these live in **Design → pick the room as scope**: the settings
+with a ladder appear as the usual family rows, and the room-only ones (backdrop
+photo, tile gap, room-block colours, room header, header chips, button shapes)
+sit in a **Room chrome — this room only** block beneath them.
 
 ### `device_styles` — per device, keyed by `device_id`
 
@@ -553,17 +588,25 @@ behaves at the wall. `step` (% of full, default 5) and `interval` (ms, default
 ### The rest of the cascade
 
 - **`profile_styles`** — keyed by profile (`relay`, `dimmer`, …): "all relays", one
-  rung below `device_styles`. Accepts `tile_style`, `power_monitor_variant`,
-  `tile_layout`, `sensors`, `show_graphs`, `elements` and `color` — the rest of the
-  per-device keys are not read at this layer.
+  rung below `device_styles`. Accepts `theme`, `color`, `tile_style`,
+  `power_monitor_variant`, `tile_layout`, `sensors`, `show_graphs`, `elements` and
+  `energy_period` — the rest of the per-device keys are not read at this layer.
 - **`style_presets`** — keyed by tile style: defaults for every tile rendered in
   that style (`variant`, `sensors`, `tile_layout`, `elements`).
 - **`custom_styles`** — your saved named styles, assigned with `tile_style: custom:<key>`.
 
 Full order: `device_styles` → `profile_styles` → `area_styles` → `views[i]` →
-`custom_styles` → `style_presets` → top-level → built-in profile default. Views only
-override layout keys (`tile_style`, `power_monitor_variant`, `columns`, `tile_size`,
-`sort_by`).
+`custom_styles` → `style_presets` → top-level → built-in profile default. A view
+is a full Tile-family rung: it can carry `theme`, `tile_style`,
+`power_monitor_variant`, `tile_layout`, `sensors`, `elements`, `show_graphs`,
+`energy_period` — plus the Container keys (`columns`, `tile_size`, `tile_gap`,
+`sort_by`) and a `style` sub-object with the card-chrome colours (see the family
+table above).
+
+Note on `style_presets[<style>].elements`: this is where the editor's **Global**
+scope writes its element toggles — the card-wide rung of the elements ladder.
+(Older configs that carried a stray top-level `elements` key are migrated into
+the right preset automatically.)
 
 ---
 
@@ -595,8 +638,10 @@ views:
 ```
 
 Filter keys: `profiles`, `domains`, `areas`, `devices`, `exclude_devices`,
-`entity_id_pattern`. Layout overrides: `tile_style`, `power_monitor_variant`,
-`columns`, `tile_size`, `sort_by`.
+`entity_id_pattern`. Style and layout overrides: everything a view rung can carry
+— `theme`, `tile_style`, `power_monitor_variant`, `tile_layout`, `sensors`,
+`elements`, `show_graphs`, `energy_period`, `columns`, `tile_size`, `tile_gap`,
+`sort_by`, and a chrome `style` sub-object.
 
 ---
 
@@ -632,9 +677,18 @@ each heading. Every row says where its value comes from — `set here` with a re
 or `from Room · Kitchen` / `from Card`. A family a scope cannot set is shown
 greyed *with the reason*, rather than hidden.
 
-At **Global** the panel also holds the settings that have no layers under them at
-all: the theme picker, chips & metrics, tiles, the sensor-chip groups, and the
-card's own header, surface and typography.
+Two scopes carry an extra block of settings that have no ladder at all. At
+**Global** it is the theme picker, chips & metrics, tiles, the sensor-chip
+groups, and the card's own header, surface and typography. At a **room** it is
+**Room chrome — this room only**: the room block's backdrop photo, tile gap,
+tile and room-block colours, room header colours, per-room header chips, and
+ON/OFF button shapes — things that exist exactly once per room.
+
+**Shortcut:** tapping a device tile in the editor's live preview jumps straight
+to that device's scope in Design (the same landing as the ✎ button in Rooms &
+devices). Buttons and sliders on the tile still work, so the preview stays
+usable for testing controls; outside the editor a tap opens the detail sheet as
+usual.
 
 The **◆ Defaults** overlay sets the first-run look (view, theme, tile style,
 columns, tile size) and holds "Reset look" and "Reset everything". The

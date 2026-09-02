@@ -240,14 +240,14 @@
       { "key": "show_entity_list", "type": "boolean", "default": "true", "fn": "The All Entities section of the expanded detail sheet. false hides the whole section (hidden_entities trims it item by item)." },
       { "key": "graph_style.bar_radius", "type": "number", "default": "1.5", "fn": "Corner radius of the bars when graph_style.type is 'bar'." },
       { "key": "theme", "type": "ThemePreset", "default": "'warm_dusk' (seeded by getStubConfig)", "fn": "Palette base under `style` — every colour `style` omits comes from the preset. Picking a theme CLEARS the palette out of `style`, so `theme` stays authoritative. 'custom' applies no base (the colours in `style` are the theme); 'ha' applies no palette either but points every colour at Home Assistant's own theme variables, so the card follows the active HA theme including light/dark. Also settable per view and per room." },
-      { "key": "style_presets", "type": "Record<TileStyle, StylePreset>", "default": "none", "fn": "Per-tile-style presets (variant / sensors / tile_layout / elements) applied to every tile rendered in that style. Sits below device/area overrides in the cascade." },
+      { "key": "style_presets", "type": "Record<TileStyle, StylePreset>", "default": "none", "fn": "Per-tile-style presets (variant / sensors / tile_layout / elements) applied to every tile rendered in that style. Sits below device/area overrides in the cascade. The `elements` sub-key is no longer YAML-only: the Design tab's Global-scope element toggles write style_presets[<style>].elements. variant / sensors / tile_layout at this level remain YAML-only." },
       { "key": "style.button_shape / button_variant / button_size", "type": "ButtonShape / ButtonVariant / ButtonSize", "default": "pill / fill / md", "fn": "Global ON/OFF button styling. Only the per-room equivalents (area_styles[name].button*) have editor controls." }
     ],
     "view": [
       { "key": "views[i].sort_by", "type": "SortBy", "default": "inherit", "fn": "Per-view device sort order. The editor exposes sort_by globally only." }
     ],
     "area": [
-      { "key": "area_styles[name].bgColor", "type": "string", "default": "inherit", "fn": "Room block background colour. Sits under the room backdrop photo, and overrides what a room `theme` paints there." },
+      { "key": "area_styles[name].bgColor", "type": "string", "default": "transparent", "fn": "Room block background colour. Sits under the room backdrop photo, and overrides what a room `theme` paints there. No longer YAML-only: edited in Design → room scope → Room chrome (advanced)." },
       { "key": "area_styles[name].borderColor", "type": "string", "default": "inherit", "fn": "Room block border colour (the editor exposes only its width and radius)." },
       { "key": "area_styles[name].borderStyle", "type": "'solid' | 'dashed' | 'dotted'", "default": "solid", "fn": "Room block border style." },
       { "key": "area_styles[name].headerBgDir", "type": "string", "default": "135deg", "fn": "Direction of the room-header gradient." },
@@ -256,8 +256,8 @@
       { "key": "area_styles[name].tileTextColor", "type": "string", "default": "inherit", "fn": "Tile text colour inside this room." },
       { "key": "area_styles[name].accentColor", "type": "string", "default": "inherit", "fn": "Accent colour for tiles in this room." },
       { "key": "area_styles[name].boxShadow", "type": "BoxShadow", "default": "none", "fn": "Room block shadow preset." },
-      { "key": "area_styles[name].tile_style / power_monitor_variant", "type": "TileStyle / PowerMonitorVariant", "default": "inherit", "fn": "Per-room tile style override — a real cascade rung (device → type → area → view → global), but only the device, view and global scopes have pickers." },
-      { "key": "area_styles[name].elements", "type": "Record<string, boolean>", "default": "per STYLE_ELEMENTS (visible unless the entry declares def: false, e.g. header_chips)", "fn": "Per-element visibility for tiles in this room. The editor exposes elements at device and profile scope only." }
+      { "key": "area_styles[name].tile_style / power_monitor_variant", "type": "TileStyle / PowerMonitorVariant", "default": "inherit", "fn": "Per-room tile style override — a real cascade rung (device → type → area → view → global). The Design tab's Tile family offers the picker at every scope, room included." },
+      { "key": "area_styles[name].elements", "type": "Record<string, boolean>", "default": "per STYLE_ELEMENTS (visible unless the entry declares def: false, e.g. header_chips)", "fn": "Per-element visibility for tiles in this room. The Design tab's Elements row is available at every scope (global / view / room / type / device); toggles seed from the inherited value." }
     ],
     "device": [
       { "key": "custom_styles[key].base / variant / elements / sensors / tile_layout", "type": "CustomStyleDef", "default": "—", "fn": "The saved-style object itself. The editor writes it via 💾 Save style and can rename/delete it, but the individual fields are only editable by re-saving or by hand." }
@@ -392,7 +392,7 @@
         ]}
       ]},
     { "id": "design-global", "icon": "◈", "label": "Design — Global scope",
-      "note": "Card-wide look, with a live preview strip on top. Tiles is basic; Card, Colours and Typography are advanced-only. Per-room styling lives here too, behind a room picker. Theme presets write the palette into style AND record the name in `theme`; the picker highlights whatever detectTheme reads back out of the colours. The card uses `theme` as a palette base under style, so hand-written YAML can set a theme without listing colours.",
+      "note": "Card-wide look, with a live preview strip on top. Tiles is basic; Card, Colours and Typography are advanced-only. Per-room styling is NOT here: pick the room in the Design scope map — ladder settings appear as the family rows, and the room-only ones sit in a 'Room chrome — this room only' block. Theme presets record the name in `theme` and clear matching palette keys out of `style`; the picker highlights whatever detectTheme reads back out of the colours. The card uses `theme` as a palette base under style, so hand-written YAML can set a theme without listing colours.",
       "groups": [
         { "name": "Card", "controls": [
           { "control": "Needs attention", "fn": "Summary above the rooms: offline devices, firing alerts, flat batteries, pending updates. Renders only when something qualifies.", "key": "show_attention", "scope": "global", "default": "on", "advanced": false },
@@ -435,13 +435,13 @@
           { "control": "Font family", "fn": "System / Bundled / Display font", "key": "style.font_family", "scope": "global", "default": "inherit", "advanced": true },
           { "control": "Text scale", "fn": "Global text size scale (0.8–1.3×)", "key": "style.text_size_scale", "scope": "global", "default": "1×", "advanced": true }
         ]},
-        { "name": "Per-room style panel", "controls": [
-          { "control": "Room picker", "fn": "Which room the panel below edits", "key": "none", "scope": "local", "default": "none selected", "advanced": false },
-          { "control": "Columns", "fn": "Tile columns in this room", "key": "area_styles[name].columns", "scope": "area", "default": "3", "advanced": false },
-          { "control": "Tile gap", "fn": "Gap between tiles", "key": "area_styles[name].tileGap", "scope": "area", "default": "10px", "advanced": false },
-          { "control": "Show graphs", "fn": "Per-room sparkline override", "key": "area_styles[name].show_graphs", "scope": "area", "default": "Inherit", "advanced": false },
-          { "control": "Room background photo", "fn": "Room backdrop image + fit, plus Sharp/Ambient render mode and Top/Center/Bottom crop", "key": "area_styles[name].bg_image / .bg_image_size / .bg_image_mode / .bg_image_pos", "scope": "area", "default": "none / cover / sharp / center", "advanced": true },
-          { "control": "Tile background", "fn": "Tile background colour", "key": "area_styles[name].tileBgColor", "scope": "area", "default": "#1c1c1e", "advanced": false },
+        { "name": "Room scope (Design → pick a room). Ladder settings render as the usual family rows; the room-only ones sit in the 'Room chrome — this room only' block.", "controls": [
+          { "control": "Columns", "fn": "Tile columns in this room (Container family row at room scope)", "key": "area_styles[name].columns", "scope": "area", "default": "3", "advanced": false },
+          { "control": "Tile gap", "fn": "Gap between tiles (Room chrome)", "key": "area_styles[name].tileGap", "scope": "area", "default": "10px", "advanced": false },
+          { "control": "Show graphs", "fn": "Per-room sparkline override (Tile family row at room scope)", "key": "area_styles[name].show_graphs", "scope": "area", "default": "Inherit", "advanced": false },
+          { "control": "Room background photo", "fn": "Room backdrop image + fit, plus Sharp/Ambient render mode and Top/Center/Bottom crop (Room chrome)", "key": "area_styles[name].bg_image / .bg_image_size / .bg_image_mode / .bg_image_pos", "scope": "area", "default": "none / cover / sharp / center", "advanced": false },
+          { "control": "Tile background", "fn": "Tile background colour (Room chrome)", "key": "area_styles[name].tileBgColor", "scope": "area", "default": "#1c1c1e", "advanced": false },
+          { "control": "Room block background", "fn": "Background of the room block itself (Room chrome)", "key": "area_styles[name].bgColor", "scope": "area", "default": "transparent", "advanced": true },
           { "control": "Tile border", "fn": "Tile border colour", "key": "area_styles[name].tileBorderColor", "scope": "area", "default": "rgba(255,255,255,.07)", "advanced": true },
           { "control": "Tile corner radius", "fn": "Tile corner radius", "key": "area_styles[name].tileBorderRadius", "scope": "area", "default": "12px", "advanced": true },
           { "control": "Tile opacity", "fn": "Tile opacity", "key": "area_styles[name].tileOpacity", "scope": "area", "default": "100%", "advanced": true },
@@ -452,18 +452,17 @@
           { "control": "Header text", "fn": "Room header text colour", "key": "area_styles[name].textColor", "scope": "area", "default": "#f4601e", "advanced": true },
           { "control": "Header font size", "fn": "Room header font size", "key": "area_styles[name].fontSize", "scope": "area", "default": "12px", "advanced": true },
           { "control": "Room header chips", "fn": "Which summary chips this room's HEADER row shows (keys in areaChips). Independent of the tile `sensors` list; only chips whose sensor exists in the room render.", "key": "area_styles[name].header_chips", "scope": "area", "default": "power·energy·voltage·current·temperature", "advanced": false },
-          { "control": "Energy shows", "fn": "Energy window for this room (Total / Today / Week / Month); the room-header Energy chip sums its devices over that window", "key": "area_styles[name].energy_period", "scope": "area", "default": "inherit", "advanced": false },
-          { "control": "Sensor chips", "fn": "Whitelist of sensor chips for this room", "key": "area_styles[name].sensors", "scope": "area", "default": "inherit", "advanced": false },
-          { "control": "Button shape / variant / size", "fn": "ON/OFF button style for this room", "key": "area_styles[name].buttonShape / buttonVariant / buttonSize", "scope": "area", "default": "pill / fill / md", "advanced": true },
-          { "control": "Colour theme", "fn": "Palette for this room — tiles, text, accent and room header. The card's own header is not inside a room, so those three palette keys are skipped; `card_bg` paints the room block. Individual room colours still override it", "key": "area_styles[name].theme", "scope": "area", "default": "inherit", "advanced": false },
-          { "control": "Room reset ↺", "fn": "Clear this room's style block", "key": "area_styles[name] → del", "scope": "area", "default": "—", "advanced": false }
+          { "control": "Energy shows", "fn": "Energy window for this room (Total / Today / Week / Month); the room-header Energy chip sums its devices over that window (Tile family row at room scope)", "key": "area_styles[name].energy_period", "scope": "area", "default": "inherit", "advanced": false },
+          { "control": "Sensor chips", "fn": "Whitelist of sensor chips for this room (Tile family row at room scope)", "key": "area_styles[name].sensors", "scope": "area", "default": "inherit", "advanced": false },
+          { "control": "Button shape / variant / size", "fn": "ON/OFF button style for this room (Room chrome)", "key": "area_styles[name].buttonShape / buttonVariant / buttonSize", "scope": "area", "default": "pill / fill / md", "advanced": true },
+          { "control": "Colour theme", "fn": "Palette for this room — tiles, text, accent and room header. The card's own header is not inside a room, so those palette keys are skipped. Individual room colours still override it (Tile family row at room scope)", "key": "area_styles[name].theme", "scope": "area", "default": "inherit", "advanced": false }
         ]}
       ]},
     { "id": "graphs", "icon": "∿", "label": "Graphs & Sensors",
       "note": "All global defaults — override per room/device elsewhere. Sensor chips write to one sensors array (empty = all shown). The ∿ button on a chip also adds it to the graph palette.",
       "groups": [
         { "name": "Graph type", "controls": [
-          { "control": "Show graphs on tiles", "fn": "Master sparkline switch", "key": "show_graphs", "scope": "global", "default": "on", "advanced": false },
+          { "control": "Show graphs on tiles", "fn": "Master sparkline switch. Every series ends at the sensor's live reading, appended as a 'now' point so the graph label matches the tile's chips.", "key": "show_graphs", "scope": "global", "default": "off", "advanced": false },
           { "control": "Type", "fn": "Line / Area / Bar", "key": "graph_style.type", "scope": "global", "default": "line", "advanced": false },
           { "control": "History window", "fn": "History look-back (1–168h)", "key": "graph_hours", "scope": "global", "default": "24h", "advanced": false },
           { "control": "Energy shows", "fn": "What every Energy chip reports: Total = lifetime meter reading; Today/Week/Month = consumption this period, from recorder statistics (bucketed in HA's timezone). Falls back to the lifetime total if statistics are unavailable.", "key": "energy_period", "scope": "global", "default": "total", "advanced": false },
@@ -471,7 +470,7 @@
           { "control": "Fill area under line", "fn": "Area fill beneath the line", "key": "graph_style.fill", "scope": "global", "default": "on", "advanced": true },
           { "control": "Graph height", "fn": "Sparkline pixel height", "key": "graph_style.height", "scope": "global", "default": "32px", "advanced": true },
           { "control": "Show time axis labels", "fn": "X-axis time labels", "key": "graph_style.time_labels", "scope": "global", "default": "on", "advanced": true },
-          { "control": "Show peak / min dots", "fn": "Peak & min marker dots", "key": "graph_style.show_dots", "scope": "global", "default": "on", "advanced": true },
+          { "control": "Show peak / min dots", "fn": "Peak & min marker dots. They mark the history's extremes — the appended live 'now' point is deliberately excluded, so a momentary spike doesn't relocate the peak.", "key": "graph_style.show_dots", "scope": "global", "default": "on", "advanced": true },
           { "control": "Tick grid lines", "fn": "Background tick grid", "key": "graph_style.tick_lines", "scope": "global", "default": "on", "advanced": true }
         ]},
         { "name": "Graph colours", "controls": [

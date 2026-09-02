@@ -186,7 +186,9 @@ export interface AreaStyle {
   /** Per-area override for tile sparkline graphs. undefined = inherit global. */
   show_graphs?: boolean;
   /** Per-element visibility override for tiles in this area. Element id → visible.
-   *  Omitted ids inherit style preset → default (visible). */
+   *  Omitted ids inherit style preset → the element's STYLE_ELEMENTS default
+   *  (visible unless the entry declares `def: false` — opt-in placements like
+   *  header_chips). */
   elements?: Record<string, boolean>;
   /** Per-room energy window override (total/today/week/month). */
   energy_period?: EnergyPeriod;
@@ -332,7 +334,9 @@ export interface DeviceStyle {
   /** Per-device override for tile sparkline graphs. undefined = inherit area/global. */
   show_graphs?: boolean;
   /** Per-element visibility override for this device's tile style. Element id →
-   *  visible. Omitted ids inherit area → style preset → default (visible). */
+   *  visible. Omitted ids inherit type → area → view → style preset → the
+   *  element's STYLE_ELEMENTS default (visible unless the entry declares
+   *  `def: false` — opt-in placements like header_chips). */
   elements?: Record<string, boolean>;
   /** What tapping an input channel row runs, keyed by the channel's entity_id
    *  (what the editor writes) or its channel number. Input-only hardware — Shelly

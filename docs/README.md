@@ -14,10 +14,10 @@ it knows how to check:
 - **`firstRun`** — the first-run defaults, human-readable, with their code source.
 - **`profiles`** — the 15 device profiles, each with badge, smart tile style, and default sensor chips.
 - **`profileBlockOrder`** — the default tile block order per profile.
-- **`themes`** — the 7 colour presets with full palettes.
+- **`themes`** — the 8 colour presets with full palettes.
 - **`headerChips`, `sensorGroups`, `tileStyles`, `tileBlocks`** — the pickable vocabularies.
-- **`editorTabs`** — every editor control (7 tabs + Defaults panel + toolbar): function, config key, scope, default, advanced flag.
-- **`scopes` / `cascade`** — the resolution order (device → device type → room → view → global → built-in default).
+- **`editorTabs`** — every editor control (5 tabs + Defaults panel + toolbar): function, config key, scope, default, advanced flag.
+- **`scopes` / `cascade`** — the three family ladders (Tile: device → type → room → view → card; Container: room → view → card; Card chrome: view → card), with saved looks as a side ladder between view and card.
 
 Every tool below reads from this file's data model. **Keep it in sync** when the card's
 config surface changes.

@@ -293,8 +293,8 @@ const YAMLONLY = [
   ['area_styles[name].tileTextColor','string','inherit','Tile text colour inside this room.','area'],
   ['area_styles[name].accentColor','string','inherit','Accent colour for tiles in this room.','area'],
   ['area_styles[name].boxShadow','BoxShadow','none','Room block shadow preset.','area'],
-  ['area_styles[name].tile_style / power_monitor_variant','TileStyle / PowerMonitorVariant','inherit','Per-room tile style override — a real cascade rung (device → type → area → view → global), but only the device, view and global scopes have pickers.','area'],
-  ['area_styles[name].elements','Record<string, boolean>','all visible','Per-element visibility for tiles in this room. The editor exposes elements at device and profile scope only.','area'],
+  ['area_styles[name].tile_style / power_monitor_variant','TileStyle / PowerMonitorVariant','inherit','Per-room tile style override — a real cascade rung (device → type → area → view → global). The Design tab\'s Tile family offers the picker at every scope, room included.','area'],
+  ['area_styles[name].elements','Record<string, boolean>','per STYLE_ELEMENTS (visible unless the entry declares def: false, e.g. header_chips)','Per-element visibility for tiles in this room. The Design tab\'s Elements row is available at every scope; toggles seed from the inherited value.','area'],
   ['custom_styles[key].base / variant / elements / sensors / tile_layout','CustomStyleDef','—','The saved-style object itself. The editor writes it via 💾 Save style and can rename/delete it, but the individual fields are only editable by re-saving or by hand.','device'],
 ];
 
@@ -354,7 +354,7 @@ const TABS = [
       ['This device / All options','Scope the panel to the controls that do something for this device (its own sensor chips, the blocks it can render, energy only when it meters energy) or show the card’s full option surface. Viewer-local, never written to YAML.','—','local','This device',0],
       ['Input actions','Per input channel (i3/i4/UNI): run a script or service, toggle one entity or a list of them, or open more-info, plus an optional press-and-hold action (dim while held, alternating direction between holds) and an optional dropdown chip listing a select entity’s options. Input hardware has no output, so a channel row is a status row until it is given an action.','device_styles[id].input_actions[entity_id]','device','none — status only',0],
       ['Sensor chips','Whitelist of sensor chips for this device','device_styles[id].sensors','device','inherit',0],
-      ['Style elements','Show / hide the parts of the chosen tile style (toggle, graph, secondary readings…). Options come from STYLE_ELEMENTS per style.','device_styles[id].elements','device','all visible',0],
+      ['Style elements','Show / hide the parts of the chosen tile style (toggle, graph, secondary readings…). Options come from STYLE_ELEMENTS per style.','device_styles[id].elements','device','per STYLE_ELEMENTS (visible unless def: false; header_chips is opt-in)',0],
       ['Entity animations','Per-entity ON/OFF icon + speed','device_styles[id].entity_animations[eid]','device','none / 1',1],
       ['Hidden entities','Remove entities from the detail sheet list','hidden_entities','global','not hidden',1],
       ['Clear device style','Delete the entire device-style block','device_styles[id] → del','device','—',0],
@@ -363,7 +363,7 @@ const TABS = [
       ['Tile layout style','Style for every device of this profile','profile_styles[type].tile_style','device','inherit',0],
       ['Power-monitor variant','Sub-variant when style = power-monitor','profile_styles[type].power_monitor_variant','device','\'big-number\'',0],
       ['Sparkline graphs','Per-profile sparkline override (inherit / on / off)','profile_styles[type].show_graphs','device','inherit',0],
-      ['Style elements','Element visibility for every device of this profile','profile_styles[type].elements','device','all visible',0],
+      ['Style elements','Element visibility for every device of this profile','profile_styles[type].elements','device','per STYLE_ELEMENTS (visible unless def: false; header_chips is opt-in)',0],
       ['Visible blocks','Block order / visibility for this profile (style = default)','profile_styles[type].tile_layout','device','profile default',0],
     ]},
     {name:'Save as a named style', rows:[
@@ -429,7 +429,7 @@ const TABS = [
    ]},
 
   {id:'design-global', icon:'◈', label:'Design — Global scope',
-   note:'Card-wide look, with a live preview strip on top. Tiles is basic; Card, Colours and Typography are advanced-only. Per-room styling lives here too, behind a room picker. Theme presets write the palette into style AND record the name in `theme`; the picker highlights whatever detectTheme reads back out of the colours. The card uses `theme` as a palette base under style, so hand-written YAML can set a theme without listing colours.',
+   note:'Card-wide look, with a live preview strip on top. Tiles is basic; Card, Colours and Typography are advanced-only. Per-room styling is NOT here: pick the room in the Design scope map — ladder settings appear as the family rows, and the room-only ones sit in a "Room chrome — this room only" block. Theme presets record the name in `theme` and clear matching palette keys out of `style`; the picker highlights whatever detectTheme reads back out of the colours. The card uses `theme` as a palette base under style, so hand-written YAML can set a theme without listing colours.',
    groups:[
     {name:'Card', rows:[
       ['Needs attention','Summary above the rooms: offline devices, firing alerts, flat batteries, pending updates. Renders only when something qualifies.','show_attention','global','on',0],
@@ -471,13 +471,13 @@ const TABS = [
       ['Font family','System / Bundled / Display font','style.font_family','global','inherit',1],
       ['Text scale','Global text size scale (0.8–1.3×)','style.text_size_scale','global','1×',1],
     ]},
-    {name:'Per-room style panel', rows:[
-      ['Room picker','Which room the panel below edits','none','local','none selected',0],
-      ['Columns','Tile columns in this room','area_styles[name].columns','area','3',0],
-      ['Tile gap','Gap between tiles','area_styles[name].tileGap','area','10px',0],
-      ['Show graphs','Per-room sparkline override','area_styles[name].show_graphs','area','Inherit',0],
-      ['Room background photo','Room backdrop image + fit, plus Sharp/Ambient render mode and Top/Center/Bottom crop','area_styles[name].bg_image / .bg_image_size / .bg_image_mode / .bg_image_pos','area','none / cover / sharp / center',1],
-      ['Tile background','Tile background colour','area_styles[name].tileBgColor','area','#1c1c1e',0],
+    {name:'Room scope (Design → pick a room). Ladder settings render as the usual family rows; the room-only ones sit in the "Room chrome — this room only" block.', rows:[
+      ['Columns','Tile columns in this room (Container family row at room scope)','area_styles[name].columns','area','3',0],
+      ['Tile gap','Gap between tiles (Room chrome)','area_styles[name].tileGap','area','10px',0],
+      ['Show graphs','Per-room sparkline override (Tile family row at room scope)','area_styles[name].show_graphs','area','Inherit',0],
+      ['Room background photo','Room backdrop image + fit, plus Sharp/Ambient render mode and Top/Center/Bottom crop (Room chrome)','area_styles[name].bg_image / .bg_image_size / .bg_image_mode / .bg_image_pos','area','none / cover / sharp / center',0],
+      ['Tile background','Tile background colour (Room chrome)','area_styles[name].tileBgColor','area','#1c1c1e',0],
+      ['Room block background','Background of the room block itself (Room chrome)','area_styles[name].bgColor','area','transparent',1],
       ['Tile border','Tile border colour','area_styles[name].tileBorderColor','area','rgba(255,255,255,.07)',1],
       ['Tile corner radius','Tile corner radius','area_styles[name].tileBorderRadius','area','12px',1],
       ['Tile opacity','Tile opacity','area_styles[name].tileOpacity','area','100%',1],
@@ -488,10 +488,9 @@ const TABS = [
       ['Header text','Room header text colour','area_styles[name].textColor','area','#f4601e',1],
       ['Header font size','Room header font size','area_styles[name].fontSize','area','12px',1],
       ['Room header chips','Which summary chips this room\'s HEADER row shows (keys in areaChips). Independent of the tile `sensors` list; only chips whose sensor exists in the room render.','area_styles[name].header_chips','area','power·energy·voltage·current·temperature',0],
-      ['Energy shows','Energy window for this room (Total / Today / Week / Month); the room-header Energy chip sums its devices over that window','area_styles[name].energy_period','area','inherit',0],
-      ['Sensor chips','Whitelist of sensor chips for this room','area_styles[name].sensors','area','inherit',0],
-      ['Button shape / variant / size','ON/OFF button style for this room','area_styles[name].buttonShape / buttonVariant / buttonSize','area','pill / fill / md',1],
-      ['Room reset ↺','Clear this room\'s style block','area_styles[name] → del','area','—',0],
+      ['Energy shows','Energy window for this room (Total / Today / Week / Month); the room-header Energy chip sums its devices over that window (Tile family row at room scope)','area_styles[name].energy_period','area','inherit',0],
+      ['Sensor chips','Whitelist of sensor chips for this room (Tile family row at room scope)','area_styles[name].sensors','area','inherit',0],
+      ['Button shape / variant / size','ON/OFF button style for this room (Room chrome)','area_styles[name].buttonShape / buttonVariant / buttonSize','area','pill / fill / md',1],
     ]},
    ]},
 

@@ -26,9 +26,11 @@ Pick the scope in the map at the top. Devices are grouped by room, type or integ
 
 Every control says where its value is coming from — **set here**, with a ↺ to drop it, or **from Room · Kitchen** / **from Card**. Most specific wins, always.
 
-What you can set depends on the layer, and the tab says why. There are three groups. **Tile** settings — theme, colour, tile style, blocks, chips, graphs, energy window — can be set anywhere: device, type, room, view, card. **Container** settings — columns, tile size, gap — stop at the room, because a grid needs something to hold it and one device has no column count. **Card chrome** — the header, the card surface, typography — only a view or the card can set, because a room does not contain the card's header.
+What you can set depends on the layer, and the tab says why. There are three groups. **Tile** settings — theme, colour, tile style, blocks, chips, graphs, energy window — can be set anywhere: device, type, room, view, card. **Container** settings — columns and tile size — stop at the room, because a grid needs something to hold it and one device has no column count. **Card chrome** — the header, the card surface, typography — only a view or the card can set, because a room does not contain the card's header.
 
-Global also holds the settings that have nothing under them at all: the theme picker, chips & metrics, tiles, the sensor-chip groups, and the card's own header and type.
+Two scopes also hold settings with no ladder under them at all. Global has the theme picker, chips & metrics, tiles, the sensor-chip groups, and the card's own header and type. A room has **Room chrome** — the room block's backdrop photo, tile gap, header colours, borders, per-room header chips and button shapes — things that exist exactly once per room.
+
+A shortcut worth knowing: in the card editor, tapping a device tile in the **live preview** jumps straight to that device's scope in Design — same landing as the ✎ button in Rooms & devices. Buttons and sliders on the tile still work normally, so you can test controls in the preview too.
 
 ### Global defaults vs. per-room overrides
 
