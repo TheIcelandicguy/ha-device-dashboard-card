@@ -51,7 +51,10 @@ export interface TileSensors {
   uptime: number | null;
 }
 export interface GraphEntity { entityId: string; label: string; dc: string; unit: string }
-export interface SparkPoint { t: number; v: number }
+/** `live` marks the synthetic "now" point appended from the current state —
+ *  drawn like any other, but excluded from auto-scaling and peak dots so an
+ *  instantaneous spike can't flatten a series of statistic means. */
+export interface SparkPoint { t: number; v: number; live?: boolean }
 export interface InputChannel {
   entityId: string;
   label: string;
@@ -97,10 +100,10 @@ export interface TileCtx {
   online: boolean;
   isOn: boolean;
 
-  /** Per-element visibility for this tile's style (Style Presets). Returns the
-   *  element's default (`def`, true when omitted) unless a device/area/
-   *  style-preset override says otherwise. */
-  showEl: (id: string, def?: boolean) => boolean;
+  /** Per-element visibility for this tile's style (Style Presets). The default
+   *  comes from STYLE_ELEMENTS (`def: false` marks opt-in elements) unless a
+   *  device/area/style-preset override says otherwise. */
+  showEl: (id: string) => boolean;
 
   // Device helpers
   getPrimarySwitch: (d: HADevice) => PrimarySwitch | null;

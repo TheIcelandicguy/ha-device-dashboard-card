@@ -2,7 +2,7 @@ import { html, svg, nothing, TemplateResult } from 'lit';
 import { formatPower, formatEnergy, formatUptime } from '../helpers';
 import type { PowerMonitorVariant } from '../types';
 import type { TileCtx } from './tile-context';
-import { renderNameDot } from './tile-parts';
+import { renderNameDot, chipsInHeader } from './tile-parts';
 
 export function renderPowerMonitorTile(ctx: TileCtx, variant: PowerMonitorVariant): TemplateResult {
   switch (variant) {
@@ -16,23 +16,18 @@ export function renderPowerMonitorTile(ctx: TileCtx, variant: PowerMonitorVarian
 
 type PMSensors = ReturnType<TileCtx['tileSensors']>;
 
-/** The secondary readings as one chip strip — shared by every placement. */
+/** The secondary readings as one chip strip — shared by every placement. The
+ *  energy chip carries the period-aware label (Energy today / this week …) as
+ *  a tooltip: the strip has no room for the table variant's row label, but the
+ *  period context must not silently vanish when the chips replace that row. */
 function pmChips(s: PMSensors, cls = 'ts-chips'): TemplateResult {
   return html`<div class="${cls}">
     ${s.voltage != null ? html`<span class="ts-chip">${s.voltage.toFixed(1)} V</span>` : nothing}
     ${s.current != null ? html`<span class="ts-chip">${s.current.toFixed(2)} A</span>` : nothing}
-    ${s.energy  != null ? html`<span class="ts-chip">${s.energy.toFixed(2)} kWh</span>` : nothing}
+    ${s.energy  != null ? html`<span class="ts-chip" title="${s.energyLabel ?? 'Energy'}">${s.energy.toFixed(2)} kWh</span>` : nothing}
     ${s.temp    != null ? html`<span class="ts-chip">${s.temp.toFixed(1)} °C</span>` : nothing}
     ${s.rssi    != null ? html`<span class="ts-chip">${s.rssi} dBm</span>` : nothing}
   </div>`;
-}
-
-/** header_chips (opt-in element) moves the secondary readings into the name
- *  row; the variant's own secondary placement then stands down — the chips
- *  move, they don't duplicate. Gated on 'secondary' too, so hiding the
- *  readings hides them wherever they sit. */
-function chipsInHeader(ctx: TileCtx): boolean {
-  return ctx.showEl('header_chips', false) && ctx.showEl('secondary');
 }
 
 function renderPMBigNumber(ctx: TileCtx): TemplateResult {
@@ -40,14 +35,18 @@ function renderPMBigNumber(ctx: TileCtx): TemplateResult {
   const s = ctx.tileSensors(device);
   const sw = ctx.getPrimarySwitch(device);
   const sparks = ctx.getPowerSparks(device);
+  const hdrChips = chipsInHeader(ctx);
   ctx.ensureGraphData(device);
   const W = 200, H = 32, pad = 2;
   const lw = config.graph_style?.line_width ?? 1.5;
   const lineColor = isOn ? accent : 'var(--sc-text-muted)';
   const sparkSvg = sparks.length > 1 ? (() => {
-    const vals = sparks.map(p => p.v);
+    // Scale off the history only: the appended live point is an instantaneous
+    // reading against 5-minute means, and letting it set the range flattens
+    // the whole series exactly when a load spikes.
+    const hist = sparks.filter(p => !p.live).map(p => p.v);
     const psr = config.graph_style?.sensor_ranges?.['power'] ?? {};
-    const mn = psr.min ?? Math.min(...vals), mx = psr.max ?? Math.max(...vals), rng = mx - mn || 1;
+    const mn = psr.min ?? Math.min(...hist), mx = psr.max ?? Math.max(...hist), rng = mx - mn || 1;
     const coords = sparks.map((p, i) => `${((i / (sparks.length - 1)) * W).toFixed(1)},${(H - pad - ((p.v - mn) / rng) * (H - pad * 2)).toFixed(1)}`).join(' ');
     const gId = `pm-bn-${device.device_id.replace(/\W/g, '')}`;
     return svg`<defs><linearGradient id="${gId}" x1="0" y1="0" x2="0" y2="1">
@@ -63,13 +62,13 @@ function renderPMBigNumber(ctx: TileCtx): TemplateResult {
       <div class="ts-hero-top">
         ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
         ${renderNameDot(device, online, 'ts-hero-name')}
-        ${chipsInHeader(ctx) ? pmChips(s, 'ts-chips ts-chips-hdr') : nothing}
+        ${hdrChips ? pmChips(s, 'ts-chips ts-chips-hdr') : nothing}
       </div>
       <div class="ts-hero-num" style="color:${isOn ? accent : 'var(--sc-text-muted)'}">${s.power != null ? s.power.toFixed(s.power < 10 ? 1 : 0) : '—'}</div>
       <div class="ts-hero-unit">watts · ${isOn ? 'active' : 'idle'}</div>
       ${ctx.showEl('graph') ? html`<div class="ts-hero-spark"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:${H}px;display:block">${sparkSvg}</svg></div>` : nothing}
       <div class="ts-hero-foot">
-        ${ctx.showEl('secondary') && !chipsInHeader(ctx) ? pmChips(s) : nothing}
+        ${!hdrChips && ctx.showEl('secondary') ? pmChips(s) : nothing}
         ${ctx.showEl('uptime') ? html`<span class="ts-uptime">${s.uptime ? formatUptime(s.uptime) : ''}</span>` : nothing}
       </div>
       ${ctx.showEl('lower_body') ? ctx.renderTileLowerBody(device, profile) : nothing}
@@ -118,7 +117,7 @@ function renderPMGauge(ctx: TileCtx): TemplateResult {
       <div class="ts-ring-top" style="width:100%">
         ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
         ${renderNameDot(device, online, 'ts-ring-name')}
-        ${chipsInHeader(ctx) ? pmChips(s, 'ts-chips ts-chips-hdr') : nothing}
+        ${chipsInHeader(ctx) ? pmChips(s, 'ts-chips ts-chips-hdr') : nothing /* gauge has no body chips to stand down */}
       </div>
       <svg viewBox="0 0 ${CX * 2} ${svgH}" style="width:100%;max-width:360px;height:auto;overflow:visible;display:block">
         ${rings.map((ring, i) => {
@@ -142,6 +141,7 @@ function renderPMGraph(ctx: TileCtx): TemplateResult {
   const { device, isOn, accent, online, config, profile } = ctx;
   const s = ctx.tileSensors(device);
   const sw = ctx.getPrimarySwitch(device);
+  const hdrChips = chipsInHeader(ctx);
   ctx.ensureGraphData(device);
   const sparks = ctx.getPowerSparks(device);
   const W = 200, H = 48, pad = 3;
@@ -150,11 +150,14 @@ function renderPMGraph(ctx: TileCtx): TemplateResult {
   let peakX = 0, peakY = H - pad;
   const sparkBody = sparks.length > 1 ? (() => {
     const vals = sparks.map(p => p.v);
+    // Scale and peak off the history only — the appended live point is an
+    // instantaneous reading against 5-minute means (see SparkPoint.live).
+    const hist = sparks.filter(p => !p.live).map(p => p.v);
     const psr = config.graph_style?.sensor_ranges?.['power'] ?? {};
-    const mn = psr.min ?? Math.min(...vals), mx = psr.max ?? Math.max(...vals), rng = mx - mn || 1;
+    const mn = psr.min ?? Math.min(...hist), mx = psr.max ?? Math.max(...hist), rng = mx - mn || 1;
     const ptX = (_: unknown, i: number) => (i / (sparks.length - 1)) * W;
     const ptY = (v: number) => H - pad - ((v - mn) / rng) * (H - pad * 2);
-    const maxIdx = vals.indexOf(mx); peakX = ptX(null, maxIdx); peakY = ptY(mx);
+    const maxIdx = vals.indexOf(mx); peakX = ptX(null, Math.max(0, maxIdx)); peakY = ptY(mx);
     const coords = sparks.map((p, i) => `${ptX(null, i).toFixed(1)},${ptY(p.v).toFixed(1)}`).join(' ');
     const gId = `pm-gr-${device.device_id.replace(/\W/g, '')}`;
     return svg`<defs><linearGradient id="${gId}" x1="0" y1="0" x2="0" y2="1">
@@ -171,7 +174,7 @@ function renderPMGraph(ctx: TileCtx): TemplateResult {
       <div class="ts-spark-top">
         ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
         ${renderNameDot(device, online, 'ts-spark-name')}
-        ${chipsInHeader(ctx) ? pmChips(s, 'ts-chips ts-chips-hdr') : nothing}
+        ${hdrChips ? pmChips(s, 'ts-chips ts-chips-hdr') : nothing}
       </div>
       ${ctx.showEl('graph') ? html`<div class="ts-spark-graph"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:${H}px;display:block;overflow:visible">${sparkBody}</svg></div>` : nothing}
       <div class="ts-spark-bottom">
@@ -179,7 +182,7 @@ function renderPMGraph(ctx: TileCtx): TemplateResult {
           <div class="ts-spark-big" style="color:${isOn ? accent : 'var(--sc-text-muted)'}">${s.power != null ? s.power.toFixed(s.power < 10 ? 1 : 0) : '—'}</div>
           <div class="ts-spark-sub">${isOn ? 'W · now' : 'W · idle'}</div>
         </div>
-        ${ctx.showEl('secondary') && !chipsInHeader(ctx) ? html`<div class="ts-spark-meta">
+        ${!hdrChips && ctx.showEl('secondary') ? html`<div class="ts-spark-meta">
           ${s.voltage != null ? html`<div class="ts-spark-mrow">${s.voltage.toFixed(1)} <b>V</b></div>` : nothing}
           ${s.current != null ? html`<div class="ts-spark-mrow">${s.current.toFixed(2)} <b>A</b></div>` : nothing}
           ${s.energy  != null ? html`<div class="ts-spark-mrow">${s.energy.toFixed(2)} <b>kWh</b></div>` : nothing}
@@ -195,17 +198,25 @@ function renderPMCompact(ctx: TileCtx): TemplateResult {
   const { device, isOn, accent, online, profile } = ctx;
   const s = ctx.tileSensors(device);
   const sw = ctx.getPrimarySwitch(device);
+  const hdrChips = chipsInHeader(ctx);
+  // .ts-hbar-main is a block, not a flex row, so the header placement needs
+  // its own flex wrapper around name + chips — dropping the strip in as a
+  // sibling would give it a full-width line above the big number.
   return html`
     <div class="ts-hbar" style="--ts-accent:${accent}">
       <div class="ts-hbar-top">
         <div class="ts-hbar-left-bar" style="background:${isOn ? accent : 'rgba(255,255,255,0.07)'}"></div>
         <div class="ts-hbar-main">
-          ${renderNameDot(device, online, 'ts-hbar-name')}
-          ${chipsInHeader(ctx) ? pmChips(s, 'ts-chips ts-chips-hdr') : nothing}
+          ${hdrChips ? html`
+            <div class="ts-hbar-namerow">
+              ${renderNameDot(device, online, 'ts-hbar-name')}
+              ${pmChips(s, 'ts-chips ts-chips-hdr')}
+            </div>`
+          : renderNameDot(device, online, 'ts-hbar-name')}
           <div class="ts-hbar-num" style="color:${isOn ? accent : 'var(--sc-text-muted)'}">${s.power != null ? s.power.toFixed(s.power < 10 ? 1 : 0) : '—'}</div>
           <div class="ts-hbar-unit">watts</div>
         </div>
-        ${ctx.showEl('secondary') && !chipsInHeader(ctx) ? html`<div class="ts-hbar-side">
+        ${!hdrChips && ctx.showEl('secondary') ? html`<div class="ts-hbar-side">
           ${s.voltage != null ? html`<div class="ts-hbar-sstat"><div class="ts-hbar-sk">V</div><div class="ts-hbar-sv">${s.voltage.toFixed(0)}</div></div>` : nothing}
           ${s.current != null ? html`<div class="ts-hbar-sstat"><div class="ts-hbar-sk">A</div><div class="ts-hbar-sv">${s.current.toFixed(2)}</div></div>` : nothing}
           ${s.temp    != null ? html`<div class="ts-hbar-sstat"><div class="ts-hbar-sk">°C</div><div class="ts-hbar-sv">${s.temp.toFixed(1)}</div></div>` : nothing}
@@ -227,15 +238,17 @@ function renderPMTable(ctx: TileCtx): TemplateResult {
   const { device, isOn, accent, online, config, profile } = ctx;
   const s = ctx.tileSensors(device);
   const sw = ctx.getPrimarySwitch(device);
+  const hdrChips = chipsInHeader(ctx);
   ctx.ensureGraphData(device);
   const sparks = ctx.getPowerSparks(device);
   const W = 200, H = 24, pad = 2;
   const lw = config.graph_style?.line_width ?? 1.5;
   const lineColor = isOn ? accent : 'var(--sc-text-muted)';
   const sparkBody = sparks.length > 1 ? (() => {
-    const vals = sparks.map(p => p.v);
+    // Scale off the history only (see SparkPoint.live).
+    const hist = sparks.filter(p => !p.live).map(p => p.v);
     const psr = config.graph_style?.sensor_ranges?.['power'] ?? {};
-    const mn = psr.min ?? Math.min(...vals), mx = psr.max ?? Math.max(...vals), rng = mx - mn || 1;
+    const mn = psr.min ?? Math.min(...hist), mx = psr.max ?? Math.max(...hist), rng = mx - mn || 1;
     const coords = sparks.map((p, i) => `${((i / (sparks.length - 1)) * W).toFixed(1)},${(H - pad - ((p.v - mn) / rng) * (H - pad * 2)).toFixed(1)}`).join(' ');
     const gId = `pm-tbl-${device.device_id.replace(/\W/g, '')}`;
     return svg`<defs><linearGradient id="${gId}" x1="0" y1="0" x2="0" y2="1">
@@ -255,10 +268,10 @@ function renderPMTable(ctx: TileCtx): TemplateResult {
       <div class="ts-list-header">
         ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
         ${renderNameDot(device, online, 'ts-list-name')}
-        ${chipsInHeader(ctx) ? pmChips(s, 'ts-chips ts-chips-hdr') : nothing}
+        ${hdrChips ? pmChips(s, 'ts-chips ts-chips-hdr') : nothing}
       </div>
       ${s.power   != null ? row('Power',   formatPower(s.power),         true) : nothing}
-      ${ctx.showEl('secondary') && !chipsInHeader(ctx) ? html`
+      ${!hdrChips && ctx.showEl('secondary') ? html`
         ${s.voltage != null ? row('Voltage', `${s.voltage.toFixed(1)} V`)       : nothing}
         ${s.current != null ? row('Current', `${s.current.toFixed(3)} A`)       : nothing}
         ${s.energy  != null ? row(s.energyLabel, formatEnergy(s.energy))        : nothing}

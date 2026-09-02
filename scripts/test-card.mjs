@@ -541,6 +541,16 @@ try {
     style_presets: { 'power-monitor': { elements: { toggle: true } } },
     device_styles: { dimmer: { elements: { toggle: false } } },
   }, { id: 'v', name: 'V', elements: { toggle: true } }), 'toggle'), false);
+  // Opt-in defaults come from STYLE_ELEMENTS (def: false), not from call sites —
+  // a renderer that forgets a literal cannot flip the default for everyone.
+  eq('header_chips defaults OFF via STYLE_ELEMENTS',
+    cas.elementVisible(cin({ tile_style: 'power-monitor' }), 'header_chips'), false);
+  eq('elementDefault reads the table', cas.elementDefault('power-monitor', 'header_chips'), false);
+  eq('elementDefault falls back to shown', cas.elementDefault('power-monitor', 'toggle'), true);
+  eq('a layer can still opt in', cas.elementVisible(cin({
+    tile_style: 'power-monitor',
+    device_styles: { dimmer: { elements: { header_chips: true } } },
+  }), 'header_chips'), true);
 
   console.log('\ncascade — legacy aliases');
   eq('hero remaps to a power-monitor variant', cas.resolveStyle('hero'), { style: 'power-monitor', variant: 'big-number' });

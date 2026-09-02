@@ -96,11 +96,26 @@ if (chipDefaults) {
 }
 
 // ── style elements ──
+// Compare per-style ELEMENT IDS, not just style keys: the designer's inlined
+// ELEMENTS map is hand-synced, and a style-key presence test let a new element
+// (header_chips) drift past this gate unnoticed.
 const seBlock = helpers.match(/STYLE_ELEMENTS[^{]*\{([\s\S]*?)\n\};/);
 if (seBlock) {
-  const codeStyles = [...seBlock[1].matchAll(/^\s{2}'?([\w-]+)'?:\s*\[/gm)].map((m) => m[1]);
   const presets = read('docs/tools/style-presets.html');
-  for (const st of codeStyles) if (!presets.includes(`'${st}'`)) note('style-presets.html', `no elements listed for style "${st}"`);
+  const styleRe = /^\s{2}'?([\w-]+)'?:\s*\[([\s\S]*?)\],\s*$/gm;
+  for (const m of seBlock[1].matchAll(styleRe)) {
+    const st = m[1];
+    if (!presets.includes(`'${st}'`)) { note('style-presets.html', `no elements listed for style "${st}"`); continue; }
+    const desRow = presets.match(new RegExp(`'${st}':\\s*\\[(.*)\\],?`));
+    const codeIds = [...m[2].matchAll(/\{ id: '(\w+)'/g)].map((x) => x[1]);
+    const desIds = desRow ? [...desRow[1].matchAll(/\['(\w+)','/g)].map((x) => x[1]) : [];
+    for (const id of codeIds) if (!desIds.includes(id)) {
+      note('style-presets.html', `style "${st}" is missing element "${id}" from STYLE_ELEMENTS`);
+    }
+    for (const id of desIds) if (!codeIds.includes(id)) {
+      note('style-presets.html', `style "${st}" lists element "${id}" that STYLE_ELEMENTS no longer has`);
+    }
+  }
 }
 
 // ── header chips + themes ──

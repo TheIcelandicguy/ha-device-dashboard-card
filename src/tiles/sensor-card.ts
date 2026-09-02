@@ -1,7 +1,7 @@
 import { html, nothing, TemplateResult } from 'lit';
 import type { HAEntity, HassAttrs } from '../types';
 import type { TileCtx } from './tile-context';
-import { renderNameDot, renderNoEntity } from './tile-parts';
+import { renderNameDot, renderNoEntity, chipsInHeader } from './tile-parts';
 
 const PRIORITY_CLASSES = ['temperature', 'humidity', 'carbon_dioxide', 'illuminance', 'battery'];
 const BINARY_CLASSES = ['motion', 'door', 'window', 'moisture', 'smoke', 'gas'];
@@ -50,18 +50,21 @@ export function renderSensorCardTile(ctx: TileCtx): TemplateResult {
     }).slice(0, 4);
     // header_chips (opt-in) moves the secondary chips into the name row; the
     // bottom placement then stands down — they move, they don't duplicate.
-    const hdrChips = ctx.showEl('header_chips', false) && ctx.showEl('secondary');
-    const chipSpans = secEnts.map(e => {
+    const hdrChips = chipsInHeader(ctx);
+    const bodyChips = !hdrChips && ctx.showEl('secondary');
+    // Built only when a placement will render them — a "lean tiles" config
+    // with secondary off shouldn't pay for markup that is never inserted.
+    const chipSpans = (hdrChips || bodyChips) && secEnts.length ? secEnts.map(e => {
       const ss = hass.states[e.entity_id];
       const v = parseFloat(ss?.state ?? '');
       const u = (ss?.attributes as HassAttrs)?.unit_of_measurement ?? '';
       return html`<span class="ts-chip">${isNaN(v) ? ss?.state : v.toFixed(1)} ${u}</span>`;
-    });
+    }) : null;
     return html`
       <div class="ts-sensor" style="--ts-accent:${accent}">
         <div class="ts-sensor-top">
           ${renderNameDot(device, online)}
-          ${hdrChips && secEnts.length ? html`<div class="ts-chips ts-chips-hdr">${chipSpans}</div>` : nothing}
+          ${hdrChips && chipSpans ? html`<div class="ts-chips ts-chips-hdr">${chipSpans}</div>` : nothing}
           <span class="ts-sensor-dc">${dc}</span>
         </div>
         ${ctx.showEl('primary_value') ? html`<div class="ts-sensor-main">
@@ -75,7 +78,7 @@ export function renderSensorCardTile(ctx: TileCtx): TemplateResult {
         ${ctx.showEl('graph') ? html`<div class="ts-sensor-spark">
           ${ctx.renderSparklinesFiltered(device, ctx.getGraphEntities(device).filter(e => e.entityId === primaryEnt!.entity_id))}
         </div>` : nothing}
-        ${ctx.showEl('secondary') && !hdrChips && secEnts.length ? html`<div class="ts-chips" style="margin-top:6px">
+        ${bodyChips && chipSpans ? html`<div class="ts-chips" style="margin-top:6px">
           ${chipSpans}
         </div>` : nothing}
       </div>`;

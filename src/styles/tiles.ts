@@ -29,9 +29,16 @@ export const tilesCss = css`
     .ts-hero-foot { display:flex; align-items:center; justify-content:space-between; padding-top:6px; border-top:1px solid var(--sc-tile-border); margin-top:auto; }
 
     .ts-chips { display:flex; flex-wrap:wrap; gap:3px; }
-    /* header_chips placement: ride the name row's spare width, right-aligned,
-       and never push the name itself off the tile. */
-    .ts-chips-hdr { margin-left:auto; justify-content:flex-end; min-width:0; flex:0 1 auto; }
+    /* header_chips placement: ride the name row's spare width, right-aligned.
+       The name elements are flex-basis 0, so without a cap the strip's content
+       basis wins the whole row and the name collapses to nothing on narrow
+       tiles — max-width guarantees the name keeps ~45% and the strip wraps
+       inside its own share instead. */
+    .ts-chips-hdr { margin-left:auto; justify-content:flex-end; min-width:0; flex:0 1 auto; max-width:55%; }
+    /* Flex wrapper the compact variant puts around name + header chips:
+       .ts-hbar-main is a block, so the strip needs a row of its own to ride. */
+    .ts-hbar-namerow { display:flex; align-items:center; gap:6px; margin-bottom:4px; }
+    .ts-hbar-namerow .ts-hbar-name { flex:1; min-width:0; margin-bottom:0; }
 
     .ts-chip { font-size:var(--fs-sm); padding:2px 6px; border-radius:4px; background:var(--sc-sensor-bg); border:1px solid var(--sc-tile-border); color:var(--sc-text-muted); }
 

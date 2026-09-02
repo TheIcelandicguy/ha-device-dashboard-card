@@ -257,7 +257,7 @@
       { "key": "area_styles[name].accentColor", "type": "string", "default": "inherit", "fn": "Accent colour for tiles in this room." },
       { "key": "area_styles[name].boxShadow", "type": "BoxShadow", "default": "none", "fn": "Room block shadow preset." },
       { "key": "area_styles[name].tile_style / power_monitor_variant", "type": "TileStyle / PowerMonitorVariant", "default": "inherit", "fn": "Per-room tile style override — a real cascade rung (device → type → area → view → global), but only the device, view and global scopes have pickers." },
-      { "key": "area_styles[name].elements", "type": "Record<string, boolean>", "default": "all visible", "fn": "Per-element visibility for tiles in this room. The editor exposes elements at device and profile scope only." }
+      { "key": "area_styles[name].elements", "type": "Record<string, boolean>", "default": "per STYLE_ELEMENTS (visible unless the entry declares def: false, e.g. header_chips)", "fn": "Per-element visibility for tiles in this room. The editor exposes elements at device and profile scope only." }
     ],
     "device": [
       { "key": "custom_styles[key].base / variant / elements / sensors / tile_layout", "type": "CustomStyleDef", "default": "—", "fn": "The saved-style object itself. The editor writes it via 💾 Save style and can rename/delete it, but the individual fields are only editable by re-saving or by hand." }
@@ -319,7 +319,7 @@
           { "control": "Visible blocks", "fn": "Show / hide + reorder each tile block (style = default)", "key": "device_styles[id].tile_layout", "scope": "device", "default": "inherits global", "advanced": false },
           { "control": "Input actions", "fn": "Per input channel (i3/i4/UNI): run a script or service, toggle one entity or a list of them, or open more-info, plus an optional press-and-hold action (dim while held, alternating direction between holds) and an optional dropdown chip listing a select entity's options. Input hardware has no output, so a channel row is a status row until it is given an action.", "key": "device_styles[id].input_actions[entity_id]", "scope": "device", "default": "none — status only", "advanced": false },
           { "control": "Sensor chips", "fn": "Whitelist of sensor chips for this device", "key": "device_styles[id].sensors", "scope": "device", "default": "inherit", "advanced": false },
-          { "control": "Style elements", "fn": "Show / hide the parts of the chosen tile style (toggle, graph, secondary readings…). Options come from STYLE_ELEMENTS per style.", "key": "device_styles[id].elements", "scope": "device", "default": "all visible", "advanced": false },
+          { "control": "Style elements", "fn": "Show / hide the parts of the chosen tile style (toggle, graph, secondary readings…). Options come from STYLE_ELEMENTS per style.", "key": "device_styles[id].elements", "scope": "device", "default": "per STYLE_ELEMENTS (visible unless def: false; header_chips is opt-in)", "advanced": false },
           { "control": "Entity animations", "fn": "Per-entity ON/OFF icon + speed", "key": "device_styles[id].entity_animations[eid]", "scope": "device", "default": "none / 1", "advanced": true },
           { "control": "Hidden entities", "fn": "Remove entities from the detail sheet list", "key": "hidden_entities", "scope": "global", "default": "not hidden", "advanced": true },
           { "control": "Clear device style", "fn": "Delete the entire device-style block", "key": "device_styles[id] → del", "scope": "device", "default": "—", "advanced": false }
@@ -328,7 +328,7 @@
           { "control": "Tile layout style", "fn": "Style for every device of this profile", "key": "profile_styles[type].tile_style", "scope": "device", "default": "inherit", "advanced": false },
           { "control": "Power-monitor variant", "fn": "Sub-variant when style = power-monitor", "key": "profile_styles[type].power_monitor_variant", "scope": "device", "default": "'big-number'", "advanced": false },
           { "control": "Sparkline graphs", "fn": "Per-profile sparkline override (inherit / on / off)", "key": "profile_styles[type].show_graphs", "scope": "device", "default": "inherit", "advanced": false },
-          { "control": "Style elements", "fn": "Element visibility for every device of this profile", "key": "profile_styles[type].elements", "scope": "device", "default": "all visible", "advanced": false },
+          { "control": "Style elements", "fn": "Element visibility for every device of this profile", "key": "profile_styles[type].elements", "scope": "device", "default": "per STYLE_ELEMENTS (visible unless def: false; header_chips is opt-in)", "advanced": false },
           { "control": "Visible blocks", "fn": "Block order / visibility for this profile (style = default)", "key": "profile_styles[type].tile_layout", "scope": "device", "default": "profile default", "advanced": false }
         ]},
         { "name": "Save as a named style", "controls": [

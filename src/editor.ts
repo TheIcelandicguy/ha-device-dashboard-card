@@ -5,7 +5,7 @@ import { keyed } from 'lit/directives/keyed.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent, LovelaceCardConfig } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout, EnergyPeriod, InputActionConfig } from './types';
-import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, PROFILE_LABELS, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, setBlockInLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels, deviceRelevance,
+import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels,
   CONFIG_KEYS, LOVELACE_KEYS } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, detectTheme, paletteFor, type ThemePalette } from './themes';
 import {
@@ -19,6 +19,7 @@ import {
   resolveCloudImage as sciResolveImage, isStockRoomImage as sciIsStockImage,
   cloudMac as sciMac, type RegistryDeviceLike as SciRegistryDevice,
 } from './shelly-cloud-import';
+import { resolveStyle } from './cascade';
 import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons';
 import { EDITOR_LAYOUT } from './editor-layout';
 import { HELP_CONCEPTS, HELP_RECIPES, HELP_INTRO, type HelpTopic } from './help';
@@ -317,15 +318,21 @@ export class HADeviceDashboardEditor extends LitElement {
   private _gotoControl(tab: string, section: string, ctl: string): void {
     this._tab = tab;
     this._defaultsOpen = false;
-    // The registry sections (design-tiles, design-header, …) only render at
-    // Global scope — jumping to one while a device is selected would land on
-    // nothing, so re-base the scope first. The two structural sections belong
-    // to every scope and must not reset it.
+    const open: Record<string, boolean> = { [section]: true };
+    // The registry sections (design-tiles, design-header, …) render inside the
+    // design-panel accordion and only at Global scope, so jumping to one must
+    // open that ancestor too — a section under a closed parent has no layout
+    // box, and the scroll and flash land on nothing — and re-base the scope.
+    // Membership in the registry decides it, not a name pattern: a prefix test
+    // silently breaks the first time a structural design-* section is added.
+    // The re-base is deliberately transient (no _setDesignScope): navigation
+    // has no business overwriting the user's persisted working scope.
     if (tab === 'design' && section.startsWith('design-')
-        && section !== 'design-scope' && section !== 'design-panel') {
-      this._setDesignScope(GLOBAL_SCOPE);
+        && this._globalSectionDescriptors()[section.slice(7)]) {
+      this._designScope = GLOBAL_SCOPE;
+      open['design-panel'] = true;
     }
-    this._openSections = { ...this._openSections, [section]: true };
+    this._openSections = { ...this._openSections, ...open };
     this._flashControl = ctl;
     if (this._flashTimer) clearTimeout(this._flashTimer);
     this._flashTimer = window.setTimeout(() => { this._flashControl = null; this._flashTimer = null; }, 2400);
@@ -339,8 +346,12 @@ export class HADeviceDashboardEditor extends LitElement {
   private _onEditorGoto = (e: Event): void => {
     const d = (e as CustomEvent).detail as
       { tab?: string; section?: string; flash?: string; device?: string } | undefined;
-    if (d?.device) { this._gotoDevice(d.device); return; }
+    // preventDefault tells the dispatching card its tap was handled — with no
+    // editor mounted (YAML mode, card picker) the card falls back to its
+    // detail sheet instead of a tap that does nothing.
+    if (d?.device) { e.preventDefault(); this._gotoDevice(d.device); return; }
     if (!d?.tab || !d.section || !d.flash) return;
+    e.preventDefault();
     this._gotoControl(d.tab, d.section, d.flash);
   };
 
@@ -1403,7 +1414,7 @@ export class HADeviceDashboardEditor extends LitElement {
                         @click=${(e:Event)=>{e.stopPropagation();this._clearDeviceStyle(dev.device_id);}}>↺</button>` : nothing}
                       <button class="room-style-btn" title="Style this device →" @click=${(e:Event) => {
                         e.stopPropagation();
-                        this._selectedDeviceId = dev.device_id; this._setDesignScope({ kind: 'device', id: dev.device_id }); this._tab = 'design';
+                        this._gotoDevice(dev.device_id);
                       }}>✎</button>
                     </div>`;
                 })}
@@ -1472,7 +1483,7 @@ export class HADeviceDashboardEditor extends LitElement {
                         @click=${(e:Event)=>{e.stopPropagation();this._clearDeviceStyle(dev.device_id);}}>↺</button>` : nothing}
                       <button class="room-style-btn" title="Style this device →" @click=${(e: Event) => {
                         e.stopPropagation();
-                        this._selectedDeviceId = dev.device_id; this._setDesignScope({ kind: 'device', id: dev.device_id }); this._tab = 'design';
+                        this._gotoDevice(dev.device_id);
                       }}>✎</button>
                     </div>`;
                 }) : html`<div class="room-device-empty">No devices in this room</div>`}
@@ -2399,11 +2410,17 @@ export class HADeviceDashboardEditor extends LitElement {
   ): TemplateResult {
     const els = STYLE_ELEMENTS[style];
     if (!els) return html``;
-    // An element back at its own default carries no override — most default to
-    // shown, opt-in placement elements (def: false) to hidden.
-    const setEl = (id: string, visible: boolean, def: boolean) => {
+    // Each switch is seeded from what the element resolves to when THIS scope
+    // says nothing — the rungs above it, not the table default. Comparing the
+    // click against that inherited value (not the default) is what makes an
+    // inherited `true` switchable OFF at a narrower scope: matching the
+    // inherited value drops the override, differing writes it, in either
+    // direction.
+    const inh = (el: { id: string; def?: boolean }) =>
+      this._inheritedElementValue(style, el.id, el.def ?? true);
+    const setEl = (el: { id: string; def?: boolean }, visible: boolean) => {
       const next = { ...cur };
-      if (visible === def) delete next[id]; else next[id] = visible;
+      if (visible === inh(el)) delete next[el.id]; else next[el.id] = visible;
       apply(Object.keys(next).length ? next : undefined);
     };
     return html`
@@ -2414,432 +2431,10 @@ export class HADeviceDashboardEditor extends LitElement {
         ${els.map(el => html`
           <div class="tog-row" style="border:none;padding:3px 0">
             <div class="tog-lbl">${el.label}</div>
-            <label class="sw"><input type="checkbox" .checked=${cur[el.id] ?? el.def ?? true}
-              @change=${(e: Event) => setEl(el.id, (e.target as HTMLInputElement).checked, el.def ?? true)}>
+            <label class="sw"><input type="checkbox" .checked=${cur[el.id] ?? inh(el)}
+              @change=${(e: Event) => setEl(el, (e.target as HTMLInputElement).checked)}>
               <span class="sw-t"></span><span class="sw-b"></span></label>
           </div>`)}
-      </div>`;
-  }
-
-  private _renderDeviceStylePanel(deviceId: string): TemplateResult {
-    const devStyle: DeviceStyle = this._config.device_styles?.[deviceId] ?? {};
-    // Scope the panel to what this device can actually do. Every gate below is
-    // `!narrow || <device has it>`, so "All options" restores the full surface
-    // and nothing a user already configured can become unreachable.
-    const relDev = this._allDevices().find(d => d.device_id === deviceId);
-    const rel = relDev ? deviceRelevance(relDev, (this.hass?.states ?? {}) as any) : null;
-    const narrow = !!rel && !this._devPanelAll;
-    const canonical = TILE_BLOCKS.map(b => b.id);
-    const globalRaw: TileLayout = this._config.tile_layout ?? canonical;
-    const globalLayout: TileBlockId[] = flattenTileLayout(globalRaw)!;
-    const devLayout: TileBlockId[] | null = flattenTileLayout(devStyle.tile_layout) ?? null;
-    const entityAnims: Record<string, { on?: string; off?: string; speed?: number }> = devStyle.entity_animations ?? {};
-
-    const toggleBlock = (blockId: TileBlockId) => {
-      const isVisible = (devLayout ?? globalLayout).includes(blockId);
-      // Toggle within whichever layout is in force, so a device that has been
-      // given side-by-side rows keeps them when a block is shown or hidden.
-      const next = setBlockInLayout(devStyle.tile_layout ?? globalRaw, blockId, !isVisible, canonical);
-      // Structural compare, not a set compare: a device whose blocks match global
-      // but are arranged into rows must keep its own layout, not fall back to it.
-      const sameAsGlobal = JSON.stringify(next) === JSON.stringify(normalizeTileLayout(globalRaw));
-      this._setDeviceStyle(deviceId, { tile_layout: sameAsGlobal ? undefined : next });
-    };
-
-    const setEntityAnim = (entityId: string, field: 'on' | 'off' | 'speed', value: string | number) => {
-      const cur: Record<string, unknown> = { ...(entityAnims[entityId] ?? {}) };
-      if (field === 'speed') {
-        const spd = Number(value);
-        if (spd === 1) delete cur['speed']; else cur['speed'] = spd;
-      } else {
-        if (value === 'none') delete cur[field]; else cur[field] = value;
-      }
-      const next = { ...entityAnims, [entityId]: cur as any };
-      if (!cur['on'] && !cur['off'] && !cur['speed']) delete next[entityId];
-      this._setDeviceStyle(deviceId, { entity_animations: Object.keys(next).length ? next : undefined });
-    };
-
-    // Find this device for profile detection
-    const allDevices = this._allDevices();
-    const dev = allDevices.find(d => d.device_id === deviceId);
-    const profile = dev ? getDeviceProfile(dev) : null;
-
-    // Auto-recommended style for this device profile
-    const profileStyleMap: Record<string, TileStyle> = {
-      relay: 'power-monitor', plug: 'power-monitor', energy: 'power-monitor', uni: 'power-monitor',
-      dimmer: 'light-control', rgb: 'light-control',
-      climate: 'climate-control', wall_display: 'climate-control',
-      cover: 'cover-control',
-      sensor: 'sensor-card',
-      input: 'input-control', generic: 'scene-button',
-    };
-    const recommended: TileStyle | undefined = profile ? profileStyleMap[profile.type] : undefined;
-    const curDevStyle: TileStyle | undefined = devStyle.tile_style;
-    const curVariant: PowerMonitorVariant = devStyle.power_monitor_variant ?? 'big-number';
-
-    const stylePickerHtml = html`
-      <div class="field" style="margin-bottom:4px">
-        <div class="field-lbl" style="display:flex;align-items:center;gap:6px">
-          Tile layout style
-          ${recommended && !curDevStyle ? html`<span class="dev-style-hint">Recommended: ${recommended}</span>` : nothing}
-          ${curDevStyle ? html`<button class="color-reset" @click=${() => this._setDeviceStyle(deviceId, { tile_style: undefined })}>↺ reset</button>` : nothing}
-        </div>
-        ${this._renderTileStylePicker(
-          curDevStyle, curVariant, recommended,
-          (v) => this._setDeviceStyle(deviceId, { tile_style: v }),
-          (v) => this._setDeviceStyle(deviceId, { power_monitor_variant: v }),
-          devStyle.show_graphs,
-          (v) => this._setDeviceStyle(deviceId, { show_graphs: v }),
-        )}
-      </div>`;
-
-    const switchEnts = dev ? dev.entities.filter(e => e.domain === 'switch' || e.domain === 'light') : [];
-
-    return html`
-      <div class="dev-style-panel">
-        ${rel ? html`
-          <div class="chip-picker-hdr" style="margin-bottom:6px">
-            <span class="chip-picker-state">
-              ${narrow ? 'Showing this device’s options' : 'Showing every option'}
-            </span>
-            <div class="pill-grp">
-              <span class="pill ${narrow ? 'on' : ''}" @click=${() => { this._devPanelAll = false; }}>This device</span>
-              <span class="pill ${narrow ? '' : 'on'}" @click=${() => { this._devPanelAll = true; }}>All options</span>
-            </div>
-          </div>` : nothing}
-        <div class="field" style="margin-bottom:6px">
-          <div class="field-lbl" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-            Type
-            ${dev?.model ? html`<span class="dev-style-hint">${dev.model}</span>` : nothing}
-            ${devStyle.profile ? html`<button class="color-reset"
-              @click=${() => this._setDeviceStyle(deviceId, { profile: undefined })}>↺ auto</button>` : nothing}
-          </div>
-          <select class="inline-text" style="width:100%"
-            @change=${(e: Event) => { const v = (e.target as HTMLSelectElement).value;
-              this._setDeviceStyle(deviceId, { profile: v ? (v as DeviceProfile) : undefined }); }}>
-            <option value="" ?selected=${!devStyle.profile}>Auto${profile ? ` — detected: ${PROFILE_LABELS[profile.type] || profile.type || 'generic'}` : ''}</option>
-            ${(['relay','plug','dimmer','rgb','climate','cover','valve','energy','sensor','input','uni','wall_display','generic'] as DeviceProfile[]).map(p => html`
-              <option value=${p} ?selected=${devStyle.profile === p}>${PROFILE_LABELS[p] || p}</option>`)}
-          </select>
-        </div>
-        ${stylePickerHtml}
-        <div class="color-row">
-          <span class="color-key">Accent colour</span>
-          <span class="color-val">${devStyle.color ?? '#f4601e'}</span>
-          <input type="color" .value=${devStyle.color ?? '#f4601e'}
-            @input=${(e: Event) => this._setDeviceStyle(deviceId, { color: (e.target as HTMLInputElement).value })}/>
-          ${devStyle.color ? html`<button class="color-reset"
-            @click=${() => this._setDeviceStyle(deviceId, { color: undefined })}>↺</button>` : nothing}
-        </div>
-        ${this._renderBgImagePicker(
-          'Tile background photo', `tile-bg-${deviceId}`, devStyle.bg_image, devStyle.bg_image_size,
-          (url) => this._setDeviceStyle(deviceId, { bg_image: url }),
-          (v) => this._setDeviceStyle(deviceId, { bg_image_size: v }),
-          () => this._setDeviceStyle(deviceId, { bg_image: undefined, bg_image_size: undefined }))}
-        ${!narrow || rel!.hasEnergy ? html`
-        <div class="field" style="margin-top:6px">
-          <div class="field-lbl">Energy shows</div>
-          ${this._renderEnergyPeriodPicker(devStyle.energy_period, (v) => this._setDeviceStyle(deviceId, { energy_period: v }), true)}
-        </div>` : nothing}
-        ${this._adv(html`
-        ${!narrow || rel!.hasEnergy ? html`
-        <div class="field" style="margin-top:6px">
-          <div class="field-lbl">Energy entity — optional</div>
-          <input type="text" class="inline-text" placeholder="sensor.…_energy_daily (Utility Meter)"
-            .value=${devStyle.energy_entity ?? ''}
-            @change=${(e:Event)=>{ const v=(e.target as HTMLInputElement).value.trim(); this._setDeviceStyle(deviceId, { energy_entity: v || undefined }); }}/>
-          <div class="hint" style="margin-top:2px">Point the Energy value at a specific entity (e.g. a Utility Meter). Empty = the device's own energy sensor.</div>
-        </div>` : nothing}
-        <div class="tile-icon-row">
-          <span class="color-key">Tile icon</span>
-          <div class="tile-icon-pickers">
-            <span class="tile-icon-state-lbl">ON</span>
-            ${this._iconPicker(
-              `tile-on-${deviceId}`,
-              devStyle.tile_icon,
-              true,
-              (val) => this._setDeviceStyle(deviceId, { tile_icon: val as EntityAnimationType | undefined })
-            )}
-            <span class="tile-icon-state-lbl">OFF</span>
-            ${this._iconPicker(
-              `tile-off-${deviceId}`,
-              devStyle.tile_icon_off,
-              false,
-              (val) => this._setDeviceStyle(deviceId, { tile_icon_off: val as EntityAnimationType | undefined })
-            )}
-          </div>
-          <select class="anim-select" style="width:90px" .value=${String(devStyle.tile_icon_speed ?? 1)}
-            @change=${(ev: Event) => {
-              const v = Number((ev.target as HTMLSelectElement).value);
-              this._setDeviceStyle(deviceId, { tile_icon_speed: v === 1 ? undefined : v });
-            }}>
-            <option value="0.25" ?selected=${(devStyle.tile_icon_speed ?? 1) === 0.25}>0.25× Slow</option>
-            <option value="0.5"  ?selected=${(devStyle.tile_icon_speed ?? 1) === 0.5}>0.5× Slow</option>
-            <option value="1"    ?selected=${(devStyle.tile_icon_speed ?? 1) === 1}>1× Normal</option>
-            <option value="1.5"  ?selected=${(devStyle.tile_icon_speed ?? 1) === 1.5}>1.5× Fast</option>
-            <option value="2"    ?selected=${(devStyle.tile_icon_speed ?? 1) === 2}>2× Fast</option>
-            <option value="3"    ?selected=${(devStyle.tile_icon_speed ?? 1) === 3}>3× Rapid</option>
-            <option value="5"    ?selected=${(devStyle.tile_icon_speed ?? 1) === 5}>5× Frantic</option>
-          </select>
-        </div>`)}
-        ${(() => {
-          // Hidden on power-monitor tiles: the Display picker (Circles/Graphs/Both)
-          // already owns show_graphs there, so a second control would be redundant.
-          const p = dev ? getDeviceProfile(dev) : null;
-          const rawTs = devStyle.tile_style
-            ?? (this._config.smart_tile_styles && p && dev ? profileDefaultTileStyle(p.type, dev) : undefined)
-            ?? this._config.tile_style;
-          if (this._baseStyleOf(rawTs) === 'power-monitor') return nothing;
-          if (narrow && !rel!.hasGraphs) return nothing;
-          return html`
-        <div class="field-lbl" style="margin-bottom:4px">Show graphs</div>
-        <div class="pill-grp" style="margin-bottom:8px">
-          ${([['Inherit', undefined], ['On', true], ['Off', false]] as Array<[string, boolean | undefined]>).map(([lbl, val]) => html`
-            <span class="pill ${devStyle.show_graphs === val ? 'on' : ''}"
-              @click=${() => this._setDeviceStyle(deviceId, { show_graphs: val })}>${lbl}</span>`)}
-        </div>`;
-        })()}
-        ${(() => {
-          // Blocks compose the 'default' style only. Showing this grid on a
-          // power-monitor tile would offer toggles that change nothing.
-          const profile = dev ? getDeviceProfile(dev) : null;
-          const raw = devStyle.tile_style
-            ?? (this._config.smart_tile_styles && profile && dev ? profileDefaultTileStyle(profile.type, dev) : undefined)
-            ?? this._config.tile_style;
-          const base = this._baseStyleOf(raw);
-          if (base && base !== 'default') return nothing;
-          return html`
-            ${this._renderLayoutCanvas(devStyle.tile_layout, globalRaw,
-              (l) => this._setDeviceStyle(deviceId, { tile_layout: l }),
-              narrow ? rel!.blocks : undefined)}
-            ${/* The canvas supersedes this flat grid — it hides a block by dragging
-                  it to the palette. Kept behind Advanced as a no-drag fallback
-                  (touch, accessibility) and in case the canvas doesn't stick. It is
-                  row-preserving via setBlockInLayout, so the two agree. */
-              this._adv(html`
-                <div class="field-lbl" style="margin:6px 0 4px">Visible blocks</div>
-                <div class="block-toggles">
-                  ${TILE_BLOCKS.filter(b => b.id !== 'graph')
-                    .filter(b => !narrow || rel!.blocks.has(b.id) || (devLayout ?? globalLayout).includes(b.id))
-                    .map(b => {
-                    const on = devLayout === null ? globalLayout.includes(b.id) : devLayout.includes(b.id);
-                    return html`<span class="block-tog ${on ? 'on' : ''}" @click=${() => toggleBlock(b.id)}>
-                      ${on ? '👁' : '○'} ${b.label}
-                    </span>`;
-                  })}
-                </div>`)}`;
-        })()}
-        ${(() => {
-          // Input channels (i3/i4, UNI). The hardware has no output — nothing in
-          // HA can make it emit a press — so a channel's tile row becomes a
-          // button only once it has an action to run.
-          const chans = dev ? detectInputChannels(dev, this.hass.states as any) : [];
-          if (!chans.length) return nothing;
-          const acts: Record<string, InputActionConfig> = devStyle.input_actions ?? {};
-          // A channel can drive several entities — the field takes a comma-separated
-          // list and stores a bare string when there is only one, so simple configs
-          // stay simple.
-          const entText = (e?: string | string[]) => Array.isArray(e) ? e.join(', ') : (e ?? '');
-          const parseEnt = (v: string): string | string[] | undefined => {
-            const parts = v.split(',').map(x => x.trim()).filter(Boolean);
-            return parts.length > 1 ? parts : (parts[0] || undefined);
-          };
-          const setAct = (key: string, patch: Partial<InputActionConfig> | null) => {
-            const next: Record<string, InputActionConfig> = { ...acts };
-            if (!patch) delete next[key];
-            else next[key] = { ...(next[key] ?? { action: 'none' }), ...patch } as InputActionConfig;
-            this._setDeviceStyle(deviceId, { input_actions: Object.keys(next).length ? next : undefined });
-          };
-          return html`
-            <div class="field-lbl" style="margin:8px 0 2px">Input actions</div>
-            <div class="hint" style="margin-bottom:6px">
-              An input device has no output of its own, so HA can't replay a press.
-              Give a channel an action and its tile row becomes a button that runs it.
-            </div>
-            ${chans.map(ch => {
-              const cur = acts[ch.entityId] ?? acts[String(ch.channel)];
-              const kind = cur?.action ?? 'none';
-              return html`
-                <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">
-                  <span style="flex:0 0 34%;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-                    title=${ch.entityId}>${ch.label}</span>
-                  <select class="inline-text" style="flex:1"
-                    @change=${(e: Event) => {
-                      const v = (e.target as HTMLSelectElement).value as InputActionConfig['action'];
-                      setAct(ch.entityId, v === 'none' ? null : { action: v });
-                    }}>
-                    <option value="none" ?selected=${kind === 'none'}>— none (status only) —</option>
-                    <option value="perform-action" ?selected=${kind === 'perform-action'}>Run script / service</option>
-                    <option value="toggle" ?selected=${kind === 'toggle'}>Toggle entity</option>
-                    <option value="more-info" ?selected=${kind === 'more-info'}>Show more-info</option>
-                  </select>
-                </div>
-                ${kind === 'perform-action' ? html`
-                  <div style="display:flex;gap:6px;margin:0 0 6px 34%">
-                    <input type="text" class="inline-text" style="flex:1" placeholder="script.hall_lights"
-                      .value=${cur?.perform_action ?? ''}
-                      @change=${(e: Event) => setAct(ch.entityId, { perform_action: (e.target as HTMLInputElement).value.trim() || undefined })}/>
-                    <input type="text" class="inline-text" style="flex:1" placeholder="target entity — optional"
-                      .value=${entText(cur?.entity)}
-                      @change=${(e: Event) => setAct(ch.entityId, { entity: parseEnt((e.target as HTMLInputElement).value) })}/>
-                  </div>` : nothing}
-                ${kind === 'toggle' ? html`
-                  <div style="margin:0 0 6px 34%">
-                    <input type="text" class="inline-text" style="width:100%"
-                      placeholder="light.hall — or several, comma separated"
-                      .value=${entText(cur?.entity)}
-                      @change=${(e: Event) => setAct(ch.entityId, { entity: parseEnt((e.target as HTMLInputElement).value) })}/>
-                  </div>` : nothing}
-                ${kind === 'more-info' ? html`
-                  <div style="margin:0 0 6px 34%">
-                    <input type="text" class="inline-text" style="width:100%"
-                      placeholder=${ch.entityId}
-                      .value=${entText(cur?.entity)}
-                      @change=${(e: Event) => setAct(ch.entityId, { entity: parseEnt((e.target as HTMLInputElement).value) })}/>
-                  </div>` : nothing}
-                ${kind !== 'none' ? html`
-                  <div style="display:flex;gap:6px;align-items:center;margin:0 0 8px 34%">
-                    <span style="font-size:11px;color:var(--secondary-text-color);flex:0 0 42px">On hold</span>
-                    <select class="inline-text" style="flex:1"
-                      @change=${(e: Event) => {
-                        const v = (e.target as HTMLSelectElement).value;
-                        setAct(ch.entityId, { hold_action: v === 'none' ? undefined : { action: 'dim' } });
-                      }}>
-                      <option value="none" ?selected=${(cur?.hold_action?.action ?? 'none') === 'none'}>— nothing —</option>
-                      <option value="dim" ?selected=${cur?.hold_action?.action === 'dim'}>Dim the light while held</option>
-                    </select>
-                    ${cur?.hold_action?.action === 'dim' ? html`
-                      <input type="text" class="inline-text" style="flex:1"
-                        placeholder=${entText(cur?.entity) || 'light.…'}
-                        .value=${entText(cur?.hold_action?.entity)}
-                        @change=${(e: Event) => {
-                          const v = parseEnt((e.target as HTMLInputElement).value);
-                          setAct(ch.entityId, { hold_action: { ...(cur?.hold_action ?? { action: 'dim' }), entity: v } });
-                        }}/>` : nothing}
-                  </div>
-                  ${cur?.hold_action?.action === 'dim' ? html`
-                    <div class="hint" style="margin:-4px 0 8px 34%">
-                      Hold brightens, release, hold again darkens — it alternates each hold.
-                    </div>` : nothing}
-                  <div style="display:flex;gap:6px;align-items:center;margin:0 0 8px 34%">
-                    <span style="font-size:11px;color:var(--secondary-text-color);flex:0 0 42px">Double</span>
-                    <select class="inline-text" style="flex:1"
-                      @change=${(e: Event) => {
-                        const v = (e.target as HTMLSelectElement).value as InputActionConfig['action'];
-                        setAct(ch.entityId, { double_tap_action: v === 'none' ? undefined : { action: v } });
-                      }}>
-                      <option value="none" ?selected=${(cur?.double_tap_action?.action ?? 'none') === 'none'}>— nothing —</option>
-                      <option value="perform-action" ?selected=${cur?.double_tap_action?.action === 'perform-action'}>Run script / service</option>
-                      <option value="toggle" ?selected=${cur?.double_tap_action?.action === 'toggle'}>Toggle entity</option>
-                    </select>
-                    ${cur?.double_tap_action && cur.double_tap_action.action !== 'none' ? html`
-                      <input type="text" class="inline-text" style="flex:1"
-                        placeholder=${cur.double_tap_action.action === 'perform-action' ? 'light.turn_on' : entText(cur?.entity) || 'light.…'}
-                        .value=${cur.double_tap_action.action === 'perform-action'
-                          ? (cur.double_tap_action.perform_action ?? '')
-                          : entText(cur.double_tap_action.entity)}
-                        @change=${(e: Event) => {
-                          const raw = (e.target as HTMLInputElement).value;
-                          const patch = cur!.double_tap_action!.action === 'perform-action'
-                            ? { perform_action: raw.trim() || undefined }
-                            : { entity: parseEnt(raw) };
-                          setAct(ch.entityId, { double_tap_action: { ...cur!.double_tap_action!, ...patch } });
-                        }}/>` : nothing}
-                  </div>
-                  ${cur?.double_tap_action && cur.double_tap_action.action !== 'none' ? html`
-                    <div class="hint" style="margin:-4px 0 8px 34%">
-                      A double tap delays the single tap by ~250ms on this channel so the two can be told apart.
-                    </div>` : nothing}
-                  ${this._adv(html`
-                    <div style="display:flex;gap:6px;align-items:center;margin:0 0 8px 34%">
-                      <span style="font-size:11px;color:var(--secondary-text-color);flex:0 0 42px">Dropdown</span>
-                      <input type="text" class="inline-text" style="flex:1"
-                        placeholder="select.wled_preset — optional"
-                        .value=${cur?.select_chip?.entity ?? ''}
-                        @change=${(e: Event) => {
-                          const v = (e.target as HTMLInputElement).value.trim();
-                          setAct(ch.entityId, { select_chip: v ? { entity: v } : undefined });
-                        }}/>
-                    </div>`)}` : nothing}
-              `;
-            })}
-          `;
-        })()}
-        ${!narrow || rel!.chips.size ? html`
-        <div class="field-lbl" style="margin:6px 0 4px">Sensor chips</div>
-        ${(() => {
-          const areaSel = dev?.area ? this._config.area_styles?.[dev.area]?.sensors : undefined;
-          return this._chipPicker(
-            devStyle.sensors,
-            areaSel?.length ? areaSel : this._config.sensors,
-            areaSel?.length ? `area (${dev?.area})` : 'global',
-            (next) => this._setDeviceStyle(deviceId, { sensors: next }),
-            narrow ? rel!.chips : undefined,
-          );
-        })()}` : nothing}
-        ${this._adv(switchEnts.length ? html`
-          <div class="field-lbl" style="margin:6px 0 4px">Entity animations</div>
-          <div class="ent-anim-header">
-            <span class="ent-anim-hcol name">Entity</span>
-            <span class="ent-anim-hcol">When ON</span>
-            <span class="ent-anim-hcol">When OFF</span>
-            <span class="ent-anim-hcol">Speed</span>
-          </div>
-          ${switchEnts.map(e => {
-            const state = this.hass?.states[e.entity_id];
-            const name = (state?.attributes as any)?.friendly_name ?? e.entity_id.split('.').pop() ?? e.entity_id;
-            const curOn  = (entityAnims[e.entity_id]?.on  ?? 'none') as EntityAnimationType;
-            const curOff = (entityAnims[e.entity_id]?.off ?? 'none') as EntityAnimationType;
-            const curSpd = entityAnims[e.entity_id]?.speed ?? 1;
-            return html`
-              <div class="ent-anim-row">
-                <span class="ent-anim-name">${name}</span>
-                ${this._iconPicker(
-                  `ent-on-${deviceId}-${e.entity_id}`,
-                  curOn === 'none' ? undefined : curOn,
-                  true,
-                  (val) => setEntityAnim(e.entity_id, 'on', val ?? 'none')
-                )}
-                ${this._iconPicker(
-                  `ent-off-${deviceId}-${e.entity_id}`,
-                  curOff === 'none' ? undefined : curOff,
-                  false,
-                  (val) => setEntityAnim(e.entity_id, 'off', val ?? 'none')
-                )}
-                <select class="anim-select" .value=${String(curSpd)}
-                  @change=${(ev: Event) => setEntityAnim(e.entity_id, 'speed', (ev.target as HTMLSelectElement).value)}>
-                  <option value="0.25" ?selected=${curSpd === 0.25}>0.25× Slowest</option>
-                  <option value="0.5"  ?selected=${curSpd === 0.5}>0.5× Slow</option>
-                  <option value="1"    ?selected=${curSpd === 1}>1× Normal</option>
-                  <option value="1.5"  ?selected=${curSpd === 1.5}>1.5× Fast</option>
-                  <option value="2"    ?selected=${curSpd === 2}>2× Faster</option>
-                  <option value="3"    ?selected=${curSpd === 3}>3× Rapid</option>
-                  <option value="5"    ?selected=${curSpd === 5}>5× Frantic</option>
-                </select>
-              </div>`;
-          })}
-        ` : nothing)}
-        ${this._adv(dev?.entities.length ? html`
-          <div class="field-lbl" style="margin:6px 0 4px">Hidden entities
-            <span style="font-weight:400;color:var(--t3)">— removed from the detail sheet's entity list</span></div>
-          <div class="block-toggles">
-            ${dev.entities.map(e => {
-              const hiddenList = this._config.hidden_entities ?? [];
-              const hidden = hiddenList.includes(e.entity_id);
-              const nm = (this.hass?.states[e.entity_id]?.attributes as any)?.friendly_name
-                ?? e.entity_id.split('.').pop() ?? e.entity_id;
-              return html`<span class="block-tog ${hidden ? '' : 'on'}"
-                @click=${() => this._set('hidden_entities',
-                  hidden ? hiddenList.filter(x => x !== e.entity_id) : [...hiddenList, e.entity_id])}>
-                ${hidden ? '🚫' : '👁'} ${nm}</span>`;
-            })}
-          </div>
-        ` : nothing)}
-        <button class="room-style-btn" style="align-self:flex-end;margin-top:2px" @click=${() => {
-          const updated = { ...(this._config.device_styles ?? {}) };
-          delete updated[deviceId];
-          this._set('device_styles', Object.keys(updated).length ? updated : undefined);
-        }}>Clear device style</button>
       </div>`;
   }
 
@@ -3043,6 +2638,68 @@ export class HADeviceDashboardEditor extends LitElement {
       </div>`;
   }
 
+  /** The base style the card renders at its own (global) layer — no scope
+   *  involved, so safe to call from _scopeValues without recursion. */
+  private _globalEffectiveStyle(): TileStyle {
+    return resolveStyle(this._baseStyleOf(this._config.tile_style)).style;
+  }
+
+  /**
+   * The base style the selected scope's tiles actually render as: this scope's
+   * own tile_style or the inherited one, the smart-styles profile default where
+   * the scope names a device or type, `custom:<key>` unwrapped to its base, and
+   * legacy aliases (hero, ring, …) remapped exactly as the renderer does.
+   * The Blocks and Elements rows key off this — under-resolving it is how the
+   * editor offered a drag canvas that the tile then ignored.
+   */
+  private _effectiveScopeStyle(): TileStyle {
+    const sc = this._designScope;
+    let raw = (this._scopeValues()['tile_style'] as TileStyle | undefined)
+      ?? (this._inheritedFrom('tile_style')?.value as TileStyle | undefined);
+    if (!raw && this._config.smart_tile_styles) {
+      if (sc.kind === 'device') {
+        const dev = this._allDevices().find(d => d.device_id === sc.id);
+        if (dev) raw = profileDefaultTileStyle(this._deviceProfile(dev), dev);
+      } else if (sc.kind === 'type') {
+        raw = PROFILE_DEFAULT_TILE_STYLE[sc.profile];
+      }
+    }
+    return resolveStyle(this._baseStyleOf(raw)).style;
+  }
+
+  /** Global element toggles land in style_presets[<style>].elements — the
+   *  cascade's card-wide rung for elements. There is no top-level `elements`
+   *  key: writing one looked saved in the editor and did nothing on the card. */
+  private _setGlobalElements(els: Record<string, boolean> | undefined): void {
+    const style = this._globalEffectiveStyle();
+    const presets = { ...(this._config.style_presets ?? {}) };
+    const entry = { ...(presets[style] ?? {}) };
+    if (els && Object.keys(els).length) entry.elements = els; else delete entry.elements;
+    if (Object.keys(entry).length) presets[style] = entry; else delete presets[style];
+    this._set('style_presets', Object.keys(presets).length ? presets : undefined);
+  }
+
+  /** What one element resolves to when the current scope sets nothing: the
+   *  rungs above it in cascade.elementVisible's order that the editor can know
+   *  (which view a dashboard has active is unknowable here, so the view rung is
+   *  skipped), ending at the style's preset and the STYLE_ELEMENTS default. */
+  private _inheritedElementValue(style: TileStyle, id: string, def: boolean): boolean {
+    const c = this._config;
+    const sc = this._designScope;
+    const rungs: Array<Record<string, boolean> | undefined> = [];
+    if (sc.kind === 'device') {
+      const dev = this._allDevices().find(d => d.device_id === sc.id);
+      if (dev) {
+        rungs.push(c.profile_styles?.[this._deviceProfile(dev)]?.elements);
+        if (dev.area) rungs.push(c.area_styles?.[dev.area]?.elements);
+      }
+    }
+    // At Global the preset IS this scope's own value, not an inherited one.
+    if (sc.kind !== 'global') rungs.push(c.style_presets?.[style]?.elements);
+    for (const r of rungs) { const val = r?.[id]; if (val !== undefined) return val; }
+    return def;
+  }
+
   /** Write a patch into whichever config block the current scope owns. One place,
    *  so a control never needs to know which layer it is being rendered at. */
   private _patchScope(patch: Record<string, unknown>): void {
@@ -3050,6 +2707,10 @@ export class HADeviceDashboardEditor extends LitElement {
     switch (sc.kind) {
       case 'global':
         for (const [k, v] of Object.entries(patch)) {
+          if (k === 'elements') {
+            this._setGlobalElements(v as Record<string, boolean> | undefined);
+            continue;
+          }
           this._set(k, v);
         }
         return;
@@ -3070,7 +2731,15 @@ export class HADeviceDashboardEditor extends LitElement {
     const sc = this._designScope;
     const c = this._config;
     switch (sc.kind) {
-      case 'global': return c as unknown as Record<string, unknown>;
+      case 'global': {
+        // Elements live in style_presets at this layer (see _setGlobalElements);
+        // surface them under the same key so _designRow's badge and reset see
+        // the value the card actually reads.
+        const els = c.style_presets?.[this._globalEffectiveStyle()]?.elements;
+        return (els !== undefined
+          ? { ...(c as unknown as Record<string, unknown>), elements: els }
+          : c) as unknown as Record<string, unknown>;
+      }
       case 'view': return ((c.views ?? []).find(v => v.id === sc.id) ?? {}) as unknown as Record<string, unknown>;
       case 'room': return (c.area_styles?.[sc.name] ?? {}) as unknown as Record<string, unknown>;
       case 'type': return (c.profile_styles?.[sc.profile] ?? {}) as unknown as Record<string, unknown>;
@@ -3237,11 +2906,21 @@ export class HADeviceDashboardEditor extends LitElement {
       // monolithic renderer whose parts are toggled with Elements. Resolve it
       // once, the same way for the Blocks and Elements rows, so the two can
       // never disagree about which one applies.
-      const effStyle = (this._baseStyleOf(
-        (v['tile_style'] as TileStyle | undefined)
-        ?? (this._inheritedFrom('tile_style')?.value as TileStyle | undefined))
-        ?? 'default') as TileStyle;
+      const effStyle = this._effectiveScopeStyle();
       const effLabel = TILE_STYLE_OPTIONS.find(o => o.v === effStyle)?.label ?? effStyle;
+      // A lower layer can override tile_style back to 'default', and those
+      // tiles still read config.tile_layout — so at Global the canvas must
+      // stay reachable even when the card-wide style is something else, or
+      // the layout they render becomes un-arrangeable from anywhere.
+      const adaptiveBelow = sc.kind === 'global' && effStyle !== 'default' && (() => {
+        const isDefault = (t?: TileStyle) =>
+          t !== undefined && resolveStyle(this._baseStyleOf(t)).style === 'default';
+        return Object.values(this._config.device_styles ?? {}).some(d => isDefault(d.tile_style))
+          || Object.values(this._config.profile_styles ?? {}).some(p => isDefault(p.tile_style))
+          || Object.values(this._config.area_styles ?? {}).some(a => isDefault(a.tile_style))
+          || (this._config.views ?? []).some(vw => isDefault(vw.tile_style));
+      })();
+      const showCanvas = effStyle === 'default' || adaptiveBelow;
       return html`
       ${this._designRow('Colour theme', 'theme',
         sc.kind === 'global'
@@ -3264,8 +2943,14 @@ export class HADeviceDashboardEditor extends LitElement {
         ))}
 
       ${this._designRow('Blocks', 'tile_layout',
-        effStyle === 'default'
-          ? this._renderLayoutCanvas(
+        showCanvas
+          ? html`
+            ${adaptiveBelow ? html`<div class="hint" style="margin-bottom:4px">
+                These tiles render as <b>${effLabel}</b>, but some rooms, types or
+                devices switch back to the adaptive style — this layout is what
+                those tiles use.
+              </div>` : nothing}
+            ${this._renderLayoutCanvas(
               v['tile_layout'] as TileLayout | undefined,
               // The canvas needs something concrete to draw when this layer sets
               // nothing, so hand it whatever is inherited — the layout the tiles
@@ -3274,7 +2959,7 @@ export class HADeviceDashboardEditor extends LitElement {
                 (this._inheritedFrom('tile_layout')?.value as TileLayout | undefined)
                 ?? PROFILE_DEFAULT_BLOCKS.generic!)!,
               (layout) => this._patchScope({ tile_layout: layout }),
-            )
+            )}`
           // Offering the drag canvas anyway would be a lie — the user arranges
           // blocks, the tile ignores them. Say which style is in force instead.
           : html`<div class="hint">
@@ -3283,7 +2968,7 @@ export class HADeviceDashboardEditor extends LitElement {
               Use Elements below to show or hide this style's parts, or switch
               Tile style to Default to arrange blocks.
             </div>`,
-        effStyle === 'default'
+        showCanvas
           ? 'Drag to reorder or drop into a row. Blocks only apply to the adaptive tile style.'
           : undefined)}
 

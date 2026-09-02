@@ -97,12 +97,13 @@ const STYLES = [
   ['default','Default'],['power-monitor','Power'],['light-control','Light'],
   ['climate-control','Climate'],['cover-control','Cover'],['sensor-card','Sensor'],['input-control','Inputs'],['scene-button','Scene'],
 ];
+/* Third field marks an OPT-IN element (def:false in src) — off until enabled. */
 const ELEMENTS = {
-  'power-monitor':  [['toggle','On/off button'],['graph','Sparkline graph'],['secondary','Secondary readings (V/A/kWh)'],['uptime','Uptime badge'],['lower_body','Lower body (blocks)']],
+  'power-monitor':  [['toggle','On/off button'],['graph','Sparkline graph'],['secondary','Secondary readings (V/A/kWh)'],['header_chips','Chips in the name row',false],['uptime','Uptime badge'],['lower_body','Lower body (blocks)']],
   'light-control':  [['color_wheel','Colour wheel'],['brightness','Brightness slider'],['color_temp','Colour temperature'],['white','White channel'],['effects','Effects'],['power','Power reading']],
   'climate-control':[['heating_badge','Heating badge'],['dial','Temperature dial'],['adjust_buttons','+/− buttons'],['stats','Stats row'],['presets','Preset buttons']],
   'cover-control':  [['position_pct','Position %'],['shutter_graphic','Shutter graphic'],['moving_label','Moving label'],['buttons','Open / stop / close']],
-  'sensor-card':    [['primary_value','Primary value'],['trend','Trend arrow'],['graph','Sparkline graph'],['secondary','Secondary chips']],
+  'sensor-card':    [['primary_value','Primary value'],['trend','Trend arrow'],['graph','Sparkline graph'],['secondary','Secondary chips'],['header_chips','Chips in the name row',false]],
   'input-control':  [['name','Name'],['keypad','Channel keys'],['input_rows','Unassigned channel rows'],['target_state','Channel name under the key'],['last_event','Last-pressed time']],
   'scene-button':   [['icon','Icon'],['name','Name'],['timestamp','Last-triggered time'],['input_rows','Input channel rows']],
 };
@@ -115,8 +116,10 @@ const SENSOR_GROUPS = {
 };
 const BLOCKS = [['name_row','Name & toggle'],['sensors','Sensor chips'],['graph','Graph'],['dimmer','Brightness / colour'],['cover_controls','Cover controls'],['trv_control','Temperature control'],['valve_controls','Valve controls'],['input_channels','Input channels'],['relay_channels','Relay channels'],['power_bar','Power bar'],['virtual_controls','Virtual controls'],['delegated_controls','Native controls'],['badges','Type & gen badges']];
 
-/* ── state: per style { variant, chipsMode, chips[], blocksMode, blocks[], hidden:Set } ── */
-function fresh(){ const s={}; STYLES.forEach(([k])=>{ s[k]={ variant:'big-number', chipsMode:'inherit', chips:[], blocksMode:'inherit', blocks:BLOCKS.map(b=>b[0]), hidden:{} }; }); return s; }
+/* ── state: per style { variant, chipsMode, chips[], blocksMode, blocks[], ov } ──
+   `ov` holds explicit element overrides (true or false); an element at its own
+   default carries no entry, so opt-in elements (def:false) export `true`. */
+function fresh(){ const s={}; STYLES.forEach(([k])=>{ s[k]={ variant:'big-number', chipsMode:'inherit', chips:[], blocksMode:'inherit', blocks:BLOCKS.map(b=>b[0]), ov:{} }; }); return s; }
 let ST = fresh();
 let active='power-monitor', drag=null;
 const $=x=>document.getElementById(x);
@@ -127,7 +130,7 @@ function styleDirty(k){
   if(k==='power-monitor' && s.variant!=='big-number') return true;
   if(s.chipsMode==='curated') return true;
   if(k==='default' && s.blocksMode==='custom') return true;
-  if(Object.values(s.hidden).some(v=>v)) return true;
+  if(Object.keys(s.ov).length) return true;
   return false;
 }
 
@@ -158,11 +161,12 @@ function renderEditor(){
   if(els){
     ed.appendChild(el('div','bh',`<span class="t">Elements</span><span class="l"></span><span class="note">green = shown</span>`));
     const wrap=el('div','els');
-    els.forEach(([id,lbl])=>{
-      const on=!s.hidden[id];
+    els.forEach(([id,lbl,def])=>{
+      const dflt=def!==false;
+      const on=s.ov[id]!==undefined?s.ov[id]:dflt;
       const row=el('div','el'); row.innerHTML=`<span class="en">${lbl}</span><span class="eid">${id}</span>`;
       const sw=el('label','sw'); sw.innerHTML=`<input type="checkbox" ${on?'checked':''}><span class="tk"></span><span class="kn"></span>`;
-      sw.querySelector('input').onchange=e=>{ if(e.target.checked) delete s.hidden[id]; else s.hidden[id]=true; renderAll(); };
+      sw.querySelector('input').onchange=e=>{ if(e.target.checked===dflt) delete s.ov[id]; else s.ov[id]=e.target.checked; renderAll(); };
       row.appendChild(sw); wrap.appendChild(row);
     });
     ed.appendChild(wrap);
@@ -213,8 +217,8 @@ function buildPresets(){
     if(k==='power-monitor' && s.variant!=='big-number') p.variant=s.variant;
     if(s.chipsMode==='curated') p.sensors=[...s.chips];
     if(k==='default' && s.blocksMode==='custom') p.tile_layout=[...s.blocks];
-    const hidden=Object.keys(s.hidden).filter(id=>s.hidden[id]);
-    if(hidden.length){ p.elements={}; hidden.forEach(id=>p.elements[id]=false); }
+    const ovIds=Object.keys(s.ov);
+    if(ovIds.length){ p.elements={}; ovIds.forEach(id=>p.elements[id]=s.ov[id]); }
     if(Object.keys(p).length) out[k]=p;
   });
   return out;

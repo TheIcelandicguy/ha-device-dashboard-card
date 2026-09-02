@@ -33,7 +33,7 @@ import type {
   HADeviceDashboardConfig, HADevice, DeviceProfile, TileStyle, TileLayout,
   ViewConfig, EnergyPeriod, CustomStyleDef, PowerMonitorVariant, ThemePreset, TileSize,
 } from './types';
-import { PROFILE_DEFAULT_BLOCKS, PROFILE_DEFAULT_SENSORS, profileDefaultTileStyle } from './helpers';
+import { PROFILE_DEFAULT_BLOCKS, PROFILE_DEFAULT_SENSORS, profileDefaultTileStyle, STYLE_ELEMENTS } from './helpers';
 
 /** Everything the cascades need to resolve one device. */
 export interface CascadeInput {
@@ -154,21 +154,30 @@ export function showGraphs(i: CascadeInput): boolean {
   return i.config.show_graphs ?? false;
 }
 
+/** The default STYLE_ELEMENTS declares for an element of a style: true unless
+ *  the entry carries `def: false` (opt-in placement elements). One table owns
+ *  the answer — call sites must not repeat the literal, or the renderer and
+ *  the editor drift the moment the table changes. */
+export function elementDefault(style: TileStyle, id: string): boolean {
+  return STYLE_ELEMENTS[style]?.find(e => e.id === id)?.def ?? true;
+}
+
 /**
  * Whether one part of the chosen tile style is shown.
  * device → type → room → view → saved style → preset → the element's own
- * default. Mirrors the tile_style cascade, so a view that switches style can
- * adjust its parts. `def` is true for plain show/hide elements; placement
- * elements (header_chips) pass false so they are opt-in.
+ * default from STYLE_ELEMENTS (true unless the entry says `def: false`).
+ * Mirrors the tile_style cascade, so a view that switches style can adjust
+ * its parts.
  */
-export function elementVisible(i: CascadeInput, id: string, def = true): boolean {
+export function elementVisible(i: CascadeInput, id: string): boolean {
+  const style = effectiveStyle(i);
   return deviceStyle(i)?.elements?.[id]
     ?? profileStyle(i)?.elements?.[id]
     ?? areaStyle(i)?.elements?.[id]
     ?? i.view?.elements?.[id]
     ?? customDef(i)?.elements?.[id]
-    ?? i.config.style_presets?.[effectiveStyle(i)]?.elements?.[id]
-    ?? def;
+    ?? i.config.style_presets?.[style]?.elements?.[id]
+    ?? elementDefault(style, id);
 }
 
 /** Energy window: device → type → room → view → card → lifetime total. */

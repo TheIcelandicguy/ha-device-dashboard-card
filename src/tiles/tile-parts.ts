@@ -2,6 +2,15 @@ import { html, nothing, TemplateResult } from 'lit';
 import type { HADevice } from '../types';
 import type { TileCtx, InputChannel } from './tile-context';
 
+/** header_chips (an opt-in element) moves a style's secondary chips into the
+ *  name row; the style's own chip placement then stands down — the chips move,
+ *  they don't duplicate. Gated on 'secondary' too, so hiding the readings
+ *  hides them wherever they sit. One predicate for every style that supports
+ *  the placement, so the mutual exclusion can't drift per style. */
+export function chipsInHeader(ctx: TileCtx): boolean {
+  return ctx.showEl('header_chips') && ctx.showEl('secondary');
+}
+
 /** Standard name + online-dot header used across alt-style tiles. */
 export function renderNameDot(device: HADevice, online: boolean, className = 'ts-hero-name'): TemplateResult {
   return html`

@@ -1091,6 +1091,41 @@ export function migrateConfig<T extends {
     }
   }
 
+  // The Design panel's Global scope used to write element toggles to a
+  // top-level `elements` key that nothing reads — the cascade's card-wide rung
+  // for elements is style_presets[<style>].elements. Relocate the stray key to
+  // the preset of the style the card renders globally (values already set in
+  // the preset win), so those saved toggles finally take effect; if the global
+  // style is adaptive or unknown the key has no meaning and is dropped.
+  const cfgEls = config as unknown as {
+    elements?: Record<string, boolean>;
+    tile_style?: TileStyle;
+    custom_styles?: Record<string, { base?: TileStyle }>;
+    style_presets?: Record<string, { elements?: Record<string, boolean> }>;
+  };
+  let relocatedPresets: typeof cfgEls.style_presets;
+  let dropElements = false;
+  if (cfgEls.elements && typeof cfgEls.elements === 'object') {
+    let base = cfgEls.tile_style;
+    if (typeof base === 'string' && base.startsWith('custom:')) {
+      base = cfgEls.custom_styles?.[base.slice(7)]?.base ?? 'default';
+    }
+    // Legacy aliases, mirroring cascade's LEGACY_VARIANT (helpers cannot
+    // import cascade — cascade imports helpers).
+    const LEGACY: Record<string, TileStyle> = {
+      hero: 'power-monitor', ring: 'power-monitor', spark: 'power-monitor',
+      hbar: 'power-monitor', list: 'power-monitor', command: 'scene-button',
+    };
+    const styleKey = (base && LEGACY[base]) || base;
+    if (styleKey && STYLE_ELEMENTS[styleKey]) {
+      const entry = { ...(cfgEls.style_presets?.[styleKey] ?? {}) };
+      entry.elements = { ...cfgEls.elements, ...(entry.elements ?? {}) };
+      relocatedPresets = { ...(cfgEls.style_presets ?? {}), [styleKey]: entry };
+    }
+    dropElements = true;
+    changed = true;
+  }
+
   if (!changed) return config;
   const out: T = { ...config };
   if (style !== config.style) {
@@ -1100,6 +1135,10 @@ export function migrateConfig<T extends {
   if (theme !== config.theme) (out as { theme?: unknown }).theme = theme;
   if (graphSensors) out.graph_sensors = graphSensors;
   if (graphColors)  out.graph_sensor_colors = graphColors;
+  if (dropElements) {
+    delete (out as { elements?: unknown }).elements;
+    if (relocatedPresets) (out as { style_presets?: unknown }).style_presets = relocatedPresets;
+  }
   return out;
 }
 

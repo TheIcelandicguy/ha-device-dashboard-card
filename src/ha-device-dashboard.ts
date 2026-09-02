@@ -1323,25 +1323,45 @@ export class HADeviceDashboard extends LitElement {
   /** Compound key for graph data cache: entityId::hours */
   private _gk(entityId: string, hours: number): string { return `${entityId}::${hours}`; }
 
+  /** Derived live-appended series, memoised per (entityId, hours). Keyed on
+   *  the cached history array's identity plus the state's last_updated, so a
+   *  render where nothing changed returns the SAME array — array identity and
+   *  byte-identical SVG attribute strings are what let Lit skip rewriting
+   *  every sparkline on the fleet each throttled render. */
+  private _liveSeriesCache = new Map<string, {
+    src: Array<{ t: number; v: number }>; lu: string; out: Array<{ t: number; v: number; live?: boolean }>;
+  }>();
+
   /** History series with the live state appended as a final "now" point.
    *  The 24h series is statistics rows — 5-minute MEANS — and the cache holds
    *  them for up to 5 minutes, so a graph's end always sits slightly behind
    *  (and smoothed away from) the live reading the sensor chips show: the same
    *  device read 64.4 °C on its chip and 64.2 °C at the end of its graph.
    *  Pinning the line's end to the live state makes the graph's value label
-   *  agree with the rest of the tile. Returns a fresh array; the cache is
-   *  never mutated. */
-  private _withLivePoint(
+   *  agree with the rest of the tile.
+   *
+   *  The point is stamped with the state's last_updated (stable between state
+   *  changes, unlike Date.now(), which shifted every x coordinate on every
+   *  render) and marked `live: true` so scaling code can exclude an
+   *  instantaneous reading from a mean-based series' min/max. The history
+   *  cache is never mutated. */
+  private _seriesWithLive(
     entityId: string,
-    points: Array<{ t: number; v: number }> | undefined,
-  ): Array<{ t: number; v: number }> | undefined {
+    hours: number,
+  ): Array<{ t: number; v: number; live?: boolean }> | undefined {
+    const points = this._graphData.get(this._gk(entityId, hours));
     if (!points?.length) return points;
-    const v = parseFloat(this.hass.states[entityId]?.state ?? '');
+    const st = this.hass.states[entityId];
+    const v = parseFloat(st?.state ?? '');
     if (isNaN(v)) return points;
-    // Stamped "now", not last_updated: the value is what the sensor reads at
-    // render time, even when its last state change is older than the series.
-    const t = Date.now();
-    return t > points[points.length - 1].t ? [...points, { t, v }] : points;
+    const t = Date.parse(st.last_updated ?? '') || 0;
+    if (!(t > points[points.length - 1].t)) return points;
+    const key = this._gk(entityId, hours);
+    const hit = this._liveSeriesCache.get(key);
+    if (hit && hit.src === points && hit.lu === st.last_updated) return hit.out;
+    const out = [...points, { t, v, live: true }];
+    this._liveSeriesCache.set(key, { src: points, lu: st.last_updated, out });
+    return out;
   }
 
   private _requestGraphData(entityId: string, hours?: number) {
@@ -1720,7 +1740,7 @@ export class HADeviceDashboard extends LitElement {
     // Key each row by entityId so Lit tracks row identity across renders as
     // history arrives (loading → data).
     const rowData = entities.map((e) => {
-      const points = this._withLivePoint(e.entityId, this._graphData.get(this._gk(e.entityId, graphHours)));
+      const points = this._seriesWithLive(e.entityId, graphHours);
       this._requestGraphData(e.entityId, graphHours);  // no-op if already fetched/fetching
       return { e, points };
     });
@@ -1746,9 +1766,14 @@ export class HADeviceDashboard extends LitElement {
       }
 
       const vals = points.map(p => p.v);
+      // Scale off the history only: the appended live point is an instantaneous
+      // reading against 5-minute means, and letting it set the range would
+      // flatten the whole series exactly when a load spikes. It still draws
+      // (clipped at the edge if it exceeds the range) and still sets the label.
+      const histVals = points.filter(p => !(p as { live?: boolean }).live).map(p => p.v);
       const srng = (this._config.graph_style?.sensor_ranges ?? {})[dc] ?? {};
-      const min = srng.min ?? Math.min(...vals);
-      const max = srng.max ?? Math.max(...vals);
+      const min = srng.min ?? Math.min(...histVals);
+      const max = srng.max ?? Math.max(...histVals);
       const range = max - min || 1;
       const tMin = points[0].t, tMax = points[points.length - 1].t;
       const tRange = (tMax - tMin) || 1;
@@ -1765,7 +1790,7 @@ export class HADeviceDashboard extends LitElement {
       // Peak/min dots mark the actual data extremes — NOT the configured
       // y-axis range (srng.min/max), which usually isn't a literal data value,
       // so vals.indexOf(range bound) would be -1 and points[-1] would throw.
-      const dataMax = Math.max(...vals), dataMin = Math.min(...vals);
+      const dataMax = Math.max(...histVals), dataMin = Math.min(...histVals);
       let maxIdx = vals.indexOf(dataMax), minIdx = vals.indexOf(dataMin);
       if (maxIdx < 0) maxIdx = 0;
       if (minIdx < 0) minIdx = 0;
@@ -2603,8 +2628,7 @@ export class HADeviceDashboard extends LitElement {
       return s && (s.attributes as HassAttrs)?.device_class === 'power';
     });
     if (!powerEnt) return [];
-    return this._withLivePoint(powerEnt.entity_id,
-      this._graphData.get(this._gk(powerEnt.entity_id, this._config.graph_hours ?? 24))) ?? [];
+    return this._seriesWithLive(powerEnt.entity_id, this._config.graph_hours ?? 24) ?? [];
   }
   // ── Style resolution helpers ─────────────────────────────────────────────
 
@@ -2676,10 +2700,10 @@ export class HADeviceDashboard extends LitElement {
     const sw = getPrimarySwitch(device);
     const isOn = sw?.isOn ?? false;
     // Per-element visibility for this tile's style: device → area → style preset →
-    // the element's default. Renderers call showEl(id); an unset id defaults to
-    // shown unless the call passes its own default (opt-in placement elements).
+    // the element's default from STYLE_ELEMENTS (opt-in elements declare
+    // `def: false` there — the one table owns the default, not the call sites).
     const _cin = this._cascade(device, profile);
-    const showEl = (id: string, def?: boolean): boolean => cascade.elementVisible(_cin, id, def);
+    const showEl = (id: string): boolean => cascade.elementVisible(_cin, id);
     return {
       showEl,
       hass: this.hass,
@@ -2732,7 +2756,7 @@ export class HADeviceDashboard extends LitElement {
       handleScenePress: (d) => this._handleScenePress(d),
       adjustTrvTemp: (trv, dir) => this._adjustTrvTemp(trv, dir),
       requestGraphData: (id, h) => this._requestGraphData(id, h),
-      getGraphPoints: (id, h) => this._withLivePoint(id, this._graphData.get(this._gk(id, h))) ?? [],
+      getGraphPoints: (id, h) => this._seriesWithLive(id, h) ?? [],
       rgbToHex: (r, g, b) => this._rgbToHex(r, g, b),
       setBrightness: (id, pct) => this._setBrightness(id, pct),
       setColor: (id, hex, w, rgbw) => this._setColor(id, hex, w, rgbw),
@@ -2859,11 +2883,15 @@ export class HADeviceDashboard extends LitElement {
     // (Design tab, device scope) instead of opening the detail sheet: the sheet
     // barely fits the preview pane, and a tap there means "edit this one".
     // Controls on the tile are exempt above, so toggles stay testable.
+    // The event is cancelable and the editor preventDefault()s when it acts —
+    // if nothing is listening (YAML mode unmounts the GUI editor; the card
+    // picker renders previews with no editor at all) the tap falls through to
+    // the detail sheet rather than being silently swallowed.
     if (this.preview || this.hasAttribute('data-edit-preview')) {
-      window.dispatchEvent(new CustomEvent('hdd-editor-goto', {
-        detail: { device: device.device_id },
+      const unhandled = window.dispatchEvent(new CustomEvent('hdd-editor-goto', {
+        detail: { device: device.device_id }, cancelable: true,
       }));
-      return;
+      if (!unhandled) return;
     }
     this._detailDevice = device.device_id;
     this._detailHistoryRange = 24;
