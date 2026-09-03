@@ -37,7 +37,8 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
         : (devSt?.tile_icon_off ?? devSt?.tile_icon);
       let tileIcon: TemplateResult;
       if (tileIconType) {
-        tileIcon = renderAnimSvg(tileIconType as EntityAnimationType, isOn, `--ent-spd:${devSt?.tile_icon_speed ?? 1}`, 'tile-icon');
+        tileIcon = renderAnimSvg(tileIconType as EntityAnimationType, isOn,
+          `--ent-spd:${devSt?.tile_icon_speed ?? 1};--ent-size:${devSt?.tile_icon_size ?? 1}`, 'tile-icon');
       } else if (valve) {
         const pos = valve.position ?? (valve.state === 'open' ? 100 : 0);
         const valveIconType: EntityAnimationType | undefined =

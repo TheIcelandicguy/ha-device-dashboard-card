@@ -249,6 +249,20 @@ try {
   eq('Gen1 hostnames carry a 6-hex id', h.shellyHostname({ entities: [{ entity_id: 'sensor.shellyix3_a4cf12_rssi' }] }), 'shellyix3-a4cf12');
   eq('no hostname when every entity is renamed', h.shellyHostname({ entities: [{ entity_id: 'event.hall_switch_input_1' }] }), undefined);
 
+  console.log('\nattachExtraSensors — readings lent by another device');
+  const lend = Object.keys(hass.states).find(id => id.startsWith('sensor.') && hass.states[id].attributes?.device_class === 'temperature');
+  ok('fixture has a temperature sensor to lend', !!lend);
+  const lent = h.attachExtraSensors(uni, { [i4.device_id]: { extra_sensors: [lend, 'sensor.does_not_exist', lend] } }, hass);
+  const i4b = lent.find(d => d.device_id === i4.device_id);
+  eq('borrower gains exactly one entity (missing skipped, repeat not doubled)', i4b.entities.length, i4.entities.length + 1);
+  const bor = i4b.entities.find(e => e.entity_id === lend);
+  ok('borrowed entity is flagged with the lender\'s name', typeof bor.borrowed_from === 'string' && bor.borrowed_from.length > 0);
+  eq('borrowed entity carries the live state', bor.state, hass.states[lend].state);
+  ok('the original device object is untouched', !i4.entities.some(e => e.entity_id === lend));
+  ok('devices that borrow nothing keep their reference', lent.find(d => d.device_id === i3.device_id) === i3);
+  eq('no device_styles → same array back', h.attachExtraSensors(uni, undefined, hass), uni);
+  ok('a borrowed reading reaches the gauge values', h.deviceSensorValues(i4b, hass.states).temperature != null);
+
   console.log('\ngauge rings follow the device');
   const wdVals = { temperature: 25.9, humidity: 37.6, illuminance: 5, signal_strength: -60 };
   const wdRings = h.gaugeRings(wdVals, { accent: '#f00' });

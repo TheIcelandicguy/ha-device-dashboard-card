@@ -35,7 +35,10 @@ const DEAD = new Set(['unavailable', 'unknown']);
 /** Same rule the tiles use: a device is online if any of its entities has a
  *  usable state. A battery sensor still reporting counts. */
 export function isOnline(device: HADevice, states: States): boolean {
+  // A reading lent by another device (extra_sensors) says nothing about this
+  // one's reachability — a live BLU H&T must not keep a dead Wall Display green.
   return device.entities.some(e => {
+    if (e.borrowed_from) return false;
     const s = states[e.entity_id];
     return !!s && !DEAD.has(s.state ?? '');
   });

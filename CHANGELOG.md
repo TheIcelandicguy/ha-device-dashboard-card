@@ -28,6 +28,16 @@ installs from them.
 - **Dropdown chips name themselves** — "Preset: Boot master on" rather than the
   bare option; `select_chip.label` still overrides.
 
+### Borrowed readings
+
+- **`extra_sensors`** — show sensor entities from another device on this tile
+  as if it reported them: a BLU H&T's temperature and humidity on a Wall
+  Display XL, which only has a light sensor. Merged at discovery, so the chips,
+  graphs, gauge rings, sensor card and detail sheet (marked "from <device>")
+  all see them, while the lender keeps showing them too. Borrowed entities
+  never count toward the device's online state. Editor: Design → the device →
+  Extra sensors, with the entity picker.
+
 ### Graphs
 
 - **The gauge follows the device.** `power_monitor_variant: gauge` used to
@@ -52,8 +62,33 @@ installs from them.
   only power. The power-monitor "Graphs" element now hides the sensor rows as
   well as the spark, so it is no longer a dead toggle on Gauge and Compact.
 
+### Eighteen new animated icons
+
+Drawn for the devices a Shelly house actually has: **Flicker / Scanline /
+Wake** screens for the Wall Displays; **Oven**, **Washer**, **Tumble** and
+**Dishes** for the appliance relays; **Floor heat** and **Radiator** for the
+heating groups; a turning **Valve**; a **Smoke detector** whose LED blinks
+green at rest and red fast in alarm; a **Camera** with a REC dot; **LED strip**
+(chasing) and **Rainbow** (hue-cycling) for WLED and RGBW; a **Plug** with a
+spark; a **Garage** door rolling up and down; a pulsing **Bluetooth** mark for
+BLU sensors; a **Router** with blinking activity LEDs; and a **PC** with a
+breathing power LED and activity bars. All honour the speed and size
+multipliers.
+
 ### Editor
 
+- **Animated icons are back at device scope.** The tile's ON/OFF header icon
+  and speed (`tile_icon`, `tile_icon_off`, `tile_icon_speed`) and, under
+  Advanced, the per-switch icons (`entity_animations`) had the same fate: the
+  icon popover survived the panel's retirement, nothing called it. Design → the
+  device → Animated icons. New alongside: a **size** multiplier
+  (`tile_icon_size`, per-entity `size`) next to the speed one, and both sliders
+  are labelled with what they do.
+- **Tile photo is back at device scope.** The per-device backdrop
+  (`device_styles[id].bg_image`) lost its uploader when the Device styling
+  panel was retired — Shelly Cloud import could still write it, the editor
+  could not. Design → the device → Tile photo, with the same upload / URL /
+  fit picker the room backdrop uses.
 - **Input actions get Home Assistant's entity picker** — search by name, room
   or entity id, scoped to the device's own entities or everything, with the
   chosen targets shown as removable chips. Each channel is a card with the action

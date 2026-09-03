@@ -281,6 +281,31 @@ export type EntityAnimationType =
   | 'star'       // 5-point star with pulse
   | 'star2'      // 4-point sparkle spinning
   | 'star3'      // shooting star
+  // Screens (Wall Display)
+  | 'display'    // screen whose backlight flickers
+  | 'display2'   // screen with a scanline sweeping down
+  | 'display3'   // screen waking: dot blooms into a panel
+  // Appliances
+  | 'oven'       // oven door with heat shimmer
+  | 'washer'     // front-loader drum spinning
+  | 'washer2'    // drum tumbling back and forth
+  | 'dishwasher' // rack with a spinning spray arm
+  // Heating and water
+  | 'floorheat'  // floor slab with heat rising
+  | 'radiator'   // radiator fins with heat rising
+  | 'valve'      // handwheel turning on a pipe
+  // Safety
+  | 'smoke'      // smoke detector: green blink at rest, red fast blink when alarming
+  | 'camera'     // camera with a blinking REC dot
+  // Lights and strips
+  | 'strip'      // LED strip with a chasing light
+  | 'strip2'     // LED strip cycling through the rainbow
+  | 'plug'       // plug with a spark
+  // Doors and rooms
+  | 'garage'     // garage door rolling up and down
+  | 'ble'        // Bluetooth mark with a pulsing ring
+  | 'router'     // router with antennas and blinking activity LEDs
+  | 'pc'         // desktop: tower with a breathing power LED, monitor with activity bars
   // Pulse variants
   | 'pulse2'     // double concentric rings
   | 'pulse3'     // ECG flatline spike
@@ -314,6 +339,12 @@ export interface DeviceStyle {
    *  tile chip, room total and header chip — so the override never renders
    *  alongside the raw sensors it stands in for. */
   energy_entity?: string;
+  /** Sensor entities that live on another device, shown on this tile as if it
+   *  reported them — a BLU H&T's temperature on a Wall Display XL, which has no
+   *  temperature sensor of its own. Merged into the device's entity list at
+   *  discovery (`attachExtraSensors`), so chips, graphs, gauge rings, the sensor
+   *  card and the detail sheet all see them; the lender still shows them too. */
+  extra_sensors?: string[];
   tile_layout?: TileLayout; // per-device block order/visibility
   /** Override the auto-detected device profile (categorisation). undefined = auto. */
   profile?: DeviceProfile;
@@ -327,8 +358,12 @@ export interface DeviceStyle {
   tile_icon_off?: EntityAnimationType;
   /** Speed multiplier for the custom tile icon (default 1) */
   tile_icon_speed?: number;
-  /** Per-entity state animations, keyed by entity_id */
-  entity_animations?: Record<string, { on?: EntityAnimationType; off?: EntityAnimationType; speed?: number }>;
+  /** Size multiplier for the custom tile icon (default 1 = 18 px in the tile
+   *  header, 48 px on the scene button). */
+  tile_icon_size?: number;
+  /** Per-entity state animations, keyed by entity_id. `speed` and `size` are
+   *  multipliers on the defaults (1). */
+  entity_animations?: Record<string, { on?: EntityAnimationType; off?: EntityAnimationType; speed?: number; size?: number }>;
   /** Sensor chip keys for this device. undefined = inherit area/global `sensors`. */
   sensors?: string[];
   /** Per-device override for tile sparkline graphs. undefined = inherit area/global. */
@@ -784,6 +819,10 @@ export interface HAEntity {
   platform?: string;
   /** HA registry entity_category: 'config' | 'diagnostic' | undefined (primary). */
   entity_category?: string;
+  /** Set on an entity another device lent this one via `extra_sensors`: the
+   *  lender's name. Readers that judge the device itself (online state, faults)
+   *  skip borrowed entities; readings (chips, graphs, rings) treat them as own. */
+  borrowed_from?: string;
 }
 
 /** Narrow structural type for the common HA state.attributes shape.

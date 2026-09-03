@@ -604,6 +604,55 @@ export function deviceSensorValues(
   return out;
 }
 
+/** Lend a device readings that live on another device. `extra_sensors` on a
+ *  device style lists entity ids to show on that tile as if the device reported
+ *  them — a BLU H&T's temperature on a Wall Display XL, which has no sensor of
+ *  its own. Done once at discovery so every surface (chips, graphs, gauge rings,
+ *  sensor card, detail sheet) sees them with no special case; the entity is
+ *  flagged `borrowed_from` so device-health readers can leave it out. Devices
+ *  that borrow nothing are returned as-is (same reference); a borrower gets a
+ *  fresh entity array. Unknown ids are skipped, an id the device already owns is
+ *  not doubled. */
+export function attachExtraSensors(
+  devices: HADevice[],
+  deviceStyles: Record<string, { extra_sensors?: string[] }> | undefined,
+  hass: HomeAssistant,
+): HADevice[] {
+  if (!deviceStyles) return devices;
+  const byId = new Map(devices.map(d => [d.device_id, d]));
+  const entityRegistry: Record<string, any> = (hass as any).entities ?? {};
+  const deviceRegistry: Record<string, any> = (hass as any).devices ?? {};
+  return devices.map(d => {
+    const ids = deviceStyles[d.device_id]?.extra_sensors;
+    if (!ids?.length) return d;
+    const seen = new Set(d.entities.map(e => e.entity_id));
+    const extra: HAEntity[] = [];
+    for (const id of ids) {
+      if (seen.has(id)) continue;
+      const st = hass.states[id];
+      if (!st) continue;
+      seen.add(id);
+      const reg = entityRegistry[id];
+      const lenderId: string | undefined = reg?.device_id;
+      const lender = lenderId
+        ? (byId.get(lenderId)?.name ?? deviceRegistry[lenderId]?.name_by_user ?? deviceRegistry[lenderId]?.name)
+        : undefined;
+      extra.push({
+        entity_id: id,
+        domain: id.split('.')[0],
+        state: st.state,
+        attributes: (st.attributes ?? {}) as Record<string, unknown>,
+        device_id: lenderId,
+        area_id: reg?.area_id,
+        platform: reg?.platform ? String(reg.platform).toLowerCase() : undefined,
+        entity_category: reg?.entity_category ?? undefined,
+        borrowed_from: lender ?? 'another device',
+      });
+    }
+    return extra.length ? { ...d, entities: [...d.entities, ...extra] } : d;
+  });
+}
+
 /** What a gauge ring knows per device class: default range and how the value
  *  reads. Array order is ring order — electrical first so a relay keeps
  *  W/V/A/°C, then the environment a Wall Display or BLU H&T reports. */

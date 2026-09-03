@@ -528,10 +528,31 @@ sit in a **Room chrome — this room only** block beneath them.
 | `sensors` | Chip whitelist |
 | `show_graphs` | Sparkline override |
 | `bg_image`, `bg_image_size` | Per-tile backdrop photo |
-| `tile_icon`, `tile_icon_off`, `tile_icon_speed` | Animated tile icon per state |
-| `entity_animations` | Per-entity ON/OFF icon + speed, keyed by entity_id |
+| `tile_icon`, `tile_icon_off`, `tile_icon_speed`, `tile_icon_size` | Animated tile icon per state; speed and size are multipliers on the default (1) |
+| `entity_animations` | Per-entity ON/OFF icon + `speed` + `size`, keyed by entity_id |
 | `energy_period`, `energy_entity` | Energy window / stand-in meter for this device |
+| `extra_sensors` | Sensor entities from other devices shown on this tile as its own — see below |
 | `input_actions` | What tapping an input channel runs — see below |
+
+#### `extra_sensors` — borrow a reading from another device
+
+A Wall Display XL has an ambient-light sensor but no temperature or humidity
+sensor; the room's readings come from a BLU H&T next to it. `extra_sensors`
+lists sensor entities that live on other devices and shows them on this tile as
+if the device reported them — in the chips, the graphs, the gauge rings, the
+sensor card and the detail sheet (where they are marked "from <device>"). The
+lender keeps showing them too.
+
+```yaml
+device_styles:
+  af4740ba7641367eaf5d135d2eaebec4:   # Display Forstofa (Wall Display XL)
+    extra_sensors:
+      - sensor.shelly_blu_ht_cfb7_temperature
+      - sensor.shelly_blu_ht_cfb7_humidity
+```
+
+In the editor: Design → the device → **Extra sensors**. Borrowed entities do
+not count toward the device's online state or faults.
 
 #### `input_actions` — make i3/i4 channels do something
 

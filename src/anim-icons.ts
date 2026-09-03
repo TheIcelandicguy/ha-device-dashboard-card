@@ -399,6 +399,177 @@ export function renderAnimSvg(
     <circle cx="10" cy="13.5" r="1.5" fill="rgba(0,0,0,0.35)"/>
   </svg>`}`;
 
+  // ── Screens (Wall Display) ────────────────────────────────────────────────────
+  // Shared frame: bezel, panel, stand. What moves is the panel.
+  const screenFrame = svg`
+    <rect x="2" y="3" width="16" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/>
+    <line x1="7" y1="17.5" x2="13" y2="17.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+    <line x1="10" y1="14" x2="10" y2="17.5" stroke="currentColor" stroke-width="1.4"/>`;
+
+  if (animType === 'display') return html`${svg`<svg class="${outerCls} ent-icon-display ${st}" style="${spdStyle}" viewBox="0 0 20 20">
+    ${screenFrame}
+    <rect class="scr-panel" x="3.5" y="4.5" width="13" height="8" rx="0.8" fill="currentColor" opacity="0.35"/>
+  </svg>`}`;
+
+  if (animType === 'display2') return html`${svg`<svg class="${outerCls} ent-icon-display2 ${st}" style="${spdStyle}" viewBox="0 0 20 20">
+    ${screenFrame}
+    <rect x="3.5" y="4.5" width="13" height="8" rx="0.8" fill="currentColor" opacity="0.18"/>
+    <rect class="scr-line" x="3.5" y="4.5" width="13" height="1.2" fill="currentColor" opacity="0.75"/>
+  </svg>`}`;
+
+  if (animType === 'display3') return html`${svg`<svg class="${outerCls} ent-icon-display3 ${st}" style="${spdStyle}" viewBox="0 0 20 20">
+    ${screenFrame}
+    <rect class="scr-wake" x="3.5" y="4.5" width="13" height="8" rx="0.8" fill="currentColor" opacity="0.4" style="transform-origin:10px 8.5px"/>
+  </svg>`}`;
+
+  // ── Appliances ────────────────────────────────────────────────────────────────
+
+  if (animType === 'oven') return html`${svg`<svg class="${outerCls} ent-icon-oven ${st}" style="${spdStyle}" viewBox="0 0 20 20">
+    <rect x="3" y="3.5" width="14" height="13.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/>
+    <circle cx="6" cy="6.3" r="0.9" fill="currentColor"/>
+    <circle cx="9" cy="6.3" r="0.9" fill="currentColor"/>
+    <line x1="12" y1="6.3" x2="14.5" y2="6.3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+    <rect x="5.5" y="9" width="9" height="6" rx="1" fill="currentColor" opacity="0.22"/>
+    <path class="heat-a" d="M7.5 14 q0.8 -1 0 -2 t0 -2" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+    <path class="heat-b" d="M10 14 q0.8 -1 0 -2 t0 -2" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+    <path class="heat-c" d="M12.5 14 q0.8 -1 0 -2 t0 -2" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+  </svg>`}`;
+
+  if (animType === 'washer' || animType === 'washer2') return html`${svg`<svg class="${outerCls} ent-icon-${animType} ${st}" style="${spdStyle}" viewBox="0 0 20 20">
+    <rect x="3" y="2" width="14" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/>
+    <circle cx="6" cy="4.8" r="0.8" fill="currentColor"/>
+    <circle cx="8.5" cy="4.8" r="0.8" fill="currentColor"/>
+    <circle cx="10" cy="11.5" r="4.8" fill="none" stroke="currentColor" stroke-width="1.3"/>
+    <g class="drum" style="transform-origin:10px 11.5px">
+      <path d="M10 8.2 A3.3 3.3 0 0 1 13.3 11.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+      <path d="M10 14.8 A3.3 3.3 0 0 1 6.7 11.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+    </g>
+    <path class="drum-water" d="M6.5 13 q1.2 -1 2.4 0 t2.4 0 t2.4 0" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" opacity="0.6" stroke-dasharray="14"/>
+  </svg>`}`;
+
+  if (animType === 'dishwasher') return html`${svg`<svg class="${outerCls} ent-icon-dishwasher ${st}" style="${spdStyle}" viewBox="0 0 20 20">
+    <rect x="3" y="3" width="14" height="14" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/>
+    <line x1="5" y1="7.5" x2="15" y2="7.5" stroke="currentColor" stroke-width="1" stroke-dasharray="1.6 1.2" opacity="0.7"/>
+    <line x1="5" y1="10.5" x2="15" y2="10.5" stroke="currentColor" stroke-width="1" stroke-dasharray="1.6 1.2" opacity="0.7"/>
+    <line class="spray-arm" x1="6.5" y1="14.5" x2="13.5" y2="14.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" style="transform-origin:10px 14.5px"/>
+    <line class="spray-a" x1="8" y1="14" x2="6" y2="11.5" stroke="currentColor" stroke-width="0.9" stroke-linecap="round" opacity="0.5"/>
+    <line class="spray-b" x1="12" y1="14" x2="14" y2="11.5" stroke="currentColor" stroke-width="0.9" stroke-linecap="round" opacity="0.5"/>
+  </svg>`}`;
+
+  // ── Heating and water ─────────────────────────────────────────────────────────
+
+  if (animType === 'floorheat') return html`${svg`<svg class="${outerCls} ent-icon-floorheat ${st}" style="${spdStyle}" viewBox="0 0 20 20">
+    <rect x="2" y="14" width="16" height="3.5" rx="0.8" fill="currentColor" opacity="0.85"/>
+    <line x1="6.5" y1="14" x2="6.5" y2="17.5" stroke="rgba(0,0,0,0.4)" stroke-width="0.8"/>
+    <line x1="10.5" y1="14" x2="10.5" y2="17.5" stroke="rgba(0,0,0,0.4)" stroke-width="0.8"/>
+    <line x1="14.5" y1="14" x2="14.5" y2="17.5" stroke="rgba(0,0,0,0.4)" stroke-width="0.8"/>
+    <path class="heat-a" d="M5.5 12 q1 -1.5 0 -3 t0 -3" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+    <path class="heat-b" d="M10 12 q1 -1.5 0 -3 t0 -3" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+    <path class="heat-c" d="M14.5 12 q1 -1.5 0 -3 t0 -3" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+  </svg>`}`;
+
+  if (animType === 'radiator') return html`${svg`<svg class="${outerCls} ent-icon-radiator ${st}" style="${spdStyle}" viewBox="0 0 20 20">
+    <rect x="2.5" y="7" width="2.4" height="10" rx="1.2" fill="currentColor"/>
+    <rect x="5.7" y="7" width="2.4" height="10" rx="1.2" fill="currentColor"/>
+    <rect x="8.8" y="7" width="2.4" height="10" rx="1.2" fill="currentColor"/>
+    <rect x="11.9" y="7" width="2.4" height="10" rx="1.2" fill="currentColor"/>
+    <rect x="15.1" y="7" width="2.4" height="10" rx="1.2" fill="currentColor"/>
+    <line x1="2.5" y1="9.5" x2="17.5" y2="9.5" stroke="rgba(0,0,0,0.35)" stroke-width="0.9"/>
+    <line x1="2.5" y1="14.5" x2="17.5" y2="14.5" stroke="rgba(0,0,0,0.35)" stroke-width="0.9"/>
+    <path class="heat-a" d="M6 5.5 q0.8 -1 0 -2 t0 -1.5" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+    <path class="heat-b" d="M10 5.5 q0.8 -1 0 -2 t0 -1.5" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+    <path class="heat-c" d="M14 5.5 q0.8 -1 0 -2 t0 -1.5" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+  </svg>`}`;
+
+  if (animType === 'valve') return html`${svg`<svg class="${outerCls} ent-icon-valve ${st}" style="${spdStyle}" viewBox="0 0 20 20">
+    <rect x="1.5" y="11.5" width="17" height="3.6" rx="1" fill="currentColor" opacity="0.6"/>
+    <rect x="9.1" y="8" width="1.8" height="4" fill="currentColor"/>
+    <g class="wheel" style="transform-origin:10px 6px">
+      <circle cx="10" cy="6" r="3.4" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <line x1="10" y1="2.6" x2="10" y2="9.4" stroke="currentColor" stroke-width="1.2"/>
+      <line x1="6.6" y1="6" x2="13.4" y2="6" stroke="currentColor" stroke-width="1.2"/>
+    </g>
+  </svg>`}`;
+
+  // ── Safety ────────────────────────────────────────────────────────────────────
+
+  if (animType === 'smoke') return html`${svg`<svg class="${outerCls} ent-icon-smoke ${st}" style="${spdStyle}" viewBox="0 0 20 20">
+    <circle class="det-ring" cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="1.4"/>
+    <circle cx="10" cy="10" r="5" fill="none" stroke="currentColor" stroke-width="1" opacity="0.5"/>
+    <circle cx="10" cy="3.6" r="0.7" fill="currentColor" opacity="0.6"/>
+    <circle cx="16.4" cy="10" r="0.7" fill="currentColor" opacity="0.6"/>
+    <circle cx="10" cy="16.4" r="0.7" fill="currentColor" opacity="0.6"/>
+    <circle cx="3.6" cy="10" r="0.7" fill="currentColor" opacity="0.6"/>
+    <circle class="det-led" cx="10" cy="10" r="1.7" fill="currentColor"/>
+  </svg>`}`;
+
+  if (animType === 'camera') return html`${svg`<svg class="${outerCls} ent-icon-camera ${st}" style="${spdStyle}" viewBox="0 0 20 20">
+    <rect x="2.5" y="6" width="11" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/>
+    <path d="M13.5 8.5 L18 6.5 L18 14.5 L13.5 12.5 Z" fill="currentColor" opacity="0.55"/>
+    <circle cx="8" cy="10.5" r="2.4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <circle cx="8" cy="10.5" r="0.9" fill="currentColor"/>
+    <circle class="rec-dot" cx="4.8" cy="8.2" r="0.9" fill="#f43f5e"/>
+  </svg>`}`;
+
+  // ── Lights and strips ─────────────────────────────────────────────────────────
+
+  if (animType === 'strip' || animType === 'strip2') return html`${svg`<svg class="${outerCls} ent-icon-${animType} ${st}" style="${spdStyle}" viewBox="0 0 20 20">
+    <rect x="1.5" y="7.5" width="17" height="5" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.3"/>
+    <circle class="led led-1" cx="4.5"  cy="10" r="1.15" fill="currentColor"/>
+    <circle class="led led-2" cx="7.25" cy="10" r="1.15" fill="currentColor"/>
+    <circle class="led led-3" cx="10"   cy="10" r="1.15" fill="currentColor"/>
+    <circle class="led led-4" cx="12.75" cy="10" r="1.15" fill="currentColor"/>
+    <circle class="led led-5" cx="15.5" cy="10" r="1.15" fill="currentColor"/>
+  </svg>`}`;
+
+  if (animType === 'plug') return html`${svg`<svg class="${outerCls} ent-icon-plug ${st}" style="${spdStyle}" viewBox="0 0 20 20">
+    <rect x="7.3" y="3" width="1.8" height="5" rx="0.6" fill="currentColor"/>
+    <rect x="10.9" y="3" width="1.8" height="5" rx="0.6" fill="currentColor"/>
+    <rect x="5" y="8" width="10" height="7.5" rx="2" fill="currentColor" opacity="0.9"/>
+    <line x1="10" y1="15.5" x2="10" y2="18.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+    <polygon class="spark" points="14.5,1.5 13,4.5 14.6,4.3 13.6,7 16.2,3.6 14.7,3.8" fill="currentColor"/>
+  </svg>`}`;
+
+  // ── Doors and rooms ───────────────────────────────────────────────────────────
+
+  if (animType === 'garage') return html`${svg`<svg class="${outerCls} ent-icon-garage ${st}" style="${spdStyle}" viewBox="0 0 20 20">
+    <path d="M2 9 L10 2.8 L18 9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="3.5" y="9" width="13" height="8.5" fill="none" stroke="currentColor" stroke-width="1.4"/>
+    <rect class="door" x="6" y="10.5" width="8" height="7" fill="currentColor" opacity="0.7" style="transform-origin:10px 10.5px"/>
+    <line x1="6" y1="13" x2="14" y2="13" stroke="rgba(0,0,0,0.35)" stroke-width="0.8"/>
+    <line x1="6" y1="15.3" x2="14" y2="15.3" stroke="rgba(0,0,0,0.35)" stroke-width="0.8"/>
+  </svg>`}`;
+
+  if (animType === 'router') return html`${svg`<svg class="${outerCls} ent-icon-router ${st}" style="${spdStyle}" viewBox="0 0 20 20">
+    <line x1="5" y1="11" x2="4" y2="3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+    <line x1="15" y1="11" x2="16" y2="3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+    <circle cx="4" cy="3" r="1" fill="currentColor"/>
+    <circle cx="16" cy="3" r="1" fill="currentColor"/>
+    <rect x="2" y="11" width="16" height="6.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/>
+    <circle class="led led-1" cx="5.5" cy="14.3" r="0.95" fill="currentColor"/>
+    <circle class="led led-2" cx="8.5" cy="14.3" r="0.95" fill="currentColor"/>
+    <circle class="led led-3" cx="11.5" cy="14.3" r="0.95" fill="currentColor"/>
+    <line x1="14" y1="14.3" x2="16" y2="14.3" stroke="currentColor" stroke-width="1" stroke-linecap="round" opacity="0.5"/>
+  </svg>`}`;
+
+  if (animType === 'pc') return html`${svg`<svg class="${outerCls} ent-icon-pc ${st}" style="${spdStyle}" viewBox="0 0 20 20">
+    <rect x="11.5" y="2.5" width="6.5" height="15" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/>
+    <circle class="pwr" cx="14.75" cy="5" r="0.85" fill="currentColor"/>
+    <line x1="13" y1="7.5" x2="16.5" y2="7.5" stroke="currentColor" stroke-width="0.9" opacity="0.5"/>
+    <line x1="13" y1="9.3" x2="16.5" y2="9.3" stroke="currentColor" stroke-width="0.9" opacity="0.5"/>
+    <rect x="1.5" y="4" width="8.5" height="6.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/>
+    <line x1="4" y1="13" x2="7.5" y2="13" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+    <line x1="5.75" y1="10.5" x2="5.75" y2="13" stroke="currentColor" stroke-width="1.2"/>
+    <rect class="act act-1" x="3.2" y="7.2" width="1.3" height="2" rx="0.4" fill="currentColor" style="transform-origin:3.85px 9.2px"/>
+    <rect class="act act-2" x="5.1" y="6" width="1.3" height="3.2" rx="0.4" fill="currentColor" style="transform-origin:5.75px 9.2px"/>
+    <rect class="act act-3" x="7" y="6.8" width="1.3" height="2.4" rx="0.4" fill="currentColor" style="transform-origin:7.65px 9.2px"/>
+  </svg>`}`;
+
+  if (animType === 'ble') return html`${svg`<svg class="${outerCls} ent-icon-ble ${st}" style="${spdStyle}" viewBox="0 0 20 20">
+    <circle class="ble-ring" cx="10" cy="10" r="4" fill="none" stroke="currentColor" stroke-width="1" opacity="0"/>
+    <path d="M6 6.5 L14 13.5 L10 17 L10 3 L14 6.5 L6 13.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`}`;
+
   return html``;
 }
 
@@ -461,6 +632,25 @@ export const ANIM_COLORS: Record<EntityAnimationType, { on: string; off: string 
   star:          { on: '#fde047', off: '#4b5563' },
   star2:         { on: '#fde047', off: '#4b5563' },
   star3:         { on: '#fde047', off: '#4b5563' },
+  display:       { on: '#7dd3fc', off: '#4b5563' },
+  display2:      { on: '#7dd3fc', off: '#4b5563' },
+  display3:      { on: '#7dd3fc', off: '#4b5563' },
+  oven:          { on: '#fb923c', off: '#4b5563' },
+  washer:        { on: '#7dd3fc', off: '#4b5563' },
+  washer2:       { on: '#7dd3fc', off: '#4b5563' },
+  dishwasher:    { on: '#38bdf8', off: '#4b5563' },
+  floorheat:     { on: '#fb923c', off: '#4b5563' },
+  radiator:      { on: '#f87171', off: '#4b5563' },
+  valve:         { on: '#38bdf8', off: '#4b5563' },
+  smoke:         { on: '#f87171', off: '#6b7280' }, // off = normal: quiet, green LED
+  camera:        { on: '#e2e8f0', off: '#4b5563' },
+  strip:         { on: '#c084fc', off: '#4b5563' },
+  strip2:        { on: '#f472b6', off: '#4b5563' },
+  plug:          { on: '#fde68a', off: '#4b5563' },
+  garage:        { on: '#cbd5e1', off: '#4b5563' },
+  ble:           { on: '#60a5fa', off: '#4b5563' },
+  router:        { on: '#34d399', off: '#4b5563' },
+  pc:            { on: '#93c5fd', off: '#4b5563' },
 };
 
 /**
@@ -598,6 +788,65 @@ export const ANIM_CSS: CSSResult = css`
   .ent-icon-star.on  { animation:star-pulse calc(2s   / var(--ent-spd,1)) ease-in-out infinite; transform-origin:10px 10px; }
   .ent-icon-star2.on .star-body { animation:fan-spin calc(3s / var(--ent-spd,1)) linear infinite; transform-origin:10px 10px; }
   .ent-icon-star3.on { animation:star-shoot calc(1.5s / var(--ent-spd,1)) ease-in-out infinite alternate; }
+
+  /* Screens, appliances, heating, safety, strips, doors (2026-09) */
+  @keyframes screen-flicker { 0%,100%{opacity:.35} 7%{opacity:.5} 11%{opacity:.22} 30%{opacity:.42} 46%{opacity:.18} 60%{opacity:.46} 78%{opacity:.3} }
+  @keyframes scanline       { 0%{transform:translateY(0)} 100%{transform:translateY(6.8px)} }
+  @keyframes screen-wake    { 0%{transform:scale(.06,.08);opacity:0} 35%{transform:scale(1,.1);opacity:1} 65%{transform:scale(1,1);opacity:.7} 100%{transform:scale(1,1);opacity:.4} }
+  @keyframes heat-rise      { 0%{transform:translateY(2px);opacity:0} 40%{opacity:.9} 100%{transform:translateY(-3px);opacity:0} }
+  @keyframes drum-tumble    { 0%{transform:rotate(0)} 45%{transform:rotate(320deg)} 60%{transform:rotate(290deg)} 100%{transform:rotate(360deg)} }
+  @keyframes led-chase      { 0%,100%{opacity:.25} 20%{opacity:1} }
+  @keyframes hue-cycle      { to{filter:hue-rotate(360deg)} }
+  @keyframes garage-door    { 0%,15%{transform:scaleY(1)} 45%,55%{transform:scaleY(.12)} 85%,100%{transform:scaleY(1)} }
+  @keyframes spark-pop      { 0%,70%,100%{opacity:0;transform:scale(.6)} 75%,85%{opacity:1;transform:scale(1)} }
+
+  .ent-icon-display.on  .scr-panel { animation:screen-flicker calc(2.4s / var(--ent-spd,1)) steps(1,end) infinite; }
+  .ent-icon-display2.on .scr-line  { animation:scanline calc(2s / var(--ent-spd,1)) linear infinite; }
+  .ent-icon-display3.on .scr-wake  { animation:screen-wake calc(3s / var(--ent-spd,1)) ease-out infinite; }
+  .ent-icon-oven.on .heat-a, .ent-icon-floorheat.on .heat-a, .ent-icon-radiator.on .heat-a { animation:heat-rise calc(1.6s / var(--ent-spd,1)) ease-out infinite; }
+  .ent-icon-oven.on .heat-b, .ent-icon-floorheat.on .heat-b, .ent-icon-radiator.on .heat-b { animation:heat-rise calc(1.6s / var(--ent-spd,1)) ease-out infinite; animation-delay:calc(-0.55s / var(--ent-spd,1)); }
+  .ent-icon-oven.on .heat-c, .ent-icon-floorheat.on .heat-c, .ent-icon-radiator.on .heat-c { animation:heat-rise calc(1.6s / var(--ent-spd,1)) ease-out infinite; animation-delay:calc(-1.1s / var(--ent-spd,1)); }
+  .ent-icon-oven.off .heat-a, .ent-icon-oven.off .heat-b, .ent-icon-oven.off .heat-c,
+  .ent-icon-floorheat.off .heat-a, .ent-icon-floorheat.off .heat-b, .ent-icon-floorheat.off .heat-c,
+  .ent-icon-radiator.off .heat-a, .ent-icon-radiator.off .heat-b, .ent-icon-radiator.off .heat-c { opacity:0; }
+  .ent-icon-washer.on  .drum { animation:fan-spin calc(1.6s / var(--ent-spd,1)) linear infinite; }
+  .ent-icon-washer2.on .drum { animation:drum-tumble calc(2.4s / var(--ent-spd,1)) ease-in-out infinite; }
+  .ent-icon-washer.on .drum-water, .ent-icon-washer2.on .drum-water { animation:wave-scroll calc(1.8s / var(--ent-spd,1)) linear infinite; }
+  .ent-icon-washer.off .drum-water, .ent-icon-washer2.off .drum-water { opacity:0; }
+  .ent-icon-dishwasher.on .spray-arm { animation:fan-spin calc(1.2s / var(--ent-spd,1)) linear infinite; }
+  .ent-icon-dishwasher.on .spray-a { animation:arc-flash calc(0.8s / var(--ent-spd,1)) ease-in-out infinite; }
+  .ent-icon-dishwasher.on .spray-b { animation:arc-flash calc(0.8s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.4s / var(--ent-spd,1)); }
+  .ent-icon-dishwasher.off .spray-a, .ent-icon-dishwasher.off .spray-b { opacity:0; }
+  .ent-icon-valve.on .wheel { animation:fan-spin calc(3s / var(--ent-spd,1)) linear infinite; }
+  .ent-icon-smoke.on  .det-led  { animation:blink calc(0.5s / var(--ent-spd,1)) step-end infinite; }
+  .ent-icon-smoke.on  .det-ring { animation:icon-pulse calc(1s / var(--ent-spd,1)) ease-in-out infinite; }
+  .ent-icon-smoke.off .det-led  { fill:#4ade80; animation:blink calc(3s / var(--ent-spd,1)) step-end infinite; }
+  .ent-icon-camera.on .rec-dot { animation:blink calc(1.2s / var(--ent-spd,1)) step-end infinite; }
+  .ent-icon-camera.off .rec-dot { fill:currentColor; opacity:.4; }
+  .ent-icon-strip.on .led-1 { animation:led-chase calc(1.5s / var(--ent-spd,1)) ease-in-out infinite; }
+  .ent-icon-strip.on .led-2 { animation:led-chase calc(1.5s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-1.2s / var(--ent-spd,1)); }
+  .ent-icon-strip.on .led-3 { animation:led-chase calc(1.5s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.9s / var(--ent-spd,1)); }
+  .ent-icon-strip.on .led-4 { animation:led-chase calc(1.5s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.6s / var(--ent-spd,1)); }
+  .ent-icon-strip.on .led-5 { animation:led-chase calc(1.5s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.3s / var(--ent-spd,1)); }
+  .ent-icon-strip.off .led { opacity:.35; }
+  .ent-icon-strip2.on { animation:hue-cycle calc(4s / var(--ent-spd,1)) linear infinite; }
+  .ent-icon-strip2.on .led-1 { fill:#f87171; } .ent-icon-strip2.on .led-2 { fill:#fbbf24; } .ent-icon-strip2.on .led-3 { fill:#4ade80; }
+  .ent-icon-strip2.on .led-4 { fill:#38bdf8; } .ent-icon-strip2.on .led-5 { fill:#a78bfa; }
+  .ent-icon-strip2.off .led { opacity:.35; }
+  .ent-icon-plug.on  .spark { animation:spark-pop calc(2s / var(--ent-spd,1)) ease-out infinite; transform-origin:14.6px 4.3px; }
+  .ent-icon-plug.off .spark { opacity:0; }
+  .ent-icon-garage.on .door { animation:garage-door calc(4s / var(--ent-spd,1)) ease-in-out infinite; }
+  .ent-icon-ble.on .ble-ring { animation:ripple-out calc(1.6s / var(--ent-spd,1)) ease-out infinite; }
+  .ent-icon-router.on .led-1 { animation:led-chase calc(1.1s / var(--ent-spd,1)) steps(1,end) infinite; }
+  .ent-icon-router.on .led-2 { animation:led-chase calc(0.7s / var(--ent-spd,1)) steps(1,end) infinite; animation-delay:calc(-0.3s / var(--ent-spd,1)); }
+  .ent-icon-router.on .led-3 { animation:led-chase calc(1.3s / var(--ent-spd,1)) steps(1,end) infinite; animation-delay:calc(-0.8s / var(--ent-spd,1)); }
+  .ent-icon-router.off .led { opacity:.3; }
+  .ent-icon-pc.on .pwr   { animation:blink calc(2s / var(--ent-spd,1)) ease-in-out infinite; }
+  .ent-icon-pc.on .act-1 { animation:bar-bounce calc(0.7s / var(--ent-spd,1)) ease-in-out infinite alternate; }
+  .ent-icon-pc.on .act-2 { animation:bar-bounce calc(0.7s / var(--ent-spd,1)) ease-in-out infinite alternate-reverse; }
+  .ent-icon-pc.on .act-3 { animation:bar-bounce calc(0.7s / var(--ent-spd,1)) ease-in-out infinite alternate; animation-delay:calc(-0.35s / var(--ent-spd,1)); }
+  .ent-icon-pc.off .act  { opacity:.3; }
+  .ent-icon-pc.off .pwr  { opacity:.4; }
 `;
 
 /** All selectable animation options with short display labels. */
@@ -655,4 +904,23 @@ export const ANIM_OPTIONS: Array<{ value: EntityAnimationType; label: string; gr
   { value: 'star',         label: 'Star',       group: '⭐' },
   { value: 'star2',        label: 'Sparkle',    group: '⭐' },
   { value: 'star3',        label: 'Shoot',      group: '⭐' },
+  { value: 'display',      label: 'Flicker',    group: '🖥️' },
+  { value: 'display2',     label: 'Scanline',   group: '🖥️' },
+  { value: 'display3',     label: 'Wake',       group: '🖥️' },
+  { value: 'oven',         label: 'Oven',       group: '🍳' },
+  { value: 'washer',       label: 'Washer',     group: '🫧' },
+  { value: 'washer2',      label: 'Tumble',     group: '🫧' },
+  { value: 'dishwasher',   label: 'Dishes',     group: '🫧' },
+  { value: 'floorheat',    label: 'Floor heat', group: '♨️' },
+  { value: 'radiator',     label: 'Radiator',   group: '♨️' },
+  { value: 'valve',        label: 'Valve',      group: '🚰' },
+  { value: 'smoke',        label: 'Smoke det.', group: '🚨' },
+  { value: 'camera',       label: 'Camera',     group: '📷' },
+  { value: 'strip',        label: 'LED strip',  group: '🌈' },
+  { value: 'strip2',       label: 'Rainbow',    group: '🌈' },
+  { value: 'plug',         label: 'Plug',       group: '🔌' },
+  { value: 'garage',       label: 'Garage',     group: '🚗' },
+  { value: 'ble',          label: 'Bluetooth',  group: '📡' },
+  { value: 'router',       label: 'Router',     group: '📡' },
+  { value: 'pc',           label: 'PC',         group: '💻' },
 ];

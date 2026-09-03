@@ -110,6 +110,7 @@ function renderSheetEntityList(ctx: TileCtx): TemplateResult {
         <span class="ds-ent-icon">${domainIcon(e.domain)}</span>
         <span class="ds-ent-name">${name}</span>
         <span class="ds-ent-state">${state}${unit ? ` ${unit}` : ''}</span>
+        ${e.borrowed_from ? html`<span class="ds-ent-age" title="Shown here via extra_sensors">from ${e.borrowed_from}</span>` : nothing}
         ${lc ? html`<span class="ds-ent-age">${lc}</span>` : nothing}
         ${isToggle ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(ev: Event) => { ev.stopPropagation(); ctx.toggle(e.entity_id, isOn, ev); }}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
       </div>`;

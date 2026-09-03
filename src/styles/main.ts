@@ -441,7 +441,7 @@ export const mainCss = css`
 
 
     /* ── Tile icons ── */
-    .tile-icon { width:18px; height:18px; flex-shrink:0; color:var(--sc-text-muted); transition:color .3s, filter .3s; }
+    .tile-icon { width:calc(18px * var(--ent-size, 1)); height:calc(18px * var(--ent-size, 1)); flex-shrink:0; color:var(--sc-text-muted); transition:color .3s, filter .3s; }
 
 
     /* Relay / plug — lightning bolt */
@@ -491,7 +491,7 @@ export const mainCss = css`
 
 
     /* ── Entity-level state animation icons ─────────────────────────────── */
-    .ent-icon { width:15px; height:15px; flex-shrink:0; transition:color .3s,filter .3s; }
+    .ent-icon { width:calc(15px * var(--ent-size, 1)); height:calc(15px * var(--ent-size, 1)); flex-shrink:0; transition:color .3s,filter .3s; }
 
     .ent-icon-flame.off { color:#4b5563; }
 
@@ -781,6 +781,101 @@ export const mainCss = css`
 
     .ent-icon-star3.on { color:#fde047; filter:drop-shadow(0 0 4px rgba(253,224,71,0.4)); animation:star-shoot calc(1.5s / var(--ent-spd,1)) ease-in-out infinite alternate; }
 
+
+    /* ── Screens, appliances, heating, safety, strips, doors (2026-09) ── */
+    @keyframes screen-flicker { 0%,100%{opacity:.35} 7%{opacity:.5} 11%{opacity:.22} 30%{opacity:.42} 46%{opacity:.18} 60%{opacity:.46} 78%{opacity:.3} }
+    @keyframes scanline       { 0%{transform:translateY(0)} 100%{transform:translateY(6.8px)} }
+    @keyframes screen-wake    { 0%{transform:scale(.06,.08);opacity:0} 35%{transform:scale(1,.1);opacity:1} 65%{transform:scale(1,1);opacity:.7} 100%{transform:scale(1,1);opacity:.4} }
+    @keyframes heat-rise      { 0%{transform:translateY(2px);opacity:0} 40%{opacity:.9} 100%{transform:translateY(-3px);opacity:0} }
+    @keyframes drum-tumble    { 0%{transform:rotate(0)} 45%{transform:rotate(320deg)} 60%{transform:rotate(290deg)} 100%{transform:rotate(360deg)} }
+    @keyframes led-chase      { 0%,100%{opacity:.25} 20%{opacity:1} }
+    @keyframes hue-cycle      { to{filter:hue-rotate(360deg)} }
+    @keyframes garage-door    { 0%,15%{transform:scaleY(1)} 45%,55%{transform:scaleY(.12)} 85%,100%{transform:scaleY(1)} }
+    @keyframes spark-pop      { 0%,70%,100%{opacity:0;transform:scale(.6)} 75%,85%{opacity:1;transform:scale(1)} }
+
+    .ent-icon-display.off,.ent-icon-display2.off,.ent-icon-display3.off { color:#4b5563; }
+    .ent-icon-display.on,.ent-icon-display2.on,.ent-icon-display3.on { color:#7dd3fc; filter:drop-shadow(0 0 4px rgba(125,211,252,0.45)); }
+    .ent-icon-display.on  .scr-panel { animation:screen-flicker calc(2.4s / var(--ent-spd,1)) steps(1,end) infinite; }
+    .ent-icon-display2.on .scr-line  { animation:scanline calc(2s / var(--ent-spd,1)) linear infinite; }
+    .ent-icon-display3.on .scr-wake  { animation:screen-wake calc(3s / var(--ent-spd,1)) ease-out infinite; }
+
+    .ent-icon-oven.off,.ent-icon-floorheat.off,.ent-icon-radiator.off { color:#4b5563; }
+    .ent-icon-oven.on,.ent-icon-floorheat.on { color:#fb923c; filter:drop-shadow(0 0 4px rgba(251,146,60,0.45)); }
+    .ent-icon-radiator.on { color:#f87171; filter:drop-shadow(0 0 4px rgba(248,113,113,0.45)); }
+    .ent-icon-oven.on .heat-a,.ent-icon-floorheat.on .heat-a,.ent-icon-radiator.on .heat-a { animation:heat-rise calc(1.6s / var(--ent-spd,1)) ease-out infinite; }
+    .ent-icon-oven.on .heat-b,.ent-icon-floorheat.on .heat-b,.ent-icon-radiator.on .heat-b { animation:heat-rise calc(1.6s / var(--ent-spd,1)) ease-out infinite; animation-delay:calc(-0.55s / var(--ent-spd,1)); }
+    .ent-icon-oven.on .heat-c,.ent-icon-floorheat.on .heat-c,.ent-icon-radiator.on .heat-c { animation:heat-rise calc(1.6s / var(--ent-spd,1)) ease-out infinite; animation-delay:calc(-1.1s / var(--ent-spd,1)); }
+    .ent-icon-oven.off .heat-a,.ent-icon-oven.off .heat-b,.ent-icon-oven.off .heat-c,
+    .ent-icon-floorheat.off .heat-a,.ent-icon-floorheat.off .heat-b,.ent-icon-floorheat.off .heat-c,
+    .ent-icon-radiator.off .heat-a,.ent-icon-radiator.off .heat-b,.ent-icon-radiator.off .heat-c { opacity:0; }
+
+    .ent-icon-washer.off,.ent-icon-washer2.off,.ent-icon-dishwasher.off { color:#4b5563; }
+    .ent-icon-washer.on,.ent-icon-washer2.on { color:#7dd3fc; filter:drop-shadow(0 0 4px rgba(125,211,252,0.4)); }
+    .ent-icon-dishwasher.on { color:#38bdf8; filter:drop-shadow(0 0 4px rgba(56,189,248,0.4)); }
+    .ent-icon-washer.on  .drum { animation:fan-spin calc(1.6s / var(--ent-spd,1)) linear infinite; }
+    .ent-icon-washer2.on .drum { animation:drum-tumble calc(2.4s / var(--ent-spd,1)) ease-in-out infinite; }
+    .ent-icon-washer.on .drum-water,.ent-icon-washer2.on .drum-water { animation:wave-scroll calc(1.8s / var(--ent-spd,1)) linear infinite; }
+    .ent-icon-washer.off .drum-water,.ent-icon-washer2.off .drum-water { opacity:0; }
+    .ent-icon-dishwasher.on .spray-arm { animation:fan-spin calc(1.2s / var(--ent-spd,1)) linear infinite; }
+    .ent-icon-dishwasher.on .spray-a { animation:arc-flash calc(0.8s / var(--ent-spd,1)) ease-in-out infinite; }
+    .ent-icon-dishwasher.on .spray-b { animation:arc-flash calc(0.8s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.4s / var(--ent-spd,1)); }
+    .ent-icon-dishwasher.off .spray-a,.ent-icon-dishwasher.off .spray-b { opacity:0; }
+
+    .ent-icon-valve.off { color:#4b5563; }
+    .ent-icon-valve.on { color:#38bdf8; filter:drop-shadow(0 0 4px rgba(56,189,248,0.4)); }
+    .ent-icon-valve.on .wheel { animation:fan-spin calc(3s / var(--ent-spd,1)) linear infinite; }
+
+    .ent-icon-smoke.off { color:#6b7280; }
+    .ent-icon-smoke.on  { color:#f87171; --ipglow:rgba(248,113,113,0.6); }
+    .ent-icon-smoke.on  .det-led  { animation:blink calc(0.5s / var(--ent-spd,1)) step-end infinite; }
+    .ent-icon-smoke.on  .det-ring { animation:icon-pulse calc(1s / var(--ent-spd,1)) ease-in-out infinite; }
+    .ent-icon-smoke.off .det-led  { fill:#4ade80; animation:blink calc(3s / var(--ent-spd,1)) step-end infinite; }
+
+    .ent-icon-camera.off { color:#4b5563; }
+    .ent-icon-camera.on  { color:#e2e8f0; }
+    .ent-icon-camera.on .rec-dot { animation:blink calc(1.2s / var(--ent-spd,1)) step-end infinite; }
+    .ent-icon-camera.off .rec-dot { fill:currentColor; opacity:.4; }
+
+    .ent-icon-strip.off,.ent-icon-strip2.off { color:#4b5563; }
+    .ent-icon-strip.on  { color:#c084fc; filter:drop-shadow(0 0 4px rgba(192,132,252,0.45)); }
+    .ent-icon-strip2.on { color:#f472b6; filter:drop-shadow(0 0 4px rgba(244,114,182,0.4)); animation:hue-cycle calc(4s / var(--ent-spd,1)) linear infinite; }
+    .ent-icon-strip.on .led-1 { animation:led-chase calc(1.5s / var(--ent-spd,1)) ease-in-out infinite; }
+    .ent-icon-strip.on .led-2 { animation:led-chase calc(1.5s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-1.2s / var(--ent-spd,1)); }
+    .ent-icon-strip.on .led-3 { animation:led-chase calc(1.5s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.9s / var(--ent-spd,1)); }
+    .ent-icon-strip.on .led-4 { animation:led-chase calc(1.5s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.6s / var(--ent-spd,1)); }
+    .ent-icon-strip.on .led-5 { animation:led-chase calc(1.5s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.3s / var(--ent-spd,1)); }
+    .ent-icon-strip2.on .led-1 { fill:#f87171; } .ent-icon-strip2.on .led-2 { fill:#fbbf24; } .ent-icon-strip2.on .led-3 { fill:#4ade80; }
+    .ent-icon-strip2.on .led-4 { fill:#38bdf8; } .ent-icon-strip2.on .led-5 { fill:#a78bfa; }
+    .ent-icon-strip.off .led,.ent-icon-strip2.off .led { opacity:.35; }
+
+    .ent-icon-plug.off { color:#4b5563; }
+    .ent-icon-plug.on  { color:#fde68a; filter:drop-shadow(0 0 4px rgba(253,230,138,0.4)); }
+    .ent-icon-plug.on  .spark { animation:spark-pop calc(2s / var(--ent-spd,1)) ease-out infinite; transform-origin:14.6px 4.3px; }
+    .ent-icon-plug.off .spark { opacity:0; }
+
+    .ent-icon-garage.off { color:#4b5563; }
+    .ent-icon-garage.on  { color:#cbd5e1; }
+    .ent-icon-garage.on .door { animation:garage-door calc(4s / var(--ent-spd,1)) ease-in-out infinite; }
+
+    .ent-icon-ble.off { color:#4b5563; }
+    .ent-icon-ble.on  { color:#60a5fa; filter:drop-shadow(0 0 4px rgba(96,165,250,0.45)); }
+    .ent-icon-ble.on .ble-ring { animation:ripple-out calc(1.6s / var(--ent-spd,1)) ease-out infinite; }
+
+    .ent-icon-router.off { color:#4b5563; }
+    .ent-icon-router.on  { color:#34d399; filter:drop-shadow(0 0 4px rgba(52,211,153,0.4)); }
+    .ent-icon-router.on .led-1 { animation:led-chase calc(1.1s / var(--ent-spd,1)) steps(1,end) infinite; }
+    .ent-icon-router.on .led-2 { animation:led-chase calc(0.7s / var(--ent-spd,1)) steps(1,end) infinite; animation-delay:calc(-0.3s / var(--ent-spd,1)); }
+    .ent-icon-router.on .led-3 { animation:led-chase calc(1.3s / var(--ent-spd,1)) steps(1,end) infinite; animation-delay:calc(-0.8s / var(--ent-spd,1)); }
+    .ent-icon-router.off .led { opacity:.3; }
+
+    .ent-icon-pc.off { color:#4b5563; }
+    .ent-icon-pc.on  { color:#93c5fd; filter:drop-shadow(0 0 4px rgba(147,197,253,0.4)); }
+    .ent-icon-pc.on .pwr   { animation:blink calc(2s / var(--ent-spd,1)) ease-in-out infinite; }
+    .ent-icon-pc.on .act-1 { animation:bar-bounce calc(0.7s / var(--ent-spd,1)) ease-in-out infinite alternate; }
+    .ent-icon-pc.on .act-2 { animation:bar-bounce calc(0.7s / var(--ent-spd,1)) ease-in-out infinite alternate-reverse; }
+    .ent-icon-pc.on .act-3 { animation:bar-bounce calc(0.7s / var(--ent-spd,1)) ease-in-out infinite alternate; animation-delay:calc(-0.35s / var(--ent-spd,1)); }
+    .ent-icon-pc.off .act  { opacity:.3; }
+    .ent-icon-pc.off .pwr  { opacity:.4; }
 
     /* ── Pulse variants ─────────────────────────────────────────── */
     .ent-icon-pulse2.off,.ent-icon-pulse3.off { color:#4b5563; }

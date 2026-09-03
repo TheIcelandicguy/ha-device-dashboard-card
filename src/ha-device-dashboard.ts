@@ -37,7 +37,7 @@ import {
   formatUptime, formatApparentPower, formatReactivePower,
   formatFrequency, formatHumidity, formatIlluminance, formatPpm, formatPercent,
   detectInputChannels, detectShellyGen, shellyClickTypes, shellyInputChannel, shellyHostname,
-  deviceSensorValues,
+  deviceSensorValues, attachExtraSensors,
 } from './helpers';
 import { renderAnimSvg } from './anim-icons';
 
@@ -368,6 +368,9 @@ export class HADeviceDashboard extends LitElement {
       includeDomains:      this._config.include_domains,
       excludeDomains:      this._config.exclude_domains,
     });
+    // Readings lent by other devices (extra_sensors) join the entity list here,
+    // so everything downstream treats them as the device's own.
+    devices = attachExtraSensors(devices, this._config.device_styles, this.hass);
 
     // Area filter — undefined = show ALL rooms, [] = show nothing, [...] = show listed
     const areaFilter = this._config.areas;
@@ -2263,7 +2266,7 @@ export class HADeviceDashboard extends LitElement {
     if (!anims) return html``;
     const animType: EntityAnimationType = (isOn ? anims.on : anims.off) ?? 'none';
     if (animType === 'none') return html``;
-    return renderAnimSvg(animType, isOn, `--ent-spd:${anims.speed ?? 1}`, 'ent-icon');
+    return renderAnimSvg(animType, isOn, `--ent-spd:${anims.speed ?? 1};--ent-size:${anims.size ?? 1}`, 'ent-icon');
   }
 
   private _renderBlock(

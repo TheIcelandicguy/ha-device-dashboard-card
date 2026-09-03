@@ -261,9 +261,9 @@ export const tilesCss = css`
 
     .ts-scene-centered { align-items:center;justify-content:center;min-height:120px;position:relative;cursor:pointer;user-select:none }
 
-    .ts-scene-icon-wrap { width:48px;height:48px;display:flex;align-items:center;justify-content:center;margin-bottom:6px }
+    .ts-scene-icon-wrap { width:calc(48px * var(--ent-size, 1));height:calc(48px * var(--ent-size, 1));display:flex;align-items:center;justify-content:center;margin-bottom:6px }
 
-    .ts-scene-icon-wrap .ts-scene-icon { width:48px;height:48px }
+    .ts-scene-icon-wrap .ts-scene-icon { width:100%;height:100% }
 
     .ts-scene-name { font-size:.9em;font-weight:700;color:var(--sc-text-primary);text-align:center }
 

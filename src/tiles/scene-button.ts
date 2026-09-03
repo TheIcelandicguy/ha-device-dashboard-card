@@ -9,6 +9,7 @@ export function renderSceneButtonTile(ctx: TileCtx): TemplateResult {
   const inputs = ctx.getInputChannels(device);
   const devSt = config.device_styles?.[device.device_id];
   const tileIconType = (devSt?.tile_icon ?? 'pulse') as EntityAnimationType;
+  const iconSize = devSt?.tile_icon_size ?? 1;
   const cmdIcon = renderAnimSvg(tileIconType, true, `--ent-spd:${devSt?.tile_icon_speed ?? 1};color:${accent}`, 'ts-scene-icon');
 
   const lastChanged = device.entities.reduce((best, e) => {
@@ -32,7 +33,7 @@ export function renderSceneButtonTile(ctx: TileCtx): TemplateResult {
   return html`
     <div class="ts-scene ts-scene-centered" style="--ts-accent:${accent}"
       @click=${(e: Event) => { e.stopPropagation(); ctx.handleScenePress(device); }}>
-      ${ctx.showEl('icon') ? html`<div class="ts-scene-icon-wrap">${cmdIcon}</div>` : nothing}
+      ${ctx.showEl('icon') ? html`<div class="ts-scene-icon-wrap" style="--ent-size:${iconSize}">${cmdIcon}</div>` : nothing}
       ${ctx.showEl('name') ? html`<div class="ts-scene-name">${device.name}</div>` : nothing}
       ${timeAgoStr && ctx.showEl('timestamp') ? html`<div class="ts-scene-time">${timeAgoStr}</div>` : nothing}
       <div class="ts-scene-ripple"></div>

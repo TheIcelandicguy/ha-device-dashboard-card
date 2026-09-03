@@ -1940,6 +1940,7 @@ export class HADeviceDashboardEditor extends LitElement {
   private _setDeviceStyle(deviceId: string, patch: Partial<{
     theme: ThemePreset | undefined;
     color: string | undefined;
+    extra_sensors: string[] | undefined;
     tile_layout: TileLayout | undefined;
     profile: DeviceProfile | undefined;
     tile_style: TileStyle | undefined;
@@ -1947,7 +1948,8 @@ export class HADeviceDashboardEditor extends LitElement {
     tile_icon: string | undefined;
     tile_icon_off: string | undefined;
     tile_icon_speed: number | undefined;
-    entity_animations: Record<string, { on?: string; off?: string; speed?: number }> | undefined;
+    tile_icon_size: number | undefined;
+    entity_animations: Record<string, { on?: string; off?: string; speed?: number; size?: number }> | undefined;
     sensors: string[] | undefined;
     show_graphs: boolean | undefined;
     elements: Record<string, boolean> | undefined;
@@ -1971,8 +1973,10 @@ export class HADeviceDashboardEditor extends LitElement {
     if (next['tile_icon'] === undefined) delete next['tile_icon'];
     if (next['tile_icon_off'] === undefined) delete next['tile_icon_off'];
     if (next['tile_icon_speed'] === undefined) delete next['tile_icon_speed'];
+    if (next['tile_icon_size'] === undefined) delete next['tile_icon_size'];
     if (next['entity_animations'] === undefined) delete next['entity_animations'];
     if (next['input_actions'] === undefined) delete next['input_actions'];
+    if (next['extra_sensors'] === undefined) delete next['extra_sensors'];
     if (next['sensors'] === undefined) delete next['sensors'];
     if (next['show_graphs'] === undefined) delete next['show_graphs'];
     if (next['elements'] === undefined) delete next['elements'];
@@ -3093,6 +3097,9 @@ export class HADeviceDashboardEditor extends LitElement {
         ${this._designFamily('tile', 'Tile — device → type → room → view → card', tileBody)}
         ${this._designFamily('container', 'Container — room → view → card', containerBody)}
         ${this._designFamily('chrome', 'Card chrome — view → card', chromeBody)}
+        ${sc.kind === 'device' ? this._renderTilePhotoBlock(sc.id) : nothing}
+        ${sc.kind === 'device' ? this._renderAnimIconsBlock(sc.id) : nothing}
+        ${sc.kind === 'device' ? this._renderExtraSensorsBlock(sc.id) : nothing}
         ${sc.kind === 'device' ? this._renderInputActionsBlock(sc.id) : nothing}
         ${sc.kind === 'room' ? html`
           <div class="dsn-family">
@@ -3311,6 +3318,126 @@ export class HADeviceDashboardEditor extends LitElement {
    * _inputAction), so the picker names that default rather than pretending
    * "none" is the resting state.
    */
+  /** The device's own backdrop photo (`device_styles[id].bg_image`). A key with
+   *  no ladder above it, orphaned when the Device styling panel was retired:
+   *  Shelly Cloud import could still write it, the editor could not. */
+  private _renderTilePhotoBlock(deviceId: string): TemplateResult {
+    const st = this._config.device_styles?.[deviceId] ?? {};
+    return html`
+      <div class="dsn-family">
+        <div class="dsn-family-hdr">Tile photo — this device only</div>
+        <div class="hint" style="margin-bottom:6px">
+          A backdrop behind this one tile — the device itself, or where it lives. A room's
+          backdrop is under room scope; the card-wide tile photo is under Global.
+        </div>
+        ${this._renderBgImagePicker(
+          'Tile background photo', `dev-bg-${deviceId}`, st.bg_image, st.bg_image_size,
+          (url) => this._setDeviceStyle(deviceId, { bg_image: url }),
+          (v) => this._setDeviceStyle(deviceId, { bg_image_size: v }),
+          () => this._setDeviceStyle(deviceId, { bg_image: undefined, bg_image_size: undefined }),
+        )}
+      </div>`;
+  }
+
+  /** Animated icons for this device: the tile's header icon (`tile_icon` /
+   *  `tile_icon_off` / `tile_icon_speed`) and per-entity icons beside its own
+   *  switches (`entity_animations`). The icon popover survived the Device
+   *  styling panel's retirement; nothing called it until this block. */
+  private _renderAnimIconsBlock(deviceId: string): TemplateResult {
+    const dev = this._allDevices().find(d => d.device_id === deviceId);
+    const st = this._config.device_styles?.[deviceId] ?? {};
+    const anims = st.entity_animations ?? {};
+    type Anim = { on?: string; off?: string; speed?: number; size?: number };
+    const setAnim = (entityId: string, patch: Anim) => {
+      const cur: Anim = { ...(anims[entityId] ?? {}), ...patch };
+      (['on', 'off', 'speed', 'size'] as const).forEach(k => { if (cur[k] === undefined) delete cur[k]; });
+      const next: Record<string, typeof cur> = { ...anims };
+      if (Object.keys(cur).length) next[entityId] = cur; else delete next[entityId];
+      this._setDeviceStyle(deviceId, { entity_animations: Object.keys(next).length ? next : undefined });
+    };
+    // The block tile draws a per-entity icon for the primary switch and for
+    // each relay channel — so the rows are this device's own switches/lights.
+    const rows = (dev?.entities ?? []).filter(e => (e.domain === 'switch' || e.domain === 'light') && !e.entity_category);
+    const shortName = (id: string) => {
+      const n = this._entityName(id);
+      const p = dev?.name?.trim() ?? '';
+      return p && n.toLowerCase().startsWith(p.toLowerCase()) ? (n.slice(p.length).trim() || n) : n;
+    };
+    // Both sliders are multipliers on the default (×1); the label says which.
+    const slider = (label: string, val: number | undefined, min: number, max: number,
+      onChange: (v: number | undefined) => void) => html`
+      <span class="anim-state">${label}</span>
+      <input type="range" min=${min} max=${max} step="0.25" .value=${String(val ?? 1)}
+        style="width:72px;accent-color:#f4601e" title="${label} ×${val ?? 1} — ×1 is the default"
+        @input=${(e: Event) => { const v = parseFloat((e.target as HTMLInputElement).value); onChange(v === 1 ? undefined : v); }}/>
+      <span class="sl-val">×${val ?? 1}</span>`;
+    const pair = (a: Anim & { on?: string; off?: string },
+      set: { on: (v: string | undefined) => void; off: (v: string | undefined) => void;
+        speed: (v: number | undefined) => void; size: (v: number | undefined) => void }) => html`
+      <div class="anim-row">
+        <span class="anim-state">ON</span>${this._iconPicker('', a.on, true, set.on)}
+        <span class="anim-state">OFF</span>${this._iconPicker('', a.off, false, set.off)}
+        ${slider('Speed', a.speed, 0.25, 3, set.speed)}
+        ${slider('Size', a.size, 0.5, 3, set.size)}
+      </div>`;
+    return html`
+      <div class="dsn-family">
+        <div class="dsn-family-hdr">Animated icons — this device only</div>
+        <div class="hint" style="margin-bottom:6px">
+          The tile's header icon — one look while ON and one while OFF (OFF falls back to the ON
+          pick) — and, under Advanced, an icon beside each of this device's own switches. The
+          adaptive tile and the scene button draw them; the other styles have no header icon.
+        </div>
+        <div class="ia-grid">
+          <span class="ia-lbl">Tile icon</span>
+          ${pair({ on: st.tile_icon, off: st.tile_icon_off, speed: st.tile_icon_speed, size: st.tile_icon_size }, {
+            on: v => this._setDeviceStyle(deviceId, { tile_icon: v }),
+            off: v => this._setDeviceStyle(deviceId, { tile_icon_off: v }),
+            speed: v => this._setDeviceStyle(deviceId, { tile_icon_speed: v }),
+            size: v => this._setDeviceStyle(deviceId, { tile_icon_size: v }),
+          })}
+          ${this._advanced ? rows.map(e => html`
+            <span class="ia-lbl" title=${e.entity_id}>${shortName(e.entity_id)}</span>
+            ${pair(anims[e.entity_id] ?? {}, {
+              on: v => setAnim(e.entity_id, { on: v }),
+              off: v => setAnim(e.entity_id, { off: v }),
+              speed: v => setAnim(e.entity_id, { speed: v }),
+              size: v => setAnim(e.entity_id, { size: v }),
+            })}`) : nothing}
+        </div>
+        ${!this._advanced && rows.length ? html`
+          <div class="dp-hint-inline">Turn on Advanced for per-switch icons (${rows.length} on this device).</div>` : nothing}
+      </div>`;
+  }
+
+  /** Readings borrowed from other devices, shown on this tile as its own —
+   *  `device_styles[id].extra_sensors`. */
+  private _renderExtraSensorsBlock(deviceId: string): TemplateResult {
+    const dev = this._allDevices().find(d => d.device_id === deviceId);
+    const cur = this._config.device_styles?.[deviceId]?.extra_sensors ?? [];
+    const lenders = cur.map(id => this._entityName(id)).filter(Boolean);
+    return html`
+      <div class="dsn-family">
+        <div class="dsn-family-hdr">Extra sensors — this device only</div>
+        <div class="hint" style="margin-bottom:6px">
+          Readings that live on another device, shown on this tile as if it reported them —
+          a BLU H&amp;T's temperature on a Wall Display XL, which has no temperature sensor of
+          its own. They join the chips, graphs, gauge rings and the detail sheet like the
+          device's own sensors; the other device keeps showing them too.
+        </div>
+        ${this._entityField(cur.length ? cur : undefined, v => {
+          const list = Array.isArray(v) ? v : v ? [v] : [];
+          this._setDeviceStyle(deviceId, { extra_sensors: list.length ? list : undefined });
+        }, {
+          deviceEntities: dev ? dev.entities.map(e => e.entity_id) : [],
+          scopeAll: true,
+          multi: true,
+          placeholder: 'Sensor entity on another device',
+          note: lenders.length ? `Borrowing: ${lenders.join(', ')}` : 'Pick sensor.* entities — temperature, humidity, lux, CO₂, battery.',
+        })}
+      </div>`;
+  }
+
   private _renderInputActionsBlock(deviceId: string): TemplateResult {
     const dev = this._allDevices().find(d => d.device_id === deviceId);
     const chans = dev ? detectInputChannels(dev, this.hass.states as any) : [];
@@ -3367,8 +3494,16 @@ export class HADeviceDashboardEditor extends LitElement {
           // Only a Shelly button has a `shelly.click` to replay; a steady switch
           // input never fires one, and other vendors' inputs use other events.
           const canPress = ch.kind === 'button' && !!dev?.isShelly;
+          // The output's friendly name starts with the device name ("Gr. 4
+          // Eldhús Gr.4 Eldhús"); on the device's own panel that half is noise.
+          const outName = (() => {
+            if (!ch.output) return '';
+            const n = this._entityName(ch.output);
+            const p = dev?.name?.trim() ?? '';
+            return p && n.toLowerCase().startsWith(p.toLowerCase()) ? (n.slice(p.length).trim() || n) : n;
+          })();
           const defaultLabel = ch.output
-            ? `— default: toggles ${this._entityName(ch.output)} —`
+            ? `— default: toggles ${outName} —`
             : '— none: row shows the press history —';
           return html`
             <div class="ia-ch ${configured ? 'set' : ''}">
@@ -5018,6 +5153,24 @@ export class HADeviceDashboardEditor extends LitElement {
       });
     }
 
+    // Borrowed sensors HA does not have — silently skipped at discovery, so the
+    // tile just lacks the reading with no other sign.
+    const missingExtra: string[] = [];
+    for (const [devId, ds] of Object.entries(c.device_styles ?? {})) {
+      for (const id of ds.extra_sensors ?? []) {
+        if (this.hass && !this.hass.states[id]) {
+          const devName = this._allDevices().find(d => d.device_id === devId)?.name ?? devId;
+          missingExtra.push(`${id} (on ${devName})`);
+        }
+      }
+    }
+    if (missingExtra.length) {
+      out.push({
+        title: `Extra sensor does not exist: ${missingExtra.join(', ')}`,
+        detail: 'It is skipped, so the tile shows nothing for it — remove it or pick the renamed entity.',
+      });
+    }
+
     return out;
   }
 
@@ -5808,6 +5961,10 @@ export class HADeviceDashboardEditor extends LitElement {
     .ia-ch-hdr { display:flex; align-items:center; gap:10px; }
     .ia-ch-name { flex:0 0 34%; font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .ia-grid { display:grid; grid-template-columns:84px minmax(0,1fr); gap:6px 10px; align-items:center; margin-top:8px; }
+    .anim-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+    .anim-row .icon-picker-wrap { flex:0 1 150px; min-width:64px; }
+    .anim-row .icon-picker-btn { width:100%; justify-content:center; }
+    .anim-state { font-size:10px; font-weight:700; letter-spacing:.04em; color:var(--t2); }
     .ia-lbl { font-size:11.5px; color:var(--t2); }
     .ia-hint { grid-column:1 / -1; font-size:11.5px; color:var(--t2); margin:-2px 0 2px; }
     .ia-note { font-size:11px; color:var(--t3); margin-top:3px; }

@@ -202,6 +202,16 @@ export const HELP_RECIPES: HelpTopic[] = [
     ],
   },
   {
+    id: 'extra-sensors',
+    title: 'Show a reading from another device on a tile',
+    body: ['A Wall Display XL has a light sensor but no temperature or humidity sensor; the room\'s readings come from a BLU H&T beside it. Borrow them and the tile shows them as its own — chips, graphs, gauge rings and the detail sheet included.'],
+    steps: [
+      'Design → Scope → expand the room → pick the device → Extra sensors.',
+      'Search for the sensor entity on the other device (sensor.blu_ht_temperature, say) and pick it. Several work.',
+      'The other device keeps showing the reading too, and a borrowed sensor never decides whether this device counts as online.',
+    ],
+  },
+  {
     id: 'colours',
     title: 'Roll a colour scheme',
     body: ['The theme picker can roll a look for you, and keep the ones you like as named palettes.'],
