@@ -389,12 +389,18 @@ export function profileDefaultTileStyle(
 export const STYLE_ELEMENTS: Partial<Record<TileStyle, Array<{ id: string; label: string; def?: boolean }>>> = {
   'power-monitor': [
     { id: 'toggle',       label: 'On/off button' },
-    { id: 'graph',        label: 'Sparkline graph' },
+    // 'graph' is every graph on the tile: the variant's own power spark AND the
+    // Show-graphs companion rows in the lower body, so it is never a dead
+    // toggle on the variants (Gauge, Compact) that have no spark of their own.
+    { id: 'graph',        label: 'Graphs (spark + sensor rows)' },
     { id: 'secondary',    label: 'Secondary readings (V/A/kWh)' },
     { id: 'header_chips', label: 'Chips in the name row', def: false },
     { id: 'uptime',       label: 'Uptime badge' },
     { id: 'lower_body',   label: 'Lower body (blocks)' },
   ],
+  // The three control styles carry a 'graphs' element so Show graphs applies to
+  // them the way it does to the block tile — a dimmer on Light control gets the
+  // same power/temperature rows it would get on the default tile.
   'light-control': [
     { id: 'color_wheel', label: 'Colour wheel' },
     { id: 'brightness',  label: 'Brightness slider' },
@@ -402,6 +408,7 @@ export const STYLE_ELEMENTS: Partial<Record<TileStyle, Array<{ id: string; label
     { id: 'white',       label: 'White channel' },
     { id: 'effects',     label: 'Effects' },
     { id: 'power',       label: 'Power reading' },
+    { id: 'graphs',      label: 'Sensor graphs (with Show graphs)' },
   ],
   'climate-control': [
     { id: 'heating_badge',  label: 'Heating badge' },
@@ -409,17 +416,21 @@ export const STYLE_ELEMENTS: Partial<Record<TileStyle, Array<{ id: string; label
     { id: 'adjust_buttons', label: '+/− buttons' },
     { id: 'stats',          label: 'Stats row' },
     { id: 'presets',        label: 'Preset buttons' },
+    { id: 'graphs',         label: 'Sensor graphs (with Show graphs)' },
   ],
   'cover-control': [
     { id: 'position_pct',    label: 'Position %' },
     { id: 'shutter_graphic', label: 'Shutter graphic' },
     { id: 'moving_label',    label: 'Moving label' },
     { id: 'buttons',         label: 'Open / stop / close' },
+    { id: 'graphs',          label: 'Sensor graphs (with Show graphs)' },
   ],
   'sensor-card': [
     { id: 'primary_value', label: 'Primary value' },
     { id: 'trend',         label: 'Trend arrow' },
-    { id: 'graph',         label: 'Sparkline graph' },
+    // Its own switch: a sensor card exists to show history, so it does not also
+    // wait on Show graphs (which defaults off and left the card blank).
+    { id: 'graph',         label: 'Sparkline graphs' },
     { id: 'secondary',     label: 'Secondary chips' },
     { id: 'header_chips',  label: 'Chips in the name row', def: false },
   ],
@@ -566,6 +577,77 @@ export const PROFILE_DEFAULT_SENSORS: Partial<Record<DeviceProfile, string[]>> =
  * list. An explicit empty `graph_sensors: []` still means "no graphs".
  */
 export const DEFAULT_GRAPH_SENSORS: string[] = ['power', 'temperature', 'humidity', 'battery'];
+
+/** First live numeric reading per device_class on a device. Primary entities
+ *  win; a diagnostic one (a relay's own temperature) only stands in for a class
+ *  nothing else reports, so a Wall Display's room temperature is never shadowed
+ *  by its board temperature. */
+export function deviceSensorValues(
+  device: HADevice,
+  states: Record<string, { state?: string; attributes?: Record<string, unknown> } | undefined>,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  const read = (diagnostics: boolean) => {
+    for (const e of device.entities) {
+      if (e.domain !== 'sensor' || !!e.entity_category !== diagnostics) continue;
+      const s = states[e.entity_id];
+      if (!s || s.state === 'unavailable' || s.state === 'unknown') continue;
+      const dc = (s.attributes?.device_class as string | undefined)
+        ?? ((e.attributes as Record<string, unknown> | undefined)?.device_class as string | undefined);
+      if (!dc || dc in out) continue;
+      const v = parseFloat(s.state ?? '');
+      if (!isNaN(v)) out[dc] = v;
+    }
+  };
+  read(false);
+  read(true);
+  return out;
+}
+
+/** What a gauge ring knows per device class: default range and how the value
+ *  reads. Array order is ring order — electrical first so a relay keeps
+ *  W/V/A/°C, then the environment a Wall Display or BLU H&T reports. */
+export const GAUGE_RING_DEFS: Array<{ key: string; label: string; min: number; max: number; digits: number }> = [
+  { key: 'power',          label: 'W',   min: 0,   max: 3000, digits: 0 },
+  { key: 'voltage',        label: 'V',   min: 0,   max: 250,  digits: 0 },
+  { key: 'current',        label: 'A',   min: 0,   max: 16,   digits: 2 },
+  { key: 'temperature',    label: '°C',  min: -10, max: 40,   digits: 1 },
+  { key: 'humidity',       label: '%',   min: 0,   max: 100,  digits: 0 },
+  { key: 'illuminance',    label: 'lx',  min: 0,   max: 2000, digits: 0 },
+  { key: 'carbon_dioxide', label: 'ppm', min: 400, max: 2000, digits: 0 },
+  { key: 'battery',        label: '%',   min: 0,   max: 100,  digits: 0 },
+];
+/** The gauge SVG has room for four concentric arcs before they crowd. */
+export const GAUGE_MAX_RINGS = 4;
+
+export interface GaugeRing {
+  key: string; label: string; val: number; min: number; max: number; color: string; digits: number;
+}
+
+/** The rings a gauge draws for a device: every GAUGE_RING_DEFS class the device
+ *  reports, in ring order, capped at GAUGE_MAX_RINGS. The gauge used to
+ *  hard-code W/V/A/°C, so a sensor device got one arc and no humidity. Ranges
+ *  and colours come from `graph_style.sensor_ranges` / `graph_sensor_colors`
+ *  with the defs and the graph palette as fallback; power takes the accent. */
+export function gaugeRings(
+  values: Record<string, number>,
+  opts: { ranges?: Record<string, { min?: number; max?: number }>; colors?: Record<string, string>; accent: string },
+): GaugeRing[] {
+  const rings: GaugeRing[] = [];
+  for (const d of GAUGE_RING_DEFS) {
+    const val = values[d.key];
+    if (val == null) continue;
+    const r = opts.ranges?.[d.key] ?? {};
+    const graphColor = GRAPH_SENSOR_DEFS.find(g => g.key === d.key)?.defaultColor;
+    rings.push({
+      key: d.key, label: d.label, val, digits: d.digits,
+      min: r.min ?? d.min, max: r.max ?? d.max,
+      color: opts.colors?.[d.key] ?? (d.key === 'power' ? opts.accent : graphColor ?? opts.accent),
+    });
+    if (rings.length >= GAUGE_MAX_RINGS) break;
+  }
+  return rings;
+}
 
 /**
  * Domain-based device type detection — the universal, integration-agnostic core.

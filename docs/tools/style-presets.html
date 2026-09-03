@@ -99,11 +99,11 @@ const STYLES = [
 ];
 /* Third field marks an OPT-IN element (def:false in src) — off until enabled. */
 const ELEMENTS = {
-  'power-monitor':  [['toggle','On/off button'],['graph','Sparkline graph'],['secondary','Secondary readings (V/A/kWh)'],['header_chips','Chips in the name row',false],['uptime','Uptime badge'],['lower_body','Lower body (blocks)']],
-  'light-control':  [['color_wheel','Colour wheel'],['brightness','Brightness slider'],['color_temp','Colour temperature'],['white','White channel'],['effects','Effects'],['power','Power reading']],
-  'climate-control':[['heating_badge','Heating badge'],['dial','Temperature dial'],['adjust_buttons','+/− buttons'],['stats','Stats row'],['presets','Preset buttons']],
-  'cover-control':  [['position_pct','Position %'],['shutter_graphic','Shutter graphic'],['moving_label','Moving label'],['buttons','Open / stop / close']],
-  'sensor-card':    [['primary_value','Primary value'],['trend','Trend arrow'],['graph','Sparkline graph'],['secondary','Secondary chips'],['header_chips','Chips in the name row',false]],
+  'power-monitor':  [['toggle','On/off button'],['graph','Graphs (spark + sensor rows)'],['secondary','Secondary readings (V/A/kWh)'],['header_chips','Chips in the name row',false],['uptime','Uptime badge'],['lower_body','Lower body (blocks)']],
+  'light-control':  [['color_wheel','Colour wheel'],['brightness','Brightness slider'],['color_temp','Colour temperature'],['white','White channel'],['effects','Effects'],['power','Power reading'],['graphs','Sensor graphs (with Show graphs)']],
+  'climate-control':[['heating_badge','Heating badge'],['dial','Temperature dial'],['adjust_buttons','+/− buttons'],['stats','Stats row'],['presets','Preset buttons'],['graphs','Sensor graphs (with Show graphs)']],
+  'cover-control':  [['position_pct','Position %'],['shutter_graphic','Shutter graphic'],['moving_label','Moving label'],['buttons','Open / stop / close'],['graphs','Sensor graphs (with Show graphs)']],
+  'sensor-card':    [['primary_value','Primary value'],['trend','Trend arrow'],['graph','Sparkline graphs'],['secondary','Secondary chips'],['header_chips','Chips in the name row',false]],
   'input-control':  [['name','Name'],['keypad','Channel keys'],['input_rows','Unassigned channel rows'],['target_state','Channel name under the key'],['last_event','Last-pressed time']],
   'scene-button':   [['icon','Icon'],['name','Name'],['timestamp','Last-triggered time'],['input_rows','Input channel rows']],
 };

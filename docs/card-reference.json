@@ -474,7 +474,7 @@
           { "control": "Tick grid lines", "fn": "Background tick grid", "key": "graph_style.tick_lines", "scope": "global", "default": "on", "advanced": true }
         ]},
         { "name": "Graph colours", "controls": [
-          { "control": "Gauge ring colours", "fn": "Per-sensor gauge colour (power/voltage/current/temp)", "key": "graph_sensor_colors[key]", "scope": "global", "default": "#f4601e / #a78bfa / #fbbf24 / #4fc3f7", "advanced": true },
+          { "control": "Gauge ring colours", "fn": "Per-sensor gauge ring colour, keyed by device class — the gauge draws one ring per class the device reports (power/voltage/current/temperature/humidity/illuminance/CO₂/battery, up to four)", "key": "graph_sensor_colors[key]", "scope": "global", "default": "#f4601e / #a78bfa / #fbbf24 / #4fc3f7", "advanced": true },
           { "control": "Sparkline colours", "fn": "Per-sensor sparkline colour (graphed sensors)", "key": "graph_sensor_colors[key]", "scope": "global", "default": "per-sensor default", "advanced": true },
           { "control": "Which sensors to graph", "fn": "The graph palette (+ All / None)", "key": "graph_sensors", "scope": "global", "default": "[] none", "advanced": true }
         ]},

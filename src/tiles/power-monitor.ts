@@ -1,5 +1,5 @@
 import { html, svg, nothing, TemplateResult } from 'lit';
-import { formatPower, formatEnergy, formatUptime } from '../helpers';
+import { formatPower, formatEnergy, formatUptime, gaugeRings } from '../helpers';
 import type { PowerMonitorVariant } from '../types';
 import type { TileCtx } from './tile-context';
 import { renderNameDot, chipsInHeader } from './tile-parts';
@@ -16,6 +16,16 @@ export function renderPowerMonitorTile(ctx: TileCtx, variant: PowerMonitorVarian
 
 type PMSensors = ReturnType<TileCtx['tileSensors']>;
 
+/** The shared lower body under a variant. The style's 'graph' element means
+ *  "graphs on this tile" — it hides the companion sensor rows as well as the
+ *  variant's own spark, so it is not a dead toggle on Gauge and Compact, which
+ *  have no spark of their own. A variant that draws its own power spark passes
+ *  `skipPowerGraph` so power is not drawn twice. */
+function lowerBody(ctx: TileCtx, opts: { skipPowerGraph?: boolean } = {}): TemplateResult | typeof nothing {
+  if (!ctx.showEl('lower_body')) return nothing;
+  return ctx.renderTileLowerBody(ctx.device, ctx.profile, { ...opts, skipGraphs: !ctx.showEl('graph') });
+}
+
 /** The secondary readings as one chip strip — shared by every placement. The
  *  energy chip carries the period-aware label (Energy today / this week …) as
  *  a tooltip: the strip has no room for the table variant's row label, but the
@@ -31,7 +41,7 @@ function pmChips(s: PMSensors, cls = 'ts-chips'): TemplateResult {
 }
 
 function renderPMBigNumber(ctx: TileCtx): TemplateResult {
-  const { device, isOn, accent, online, config, profile } = ctx;
+  const { device, isOn, accent, online, config } = ctx;
   const s = ctx.tileSensors(device);
   const sw = ctx.getPrimarySwitch(device);
   const sparks = ctx.getPowerSparks(device);
@@ -71,23 +81,25 @@ function renderPMBigNumber(ctx: TileCtx): TemplateResult {
         ${!hdrChips && ctx.showEl('secondary') ? pmChips(s) : nothing}
         ${ctx.showEl('uptime') ? html`<span class="ts-uptime">${s.uptime ? formatUptime(s.uptime) : ''}</span>` : nothing}
       </div>
-      ${ctx.showEl('lower_body') ? ctx.renderTileLowerBody(device, profile) : nothing}
+      ${lowerBody(ctx, { skipPowerGraph: true })}
     </div>`;
 }
 
 function renderPMGauge(ctx: TileCtx): TemplateResult {
-  const { device, isOn, accent, online, config, profile } = ctx;
+  const { device, isOn, accent, online, config } = ctx;
   const s = ctx.tileSensors(device);
   const sw = ctx.getPrimarySwitch(device);
-  const sr = config.graph_style?.sensor_ranges ?? {};
-  const sc = config.graph_sensor_colors ?? {};
-  type RingDef = { label: string; val: number | null; min: number; max: number; color: string };
-  const rings: RingDef[] = [
-    { label: 'W',  val: s.power,   min: sr['power']?.min       ?? 0, max: sr['power']?.max       ?? 3000, color: sc['power']       ?? accent },
-    { label: 'V',  val: s.voltage, min: sr['voltage']?.min     ?? 0, max: sr['voltage']?.max     ?? 250,  color: sc['voltage']     ?? '#a78bfa' },
-    { label: 'A',  val: s.current, min: sr['current']?.min     ?? 0, max: sr['current']?.max     ?? 16,   color: sc['current']     ?? '#fbbf24' },
-    { label: '°C', val: s.temp,    min: sr['temperature']?.min ?? 0, max: sr['temperature']?.max ?? 100,  color: sc['temperature'] ?? '#4fc3f7' },
-  ].filter(r => r.val != null);
+  // One arc per sensor class the device reports — a relay gets W/V/A/°C, a
+  // Wall Display gets °C/%/lx — rather than a fixed electrical set that left a
+  // sensor device with one arc and no humidity.
+  const rings = gaugeRings(ctx.sensorValues(device), {
+    ranges: config.graph_style?.sensor_ranges,
+    colors: config.graph_sensor_colors,
+    accent,
+  });
+  // The relay being off dims the electrical arcs (they read 0 anyway); the
+  // room's temperature and humidity are not "off" and keep full strength.
+  const ELECTRICAL = new Set(['power', 'voltage', 'current']);
 
   const CX = 110, CY = 110, sweepDeg = 180, startDeg = 180;
   const ringStep = 22;
@@ -102,13 +114,8 @@ function renderPMGauge(ctx: TileCtx): TemplateResult {
     return `M ${sx.toFixed(2)} ${sy.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${ex.toFixed(2)} ${ey.toFixed(2)}`;
   };
 
-  const fmtVal = (v: number | null | undefined, label: string): string => {
-    if (v == null) return '—';
-    if (label === 'W' && v >= 1000) return `${(v / 1000).toFixed(1)}k`;
-    if (label === 'A') return v.toFixed(2);
-    if (label === '°C') return v.toFixed(1);
-    return String(Math.round(v));
-  };
+  const fmtVal = (v: number, key: string, digits: number): string =>
+    key === 'power' && v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toFixed(digits);
 
   const svgH = CY + 22;
 
@@ -119,26 +126,29 @@ function renderPMGauge(ctx: TileCtx): TemplateResult {
         ${renderNameDot(device, online, 'ts-ring-name')}
         ${chipsInHeader(ctx) ? pmChips(s, 'ts-chips ts-chips-hdr') : nothing /* gauge has no body chips to stand down */}
       </div>
+      ${rings.length ? html`
       <svg viewBox="0 0 ${CX * 2} ${svgH}" style="width:100%;max-width:360px;height:auto;overflow:visible;display:block">
         ${rings.map((ring, i) => {
           const r = outerR - i * ringStep;
-          const pct = Math.min(1, Math.max(0, ((ring.val ?? ring.min) - ring.min) / (ring.max - ring.min || 1)));
-          const side = (ring.label === 'W' || ring.label === 'A') ? 'left' : 'right';
+          const pct = Math.min(1, Math.max(0, (ring.val - ring.min) / (ring.max - ring.min || 1)));
+          // Labels alternate sides so four of them never stack on one end.
+          const side = i % 2 === 0 ? 'left' : 'right';
           const vx = (CX + r * (side === 'left' ? -1 : 1)).toFixed(1);
           const vy = (CY + 8).toFixed(1);
           const anchor = side === 'left' ? 'start' : 'end';
+          const lit = isOn || !ELECTRICAL.has(ring.key);
           return svg`
             <path d="${arcPath(r, 1)}"   fill="none" stroke="${ring.color}" stroke-width="7" stroke-linecap="round" opacity="0.12"/>
-            <path d="${arcPath(r, pct)}" fill="none" stroke="${ring.color}" stroke-width="7" stroke-linecap="round" opacity="${isOn ? '0.9' : '0.3'}"/>
-            <text x="${vx}" y="${vy}" font-size="8" fill="${ring.color}" text-anchor="${anchor}" dominant-baseline="hanging" font-family="monospace" font-weight="700" opacity="${isOn ? 0.95 : 0.5}">${fmtVal(ring.val, ring.label)} ${ring.label}</text>`;
+            <path d="${arcPath(r, pct)}" fill="none" stroke="${ring.color}" stroke-width="7" stroke-linecap="round" opacity="${lit ? '0.9' : '0.3'}"/>
+            <text x="${vx}" y="${vy}" font-size="8" fill="${ring.color}" text-anchor="${anchor}" dominant-baseline="hanging" font-family="monospace" font-weight="700" opacity="${lit ? 0.95 : 0.5}">${fmtVal(ring.val, ring.key, ring.digits)} ${ring.label}</text>`;
         })}
-      </svg>
-      ${ctx.showEl('lower_body') ? ctx.renderTileLowerBody(device, profile) : nothing}
+      </svg>` : html`<span style="color:var(--sc-text-muted);font-size:.8em">No readings to gauge</span>`}
+      ${lowerBody(ctx)}
     </div>`;
 }
 
 function renderPMGraph(ctx: TileCtx): TemplateResult {
-  const { device, isOn, accent, online, config, profile } = ctx;
+  const { device, isOn, accent, online, config } = ctx;
   const s = ctx.tileSensors(device);
   const sw = ctx.getPrimarySwitch(device);
   const hdrChips = chipsInHeader(ctx);
@@ -190,12 +200,12 @@ function renderPMGraph(ctx: TileCtx): TemplateResult {
           ${s.rssi    != null ? html`<div class="ts-spark-mrow">${s.rssi} <b>dBm</b></div>` : nothing}
         </div>` : nothing}
       </div>
-      ${ctx.showEl('lower_body') ? ctx.renderTileLowerBody(device, profile, { skipPowerGraph: true }) : nothing}
+      ${lowerBody(ctx, { skipPowerGraph: true })}
     </div>`;
 }
 
 function renderPMCompact(ctx: TileCtx): TemplateResult {
-  const { device, isOn, accent, online, profile } = ctx;
+  const { device, isOn, accent, online } = ctx;
   const s = ctx.tileSensors(device);
   const sw = ctx.getPrimarySwitch(device);
   const hdrChips = chipsInHeader(ctx);
@@ -230,12 +240,12 @@ function renderPMCompact(ctx: TileCtx): TemplateResult {
         </div>
         ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
       </div>
-      ${ctx.showEl('lower_body') ? ctx.renderTileLowerBody(device, profile) : nothing}
+      ${lowerBody(ctx)}
     </div>`;
 }
 
 function renderPMTable(ctx: TileCtx): TemplateResult {
-  const { device, isOn, accent, online, config, profile } = ctx;
+  const { device, isOn, accent, online, config } = ctx;
   const s = ctx.tileSensors(device);
   const sw = ctx.getPrimarySwitch(device);
   const hdrChips = chipsInHeader(ctx);
@@ -281,6 +291,6 @@ function renderPMTable(ctx: TileCtx): TemplateResult {
       ${ctx.showEl('graph') ? html`<div class="ts-list-spark">
         <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:${H}px;display:block">${sparkBody}</svg>
       </div>` : nothing}
-      ${ctx.showEl('lower_body') ? ctx.renderTileLowerBody(device, profile, { skipGraphs: true }) : nothing}
+      ${lowerBody(ctx, { skipPowerGraph: true })}
     </div>`;
 }

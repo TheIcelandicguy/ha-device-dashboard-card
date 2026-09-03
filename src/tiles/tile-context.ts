@@ -128,7 +128,13 @@ export interface TileCtx {
   getValve: (d: HADevice) => ValveInfo | null;
   getPower: (d: HADevice) => number | null;
   tileSensors: (d: HADevice) => TileSensors;
+  /** Selected graph sensors, gated by Show graphs (companion rows, graph block). */
   getGraphEntities: (d: HADevice) => GraphEntity[];
+  /** Selected graph sensors regardless of Show graphs — for surfaces that are
+   *  about history (sensor card, detail sheet) and carry their own switch. */
+  getGraphSensors: (d: HADevice) => GraphEntity[];
+  /** First live reading per device_class — what the gauge rings draw. */
+  sensorValues: (d: HADevice) => Record<string, number>;
   getPowerSparks: (d: HADevice) => SparkPoint[];
   ensureGraphData: (d: HADevice) => void;
 

@@ -249,6 +249,29 @@ try {
   eq('Gen1 hostnames carry a 6-hex id', h.shellyHostname({ entities: [{ entity_id: 'sensor.shellyix3_a4cf12_rssi' }] }), 'shellyix3-a4cf12');
   eq('no hostname when every entity is renamed', h.shellyHostname({ entities: [{ entity_id: 'event.hall_switch_input_1' }] }), undefined);
 
+  console.log('\ngauge rings follow the device');
+  const wdVals = { temperature: 25.9, humidity: 37.6, illuminance: 5, signal_strength: -60 };
+  const wdRings = h.gaugeRings(wdVals, { accent: '#f00' });
+  eq('one ring per reported class, in ring order', wdRings.map(r => r.key), ['temperature', 'humidity', 'illuminance']);
+  eq('humidity range defaults to 0–100', [wdRings[1].min, wdRings[1].max], [0, 100]);
+  eq('a configured range wins', h.gaugeRings(wdVals, { accent: '#f00', ranges: { temperature: { min: 15, max: 30 } } })[0].max, 30);
+  eq('power takes the accent, others their graph colour',
+    h.gaugeRings({ power: 5, humidity: 1 }, { accent: '#f00' }).map(r => r.color), ['#f00', '#2dd4bf']);
+  eq('capped at four rings', h.gaugeRings({ power: 1, voltage: 2, current: 3, temperature: 4, humidity: 5 }, { accent: '#f00' }).length, 4);
+  const wd = { entities: [
+    { entity_id: 'sensor.d_temp', domain: 'sensor' },
+    { entity_id: 'sensor.d_hum', domain: 'sensor' },
+    { entity_id: 'sensor.d_devtemp', domain: 'sensor', entity_category: 'diagnostic' },
+  ] };
+  const wdSt = {
+    'sensor.d_temp':    { state: '25.9', attributes: { device_class: 'temperature' } },
+    'sensor.d_hum':     { state: '37.6', attributes: { device_class: 'humidity' } },
+    'sensor.d_devtemp': { state: '48',   attributes: { device_class: 'temperature' } },
+  };
+  eq('first non-diagnostic reading per class', h.deviceSensorValues(wd, wdSt), { temperature: 25.9, humidity: 37.6 });
+  eq('a diagnostic reading stands in only when nothing else reports the class',
+    h.deviceSensorValues({ entities: [wd.entities[2]] }, wdSt), { temperature: 48 });
+
   console.log('\ndeviceRelevance');
   const rel4 = h.deviceRelevance(i4, hass.states);
   ok('no energy controls for a switch that meters nothing', !rel4.hasEnergy);

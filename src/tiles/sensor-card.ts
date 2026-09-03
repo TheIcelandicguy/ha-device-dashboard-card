@@ -80,9 +80,18 @@ export function renderSensorCardTile(ctx: TileCtx): TemplateResult {
           <div class="ts-sensor-trend ${trend > 0 ? 'up' : trend < 0 ? 'down' : ''}">
             ${trend > 0 ? '↑' : trend < 0 ? '↓' : '→'} ${Math.abs(trend) < 0.05 ? 'stable' : Math.abs(trend).toFixed(1) + ' ' + unit + '/hr'}
           </div>` : nothing}
-        ${ctx.showEl('graph') ? html`<div class="ts-sensor-spark">
-          ${ctx.renderSparklinesFiltered(device, ctx.getGraphEntities(device).filter(e => e.entityId === primaryEnt!.entity_id))}
-        </div>` : nothing}
+        ${ctx.showEl('graph') ? (() => {
+          // Every selected graph sensor on the device, the primary one first —
+          // not just the primary, which left a Wall Display's humidity ungraphed.
+          // The style's own 'graph' element is the switch: a sensor card exists
+          // to show history, so it does not also wait on Show graphs.
+          const ge = ctx.getGraphSensors(device);
+          const rows = [
+            ...ge.filter(e => e.entityId === primaryEnt!.entity_id),
+            ...ge.filter(e => e.entityId !== primaryEnt!.entity_id),
+          ];
+          return html`<div class="ts-sensor-spark">${ctx.renderSparklinesFiltered(device, rows)}</div>`;
+        })() : nothing}
         ${bodyChips && chipSpans ? html`<div class="ts-chips" style="margin-top:6px">
           ${chipSpans}
         </div>` : nothing}

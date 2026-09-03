@@ -32,5 +32,6 @@ export function renderCoverControlTile(ctx: TileCtx): TemplateResult {
         <button class="ts-cover-btn ts-cover-stop" @click=${(e: Event) => ctx.coverAction(cover.entityId, 'stop', e)}>■</button>
         <button class="ts-cover-btn" @click=${(e: Event) => ctx.coverAction(cover.entityId, 'close', e)}>▼</button>
       </div>` : nothing}
+      ${ctx.showEl('graphs') ? html`<div class="ts-lower-section ts-lower-graphs">${ctx.renderSparklines(device)}</div>` : nothing}
     </div>`;
 }

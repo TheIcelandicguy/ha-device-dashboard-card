@@ -28,6 +28,30 @@ installs from them.
 - **Dropdown chips name themselves** — "Preset: Boot master on" rather than the
   bare option; `select_chip.label` still overrides.
 
+### Graphs
+
+- **The gauge follows the device.** `power_monitor_variant: gauge` used to
+  hard-code four electrical rings (W/V/A/°C), so a Wall Display or BLU H&T got a
+  lone temperature arc and no humidity. It now draws one ring per sensor class
+  the device reports — power, voltage, current, temperature, humidity,
+  illuminance, CO₂, battery — up to four, with sensible default ranges
+  (temperature −10…40 °C rather than 0…100) and the graph palette's colours.
+  Environmental rings stay lit when the relay is off.
+- **The sensor card graphs every selected sensor**, primary first, instead of
+  only the primary one — and its own "Sparkline graphs" element is the switch.
+  It no longer also waits on Show graphs, which defaults off and left a card
+  whose whole point is history without one.
+- **The detail sheet always has its history tabs.** It used to go blank when
+  tiles had Show graphs off.
+- **One rule for where graphs show.** Show graphs governs the sensor rows on
+  every tile style: the block tile's graph block, the rows under all five
+  power-monitor variants, and a new "Sensor graphs" element on Light control,
+  Climate and Cover (a dimmer on Light control gets the same power/temperature
+  rows it gets on the default tile). Number and Table no longer draw power
+  twice / drop the other sensors — every variant with its own power spark skips
+  only power. The power-monitor "Graphs" element now hides the sensor rows as
+  well as the spark, so it is no longer a dead toggle on Gauge and Compact.
+
 ### Editor
 
 - **Input actions get Home Assistant's entity picker** — search by name, room

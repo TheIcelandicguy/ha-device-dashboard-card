@@ -163,7 +163,7 @@ the machine-readable model that drives the editor defaults and the offline tools
 | `power_monitor_variant` | variant | `big-number` | Sub-variant when the style resolves to `power-monitor` |
 | `smart_tile_styles` | boolean | `false` | Tiles with no explicit style fall to a per-profile default (relay → power monitor, dimmer → light control, sensor → sensor card …) instead of the adaptive tile |
 | `tile_layout` | block[] | all visible | Order and visibility of tile blocks — see below |
-| `show_graphs` | boolean | `false` | Master switch for tile sparklines — off by default, so tiles stay lean. Turn it on globally, per view, room, type or device, or per power tile via the Display picker (Circles / Graphs / Both). Every graph line ends at the sensor's **live** reading (appended as a final "now" point so the graph label always agrees with the tile's chips); that live point deliberately doesn't move the y-axis or the peak/min dots, so a momentary spike can't flatten a day of history |
+| `show_graphs` | boolean | `false` | Master switch for the sensor sparklines on tiles — off by default, so tiles stay lean. Turn it on globally, per view, room, type or device, or per power tile via the Display picker (Circles / Graphs / Both). It governs the block tile's graph block, the rows under every power-monitor variant, and the `graphs` element on the light / climate / cover styles. Two surfaces ignore it on purpose: the sensor card (its own `graph` element is the switch — the card exists to show history) and the detail sheet. Every graph line ends at the sensor's **live** reading (appended as a final "now" point so the graph label always agrees with the tile's chips); that live point deliberately doesn't move the y-axis or the peak/min dots, so a momentary spike can't flatten a day of history |
 | `show_power_bar` | boolean | `false` | Mini usage bar at the bottom of a tile |
 | `power_bar_max` | number | `2000` | Watts that read as 100% on that bar |
 | `tile_opacity` / `card_opacity` / `header_opacity` | number | `100` | Background opacity, 0–100 |
@@ -291,11 +291,11 @@ power_monitor_variant: gauge
 | Style | Suits | Notes |
 |---|---|---|
 | `default` | anything | Adaptive block grid — the blocks below, chosen per profile |
-| `power-monitor` | relay, plug, energy | Variants: `big-number`, `gauge`, `graph`, `compact`, `table` |
+| `power-monitor` | relay, plug, energy | Variants: `big-number`, `gauge`, `graph`, `compact`, `table`. The gauge draws one arc per sensor class the device reports (W/V/A/°C on a relay, °C/%/lx on a Wall Display), up to four; ranges from `graph_style.sensor_ranges`, colours from `graph_sensor_colors` |
 | `light-control` | dimmer, RGB | Colour wheel + brightness / temperature sliders, effect dropdown |
 | `climate-control` | TRV, Wall Display | Thermostat dial front and centre |
 | `cover-control` | roller, blind | Shutter graphic + open/stop/close |
-| `sensor-card` | sensors | Big primary value + sparkline + trend badge |
+| `sensor-card` | sensors | Big primary value + trend badge + a sparkline for every selected graph sensor on the device (primary first) |
 | `input-control` | i3 / i4 / UNI | Keypad of channel keys (default for `input`) — see below |
 | `scene-button` | generic, scenes | Large tappable icon button |
 | `custom:<key>` | — | One of your saved styles from `custom_styles` |

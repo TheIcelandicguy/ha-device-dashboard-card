@@ -37,6 +37,7 @@ import {
   formatUptime, formatApparentPower, formatReactivePower,
   formatFrequency, formatHumidity, formatIlluminance, formatPpm, formatPercent,
   detectInputChannels, detectShellyGen, shellyClickTypes, shellyInputChannel, shellyHostname,
+  deviceSensorValues,
 } from './helpers';
 import { renderAnimSvg } from './anim-icons';
 
@@ -1383,8 +1384,17 @@ export class HADeviceDashboard extends LitElement {
     return cascade.showGraphs(this._cascade(device));
   }
 
+  /** The selected graph sensors, gated by Show graphs — what a tile's companion
+   *  rows and the block tile's graph block draw. */
   private _getGraphEntities(device: HADevice): GraphEntity[] {
     if (!this._showGraphs(device)) return [];
+    return this._graphSensorEntities(device);
+  }
+
+  /** The selected graph sensors regardless of Show graphs — for surfaces whose
+   *  whole point is history (the sensor card's rows, the detail sheet), which
+   *  have their own switch and should not go blank because tiles are lean. */
+  private _graphSensorEntities(device: HADevice): GraphEntity[] {
     // Normalize to device_class keys so legacy 'co2'/'rssi' configs still match.
     // Unset (never configured) falls back to a sensible default set; an explicit
     // empty list ([]) is honoured as "no graphs".
@@ -1806,7 +1816,10 @@ export class HADeviceDashboard extends LitElement {
   }
 
   private _renderSparklines(device: HADevice, expanded = false, hours?: number): TemplateResult {
-    return this._renderSparklinesFiltered(device, this._getGraphEntities(device), expanded, hours);
+    // Expanded = the detail sheet, which exists to show history: it draws the
+    // selection whether or not tiles are showing graphs.
+    const ents = expanded ? this._graphSensorEntities(device) : this._getGraphEntities(device);
+    return this._renderSparklinesFiltered(device, ents, expanded, hours);
   }
 
   private _renderSparklinesFiltered(
@@ -2832,7 +2845,9 @@ export class HADeviceDashboard extends LitElement {
       getValve: memo((d) => this._getValve(d)),
       getPower: memo((d) => this._getPower(d)),
       tileSensors: memo((d) => this._tileSensors(d)),
+      sensorValues: memo((d) => deviceSensorValues(d, this.hass.states as never)),
       getGraphEntities: memo((d) => this._getGraphEntities(d)),
+      getGraphSensors: memo((d) => this._graphSensorEntities(d)),
       getPowerSparks: memo((d) => this._getPowerSparks(d)),
       ensureGraphData: (d) => this._ensureGraphData(d),
       renderEntityAnim: (id, on, devId) => this._renderEntityAnim(id, on, devId),

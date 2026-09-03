@@ -608,8 +608,12 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   power_monitor_variant?: PowerMonitorVariant;
   /** Master switch for tile sparkline graphs (the graph_sensors-driven graph
    *  section). undefined = off — tiles are lean by default and graphs are opt-in.
-   *  Overridable per-area and per-device. `graph_sensors` stays the "which sensors
-   *  to plot" palette; this is "whether to show them". */
+   *  Overridable per view, type, area and device. `graph_sensors` stays the
+   *  "which sensors to plot" palette; this is "whether to show them" on tiles:
+   *  the block tile's graph block, the rows under the power-monitor variants,
+   *  and the `graphs` element on light / climate / cover. The sensor card and
+   *  the detail sheet ignore it — history is their purpose — and the power
+   *  variants' own inline power spark is the `graph` element's business. */
   show_graphs?: boolean;
   /** Ordered list of tile blocks. Omit a block to hide it. */
   tile_layout?: TileLayout;
