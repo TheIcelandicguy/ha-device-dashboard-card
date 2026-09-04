@@ -291,7 +291,7 @@ power_monitor_variant: gauge
 | Style | Suits | Notes |
 |---|---|---|
 | `default` | anything | Adaptive block grid — the blocks below, chosen per profile |
-| `power-monitor` | relay, plug, energy | Variants: `big-number`, `gauge`, `graph`, `compact`, `table`. The gauge draws one arc per sensor class the device reports (W/V/A/°C on a relay, °C/%/lx on a Wall Display), up to four; ranges from `graph_style.sensor_ranges`, colours from `graph_sensor_colors` |
+| `power-monitor` | relay, plug, energy | Variants: `big-number`, `gauge`, `graph`, `compact`, `table`. The gauge draws one arc per sensor class the device reports (W/V/A/°C on a relay, °C/%/lx on a Wall Display), up to four; ranges from `graph_style.sensor_ranges`. An arc is flat (`graph_sensor_colors`) or a gradient along its sweep (`graph_style.gauge_gradients`, 2–3 stops) — temperature defaults to blue → yellow → red — and each value sits centred just under the crown of its own arc, in the colour at its reading |
 | `light-control` | dimmer, RGB | Colour wheel + brightness / temperature sliders, effect dropdown |
 | `climate-control` | TRV, Wall Display | Thermostat dial front and centre |
 | `cover-control` | roller, blind | Shutter graphic + open/stop/close |

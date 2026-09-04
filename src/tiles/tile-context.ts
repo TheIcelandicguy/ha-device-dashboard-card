@@ -154,6 +154,10 @@ export interface TileCtx {
   setHvacMode: (entityId: string, mode: string, e: Event) => void;
   setPresetMode: (entityId: string, preset: string) => void;
   coverAction: (entityId: string, action: 'open' | 'close' | 'stop', e: Event) => void;
+  /** Drive a position-aware cover straight to a percentage (0 closed … 100 open). */
+  setCoverPosition: (entityId: string, pos: number) => void;
+  /** Start an `update.*` entity's install — the detail sheet's firmware row. */
+  installUpdate: (entityId: string, e: Event) => void;
   valveAction: (entityId: string, action: 'open' | 'close' | 'stop', e: Event) => void;
   toggle: (entityId: string, isOn: boolean, e: Event) => void;
   pressButton: (entityId: string, e: Event) => void;

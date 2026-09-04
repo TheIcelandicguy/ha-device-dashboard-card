@@ -62,7 +62,11 @@ function renderSheetHeader(ctx: TileCtx): TemplateResult {
           : profile.gen !== 'other' ? html`<span class="ds-chip">Gen ${profile.gen}</span>` : nothing}
         ${device.ip ? html`<span class="ds-chip">${device.ip}</span>` : nothing}
       </div>
-      ${fw ? html`<div class="ds-fw-update"><span>FW update: ${fw.current} → ${fw.newVersion}</span></div>` : nothing}
+      ${fw ? html`<div class="ds-fw-update">
+        <span>FW update: ${fw.current} → ${fw.newVersion}</span>
+        <button class="ds-fw-install" title="Install ${fw.newVersion} now"
+          @click=${(e: Event) => ctx.installUpdate(fw.entityId, e)}>Install</button>
+      </div>` : nothing}
       ${s.rssi != null ? html`<div class="ds-signal">Wi-Fi: ${rssiToQuality(s.rssi)} (${s.rssi} dBm)${s.uptime != null ? html` · Up ${formatUptime(s.uptime)}` : nothing}</div>` : nothing}
       <div class="ds-accent-bar" style="background:${accent}"></div>
     </div>`;

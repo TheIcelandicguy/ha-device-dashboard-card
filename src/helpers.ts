@@ -423,6 +423,7 @@ export const STYLE_ELEMENTS: Partial<Record<TileStyle, Array<{ id: string; label
     { id: 'shutter_graphic', label: 'Shutter graphic' },
     { id: 'moving_label',    label: 'Moving label' },
     { id: 'buttons',         label: 'Open / stop / close' },
+    { id: 'position_slider', label: 'Position slider (covers that report one)' },
     { id: 'graphs',          label: 'Sensor graphs (with Show graphs)' },
   ],
   'sensor-card': [
@@ -656,43 +657,77 @@ export function attachExtraSensors(
 /** What a gauge ring knows per device class: default range and how the value
  *  reads. Array order is ring order — electrical first so a relay keeps
  *  W/V/A/°C, then the environment a Wall Display or BLU H&T reports. */
-export const GAUGE_RING_DEFS: Array<{ key: string; label: string; min: number; max: number; digits: number }> = [
+export const GAUGE_RING_DEFS: Array<{
+  key: string; label: string; min: number; max: number; digits: number;
+  /** Default gradient along the arc, empty end → full end. Absent = one flat colour. */
+  stops?: string[];
+}> = [
   { key: 'power',          label: 'W',   min: 0,   max: 3000, digits: 0 },
   { key: 'voltage',        label: 'V',   min: 0,   max: 250,  digits: 0 },
   { key: 'current',        label: 'A',   min: 0,   max: 16,   digits: 2 },
-  { key: 'temperature',    label: '°C',  min: -10, max: 40,   digits: 1 },
-  { key: 'humidity',       label: '%',   min: 0,   max: 100,  digits: 0 },
-  { key: 'illuminance',    label: 'lx',  min: 0,   max: 2000, digits: 0 },
-  { key: 'carbon_dioxide', label: 'ppm', min: 400, max: 2000, digits: 0 },
-  { key: 'battery',        label: '%',   min: 0,   max: 100,  digits: 0 },
+  { key: 'temperature',    label: '°C',  min: -10, max: 40,   digits: 1, stops: ['#38bdf8', '#fde047', '#f87171'] },
+  { key: 'humidity',       label: '%',   min: 0,   max: 100,  digits: 0, stops: ['#fde68a', '#2dd4bf', '#0ea5e9'] },
+  { key: 'illuminance',    label: 'lx',  min: 0,   max: 2000, digits: 0, stops: ['#a8a29e', '#fde047'] },
+  { key: 'carbon_dioxide', label: 'ppm', min: 400, max: 2000, digits: 0, stops: ['#4ade80', '#fde047', '#f87171'] },
+  { key: 'battery',        label: '%',   min: 0,   max: 100,  digits: 0, stops: ['#f87171', '#fde047', '#4ade80'] },
 ];
 /** The gauge SVG has room for four concentric arcs before they crowd. */
 export const GAUGE_MAX_RINGS = 4;
 
 export interface GaugeRing {
-  key: string; label: string; val: number; min: number; max: number; color: string; digits: number;
+  key: string; label: string; val: number; min: number; max: number; digits: number;
+  /** Colour stops along the arc, empty end → full end. One entry = flat. */
+  stops: string[];
+  /** The stop colour at the reading — what the value label wears. */
+  color: string;
+  /** Where the reading sits in the range, 0–1. */
+  pct: number;
+}
+
+/** Linear blend between gradient stops at position t (0–1). Hex stops only —
+ *  the gauge palette is hex throughout; anything else returns the last stop. */
+export function colorAt(stops: string[], t: number): string {
+  if (stops.length === 1) return stops[0];
+  const hex = (s: string) => /^#[0-9a-f]{6}$/i.test(s) ? [1, 3, 5].map(i => parseInt(s.slice(i, i + 2), 16)) : null;
+  const rgb = stops.map(hex);
+  if (rgb.some(c => !c)) return stops[stops.length - 1];
+  const x = Math.min(1, Math.max(0, t)) * (stops.length - 1);
+  const i = Math.min(stops.length - 2, Math.floor(x));
+  const f = x - i;
+  const a = rgb[i]!, b = rgb[i + 1]!;
+  const mix = a.map((v, k) => Math.round(v + (b[k] - v) * f));
+  return '#' + mix.map(v => v.toString(16).padStart(2, '0')).join('');
 }
 
 /** The rings a gauge draws for a device: every GAUGE_RING_DEFS class the device
  *  reports, in ring order, capped at GAUGE_MAX_RINGS. The gauge used to
  *  hard-code W/V/A/°C, so a sensor device got one arc and no humidity. Ranges
- *  and colours come from `graph_style.sensor_ranges` / `graph_sensor_colors`
- *  with the defs and the graph palette as fallback; power takes the accent. */
+ *  come from `graph_style.sensor_ranges`; colours in order of precedence:
+ *  `graph_style.gauge_gradients[key]` (2–3 stops), `graph_sensor_colors[key]`
+ *  (flat), the def's default gradient, the graph palette colour; power takes
+ *  the accent. The label colour is the gradient sampled at the reading. */
 export function gaugeRings(
   values: Record<string, number>,
-  opts: { ranges?: Record<string, { min?: number; max?: number }>; colors?: Record<string, string>; accent: string },
+  opts: {
+    ranges?: Record<string, { min?: number; max?: number }>;
+    colors?: Record<string, string>;
+    gradients?: Record<string, string[]>;
+    accent: string;
+  },
 ): GaugeRing[] {
   const rings: GaugeRing[] = [];
   for (const d of GAUGE_RING_DEFS) {
     const val = values[d.key];
     if (val == null) continue;
     const r = opts.ranges?.[d.key] ?? {};
+    const min = r.min ?? d.min, max = r.max ?? d.max;
     const graphColor = GRAPH_SENSOR_DEFS.find(g => g.key === d.key)?.defaultColor;
-    rings.push({
-      key: d.key, label: d.label, val, digits: d.digits,
-      min: r.min ?? d.min, max: r.max ?? d.max,
-      color: opts.colors?.[d.key] ?? (d.key === 'power' ? opts.accent : graphColor ?? opts.accent),
-    });
+    const grad = opts.gradients?.[d.key]?.filter(Boolean);
+    const stops = grad && grad.length >= 2 ? grad
+      : opts.colors?.[d.key] ? [opts.colors[d.key]]
+      : d.stops ?? [d.key === 'power' ? opts.accent : graphColor ?? opts.accent];
+    const pct = Math.min(1, Math.max(0, (val - min) / (max - min || 1)));
+    rings.push({ key: d.key, label: d.label, val, digits: d.digits, min, max, stops, pct, color: colorAt(stops, pct) });
     if (rings.length >= GAUGE_MAX_RINGS) break;
   }
   return rings;

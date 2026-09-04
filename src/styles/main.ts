@@ -317,7 +317,7 @@ export const mainCss = css`
 
     .area-section:not(.closed) .area-header { border-radius:10px 10px 0 0; border-bottom:1px solid var(--sc-tile-border); }
 
-    .area-name { font-size:var(--area-name-size,0.78em); font-weight:var(--area-name-weight,700); text-transform:var(--sc-text-transform,uppercase); letter-spacing:0.08em; color:var(--area-header-color,var(--sc-area-header-color,var(--sc-accent))); }
+    .area-name { font-size:var(--area-name-size,0.78em); font-weight:var(--area-name-weight,700); font-style:var(--area-name-style,normal); text-transform:var(--sc-text-transform,uppercase); letter-spacing:0.08em; color:var(--area-header-color,var(--sc-area-header-color,var(--sc-accent))); }
 
     .area-chips { display:flex; align-items:center; flex-wrap:wrap; gap:4px; flex:1; margin:0 10px; }
 
@@ -1103,10 +1103,6 @@ export const mainCss = css`
 
 
 
-    .trv-target { font-size:.95em; font-weight:700; color:var(--sc-text-value); font-variant-numeric:tabular-nums; }
-
-    .trv-target.heating { color:var(--sc-accent); }
-
     .trv-flame { font-size:.75em; flex-shrink:0; }
 
 
@@ -1115,16 +1111,6 @@ export const mainCss = css`
     .trv-step:hover { background:var(--sc-accent); color:white; }
 
 
-    .trv-big-btn { width:36px;height:36px; border:1px solid var(--sc-tog-off-border); border-radius:50%; background:var(--sc-tog-off-bg); color:var(--sc-text-primary); font-size:1.3em; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; flex-shrink:0; }
-
-    .trv-big-btn:hover { background:var(--sc-accent); color:white; }
-
-
-
-
-    .trv-action-badge { font-size:.65em; font-weight:700; letter-spacing:.06em; text-transform:uppercase; padding:2px 7px; border-radius:10px; }
-
-    .trv-action-badge.heating { background:color-mix(in srgb,var(--sc-accent) 20%,transparent); color:var(--sc-accent); }
 
 
 
@@ -1242,9 +1228,6 @@ export const mainCss = css`
     .input-sel:hover { background:rgba(255,255,255,.12); color:var(--sc-text-primary); }
     .input-sel option { background-color:#241f1b; color:#f2ece3; }
 
-    .input-chip { display:flex; align-items:center; gap:4px; padding:4px 10px 4px 8px; border-radius:14px; border:1px solid rgba(255,255,255,.08); background:rgba(255,255,255,.05); font-size:12px; color:var(--sc-text-muted); transition:all .15s; }
-
-    .input-chip.active { background:color-mix(in srgb,var(--sc-accent) 20%,transparent); color:var(--sc-accent); border-color:color-mix(in srgb,var(--sc-accent) 40%,transparent); }
 
 
 
@@ -1344,33 +1327,6 @@ export const mainCss = css`
 
 
 
-
-    .sensor-chip { display:flex; align-items:center; gap:5px; background:var(--sc-sensor-bg); border-radius:20px; padding:4px 10px; white-space:nowrap; }
-
-    .sensor-label { font-size:var(--fs-xs); letter-spacing:.02em; color:var(--sc-text-muted); }
-
-    .sensor-value { font-size:calc(var(--sc-text-scale,1) * .85em); font-weight:600; color:var(--sc-text-value); font-variant-numeric:tabular-nums; }
-
-    .sensor-value.warn { color:var(--error-color,#ef4444); }
-
-
-    .spark-refresh-all { background:none; border:1px solid rgba(255,255,255,.12); border-radius:6px; color:var(--sc-text-muted); font-size:.75em; cursor:pointer; padding:3px 10px; transition:color .15s,border-color .15s; }
-
-    .spark-refresh-all:hover { color:var(--sc-accent); border-color:var(--sc-accent); }
-
-
-    /* ── Entity list ── */
-
-    .ent-caret { font-size:.65em; color:var(--sc-text-muted); transition:transform .2s; flex-shrink:0; }
-
-    .ent-caret.open { transform:rotate(180deg); }
-
-
-
-
-    .ent-name { font-size:.82em; color:var(--sc-text-detail); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-
-    .ent-state { font-size:.78em; color:var(--sc-text-secondary); font-family:monospace; white-space:nowrap; flex-shrink:0; }
 
 
     /* ── Sparklines ── */

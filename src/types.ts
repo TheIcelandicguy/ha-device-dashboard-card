@@ -110,6 +110,12 @@ export interface GraphStyle {
   bar_radius?: number;        // bar corner radius px, default 1.5
   /** Manual y-axis min/max per sensor device_class key */
   sensor_ranges?: Record<string, SensorRange>;
+  /** Gauge ring gradients per device_class key: 2–3 colours laid along the arc
+   *  from its empty end to its full end, so a temperature ring runs blue →
+   *  yellow → red and the value label takes the colour at the reading. Built-in
+   *  defaults exist for temperature, humidity, illuminance, CO₂ and battery; a
+   *  single `graph_sensor_colors[key]` entry overrides with a flat colour. */
+  gauge_gradients?: Record<string, string[]>;
 }
 
 /** Per-area visual overrides */
@@ -130,6 +136,11 @@ export interface AreaStyle {
   theme?: ThemePreset;
   // Background
   bgColor?: string;
+  /** Room block background opacity, 0–100 (default 100). Applies to `bgColor`
+   *  or, when unset, the room theme's `card_bg` — so a room can sit
+   *  translucently over the card's backdrop the way `card_opacity` lets the
+   *  card sit over the dashboard's. */
+  bgOpacity?: number;
   /** Room backdrop photo (data: URL or /local/… path), behind this room's tiles. */
   bg_image?: string;
   bg_image_size?: 'cover' | 'contain' | 'stretch';
@@ -147,6 +158,7 @@ export interface AreaStyle {
   headerBgColor?: string;
   headerBgColor2?: string;
   headerBgDir?: string;
+  /** Older name for `textColor`; read as a fallback when that is unset. */
   headerTextColor?: string;
   // Typography
   textColor?: string;

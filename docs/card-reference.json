@@ -248,10 +248,10 @@
     ],
     "area": [
       { "key": "area_styles[name].bgColor", "type": "string", "default": "transparent", "fn": "Room block background colour. Sits under the room backdrop photo, and overrides what a room `theme` paints there. No longer YAML-only: edited in Design → room scope → Room chrome (advanced)." },
-      { "key": "area_styles[name].borderColor", "type": "string", "default": "inherit", "fn": "Room block border colour (the editor exposes only its width and radius)." },
+      { "key": "area_styles[name].borderColor", "type": "string", "default": "inherit", "fn": "Room block border colour (Room chrome, Advanced)." },
       { "key": "area_styles[name].borderStyle", "type": "'solid' | 'dashed' | 'dotted'", "default": "solid", "fn": "Room block border style." },
       { "key": "area_styles[name].headerBgDir", "type": "string", "default": "135deg", "fn": "Direction of the room-header gradient." },
-      { "key": "area_styles[name].headerTextColor", "type": "string", "default": "inherit", "fn": "Room header text colour (distinct from textColor, which the editor writes)." },
+      { "key": "area_styles[name].headerTextColor", "type": "string", "default": "inherit", "fn": "Older name for textColor — read as a fallback when textColor is unset; the editor writes textColor." },
       { "key": "area_styles[name].fontWeight / fontStyle", "type": "'normal' | 'bold' / 'normal' | 'italic'", "default": "normal / normal", "fn": "Room header typography." },
       { "key": "area_styles[name].tileTextColor", "type": "string", "default": "inherit", "fn": "Tile text colour inside this room." },
       { "key": "area_styles[name].accentColor", "type": "string", "default": "inherit", "fn": "Accent colour for tiles in this room." },
@@ -446,7 +446,8 @@
           { "control": "Room block background", "fn": "Background of the room block itself (Room chrome)", "key": "area_styles[name].bgColor", "scope": "area", "default": "transparent", "advanced": true },
           { "control": "Tile border", "fn": "Tile border colour", "key": "area_styles[name].tileBorderColor", "scope": "area", "default": "rgba(255,255,255,.07)", "advanced": true },
           { "control": "Tile corner radius", "fn": "Tile corner radius", "key": "area_styles[name].tileBorderRadius", "scope": "area", "default": "12px", "advanced": true },
-          { "control": "Tile opacity", "fn": "Tile opacity", "key": "area_styles[name].tileOpacity", "scope": "area", "default": "100%", "advanced": true },
+          { "control": "Tile opacity", "fn": "Tile background opacity for this room's tiles (overrides the card-wide tile transparency)", "key": "area_styles[name].tileOpacity", "scope": "area", "default": "100%", "advanced": true },
+          { "control": "Room block opacity", "fn": "Room block background opacity — the room's own bgColor or its theme's card_bg mixed toward transparent, so the room sits translucently over the card backdrop", "key": "area_styles[name].bgOpacity", "scope": "area", "default": "100%", "advanced": true },
           { "control": "Room block border", "fn": "Border width of the room block", "key": "area_styles[name].borderWidth", "scope": "area", "default": "1px", "advanced": true },
           { "control": "Room block radius", "fn": "Corner radius of the room block", "key": "area_styles[name].borderRadius", "scope": "area", "default": "10px", "advanced": true },
           { "control": "Header gradient start", "fn": "Room header gradient start", "key": "area_styles[name].headerBgColor", "scope": "area", "default": "#1a1a2e", "advanced": true },
@@ -476,7 +477,7 @@
           { "control": "Tick grid lines", "fn": "Background tick grid", "key": "graph_style.tick_lines", "scope": "global", "default": "on", "advanced": true }
         ]},
         { "name": "Graph colours", "controls": [
-          { "control": "Gauge ring colours", "fn": "Per-sensor gauge ring colour, keyed by device class — the gauge draws one ring per class the device reports (power/voltage/current/temperature/humidity/illuminance/CO₂/battery, up to four)", "key": "graph_sensor_colors[key]", "scope": "global", "default": "#f4601e / #a78bfa / #fbbf24 / #4fc3f7", "advanced": true },
+          { "control": "Gauge ring colours", "fn": "Per-sensor gauge ring colour, keyed by device class — the gauge draws one ring per class the device reports (power/voltage/current/temperature/humidity/illuminance/CO₂/battery, up to four). Each ring is flat (one colour) or a gradient along the arc (2–3 stops, empty end → full end); temperature defaults to blue → yellow → red, and the value label takes the colour at the reading", "key": "graph_sensor_colors[key] / graph_style.gauge_gradients[key]", "scope": "global", "default": "per-sensor default; temperature/humidity/illuminance/CO₂/battery default to gradients", "advanced": true },
           { "control": "Sparkline colours", "fn": "Per-sensor sparkline colour (graphed sensors)", "key": "graph_sensor_colors[key]", "scope": "global", "default": "per-sensor default", "advanced": true },
           { "control": "Which sensors to graph", "fn": "The graph palette (+ All / None)", "key": "graph_sensors", "scope": "global", "default": "[] none", "advanced": true }
         ]},

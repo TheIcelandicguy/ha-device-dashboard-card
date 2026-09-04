@@ -2889,6 +2889,8 @@ export class HADeviceDashboard extends LitElement {
       startInputHold: (d, ch, e) => this._startInputHold(d, ch, e),
       endInputHold: () => this._endInputHold(),
       handleScenePress: (d) => this._handleScenePress(d),
+      setCoverPosition: (id, pos) => { void this._setCoverPosition(id, pos); },
+      installUpdate: (id, e) => { void this._installUpdate(id, e); },
       adjustTrvTemp: (trv, dir) => this._adjustTrvTemp(trv, dir),
       requestGraphData: (id, h) => this._requestGraphData(id, h),
       getGraphPoints: (id, h) => this._seriesWithLive(id, h) ?? [],
@@ -3374,9 +3376,18 @@ export class HADeviceDashboard extends LitElement {
           ? `linear-gradient(${areaStyle.headerBgDir ?? 'to right'}, ${areaStyle.headerBgColor}, ${areaStyle.headerBgColor2})`
           : areaStyle.headerBgColor;
       }
-      if (areaStyle.textColor)       styleObj['--area-header-color'] = areaStyle.textColor;
+      // textColor is what the editor writes; headerTextColor is the older name
+      // for the same thing and was documented but never read — honour both.
+      const headerText = areaStyle.textColor ?? areaStyle.headerTextColor;
+      if (headerText)                styleObj['--area-header-color'] = headerText;
       if (areaStyle.fontSize)        styleObj['--area-name-size']    = `${areaStyle.fontSize}px`;
       if (areaStyle.fontWeight)      styleObj['--area-name-weight']  = areaStyle.fontWeight;
+      if (areaStyle.fontStyle)       styleObj['--area-name-style']   = areaStyle.fontStyle;
+      if (areaStyle.boxShadow && areaStyle.boxShadow !== 'none') {
+        styleObj['boxShadow'] = areaStyle.boxShadow === 'soft' ? '0 2px 8px rgba(0,0,0,.28)'
+          : areaStyle.boxShadow === 'medium' ? '0 4px 16px rgba(0,0,0,.38)'
+          : '0 8px 28px rgba(0,0,0,.5)';
+      }
       if (areaStyle.tileBgColor)     styleObj['--sc-tile-bg']           = areaStyle.tileBgColor;
       if (areaStyle.tileBorderColor) styleObj['--sc-tile-border']    = areaStyle.tileBorderColor;
       if (areaStyle.tileBorderRadius != null) styleObj['--tile-radius'] = `${areaStyle.tileBorderRadius}px`;
@@ -3386,6 +3397,20 @@ export class HADeviceDashboard extends LitElement {
         styleObj['--sc-accent']      = areaStyle.accentColor;
         styleObj['--sc-graph-line']  = areaStyle.accentColor;
         styleObj['--sc-accent-glow'] = `${areaStyle.accentColor}59`;
+      }
+      // Room block transparency: fade whatever background the room ended up with
+      // (its own bgColor, or the room theme's card_bg) toward transparent. Done
+      // last so it sees the resolved colour. A room with no background of its
+      // own is already transparent, so there is nothing to fade.
+      if (areaStyle.bgOpacity != null && areaStyle.bgOpacity < 100) {
+        const base = (styleObj['backgroundColor'] as string | undefined) ?? (styleObj['--sc-card-bg'] as string | undefined);
+        if (base) styleObj['backgroundColor'] = `color-mix(in srgb, ${base} ${Math.max(0, areaStyle.bgOpacity)}%, transparent)`;
+      }
+      // Per-room tile transparency. The Room chrome slider wrote this key for a
+      // long time with nothing reading it: the tiles' background opacity var is
+      // inherited from the card, so overriding it on the room section is enough.
+      if (areaStyle.tileOpacity != null && areaStyle.tileOpacity < 100) {
+        styleObj['--sc-tile-bg-opacity'] = String(Math.max(0, areaStyle.tileOpacity) / 100);
       }
       // Per-room button style overrides
       if (areaStyle.buttonShape || areaStyle.buttonVariant || areaStyle.buttonSize) {

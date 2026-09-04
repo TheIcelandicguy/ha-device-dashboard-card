@@ -47,6 +47,13 @@ installs from them.
   illuminance, CO₂, battery — up to four, with sensible default ranges
   (temperature −10…40 °C rather than 0…100) and the graph palette's colours.
   Environmental rings stay lit when the relay is off.
+- **Gauge arcs can be gradients.** A ring runs 2–3 colours along its sweep,
+  empty end to full end, so temperature climbs blue → yellow → red, humidity
+  dry → wet, battery red → green; the value label wears the colour at the
+  reading. `graph_style.gauge_gradients[key]`, with the Graphs tab's "Gauge
+  ring colours" rows switching each class between flat and gradient. Value
+  label now sits centred just under the crown of its own arc — outer arc, its
+  value, middle arc, its value — instead of piling onto the two arc ends.
 - **The sensor card graphs every selected sensor**, primary first, instead of
   only the primary one — and its own "Sparkline graphs" element is the switch.
   It no longer also waits on Show graphs, which defaults off and left a card
@@ -74,6 +81,38 @@ spark; a **Garage** door rolling up and down; a pulsing **Bluetooth** mark for
 BLU sensors; a **Router** with blinking activity LEDs; and a **PC** with a
 breathing power LED and activity bars. All honour the speed and size
 multipliers.
+
+### Leftovers from the Design move
+
+An audit of the editor after Card & Theme, Device styling, Header and Rooms
+styling were folded into Design found four orphaned features and a pile of
+dead code. The features were rewired, the rest removed:
+
+- **Save this look as a style** at device and type scope — the writer had
+  survived (`custom_styles` could be listed and deleted but never created).
+- **Install** button on the detail sheet's firmware row — the `update.install`
+  call existed, nothing showed it.
+- **Position slider** on the cover tile (element `position_slider`, for covers
+  that report a position) — `cover.set_cover_position` existed, nothing used it.
+- **Transparency at every level.** The room's "Tile opacity" slider had been
+  writing a key nothing read; it now overrides the card-wide tile
+  transparency for that room. New alongside it: **Room block opacity**
+  (`area_styles[name].bgOpacity`), so card, room and tile can each be made
+  translucent independently.
+- **Every config key has a control again.** A key-by-key check found
+  fourteen keys the card rendered but no control wrote since the merge.
+  Global Tiles: the card-wide **ON/OFF button shape / variant / size** and the
+  **power bar** (on/off + full scale). Room chrome: **tile text colour**,
+  **border colour** and **style**, **shadow**, header **gradient direction**,
+  **font weight** and **font style**. Views: per-view **device sort**. Graphs:
+  **bar corner radius** and the **fallback line colour**. Chips & metrics: the
+  detail sheet's **entity list** toggle. Three room keys that were documented
+  but never rendered now render: `headerTextColor` (as a fallback for
+  `textColor`), `fontStyle` and `boxShadow`.
+- Removed: ~70 editor CSS rules (the slide-in device panel, the rooms styling
+  accordion, the transparency preview, the drag-list block editor), a dozen
+  card CSS rules from older tile layouts, three dead state fields, and a stale
+  tab id.
 
 ### Editor
 

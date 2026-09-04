@@ -32,6 +32,11 @@ export function renderCoverControlTile(ctx: TileCtx): TemplateResult {
         <button class="ts-cover-btn ts-cover-stop" @click=${(e: Event) => ctx.coverAction(cover.entityId, 'stop', e)}>■</button>
         <button class="ts-cover-btn" @click=${(e: Event) => ctx.coverAction(cover.entityId, 'close', e)}>▼</button>
       </div>` : nothing}
+      ${cover.position != null && ctx.showEl('position_slider') ? html`
+        <input type="range" class="ts-cover-slider" min="0" max="100" .value=${String(Math.round(pos))}
+          title="Position" aria-label="Cover position"
+          @pointerdown=${(e: Event) => e.stopPropagation()}
+          @change=${(e: Event) => ctx.setCoverPosition(cover.entityId, parseInt((e.target as HTMLInputElement).value, 10))}/>` : nothing}
       ${ctx.showEl('graphs') ? html`<div class="ts-lower-section ts-lower-graphs">${ctx.renderSparklines(device)}</div>` : nothing}
     </div>`;
 }

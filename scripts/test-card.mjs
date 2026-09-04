@@ -269,8 +269,17 @@ try {
   eq('one ring per reported class, in ring order', wdRings.map(r => r.key), ['temperature', 'humidity', 'illuminance']);
   eq('humidity range defaults to 0–100', [wdRings[1].min, wdRings[1].max], [0, 100]);
   eq('a configured range wins', h.gaugeRings(wdVals, { accent: '#f00', ranges: { temperature: { min: 15, max: 30 } } })[0].max, 30);
-  eq('power takes the accent, others their graph colour',
-    h.gaugeRings({ power: 5, humidity: 1 }, { accent: '#f00' }).map(r => r.color), ['#f00', '#2dd4bf']);
+  eq('power takes the accent (flat), humidity its default gradient',
+    h.gaugeRings({ power: 5, humidity: 1 }, { accent: '#f00' }).map(r => r.stops), [['#f00'], ['#fde68a', '#2dd4bf', '#0ea5e9']]);
+  eq('temperature runs blue → yellow → red by default', wdRings[0].stops, ['#38bdf8', '#fde047', '#f87171']);
+  eq('a flat graph_sensor_colors entry overrides the gradient',
+    h.gaugeRings(wdVals, { accent: '#f00', colors: { temperature: '#123456' } })[0].stops, ['#123456']);
+  eq('gauge_gradients wins over everything',
+    h.gaugeRings(wdVals, { accent: '#f00', colors: { temperature: '#123456' }, gradients: { temperature: ['#000000', '#ffffff'] } })[0].stops, ['#000000', '#ffffff']);
+  eq('colorAt blends between stops', h.colorAt(['#000000', '#ffffff'], 0.5), '#808080');
+  eq('colorAt at the ends', [h.colorAt(['#000000', '#ffffff'], 0), h.colorAt(['#000000', '#ffffff'], 1)], ['#000000', '#ffffff']);
+  eq('colorAt with three stops picks the middle at 0.5', h.colorAt(['#38bdf8', '#fde047', '#f87171'], 0.5), '#fde047');
+  ok('the label colour is the gradient at the reading', wdRings[0].color === h.colorAt(wdRings[0].stops, wdRings[0].pct));
   eq('capped at four rings', h.gaugeRings({ power: 1, voltage: 2, current: 3, temperature: 4, humidity: 5 }, { accent: '#f00' }).length, 4);
   const wd = { entities: [
     { entity_id: 'sensor.d_temp', domain: 'sensor' },

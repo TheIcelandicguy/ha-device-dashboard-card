@@ -179,6 +179,7 @@ export const tilesCss = css`
     .ts-cover-state { position:absolute;bottom:2px;left:50%;transform:translateX(-50%);font-size:var(--fs-xs);color:var(--sc-text-muted);white-space:nowrap }
 
     .ts-cover-btns { display:flex;gap:6px }
+    .ts-cover-slider { width:100%;margin:6px 0 0;accent-color:var(--ts-accent,var(--sc-accent));cursor:pointer }
 
     .ts-cover-btn { flex:1;padding:8px 0;border-radius:8px;border:1px solid var(--sc-tile-border);background:rgba(255,255,255,.05);color:var(--sc-text-primary);font-size:14px;cursor:pointer;transition:all .15s;text-align:center }
 

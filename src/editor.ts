@@ -5,7 +5,7 @@ import { keyed } from 'lit/directives/keyed.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent, LovelaceCardConfig } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout, EnergyPeriod, InputActionConfig } from './types';
-import { getAllDevices, GRAPH_SENSOR_DEFS, getDeviceProfile, HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels,
+import { getAllDevices, GRAPH_SENSOR_DEFS, GAUGE_RING_DEFS, getDeviceProfile,HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels,
   CONFIG_KEYS, LOVELACE_KEYS } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, detectTheme, paletteFor, type ThemePalette } from './themes';
 import {
@@ -254,11 +254,7 @@ export class HADeviceDashboardEditor extends LitElement {
    *  every override in every scope, which is not something to do by mislanding a
    *  click. Same pattern as "Reset everything" in the Defaults panel. */
   @state() private _changesResetArmed = false;
-  @state() private _expandedRoomStyle: Set<string> = new Set();
   @state() private _selectedDeviceId: string | null = null;
-  /** Device-styling panel: false = only this device's own options, true = every
-   *  option the card has. Viewer-local, never written to the config. */
-  @state() private _devPanelAll = false;
   /** Conflict panel expanded — collapsed by default so it stays a hint, not a wall. */
   @state() private _conflictsOpen = false;
   /** Control id to highlight after a jump, cleared on a timer. */
@@ -275,7 +271,6 @@ export class HADeviceDashboardEditor extends LitElement {
   @state() private _helpTopic: string | null = null;
   /** Set after a colour roll, so the picker can say what it landed on. */
   @state() private _rolled: string | null = null;
-  @state() private _deviceSearch = '';
   @state() private _styleClipFeedback = '';   // transient feedback for image-upload errors
   @state() private _openDiscDropdown: string | null = null;  // Discovery: which hide-checklist dropdown is expanded
   // ── Shelly Cloud import (all transient; the auth key never reaches the config) ──
@@ -871,7 +866,6 @@ export class HADeviceDashboardEditor extends LitElement {
 
   /** Render an icon picker button. Opens the shared popover positioned below the button. */
   private _iconPicker(
-    _key: string,
     currentValue: string | undefined,
     isOn: boolean,
     onSelect: (val: string | undefined) => void
@@ -3086,6 +3080,15 @@ export class HADeviceDashboardEditor extends LitElement {
         </div>`;
     };
 
+    // A device's or a type's look can be kept as a named style (custom_styles)
+    // and handed to other scopes. The writer survived the Device styling panel's
+    // retirement; this row is its only front end.
+    const saveLook = () => {
+      if (sc.kind === 'device') this._saveDeviceAsStyle(sc.id);
+      else if (sc.kind === 'type') this._saveProfileAsStyle(sc.profile);
+    };
+    const canSaveLook = (sc.kind === 'device' || sc.kind === 'type') && setCount > 0;
+
     return html`
       <div class="dsn-panel">
         <div class="dsn-scope-hdr ${this._flashControl === 'design-scope' ? 'ctl-flash' : ''}" data-ctl="design-scope">
@@ -3094,6 +3097,16 @@ export class HADeviceDashboardEditor extends LitElement {
             ? html`<span class="dsn-badge on">${setCount} set here</span>`
             : html`<span class="dsn-badge">nothing set — all inherited</span>`}
         </div>
+        ${canSaveLook ? html`
+          <div class="dsn-save-row">
+            <input type="text" class="inline-text" style="flex:1" placeholder="Save this look as a style — name it…"
+              .value=${this._newStyleName}
+              @input=${(e: Event) => { this._newStyleName = (e.target as HTMLInputElement).value; }}
+              @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') saveLook(); }}/>
+            <button class="dsn-reset" style="padding:4px 10px" ?disabled=${!this._newStyleName.trim()}
+              title="Keep these settings as a reusable style in Saved looks"
+              @click=${saveLook}>Save</button>
+          </div>` : nothing}
         ${this._designFamily('tile', 'Tile — device → type → room → view → card', tileBody)}
         ${this._designFamily('container', 'Container — room → view → card', containerBody)}
         ${this._designFamily('chrome', 'Card chrome — view → card', chromeBody)}
@@ -3375,8 +3388,8 @@ export class HADeviceDashboardEditor extends LitElement {
       set: { on: (v: string | undefined) => void; off: (v: string | undefined) => void;
         speed: (v: number | undefined) => void; size: (v: number | undefined) => void }) => html`
       <div class="anim-row">
-        <span class="anim-state">ON</span>${this._iconPicker('', a.on, true, set.on)}
-        <span class="anim-state">OFF</span>${this._iconPicker('', a.off, false, set.off)}
+        <span class="anim-state">ON</span>${this._iconPicker(a.on, true, set.on)}
+        <span class="anim-state">OFF</span>${this._iconPicker(a.off, false, set.off)}
         ${slider('Speed', a.speed, 0.25, 3, set.speed)}
         ${slider('Size', a.size, 0.5, 3, set.size)}
       </div>`;
@@ -3646,6 +3659,20 @@ export class HADeviceDashboardEditor extends LitElement {
         </div>`;
     };
 
+    const pillRow = (label: string, key: keyof AreaStyle, opts: ReadonlyArray<readonly [string, string]>, def: string) => {
+      const cur = ((st as any)[key] as string | undefined) ?? def;
+      return html`
+        <div class="field">
+          <div class="field-lbl">${label}${(st as any)[key] !== undefined
+            ? html`<button class="color-reset" style="margin-left:6px" @click=${() => this._setAreaStyle(name, key, undefined)}>↺</button>` : nothing}</div>
+          <div class="pill-grp">
+            ${opts.map(([v, lbl]) => html`
+              <span class="pill ${cur === v ? 'on' : ''}"
+                @click=${() => this._setAreaStyle(name, key, v === def ? undefined : v)}>${lbl}</span>`)}
+          </div>
+        </div>`;
+    };
+
     const sectionLbl = (txt: string) => html`<div class="rsp-section-lbl">${txt}</div>`;
 
     return html`
@@ -3683,17 +3710,25 @@ export class HADeviceDashboardEditor extends LitElement {
         ${colorRow('Tile background', 'tileBgColor', '#1c1c1e')}
         ${this._adv(html`
         ${colorRow('Room block background', 'bgColor', 'transparent')}
+        ${slRow('Room block opacity', 'bgOpacity', 0, 100, 1, 100, '%')}
         ${colorRow('Tile border', 'tileBorderColor', 'rgba(255,255,255,0.07)')}
+        ${colorRow('Tile text', 'tileTextColor', '#f4f4f5')}
         ${slRow('Tile corner radius', 'tileBorderRadius', 0, 20, 1, 12, 'px')}
         ${slRow('Tile opacity', 'tileOpacity', 0, 100, 1, 100, '%')}
         ${slRow('Room block border', 'borderWidth', 0, 8, 1, 1, 'px')}
+        ${colorRow('Room block border colour', 'borderColor', 'rgba(255,255,255,0.07)')}
+        ${pillRow('Room block border style', 'borderStyle', [['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']], 'solid')}
         ${slRow('Room block radius', 'borderRadius', 0, 32, 2, 10, 'px')}
+        ${pillRow('Room block shadow', 'boxShadow', [['none', 'None'], ['soft', 'Soft'], ['medium', 'Medium'], ['strong', 'Strong']], 'none')}
 
         ${sectionLbl('Room header')}
         ${colorRow('Gradient start', 'headerBgColor', '#1a1a2e')}
         ${colorRow('Gradient end', 'headerBgColor2', '#0f3460')}
+        ${pillRow('Gradient direction', 'headerBgDir', [['to right', '→'], ['to bottom', '↓'], ['135deg', '↘'], ['to left', '←']], 'to right')}
         ${colorRow('Header text', 'textColor', '#f4601e')}
         ${slRow('Font size', 'fontSize', 8, 32, 1, 12, 'px')}
+        ${pillRow('Font weight', 'fontWeight', [['normal', 'Normal'], ['bold', 'Bold']], 'bold')}
+        ${pillRow('Font style', 'fontStyle', [['normal', 'Normal'], ['italic', 'Italic']], 'normal')}
         `)}
 
         ${sectionLbl('Room header chips')}
@@ -4128,6 +4163,17 @@ export class HADeviceDashboardEditor extends LitElement {
                 <span class="pill ${v.tile_size === undefined ? 'on' : ''}"
                   @click=${() => setViewField('tile_size', undefined)}>inherit</span>
               </div>
+            </div>
+
+            <div class="field">
+              <div class="field-lbl">Sort devices</div>
+              <div class="pill-grp">
+                ${([['name', 'Name'], ['power', 'Power'], ['online', 'Online'], ['area', 'Room']] as const).map(([sv, lbl]) => html`
+                  <span class="pill ${v.sort_by === sv ? 'on' : ''}"
+                    @click=${() => setViewField('sort_by', sv)}>${lbl}</span>`)}
+                <span class="pill ${v.sort_by === undefined ? 'on' : ''}"
+                  @click=${() => setViewField('sort_by', undefined)}>inherit</span>
+              </div>
             </div>`)}
           </div>` : nothing}
       </div>`;
@@ -4401,6 +4447,44 @@ export class HADeviceDashboardEditor extends LitElement {
         <input type="range" min="0" max="24" .value=${String(sty.tile_radius ?? 12)}
           @input=${(e:Event)=>this._set('style',{...sty,tile_radius:parseInt((e.target as HTMLInputElement).value,10)})}/>
       </div>
+      ${(() => {
+        // Card-wide ON/OFF button shapes (style.button_*). Room chrome carries
+        // the per-room version; this one lost its control when Card & Theme
+        // retired.
+        const shape = sty.button_shape ?? 'pill', variant = sty.button_variant ?? 'fill', size = sty.button_size ?? 'md';
+        const setBtn = (k: 'button_shape' | 'button_variant' | 'button_size', v: string, def: string) => {
+          const next = { ...sty } as Record<string, unknown>;
+          if (v === def) delete next[k]; else next[k] = v;
+          this._set('style', next);
+        };
+        const pills = (label: string, k: 'button_shape' | 'button_variant' | 'button_size',
+          opts: ReadonlyArray<readonly [string, string]>, cur: string, def: string) => html`
+          <div class="field">
+            <div class="field-lbl">${label}</div>
+            <div class="pill-grp">
+              ${opts.map(([v, l]) => html`<span class="pill ${cur === v ? 'on' : ''}" @click=${() => setBtn(k, v, def)}>${l}</span>`)}
+            </div>
+          </div>`;
+        return html`
+          <div class="tiles-divider">ON / OFF buttons <span class="dev-style-hint">card-wide — a room's own setting wins</span></div>
+          ${pills('Shape', 'button_shape', [['pill', 'Pill'], ['rect', 'Rect'], ['square', 'Square'], ['circle', 'Circle']], shape, 'pill')}
+          ${pills('Variant', 'button_variant', [['fill', 'Fill'], ['outline', 'Outline'], ['ghost', 'Ghost']], variant, 'fill')}
+          ${pills('Size', 'button_size', [['sm', 'Small'], ['md', 'Medium'], ['lg', 'Large']], size, 'md')}`;
+      })()}
+      <div class="tiles-divider">Power bar</div>
+      <div class="tog-row">
+        <div class="tog-lbl">Mini usage bar under each tile
+          <span class="dev-style-hint">the adaptive tile's power_bar block</span></div>
+        <label class="sw"><input type="checkbox" .checked=${c.show_power_bar === true}
+          @change=${(e:Event) => this._set('show_power_bar', (e.target as HTMLInputElement).checked || undefined)}>
+          <span class="sw-t"></span><span class="sw-b"></span></label>
+      </div>
+      ${c.show_power_bar ? html`
+      <div class="field">
+        <div class="field-lbl">Full scale — <span style="color:#f4601e">${c.power_bar_max ?? 2000} W</span>${this._resetBtn(c.power_bar_max !== undefined, () => this._clearCfg('power_bar_max'))}</div>
+        <input type="range" min="100" max="5000" step="100" .value=${String(c.power_bar_max ?? 2000)}
+          @input=${(e:Event)=>this._set('power_bar_max', parseInt((e.target as HTMLInputElement).value, 10))}/>
+      </div>` : nothing}
       ${this._adv(html`
       <div class="field">
         <div class="field-lbl">Tile border width — <span style="color:#f4601e">${sty.tile_border_width ?? 1}px</span>${this._resetBtn(sty.tile_border_width !== undefined, () => this._clearStyle('tile_border_width'))}</div>
@@ -4576,9 +4660,18 @@ export class HADeviceDashboardEditor extends LitElement {
           @change=${(e:Event) => this._set('show_collapse_all', (e.target as HTMLInputElement).checked ? undefined : false)}>
           <span class="sw-t"></span><span class="sw-b"></span></label>
       </div>`;
+    const entityListRow = html`
+      <div class="tog-row" style="border:none;padding:4px 0 0">
+        <div class="tog-lbl">Entity list in the detail sheet
+          <span class="dev-style-hint">every entity on the device, with toggles; hidden_entities trims it row by row</span></div>
+        <label class="sw"><input type="checkbox" .checked=${c.show_entity_list !== false}
+          @change=${(e:Event) => this._set('show_entity_list', (e.target as HTMLInputElement).checked ? undefined : false)}>
+          <span class="sw-t"></span><span class="sw-b"></span></label>
+      </div>`;
 
     const contentBody = html`
       ${collapseAllRow}
+      ${entityListRow}
       <div class="field-lbl">Room header chips</div>
       ${this._renderGlobalRoomHeaderChips()}
       <div class="field" style="margin-top:8px">
@@ -4668,6 +4761,18 @@ export class HADeviceDashboardEditor extends LitElement {
         <input type="range" min="0.5" max="4" step="0.5" ?disabled=${graphType==='bar'} .value=${String(gs.line_width ?? 1.5)}
           @input=${(e:Event)=>this._set('graph_style',{...gs,line_width:parseFloat((e.target as HTMLInputElement).value)})}/>
       </div>
+      <div class="field" style="opacity:${graphType==='bar'?1:0.4}">
+        <div class="field-lbl">Bar corner radius — <span style="color:#f4601e">${gs.bar_radius ?? 1.5}px</span>${this._resetBtn(gs.bar_radius !== undefined, () => this._clearGraphStyle('bar_radius'))}</div>
+        <input type="range" min="0" max="6" step="0.5" ?disabled=${graphType!=='bar'} .value=${String(gs.bar_radius ?? 1.5)}
+          @input=${(e:Event)=>this._set('graph_style',{...gs,bar_radius:parseFloat((e.target as HTMLInputElement).value)})}/>
+      </div>
+      <div class="color-row">
+        <div class="color-preview-swatch" style="background:${c.graph_line_color ?? '#f4601e'}"></div>
+        <span class="color-key">Fallback line colour <span class="dev-style-hint">sensors with no colour of their own</span></span>
+        <input type="color" .value=${c.graph_line_color ?? '#f4601e'}
+          @input=${(e:Event)=>this._set('graph_line_color', (e.target as HTMLInputElement).value)}/>
+        ${c.graph_line_color ? html`<button class="color-reset" @click=${()=>this._clearCfg('graph_line_color')}>↺</button>` : nothing}
+      </div>
       <div class="tog-row">
         <div class="tog-lbl">Fill area under line</div>
         <label class="sw"><input type="checkbox" .checked=${gs.fill !== false} @change=${(e:Event)=>this._set('graph_style',{...gs,fill:(e.target as HTMLInputElement).checked})}><span class="sw-t"></span><span class="sw-b"></span></label>
@@ -4705,13 +4810,48 @@ export class HADeviceDashboardEditor extends LitElement {
     // an empty picker. An explicit [] stays empty. First toggle materialises it.
     const selectedGraphs = c.graph_sensors ?? DEFAULT_GRAPH_SENSORS;
 
-    // Gauge ring sensors — always shown with their defaults
-    const GAUGE_SENSORS = [
-      { key: 'power',       label: 'Power (W)',       default: '#f4601e' },
-      { key: 'voltage',     label: 'Voltage (V)',     default: '#a78bfa' },
-      { key: 'current',     label: 'Current (A)',     default: '#fbbf24' },
-      { key: 'temperature', label: 'Temperature (°C)', default: '#4fc3f7' },
-    ];
+    // Gauge rings: one row per class the gauge can draw, each flat (one colour,
+    // graph_sensor_colors) or a gradient along the arc (graph_style.gauge_gradients,
+    // 2–3 stops from the empty end to the full end).
+    const gradients = gs.gauge_gradients ?? {};
+    const setGradient = (key: string, stops: string[] | undefined) => {
+      const next = { ...gradients };
+      if (stops) next[key] = stops; else delete next[key];
+      this._set('graph_style', { ...gs, gauge_gradients: Object.keys(next).length ? next : undefined });
+    };
+    const setFlat = (key: string, color: string | undefined) => {
+      const next = { ...sensorColors };
+      if (color) next[key] = color; else delete next[key];
+      this._set('graph_sensor_colors', Object.keys(next).length ? next : undefined);
+    };
+    const gaugeRow = (def: typeof GAUGE_RING_DEFS[number]) => {
+      const meta = GRAPH_SENSOR_DEFS.find(s => s.key === def.key);
+      const label = `${meta?.label ?? def.key} (${def.label})`;
+      const custom = gradients[def.key];
+      const flat = sensorColors[def.key];
+      const stops = custom ?? (flat ? [flat] : def.stops ?? [meta?.defaultColor ?? '#f4601e']);
+      const isGrad = stops.length > 1;
+      const stopTitle = (i: number) => stops.length === 3 ? ['Empty end', 'Middle', 'Full end'][i] : ['Empty end', 'Full end'][i];
+      return html`
+        <div class="color-row">
+          <div class="color-preview-swatch" style="background:${isGrad ? `linear-gradient(to right, ${stops.join(', ')})` : stops[0]}"></div>
+          <span class="color-key">${label}</span>
+          ${stops.map((col, i) => html`
+            <input type="color" .value=${col} title=${isGrad ? stopTitle(i) : 'Colour'}
+              @input=${(e: Event) => {
+                const v = (e.target as HTMLInputElement).value;
+                if (isGrad) { const n = [...stops]; n[i] = v; setGradient(def.key, n); }
+                else setFlat(def.key, v);
+              }}/>`)}
+          <button class="color-reset" title=${isGrad ? 'One flat colour instead' : 'Gradient along the arc instead'}
+            @click=${() => {
+              if (isGrad) { setGradient(def.key, undefined); setFlat(def.key, stops[stops.length - 1]); }
+              else { setFlat(def.key, undefined); setGradient(def.key, def.stops ?? [stops[0], '#fde047', '#f87171']); }
+            }}>${isGrad ? '▬' : '▦'}</button>
+          ${custom || flat ? html`<button class="color-reset" title="Back to the default"
+            @click=${() => { setGradient(def.key, undefined); setFlat(def.key, undefined); }}>↺</button>` : nothing}
+        </div>`;
+    };
 
     const colorRow = (key: string, label: string, defaultColor: string) => {
       const color    = sensorColors[key] ?? defaultColor;
@@ -4733,11 +4873,12 @@ export class HADeviceDashboardEditor extends LitElement {
     };
 
     const colorBody = html`
-      <div class="field-lbl" style="margin-bottom:6px">Gauge ring colours</div>
-      ${GAUGE_SENSORS.map(s => colorRow(s.key, s.label, s.default))}
-      ${selectedGraphs.filter(k => !GAUGE_SENSORS.find(g => g.key === k)).length ? html`
+      <div class="field-lbl" style="margin-bottom:6px">Gauge ring colours
+        <span class="dev-style-hint">▦ turns a ring into a gradient along the arc — the value label takes the colour at the reading</span></div>
+      ${GAUGE_RING_DEFS.map(d => gaugeRow(d))}
+      ${selectedGraphs.filter(k => !GAUGE_RING_DEFS.find(g => g.key === k)).length ? html`
         <div class="field-lbl" style="margin:10px 0 6px">Sparkline colours</div>
-        ${selectedGraphs.filter(k => !GAUGE_SENSORS.find(g => g.key === k)).map(key => {
+        ${selectedGraphs.filter(k => !GAUGE_RING_DEFS.find(g => g.key === k)).map(key => {
           const meta = GRAPH_SENSOR_DEFS.find(s => s.key === key);
           return colorRow(key, meta?.label ?? key, getColor(key));
         })}` : nothing}
@@ -5427,7 +5568,7 @@ export class HADeviceDashboardEditor extends LitElement {
 
   protected render(): TemplateResult {
     if (!this._config) return html``;
-    type TabId = 'devices'|'views'|'layout'|'graphs'|'yaml';
+    type TabId = 'devices'|'views'|'design'|'graphs'|'yaml';
     // Tabs (order / label / icon) derive from EDITOR_LAYOUT — single source of truth.
     const tabs = EDITOR_LAYOUT.map(t => ({ id: t.id as TabId, label: t.label, icon: t.icon }));
     // Section ids that only exist / matter in advanced mode — dropped from the
@@ -5796,10 +5937,6 @@ export class HADeviceDashboardEditor extends LitElement {
     .field:last-child { margin-bottom:0; }
     .field-lbl { font-size:12px; font-weight:600; letter-spacing:0.04em; color:var(--t2); text-transform:uppercase; margin-bottom:7px; }
     .field-note { font-size:9px; font-weight:400; color:var(--t3); text-transform:none; letter-spacing:0; float:right; }
-    .field-hint { font-size:10px; color:var(--t3); margin-top:4px; }
-    .empty-hint { font-size:11px; color:var(--t3); font-style:italic; }
-    .divider { height:1px; background:var(--border); margin:10px 0; }
-    .preview-label { font-size:10px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:var(--t3); margin-bottom:6px; }
 
     /* ── Range inputs ── */
     input[type="range"] { width:100%; accent-color:var(--accent); cursor:pointer; }
@@ -5819,7 +5956,6 @@ export class HADeviceDashboardEditor extends LitElement {
     .tog-row { display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border); }
     .tog-row:last-child { border-bottom:none; }
     .tog-lbl { font-size:13px; color:var(--text); }
-    .tog-sub { font-size:11px; color:var(--t3); margin-top:2px; }
 
     /* ── Pill group ── */
     .pill-grp { display:flex; flex-wrap:wrap; gap:6px; }
@@ -5854,7 +5990,6 @@ export class HADeviceDashboardEditor extends LitElement {
     .color-row { display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--border); }
     .color-row:last-child { border-bottom:none; }
     .color-key { font-size:12px; color:var(--t2); flex:1; min-width:0; }
-    .color-val { font-family:monospace; font-size:10px; color:var(--t3); min-width:60px; text-align:right; }
     .color-reset { font-size:11px; color:var(--t3); background:none; border:none; cursor:pointer; padding:2px 4px; border-radius:3px; transition:color .15s; }
     .sel-allnone { display:inline-flex; gap:4px; margin-left:6px; vertical-align:middle; }
     .sel-mini { font:inherit; font-size:10px; font-weight:600; letter-spacing:.02em; cursor:pointer; padding:2px 8px; border-radius:6px; color:var(--t2); background:var(--s2); border:1px solid var(--border); transition:all .15s; }
@@ -5877,12 +6012,6 @@ export class HADeviceDashboardEditor extends LitElement {
     .bg-img-row { display:flex; align-items:center; gap:6px; }
     .bg-thumb { width:32px; height:32px; border-radius:5px; border:1px solid var(--border2); background-size:cover; background-position:center; flex-shrink:0; background-color:var(--s3); }
     .bg-embedded-note { flex:1; font-size:11px; color:var(--t2); font-style:italic; padding:4px 8px; background:var(--s2); border:1px dashed var(--border); border-radius:6px; }
-    .transp-preview { border-radius:10px; overflow:hidden; margin-bottom:12px; }
-    .transp-card-layer { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding:12px; min-height:140px; }
-    .transp-tile { display:flex; flex-direction:column; gap:6px; padding:8px; }
-    .transp-tile-name { height:10px; border-radius:4px; background:rgba(255,255,255,0.18); width:70%; }
-    .transp-tile-chips { display:flex; gap:4px; }
-    .transp-chip { height:8px; border-radius:3px; background:rgba(255,255,255,0.10); flex:1; }
     .tiles-divider { font-size:10px; font-weight:600; color:var(--t2); letter-spacing:.06em; text-transform:uppercase; margin:12px 0 6px; padding-top:10px; border-top:1px solid var(--border); }
     .upload-btn { font-size:10px; background:var(--s2); border:1px solid var(--border2); border-radius:5px; color:var(--text); padding:3px 8px; cursor:pointer; white-space:nowrap; }
 
@@ -5901,15 +6030,6 @@ export class HADeviceDashboardEditor extends LitElement {
     .room-style-btn:hover { border-color:var(--accent); color:var(--accent); }
     .room-reset-btn { background:none; border:1px solid var(--border); color:var(--t3); border-radius:5px; font-size:11px; line-height:1; padding:3px 7px; cursor:pointer; transition:all .12s; flex-shrink:0; }
     .room-reset-btn:hover { border-color:var(--accent); color:var(--accent); }
-    .room-style-row { border-bottom:1px solid var(--border); }
-    .room-style-row:last-child { border-bottom:none; }
-    .room-style-hdr { display:flex; align-items:center; gap:8px; padding:8px 4px; cursor:pointer; user-select:none; }
-    .room-style-hdr:hover { background:rgba(255,255,255,0.03); border-radius:6px; }
-    .room-style-name { flex:1; font-size:12px; color:var(--text); font-weight:500; }
-    .room-styled-dot { width:6px; height:6px; border-radius:50%; background:var(--accent); flex-shrink:0; }
-    .room-swatch-strip { display:flex; gap:3px; align-items:center; }
-    .room-swatch { width:12px; height:12px; border-radius:3px; border:1px solid rgba(255,255,255,0.15); flex-shrink:0; }
-    .room-style-chev { font-size:9px; color:var(--t3); }
     .room-devices { padding:4px 0 4px 12px; border-bottom:1px solid var(--border); }
     .room-device-row { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid rgba(255,255,255,0.04); transition:background .15s; border-radius:4px; }
     .room-device-row.selected { background:rgba(244,96,30,0.08); border-color:var(--accent); padding-left:6px; padding-right:6px; }
@@ -5917,13 +6037,6 @@ export class HADeviceDashboardEditor extends LitElement {
     .room-style-btn.active { background:var(--accentbg); border-color:var(--accentbdr); color:var(--accent); }
 
     /* ── Device style side-panel ── */
-    .dev-panel-backdrop { position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:99; animation:fadein 0.18s ease; }
-    .dev-panel { position:fixed; top:0; right:0; bottom:0; width:min(460px, 94vw); background:var(--s1, #141418); border-left:1px solid var(--border); box-shadow:-8px 0 24px rgba(0,0,0,0.5); z-index:100; display:flex; flex-direction:column; animation:slidein 0.22s cubic-bezier(0.2,0.8,0.2,1); }
-    .dev-panel-hdr { display:flex; align-items:center; gap:10px; padding:16px; border-bottom:1px solid var(--border); background:var(--s2); flex-shrink:0; }
-    .dev-panel-title { font-size:14px; font-weight:600; color:var(--text); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .dev-panel-close { background:none; border:none; color:var(--t2); font-size:18px; cursor:pointer; padding:4px 8px; border-radius:5px; line-height:1; }
-    .dev-panel-close:hover { background:var(--s3); color:var(--text); }
-    .dev-panel-body { flex:1; overflow-y:auto; padding:16px; }
     @keyframes slidein { from { transform:translateX(100%); } to { transform:translateX(0); } }
     @keyframes fadein { from { opacity:0; } to { opacity:1; } }
     .room-device-name { flex:1; font-size:11px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -5944,11 +6057,6 @@ export class HADeviceDashboardEditor extends LitElement {
     .room-expanded { border:1px solid var(--border); border-radius:0 0 8px 8px; margin:-1px 0 4px; overflow:hidden; }
 
     /* Room style sub-section */
-    .room-style-subsec { border-bottom:1px solid var(--border); }
-    .room-style-subsec-hdr { display:flex; align-items:center; gap:7px; padding:8px 12px; cursor:pointer; user-select:none; background:var(--s2); transition:background .12s; }
-    .room-style-subsec-hdr:hover { background:var(--s3); }
-    .room-style-subsec-icon { font-size:11px; color:var(--accent); flex-shrink:0; }
-    .room-style-subsec-title { font-size:11px; font-weight:600; color:var(--text); flex:1; }
 
     /* Flat room style panel */
     .rsp-panel { padding:10px 12px; display:flex; flex-direction:column; gap:4px; background:var(--bg); }
@@ -5961,6 +6069,7 @@ export class HADeviceDashboardEditor extends LitElement {
     .ia-ch-hdr { display:flex; align-items:center; gap:10px; }
     .ia-ch-name { flex:0 0 34%; font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .ia-grid { display:grid; grid-template-columns:84px minmax(0,1fr); gap:6px 10px; align-items:center; margin-top:8px; }
+    .dsn-save-row { display:flex; align-items:center; gap:6px; margin:0 0 8px; }
     .anim-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
     .anim-row .icon-picker-wrap { flex:0 1 150px; min-width:64px; }
     .anim-row .icon-picker-btn { width:100%; justify-content:center; }
@@ -5991,7 +6100,6 @@ export class HADeviceDashboardEditor extends LitElement {
     .range-inp::-webkit-outer-spin-button, .range-inp::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
     .range-inp:focus { outline:none; border-color:var(--accent); }
     .range-inp::placeholder { color:var(--t3); }
-    .dev-style-panel { background:var(--s2); border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin:2px 0 6px 18px; display:flex; flex-direction:column; gap:8px; }
     .lay-canvas { display:flex; flex-direction:column; gap:4px; }
     .lay-row { display:flex; flex-wrap:wrap; align-items:center; gap:4px; min-height:28px; padding:4px 6px;
       border:1px dashed var(--border); border-radius:6px; background:var(--s3); }
@@ -6007,20 +6115,6 @@ export class HADeviceDashboardEditor extends LitElement {
     .lay-slot { font-size:9px; color:var(--t3); opacity:.6; padding:0 4px; }
     .lay-palette { display:flex; flex-wrap:wrap; gap:4px; min-height:28px; padding:4px 6px;
       border:1px dashed var(--border); border-radius:6px; }
-    .block-toggles { display:flex; flex-wrap:wrap; gap:5px; }
-    .block-tog { display:flex; align-items:center; gap:3px; font-size:10px; color:var(--t3); cursor:pointer; padding:2px 7px; border-radius:4px; border:1px solid var(--border); background:var(--s3); user-select:none; transition:color .12s,border-color .12s; }
-    .block-tog.on { color:var(--text); border-color:var(--border2); }
-    .tile-icon-row { display:flex; align-items:center; gap:6px; }
-    .tile-icon-pickers { display:flex; align-items:center; gap:4px; flex:1; }
-    .tile-icon-state-lbl { font-size:9px; font-weight:600; color:var(--t3); letter-spacing:.04em; text-transform:uppercase; flex-shrink:0; }
-    .ent-anim-header { display:grid; grid-template-columns:1fr 1fr 1fr 0.8fr; gap:4px; padding:0 2px 2px; }
-    .ent-anim-hcol { font-size:9px; font-weight:600; color:var(--t3); letter-spacing:.04em; text-transform:uppercase; }
-    .ent-anim-hcol.name { /* first col */ }
-    .ent-anim-row { display:grid; grid-template-columns:1fr 1fr 1fr 0.8fr; gap:4px; align-items:center; }
-    .ent-anim-name { font-size:10px; color:var(--text); font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .anim-select { width:100%; font-size:10px; padding:3px 5px; border-radius:5px; border:1px solid var(--border); background:var(--s3); color:var(--text); cursor:pointer; outline:none; transition:border-color .12s; }
-    .anim-select:focus { border-color:var(--acc,#f4601e); }
-    .icon-select { min-width:70px; }
     .icon-picker-wrap { position:relative; display:inline-block; flex:1; }
     .icon-picker-btn { cursor:pointer; display:flex; align-items:center; gap:5px; padding:4px 8px; border-radius:6px; background:var(--s3,#1e1e1e); border:1px solid var(--border,#333); color:var(--text); min-height:26px; }
     .icon-picker-btn:hover { border-color:var(--acc,#f4601e); }
@@ -6031,10 +6125,6 @@ export class HADeviceDashboardEditor extends LitElement {
     .icon-grid-cell:hover { background:rgba(255,255,255,0.07); }
     .icon-grid-lbl { font-size:8px; color:rgba(255,255,255,0.45); max-width:34px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center; }
     .icon-grid-none { font-size:13px; color:rgba(255,255,255,0.3); }
-    .icon-cell { display:flex; flex-direction:column; align-items:center; gap:2px; padding:5px 3px; border:1px solid transparent; border-radius:5px; background:none; cursor:pointer; color:var(--acc,#f4601e); transition:background .1s,border-color .1s; }
-    .icon-cell:hover { background:rgba(255,255,255,0.07); border-color:rgba(244,96,30,0.4); }
-    .icon-cell.selected { background:rgba(244,96,30,0.18); border-color:var(--acc,#f4601e); }
-    .icon-cell-label { font-size:0.58rem; color:var(--t3); max-width:34px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center; }
     .icon-cell-none { font-size:1rem; color:var(--t3); }
     .icon-preview { width:20px; height:20px; display:block; }
     .icon-picker-btn.compact { padding:3px 5px; min-height:22px; justify-content:center; width:100%; }
@@ -6044,13 +6134,6 @@ export class HADeviceDashboardEditor extends LitElement {
     .ent-icon-bulb2.off .bulb-base1,.ent-icon-bulb2.off .bulb-base2 { opacity:0.3; }
     .ent-icon-bulb2.off .bulb-filament { display:none; }
     .ent-icon-bulb3.off .bulb-chip { fill:none; stroke:currentColor; stroke-width:1; opacity:0.5; }
-    .room-style-panel { margin:8px 0 12px; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
-    .style-panel-hdr { display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:var(--s2); font-size:12px; font-weight:600; }
-    .clear-btn { font-size:10px; background:none; border:1px solid rgba(239,68,68,0.4); border-radius:4px; color:#ef4444; padding:3px 8px; cursor:pointer; }
-    .style-tabs { display:flex; gap:4px; padding:6px 10px; background:var(--bg); border-bottom:1px solid var(--border); }
-    .stab { flex:1; padding:5px 4px; border-radius:5px; font-size:10px; font-weight:600; text-align:center; cursor:pointer; border:1px solid var(--border); background:var(--s2); color:var(--t2); transition:all .12s; }
-    .stab.on { background:var(--accentbg); border-color:var(--accentbdr); color:var(--accent); }
-    .style-body { padding:10px 12px; }
 
 
     /* ── Step buttons ── */
@@ -6060,18 +6143,6 @@ export class HADeviceDashboardEditor extends LitElement {
     .step-val { font-family:monospace; font-size:13px; color:var(--text); min-width:28px; text-align:center; font-weight:500; }
 
     /* ── Drag list ── */
-    .drag-list { display:flex; flex-direction:column; gap:4px; }
-    .drag-item { display:flex; align-items:center; gap:10px; padding:9px 12px; background:var(--s2); border:1px solid var(--border); border-radius:8px; cursor:grab; transition:background .12s,border-color .12s; user-select:none; }
-    .drag-item:hover { background:var(--s3); border-color:var(--border2); }
-    .drag-item.drag-over { border-color:var(--accent); background:var(--accentbg); }
-    .drag-item.hidden-item .drag-label { color:var(--t3); text-decoration:line-through; }
-    .drag-handle { color:var(--t3); display:flex; flex-direction:column; gap:2px; cursor:grab; }
-    .drag-handle span { display:block; width:14px; height:1.5px; background:currentColor; border-radius:1px; }
-    .drag-label { font-size:12px; font-weight:500; color:var(--text); }
-    .drag-sub { font-size:10px; color:var(--t3); }
-    .drag-eye { background:none; border:none; color:var(--t3); cursor:pointer; font-size:13px; padding:2px 4px; border-radius:3px; transition:color .12s; }
-    .drag-eye:hover { color:var(--text); }
-    .tag-new { font-size:9px; font-weight:700; letter-spacing:0.06em; padding:2px 6px; border-radius:3px; text-transform:uppercase; background:var(--accentbg); color:var(--accent); border:1px solid var(--accentbdr); }
 
     /* ── Tile live preview ── */
     /* ── Tile block order preview ── */
@@ -6097,7 +6168,6 @@ export class HADeviceDashboardEditor extends LitElement {
     .tp-btn  { font-size:9px; padding:2px 6px; border-radius:4px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.05); color:rgba(255,255,255,0.6); cursor:default; flex:1; text-align:center; }
 
     /* ── Graph preview ── */
-    .graph-preview { height:56px; background:var(--s2); border:1px solid var(--border); border-radius:8px; overflow:hidden; margin-bottom:10px; }
 
     /* ── Button preview ── */
     .btn-preview { display:flex; gap:8px; align-items:center; padding:10px; background:var(--s2); border:1px solid var(--border); border-radius:8px; margin-bottom:10px; }
@@ -6158,7 +6228,6 @@ export class HADeviceDashboardEditor extends LitElement {
     .view-dev-area { font-size:10px; color:var(--t3); }
 
     /* ── Live style preview (Style tab top) ── */
-    .sp-hint { font-size:10px; color:var(--t3); text-align:center; opacity:0.8; }
 
     /* ── Tile style picker (per-room) ── */
     .ts-style-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:5px; margin-top:6px; }

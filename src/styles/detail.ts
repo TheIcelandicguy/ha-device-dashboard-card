@@ -62,6 +62,8 @@ export const detailCss = css`
     .ds-chip--on    { background: rgba(74, 222, 128, .16); color: var(--sc-online-color); border-color: rgba(74, 222, 128, .28); }
     .ds-chip--alert { background: rgba(239, 68, 68, .18);  color: #fca5a5; border-color: rgba(239, 68, 68, .28); animation: blink 1.4s step-end infinite; }
 
+    .ds-fw-install { margin-left:auto; padding:3px 10px; border-radius:6px; border:1px solid var(--sc-accent); background:transparent; color:var(--sc-accent); font-size:.78em; font-weight:600; cursor:pointer; }
+    .ds-fw-install:hover { background:var(--sc-accent); color:#fff; }
     .ds-fw-update {
       margin-top: 8px; font-size: .78em; color: var(--sc-update-color);
       padding: 4px 8px; background: rgba(245, 158, 11, .14); border-radius: 6px;

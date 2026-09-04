@@ -95,8 +95,10 @@ function renderPMGauge(ctx: TileCtx): TemplateResult {
   const rings = gaugeRings(ctx.sensorValues(device), {
     ranges: config.graph_style?.sensor_ranges,
     colors: config.graph_sensor_colors,
+    gradients: config.graph_style?.gauge_gradients,
     accent,
   });
+  const gradId = (key: string) => `pm-gg-${device.device_id.replace(/\W/g, '')}-${key}`;
   // The relay being off dims the electrical arcs (they read 0 anyway); the
   // room's temperature and humidity are not "off" and keep full strength.
   const ELECTRICAL = new Set(['power', 'voltage', 'current']);
@@ -117,7 +119,12 @@ function renderPMGauge(ctx: TileCtx): TemplateResult {
   const fmtVal = (v: number, key: string, digits: number): string =>
     key === 'power' && v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toFixed(digits);
 
-  const svgH = CY + 22;
+  // Each value sits centred just under the crown of its own arc, in the band
+  // between that arc and the next one in — outer arc, its value, middle arc,
+  // its value, inner arc, its value. The band is ringStep wide and the text is
+  // 8 tall, so it fits below the stroke without touching the next arc.
+  const STROKE = 7;
+  const svgH = CY + 8;
 
   return html`
     <div class="ts-ring" style="--ts-accent:${accent};align-items:center">
@@ -128,19 +135,29 @@ function renderPMGauge(ctx: TileCtx): TemplateResult {
       </div>
       ${rings.length ? html`
       <svg viewBox="0 0 ${CX * 2} ${svgH}" style="width:100%;max-width:360px;height:auto;overflow:visible;display:block">
+        <defs>
+          ${rings.filter(r => r.stops.length > 1).map(ring => svg`
+            <linearGradient id="${gradId(ring.key)}" x1="0" y1="0" x2="1" y2="0">
+              ${ring.stops.map((c, i) => svg`<stop offset="${(i / (ring.stops.length - 1)) * 100}%" stop-color="${c}"/>`)}
+            </linearGradient>`)}
+        </defs>
         ${rings.map((ring, i) => {
           const r = outerR - i * ringStep;
-          const pct = Math.min(1, Math.max(0, (ring.val - ring.min) / (ring.max - ring.min || 1)));
-          // Labels alternate sides so four of them never stack on one end.
-          const side = i % 2 === 0 ? 'left' : 'right';
-          const vx = (CX + r * (side === 'left' ? -1 : 1)).toFixed(1);
-          const vy = (CY + 8).toFixed(1);
-          const anchor = side === 'left' ? 'start' : 'end';
+          // A gradient runs left → right across the arc's bounding box, which is
+          // the direction the arc sweeps, so the empty end wears the first stop
+          // and a reading climbing the range walks through the colours.
+          const stroke = ring.stops.length > 1 ? `url(#${gradId(ring.key)})` : ring.stops[0];
+          // The label is ~36 units wide; on a tight inner arc the curve drops
+          // several units across that width, so measure the arc's height at
+          // the text's ends (the chord), not at its crown.
+          const HALF_TEXT = 18;
+          const arcAtEdge = CY - Math.sqrt(Math.max(0, r * r - HALF_TEXT * HALF_TEXT));
+          const vy = (arcAtEdge + STROKE / 2 + 1.5).toFixed(1);
           const lit = isOn || !ELECTRICAL.has(ring.key);
           return svg`
-            <path d="${arcPath(r, 1)}"   fill="none" stroke="${ring.color}" stroke-width="7" stroke-linecap="round" opacity="0.12"/>
-            <path d="${arcPath(r, pct)}" fill="none" stroke="${ring.color}" stroke-width="7" stroke-linecap="round" opacity="${lit ? '0.9' : '0.3'}"/>
-            <text x="${vx}" y="${vy}" font-size="8" fill="${ring.color}" text-anchor="${anchor}" dominant-baseline="hanging" font-family="monospace" font-weight="700" opacity="${lit ? 0.95 : 0.5}">${fmtVal(ring.val, ring.key, ring.digits)} ${ring.label}</text>`;
+            <path d="${arcPath(r, 1)}"        fill="none" stroke="${stroke}" stroke-width="${STROKE}" stroke-linecap="round" opacity="0.12"/>
+            <path d="${arcPath(r, ring.pct)}" fill="none" stroke="${stroke}" stroke-width="${STROKE}" stroke-linecap="round" opacity="${lit ? '0.9' : '0.3'}"/>
+            <text x="${CX}" y="${vy}" font-size="8" fill="${ring.color}" text-anchor="middle" dominant-baseline="hanging" font-family="monospace" font-weight="700" opacity="${lit ? 0.95 : 0.5}">${fmtVal(ring.val, ring.key, ring.digits)} ${ring.label}</text>`;
         })}
       </svg>` : html`<span style="color:var(--sc-text-muted);font-size:.8em">No readings to gauge</span>`}
       ${lowerBody(ctx)}
