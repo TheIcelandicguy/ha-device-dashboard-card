@@ -156,10 +156,11 @@ Cards you embed under Extra cards are rendered by Home Assistant itself, so anyt
 2. The Preview under the YAML draws the card as you type, exactly as the dashboard will — including an error card if the config is wrong.
 3. Header and footer cards can differ per view: set "Applies to" to a view and that view gets its own list, replacing the card-wide one. An empty list on a view means no cards there at all. "Use the card-wide list" clears the override.
 4. Use ▲ ▼ on a row to reorder.
-5. Set Look to "Match this card" and embedded cards take the dashboard's background, border, radius, text and accent instead of Home Assistant's theme — so they sit in the card rather than on it. A card that hard-codes its own colours keeps them.
-6. To show it conditionally, give the card a `visibility:` block — the same state, user and screen conditions a dashboard card takes. A card hidden by its condition leaves no gap.
-7. To make it narrower, give it `grid_options: {columns: 6}` — the strip is twelve columns wide, so two sixes sit side by side. Leave `grid_options` out for full width.
-8. `rows` sets a minimum height; the strip grows to fit its content rather than clipping.
+5. For a room, "Where in the room" puts the cards above the tiles (a strip) or among them (each card takes a tile's place). In the grid, grid_options.columns counts tiles rather than twelfths.
+6. Set Look to "Match this card" and embedded cards take the dashboard's background, border, radius, text and accent instead of Home Assistant's theme — so they sit in the card rather than on it. A card that hard-codes its own colours keeps them.
+7. To show it conditionally, give the card a `visibility:` block — the same state, user and screen conditions a dashboard card takes. A card hidden by its condition leaves no gap.
+8. To make it narrower, give it `grid_options: {columns: 6}` — the strip is twelve columns wide, so two sixes sit side by side. Leave `grid_options` out for full width.
+9. `rows` sets a minimum height; the strip grows to fit its content rather than clipping.
 
 ### Hide the on/off button on a tile
 

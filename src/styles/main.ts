@@ -1299,6 +1299,11 @@ export const mainCss = css`
     .extra-cards > * { grid-column:span 12; min-width:0; }
     .extra-cards:empty { display:none; }
 
+    /* area_card_placement: 'grid' — a room's cards inside the device grid,
+       each taking a tile's place. min-width:0 so a wide card cannot push the
+       grid past its column count. */
+    .device-grid > .grid-card { min-width:0; display:block; }
+
 
     /* One-time notice: native controls available but off by default */
     /* Needs attention — fleet summary above the rooms. */

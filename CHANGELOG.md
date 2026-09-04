@@ -5,6 +5,25 @@ installs from them.
 
 ## Unreleased
 
+### Room cards can sit among the tiles instead of above them
+
+`area_cards` always rendered as a full-width strip over a room's tiles, which
+reads as a banner across the room — even though `types.ts` had been calling it
+"the 'mixed in among the tiles' placement" for as long as it existed.
+
+`area_card_placement: grid` (Extra cards → Room → **Where in the room**) puts each
+card inside the device grid, taking a tile's place, so a camera or a weather card
+reads as one more thing in the room. Cards lead the grid rather than trailing it:
+a card put in a room is nearly always what you want to see first, and a trailing
+card would move every time a device came or went.
+
+In the grid a card's `grid_options.columns` counts **tiles**, not twelfths, and
+`'full'` spans the row — the header strip is twelve columns by Home Assistant's
+convention, while a room grid is however many columns that room has, and a
+`columns: 6` card in a three-column room would otherwise land on half a tile.
+
+Default is `above`, unchanged, and it is card chrome so a view can differ.
+
 ### You can see the card you are editing
 
 Adding an embedded card meant writing YAML blind and finding out what it made

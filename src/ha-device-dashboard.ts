@@ -3638,12 +3638,16 @@ export class HADeviceDashboard extends LitElement {
               </div>
             </div>`;
         })()}
-        ${isClosed ? nothing : html`
-          ${this._renderExtraCards(this._config.area_cards?.[label])}
-          <div class="device-grid" style="--cols:${cols}">
-            ${repeat(devices, (d) => d.device_id, (d) => this._renderTile(d, areaTileStyle))}
-          </div>
-        `}
+        ${isClosed ? nothing : (() => {
+          const roomCards = this._config.area_cards?.[label];
+          const inGrid = cascade.areaCardPlacement(this._config, this._getActiveView() ?? undefined) === 'grid';
+          return html`
+            ${inGrid ? nothing : this._renderExtraCards(roomCards)}
+            <div class="device-grid" style="--cols:${cols}">
+              ${inGrid ? this._renderGridCards(roomCards, cols) : nothing}
+              ${repeat(devices, (d) => d.device_id, (d) => this._renderTile(d, areaTileStyle))}
+            </div>`;
+        })()}
       </div>
     `;
   }
@@ -3841,6 +3845,43 @@ export class HADeviceDashboard extends LitElement {
           <hdd-card style=${styleMap(this._extraCardGrid(c))}
             .hass=${this.hass} .config=${c} .preview=${preview}></hdd-card>`)}
       </div>`;
+  }
+
+  /**
+   * A room's embedded cards placed INSIDE the device grid, each taking a tile's
+   * place. The strip above the tiles reads as a banner over the room; this reads
+   * as one more thing in it, which is what a camera or a weather card usually
+   * wants to be.
+   *
+   * They lead the grid rather than trailing it: a card put in a room is nearly
+   * always the thing you want to see first, and a trailing card would move every
+   * time a device came or went.
+   */
+  private _renderGridCards(cards: LovelaceCardConfig[] | undefined, cols: number): TemplateResult | typeof nothing {
+    if (!cards?.length) return nothing;
+    const preview = this.preview || this.hasAttribute('data-edit-preview');
+    const match = cascade.extraCardStyle(this._config, this._getActiveView() ?? undefined) === 'match';
+    return html`${cards.map(c => html`
+      <hdd-card class="grid-card ${match ? 'xc-match' : ''}"
+        style=${styleMap(this._gridCardSpan(c, cols))}
+        .hass=${this.hass} .config=${c} .preview=${preview}></hdd-card>`)}`;
+  }
+
+  /**
+   * How wide an in-grid card is, in TILES. Deliberately a different reading of
+   * `grid_options.columns` from the strip's: the strip is twelve columns wide by
+   * Home Assistant's convention, a room grid is however many columns the room
+   * has, and pretending a 3-column room understands twelfths would put a
+   * `columns: 6` card at "half a room" — which is not a tile boundary.
+   */
+  private _gridCardSpan(card: LovelaceCardConfig, cols: number): Record<string, string> {
+    const g = (card as { grid_options?: { columns?: number | string } }).grid_options;
+    if (!g || typeof g !== 'object') return {};
+    if (g.columns === 'full') return { 'grid-column': '1 / -1' };
+    if (typeof g.columns === 'number' && g.columns > 1) {
+      return { 'grid-column': `span ${Math.min(Math.round(g.columns), Math.max(1, cols))}` };
+    }
+    return {};
   }
 
   /**

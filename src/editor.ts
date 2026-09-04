@@ -5,7 +5,7 @@ import { keyed } from 'lit/directives/keyed.js';
 import { styleMap } from 'lit/directives/style-map.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent, LovelaceCardConfig } from 'custom-card-helpers';
-import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout, EnergyPeriod, InputActionConfig, SortBy, ExtraCardStyle } from './types';
+import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout, EnergyPeriod, InputActionConfig, SortBy, ExtraCardStyle, AreaCardPlacement } from './types';
 import { getAllDevices, GRAPH_SENSOR_DEFS, GAUGE_RING_DEFS, gaugeStops, colorAt, hexToHsv, hsvToHex, parseCssColor, withAlpha, deviceHasControllable, getDeviceProfile,HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels,
   CONFIG_KEYS, LOVELACE_KEYS } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, detectTheme, paletteFor, type ThemePalette } from './themes';
@@ -2033,6 +2033,21 @@ export class HADeviceDashboardEditor extends LitElement {
           <select @change=${(e: Event) => { this._xcRoom = (e.target as HTMLSelectElement).value; this._xcCancel(); }}>
             ${rooms.map(r => html`<option value=${r} ?selected=${r === this._xcRoom}>${r}</option>`)}
           </select>
+        </div>
+        <div class="field">
+          <div class="field-lbl">Where in the room</div>
+          ${this._pills<AreaCardPlacement>(
+            this._config.area_card_placement ?? 'above',
+            [['Above the tiles', 'above'], ['Among the tiles', 'grid']],
+            v => this._set('area_card_placement', v === 'above' ? undefined : v),
+          )}
+          <div class="dp-hint-inline">
+            ${(this._config.area_card_placement ?? 'above') === 'above'
+              ? 'A full-width strip over the room\'s tiles.'
+              : 'Each card takes a tile\'s place in the grid, so it reads as one more thing in the '
+                + 'room. Here a card\'s grid_options.columns counts tiles, not twelfths; "full" spans the row.'}
+            Applies to every room.
+          </div>
         </div>` : views.length ? html`
         <div class="field">
           <div class="field-lbl">Applies to</div>

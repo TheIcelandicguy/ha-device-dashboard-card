@@ -711,6 +711,14 @@ try {
   eq('and can opt in on its own',
     cas.extraCardStyle({}, view({ extra_card_style: 'match' })), 'match');
   ok('it is a chrome-family design key', ds.DESIGN_KEYS.chrome.includes('extra_card_style'));
+
+  eq('room cards sit above the tiles by default', cas.areaCardPlacement({}, undefined), 'above');
+  eq('the card can move them into the grid',
+    cas.areaCardPlacement({ area_card_placement: 'grid' }, undefined), 'grid');
+  eq('a view overrides the card',
+    cas.areaCardPlacement({ area_card_placement: 'grid' }, view({ area_card_placement: 'above' })), 'above');
+  ok('placement is a chrome-family design key',
+    ds.DESIGN_KEYS.chrome.includes('area_card_placement'));
   eq('a view override shows up in the Changes panel',
     ds.collectOverrides({ views: [view({ header_cards: B })] }, pal)
       .map(o => ds.scopeKey(o.scope) + '/' + o.key),

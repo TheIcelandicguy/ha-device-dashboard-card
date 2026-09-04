@@ -417,6 +417,9 @@ export interface DeviceStyle {
  *  card's palette. See `extra_card_style`. */
 export type ExtraCardStyle = 'ha' | 'match';
 
+/** Where a room's embedded cards sit: above the tiles, or among them. */
+export type AreaCardPlacement = 'above' | 'grid';
+
 export interface RadioStation {
   name: string;
   /** Stream URL, e.g. https://…/fm957.mp3 — anything the player accepts. */
@@ -604,6 +607,8 @@ export interface ViewConfig {
   footer_cards?: LovelaceCardConfig[];
   /** How this view's embedded cards are painted. Card chrome, view → card. */
   extra_card_style?: ExtraCardStyle;
+  /** Where this view's room cards sit. Card chrome, view → card. */
+  area_card_placement?: AreaCardPlacement;
   /** Tile block order/visibility while this view is showing. */
   tile_layout?: TileLayout;
   /** Sensor chips for this view. An explicit (possibly empty) list is
@@ -688,6 +693,19 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
    *   too. A card that hard-codes its own colours still wins — as it should.
    */
   extra_card_style?: ExtraCardStyle;
+  /**
+   * Where a room's `area_cards` sit.
+   *
+   * - `'above'` (default) — a full-width strip above the room's tiles.
+   * - `'grid'` — inside the device grid, each card taking a tile's place, so a
+   *   camera or a weather card reads as one more thing in the room rather than
+   *   a banner over it.
+   *
+   * In the grid a card's `grid_options.columns` counts TILES, not twelfths, and
+   * `'full'` spans the row — the strip is twelve columns wide, while a room grid
+   * is however many columns that room has.
+   */
+  area_card_placement?: AreaCardPlacement;
   /** Area filter. undefined = all; [] = none; ['Kitchen'] = specific */
   areas?: string[];
   /** Device IDs to hide */
