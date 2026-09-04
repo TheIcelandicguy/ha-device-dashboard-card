@@ -173,6 +173,7 @@ export const HELP_RECIPES: HelpTopic[] = [
     ],
     steps: [
       'Extra cards → pick the placement (header, footer or a room) → Add card.',
+      'The Preview under the YAML draws the card as you type, exactly as the dashboard will — including an error card if the config is wrong.',
       'Header and footer cards can differ per view: set "Applies to" to a view and that view gets its own list, replacing the card-wide one. An empty list on a view means no cards there at all. "Use the card-wide list" clears the override.',
       'Use ▲ ▼ on a row to reorder.',
       'Set Look to "Match this card" and embedded cards take the dashboard\'s background, border, radius, text and accent instead of Home Assistant\'s theme — so they sit in the card rather than on it. A card that hard-codes its own colours keeps them.',

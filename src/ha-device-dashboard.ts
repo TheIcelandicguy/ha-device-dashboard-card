@@ -7,7 +7,7 @@ import { HADeviceDashboardConfig, HADevice, TileBlockId, DeviceProfileResult, En
 import type { LovelaceCardConfig } from 'custom-card-helpers';
 import { BUNDLED_FONT_CSS } from './fonts';
 import { THEME_KEYS, paletteFor } from './themes';
-import { mainCss } from './styles/main';
+import { mainCss, extraCardMatchCss } from './styles/main';
 import { tilesCss } from './styles/tiles';
 import { detailCss } from './styles/detail';
 import type {
@@ -3917,6 +3917,7 @@ export class HADeviceDashboard extends LitElement {
     mainCss,
     tilesCss,
     detailCss,
+    extraCardMatchCss,
     // In HA's edit dialog, its preview pane sizes to our content (height:
     // max-content). On mobile the dialog stacks the form over the preview, so cap
     // our height there and scroll internally — the live preview stays a bounded

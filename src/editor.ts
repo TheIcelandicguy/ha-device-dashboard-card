@@ -2,6 +2,7 @@ import { LitElement, html, css, TemplateResult, nothing } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { ref } from 'lit/directives/ref.js';
 import { keyed } from 'lit/directives/keyed.js';
+import { styleMap } from 'lit/directives/style-map.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent, LovelaceCardConfig } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout, EnergyPeriod, InputActionConfig, SortBy, ExtraCardStyle } from './types';
@@ -19,7 +20,8 @@ import {
   resolveCloudImage as sciResolveImage, isStockRoomImage as sciIsStockImage,
   cloudMac as sciMac, type RegistryDeviceLike as SciRegistryDevice,
 } from './shelly-cloud-import';
-import { resolveStyle } from './cascade';
+import { resolveStyle, extraCardStyle } from './cascade';
+import { extraCardMatchCss } from './styles/main';
 import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons';
 import { EDITOR_LAYOUT } from './editor-layout';
 import { HELP_CONCEPTS, HELP_RECIPES, HELP_INTRO, type HelpTopic } from './help';
@@ -218,6 +220,24 @@ export class HADeviceDashboardEditor extends LitElement {
     this._xcDraft = cfg;
     this._xcLatest = null;
     this._xcDraftKey++;
+    // Picking a type or importing a card should show at once; only typing is
+    // worth waiting on.
+    if (this._xcPreviewTimer) { clearTimeout(this._xcPreviewTimer); this._xcPreviewTimer = undefined; }
+    this._xcPreview = cfg;
+  }
+  /** Reactive mirror of `_xcLatest` for the live preview. `_xcLatest` is
+   *  deliberately NOT reactive so a keystroke cannot remount the YAML editor
+   *  under the cursor; this one is, and lags a beat behind so the preview is
+   *  not rebuilt on every character. */
+  @state() private _xcPreview: Record<string, unknown> | null = null;
+  private _xcPreviewTimer?: ReturnType<typeof setTimeout>;
+
+  private _queueXcPreview(cfg: Record<string, unknown> | null): void {
+    if (this._xcPreviewTimer) clearTimeout(this._xcPreviewTimer);
+    this._xcPreviewTimer = setTimeout(() => {
+      this._xcPreviewTimer = undefined;
+      this._xcPreview = cfg;
+    }, 400);
   }
   /** "Copy from a dashboard" import state. */
   @state() private _xcDashboards: Array<{ url_path: string; title: string }> | null = null;
@@ -1697,6 +1717,8 @@ export class HADeviceDashboardEditor extends LitElement {
   private _xcCancel(): void {
     this._xcAdding = false; this._xcEditIndex = null; this._xcDraft = null; this._xcLatest = null;
     this._xcImportCards = null; this._xcImportLoading = false;
+    if (this._xcPreviewTimer) { clearTimeout(this._xcPreviewTimer); this._xcPreviewTimer = undefined; }
+    this._xcPreview = null;
   }
 
   /** Load the list of storage dashboards the user can copy cards from. */
@@ -1909,6 +1931,57 @@ export class HADeviceDashboardEditor extends LitElement {
       this._sciDone ? this._badge('imported', '#3ea1f5', 'rgba(62,161,245,0.12)') : nothing, body);
   }
 
+  /**
+   * The card being edited, drawn as it will appear on the dashboard. Editing was
+   * blind before this: you wrote YAML and only found out what it made after Add.
+   *
+   * It renders through the same `hdd-card` the dashboard uses, so what you see
+   * is what HA will build — including a `hui-error-card` when the config is
+   * wrong, which is the most useful thing a preview can show.
+   */
+  private _renderXcPreview(): TemplateResult {
+    const cfg = this._xcPreview;
+    const type = cfg && typeof cfg.type === 'string' ? cfg.type : '';
+    const view = this._xcView
+      ? (this._config.views ?? []).find(v => v.id === this._xcView)
+      : undefined;
+    const match = extraCardStyle(this._config, view) === 'match';
+    return html`
+      <div class="field-lbl" style="margin-top:10px">Preview</div>
+      <div class="xc-preview ${match ? 'xc-match' : ''}"
+        style=${styleMap(match ? this._xcPreviewVars() : {})}>
+        ${type
+          ? html`<hdd-card .hass=${this.hass} .config=${cfg} preview></hdd-card>`
+          : html`<div class="dp-hint-inline" style="margin:0">
+              Give the card a <code>type:</code> to see it here.</div>`}
+      </div>
+      ${match ? html`
+        <div class="dp-hint-inline">Shown in this card's palette, because Look is set to Match this card.</div>`
+        : nothing}`;
+  }
+
+  /**
+   * The card's palette as the CSS variables `extraCardMatchCss` reads. The
+   * editor's shadow root carries none of the card's `--sc-*` values, so the
+   * preview has to supply them or the shared mapping resolves to nothing.
+   */
+  private _xcPreviewVars(): Record<string, string> {
+    const pal = this._effectivePalette() as unknown as Record<string, string | undefined>;
+    const sty = (this._config.style ?? {}) as Record<string, unknown>;
+    const v: Record<string, string> = {};
+    const put = (name: string, val: unknown) => { if (val != null && val !== '') v[name] = String(val); };
+    put('--sc-tile-bg', pal.tile_bg);
+    put('--sc-tile-border', pal.tile_border);
+    put('--sc-text-primary', pal.text_primary);
+    put('--sc-text-secondary', pal.text_secondary);
+    put('--sc-text-muted', pal.text_muted);
+    put('--sc-accent', pal.accent_color);
+    if (sty.tile_radius != null) put('--tile-radius', `${sty.tile_radius}px`);
+    if (sty.tile_border_width != null) put('--sc-tile-border-width', `${sty.tile_border_width}px`);
+    put('--sc-font-family', sty.font_family);
+    return v;
+  }
+
   /** Swap a card with its neighbour. Reordering used to mean deleting the card
    *  and adding it back in the right place. */
   private _xcMove(i: number, delta: number): void {
@@ -2025,10 +2098,22 @@ export class HADeviceDashboardEditor extends LitElement {
           <div class="field-lbl">Card configuration (YAML)</div>
           ${keyed(this._xcDraftKey, yamlAvail ? html`
             <ha-yaml-editor .hass=${this.hass} .defaultValue=${this._xcDraft}
-              @value-changed=${(e: CustomEvent) => { e.stopPropagation(); if (e.detail?.isValid !== false) this._xcLatest = e.detail.value; }}></ha-yaml-editor>`
+              @value-changed=${(e: CustomEvent) => {
+                e.stopPropagation();
+                if (e.detail?.isValid === false) return;
+                this._xcLatest = e.detail.value;
+                this._queueXcPreview(e.detail.value);
+              }}></ha-yaml-editor>`
           : html`
             <textarea class="xc-yaml" .value=${JSON.stringify(this._xcDraft, null, 2)}
-              @input=${(e: Event) => { try { this._xcLatest = JSON.parse((e.target as HTMLTextAreaElement).value); } catch { /* keep last valid */ } }}></textarea>`)}
+              @input=${(e: Event) => {
+                try {
+                  const v = JSON.parse((e.target as HTMLTextAreaElement).value);
+                  this._xcLatest = v;
+                  this._queueXcPreview(v);
+                } catch { /* keep last valid */ }
+              }}></textarea>`)}
+          ${this._renderXcPreview()}
           <div class="xc-actions">
             <button class="sec-toolbar-btn" @click=${() => this._xcCommit()}>${this._xcEditIndex !== null ? 'Save' : 'Add'}</button>
             <button class="sec-toolbar-btn" @click=${() => this._xcCancel()}>Cancel</button>
@@ -6040,7 +6125,7 @@ export class HADeviceDashboardEditor extends LitElement {
   }
 
 
-  static styles = [ANIM_CSS, css`
+  static styles = [ANIM_CSS, extraCardMatchCss, css`
     :host {
       display:block;
       font-family:'DM Sans',sans-serif;
@@ -6237,6 +6322,19 @@ export class HADeviceDashboardEditor extends LitElement {
     .xc-import-row { flex:0 0 auto; min-height:26px; text-align:left; font-size:11px; font-family:monospace; padding:5px 8px; border-radius:5px; border:1px solid var(--border); background:var(--s2); color:var(--t2); cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .xc-import-row:hover { background:var(--s3); color:var(--text); border-color:var(--accent); }
     .xc-yaml { width:100%; min-height:120px; font-family:monospace; font-size:12px; background:var(--s2); color:var(--t2); border:1px solid var(--border); border-radius:6px; padding:8px; resize:vertical; }
+    /* Live preview of the card being edited. The checker plate is deliberate:
+       many cards are translucent, and on a flat panel you cannot tell a
+       transparent background from one that matches the panel by accident. */
+    .xc-preview {
+      margin-top:6px; padding:10px; border-radius:8px;
+      border:1px dashed var(--border2);
+      background:
+        linear-gradient(45deg, rgba(255,255,255,.03) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.03) 75%),
+        linear-gradient(45deg, rgba(255,255,255,.03) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.03) 75%),
+        var(--s1);
+      background-size:16px 16px; background-position:0 0, 8px 8px;
+    }
+    .xc-preview > hdd-card { display:block; }
     ha-yaml-editor { display:block; margin-top:4px; }
     .tab-body { padding:16px; background:var(--bg); overflow-y:auto; flex:1; min-height:0; }
 

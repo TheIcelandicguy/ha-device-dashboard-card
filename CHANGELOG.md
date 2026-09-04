@@ -5,6 +5,21 @@ installs from them.
 
 ## Unreleased
 
+### You can see the card you are editing
+
+Adding an embedded card meant writing YAML blind and finding out what it made
+only after pressing Add. The editor now draws it as you type, under the YAML.
+
+It renders through the same `hdd-card` the dashboard uses, so it is not an
+approximation — including Home Assistant's own error card when the config is
+wrong, which is the most useful thing a preview can show. When Look is set to
+Match this card the preview is painted in the card's palette too, from one
+shared stylesheet, so it cannot disagree with the dashboard. The backdrop is a
+checker plate because many cards are translucent and on a flat panel you cannot
+tell a transparent background from one that matches by accident.
+
+Updates are debounced, so a keystroke does not rebuild the card.
+
 ### Embedded cards can be painted in the card's own look
 
 An embedded card always looked like a Home Assistant card dropped onto the
