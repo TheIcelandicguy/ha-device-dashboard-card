@@ -136,10 +136,21 @@ function renderPMGauge(ctx: TileCtx): TemplateResult {
       ${rings.length ? html`
       <svg viewBox="0 0 ${CX * 2} ${svgH}" style="width:100%;max-width:360px;height:auto;overflow:visible;display:block">
         <defs>
-          ${rings.filter(r => r.stops.length > 1).map(ring => svg`
-            <linearGradient id="${gradId(ring.key)}" x1="0" y1="0" x2="1" y2="0">
-              ${ring.stops.map((c, i) => svg`<stop offset="${(i / (ring.stops.length - 1)) * 100}%" stop-color="${c}"/>`)}
-            </linearGradient>`)}
+          ${rings.map((ring, i) => {
+            if (ring.stops.length < 2) return nothing;
+            // userSpaceOnUse, not the default objectBoundingBox: a gradient in
+            // bounding-box units is resolved against the PARTIAL value arc, so
+            // the drawn arc always ran the full colour range and its tip was
+            // always the last stop, whatever the reading. Spanning the ring's
+            // own diameter makes the arc's colour at the tip equal the label's.
+            // The radius must come from the ring's own index, not a filtered one.
+            const r = outerR - i * ringStep;
+            return svg`
+              <linearGradient id="${gradId(ring.key)}" gradientUnits="userSpaceOnUse"
+                x1="${CX - r}" y1="0" x2="${CX + r}" y2="0">
+                ${ring.stops.map((c, j) => svg`<stop offset="${(j / (ring.stops.length - 1)) * 100}%" stop-color="${c}"/>`)}
+              </linearGradient>`;
+          })}
         </defs>
         ${rings.map((ring, i) => {
           const r = outerR - i * ringStep;

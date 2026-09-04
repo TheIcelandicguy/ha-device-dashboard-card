@@ -298,7 +298,10 @@ export function delegatableEntities(device: HADevice): HAEntity[] {
     e.domain in DELEGATE_FEATURES);
 }
 
-const deviceHasControllable = (d: HADevice): boolean =>
+/** Does the device have a primary control of its own? One definition, so the
+ *  universal-scope filter and the editor's entity-picker default cannot drift
+ *  apart on which domains count. */
+export const deviceHasControllable = (d: HADevice): boolean =>
   d.entities.some(e => entityTier(e) === 'primary' && CONTROLLABLE_DOMAINS.has(e.domain));
 
 const deviceHasRecognizedSensor = (d: HADevice): boolean =>
@@ -586,8 +589,8 @@ export const DEFAULT_GRAPH_SENSORS: string[] = ['power', 'temperature', 'humidit
 export function deviceSensorValues(
   device: HADevice,
   states: Record<string, { state?: string; attributes?: Record<string, unknown> } | undefined>,
-): Record<string, number> {
-  const out: Record<string, number> = {};
+): Record<string, SensorReading> {
+  const out: Record<string, SensorReading> = {};
   const read = (diagnostics: boolean) => {
     for (const e of device.entities) {
       if (e.domain !== 'sensor' || !!e.entity_category !== diagnostics) continue;
@@ -597,13 +600,18 @@ export function deviceSensorValues(
         ?? ((e.attributes as Record<string, unknown> | undefined)?.device_class as string | undefined);
       if (!dc || dc in out) continue;
       const v = parseFloat(s.state ?? '');
-      if (!isNaN(v)) out[dc] = v;
+      if (!isNaN(v)) out[dc] = { value: v, diagnostic: diagnostics };
     }
   };
   read(false);
   read(true);
   return out;
 }
+
+/** A reading and where it came from. Which pass found it matters downstream: a
+ *  relay's only temperature is its own board (a diagnostic entity) and runs
+ *  45–65 °C, while a room sensor's runs 15–25 °C — one range cannot serve both. */
+export interface SensorReading { value: number; diagnostic: boolean }
 
 /** Lend a device readings that live on another device. `extra_sensors` on a
  *  device style lists entity ids to show on that tile as if the device reported
@@ -620,6 +628,8 @@ export function attachExtraSensors(
   hass: HomeAssistant,
 ): HADevice[] {
   if (!deviceStyles) return devices;
+  // Most configs borrow nothing; don't map the whole fleet for them.
+  if (!Object.values(deviceStyles).some(s => s?.extra_sensors?.length)) return devices;
   const byId = new Map(devices.map(d => [d.device_id, d]));
   const entityRegistry: Record<string, any> = (hass as any).entities ?? {};
   const deviceRegistry: Record<string, any> = (hass as any).devices ?? {};
@@ -661,11 +671,15 @@ export const GAUGE_RING_DEFS: Array<{
   key: string; label: string; min: number; max: number; digits: number;
   /** Default gradient along the arc, empty end → full end. Absent = one flat colour. */
   stops?: string[];
+  /** Range to use when the reading came from a diagnostic entity — a relay's
+   *  board temperature sits at 45–65 °C, which would peg a room-temperature
+   *  ring at full red on every relay in the fleet. */
+  diag?: { min: number; max: number };
 }> = [
   { key: 'power',          label: 'W',   min: 0,   max: 3000, digits: 0 },
   { key: 'voltage',        label: 'V',   min: 0,   max: 250,  digits: 0 },
   { key: 'current',        label: 'A',   min: 0,   max: 16,   digits: 2 },
-  { key: 'temperature',    label: '°C',  min: -10, max: 40,   digits: 1, stops: ['#38bdf8', '#fde047', '#f87171'] },
+  { key: 'temperature',    label: '°C',  min: -10, max: 40,   digits: 1, stops: ['#38bdf8', '#fde047', '#f87171'], diag: { min: 0, max: 100 } },
   { key: 'humidity',       label: '%',   min: 0,   max: 100,  digits: 0, stops: ['#fde68a', '#2dd4bf', '#0ea5e9'] },
   { key: 'illuminance',    label: 'lx',  min: 0,   max: 2000, digits: 0, stops: ['#94a3b8', '#fde047', '#fffbeb'] },
   { key: 'carbon_dioxide', label: 'ppm', min: 400, max: 2000, digits: 0, stops: ['#4ade80', '#fde047', '#f87171'] },
@@ -682,6 +696,54 @@ export interface GaugeRing {
   color: string;
   /** Where the reading sits in the range, 0–1. */
   pct: number;
+}
+
+/** Read a CSS colour the card actually stores — `#rgb`, `#rrggbb`, `#rrggbbaa`,
+ *  `rgb()`/`rgba()` — into an opaque hex plus its alpha. Returns null for
+ *  anything else ('transparent', `var(--x)`, a named colour), so a caller can
+ *  say "this is not a plain colour" instead of silently treating it as black.
+ *  Tile and room backgrounds are stored as rgba with a 3.5% alpha, so a picker
+ *  that dropped the alpha turned a tint into a solid slab. */
+export function parseCssColor(value: string | undefined): { hex: string; alpha: number } | null {
+  const v = (value ?? '').trim();
+  if (!v) return null;
+  const hex = /^#([0-9a-f]{3,8})$/i.exec(v);
+  if (hex) {
+    const h = hex[1];
+    const dup = (s: string) => s + s;
+    if (h.length === 3 || h.length === 4) {
+      return { hex: '#' + [...h.slice(0, 3)].map(dup).join(''), alpha: h.length === 4 ? parseInt(dup(h[3]), 16) / 255 : 1 };
+    }
+    if (h.length === 6 || h.length === 8) {
+      return { hex: '#' + h.slice(0, 6).toLowerCase(), alpha: h.length === 8 ? parseInt(h.slice(6, 8), 16) / 255 : 1 };
+    }
+    return null;
+  }
+  const rgb = /^rgba?\(([^)]+)\)$/i.exec(v);
+  if (rgb) {
+    const parts = rgb[1].split(/[,\s/]+/).filter(Boolean);
+    if (parts.length < 3) return null;
+    const ch = parts.slice(0, 3).map(p => {
+      const n = p.endsWith('%') ? (parseFloat(p) / 100) * 255 : parseFloat(p);
+      return Math.max(0, Math.min(255, Math.round(n)));
+    });
+    if (ch.some(isNaN)) return null;
+    const aRaw = parts[3];
+    const alpha = aRaw === undefined ? 1
+      : aRaw.endsWith('%') ? parseFloat(aRaw) / 100 : parseFloat(aRaw);
+    return { hex: '#' + ch.map(c => c.toString(16).padStart(2, '0')).join(''), alpha: isNaN(alpha) ? 1 : alpha };
+  }
+  return null;
+}
+
+/** Re-attach an alpha to an opaque hex, as the `rgba()` the card's styles use.
+ *  alpha >= 1 keeps the plain hex, which is what most keys hold. */
+export function withAlpha(hex: string, alpha: number): string {
+  if (alpha >= 1) return hex;
+  const p = parseCssColor(hex);
+  if (!p) return hex;
+  const [r, g, b] = [1, 3, 5].map(i => parseInt(p.hex.slice(i, i + 2), 16));
+  return `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.round(alpha * 1000) / 1000)})`;
 }
 
 /** `#rrggbb` → HSV (h 0–360, s 0–1, v 0–1). Non-hex input reads as black. */
@@ -729,7 +791,7 @@ export function colorAt(stops: string[], t: number): string {
  *  (flat), the def's default gradient, the graph palette colour; power takes
  *  the accent. The label colour is the gradient sampled at the reading. */
 export function gaugeRings(
-  values: Record<string, number>,
+  values: Record<string, SensorReading>,
   opts: {
     ranges?: Record<string, { min?: number; max?: number }>;
     colors?: Record<string, string>;
@@ -739,20 +801,40 @@ export function gaugeRings(
 ): GaugeRing[] {
   const rings: GaugeRing[] = [];
   for (const d of GAUGE_RING_DEFS) {
-    const val = values[d.key];
-    if (val == null) continue;
+    const reading = values[d.key];
+    if (reading == null) continue;
+    const val = reading.value;
     const r = opts.ranges?.[d.key] ?? {};
-    const min = r.min ?? d.min, max = r.max ?? d.max;
-    const graphColor = GRAPH_SENSOR_DEFS.find(g => g.key === d.key)?.defaultColor;
-    const grad = opts.gradients?.[d.key]?.filter(Boolean);
-    const stops = grad && grad.length >= 2 ? grad
-      : opts.colors?.[d.key] ? [opts.colors[d.key]]
-      : d.stops ?? [d.key === 'power' ? opts.accent : graphColor ?? opts.accent];
+    // A configured range always wins; otherwise the source picks the default.
+    const def = reading.diagnostic && d.diag ? d.diag : d;
+    const min = r.min ?? def.min, max = r.max ?? def.max;
+    const stops = gaugeStops(d.key, opts);
     const pct = Math.min(1, Math.max(0, (val - min) / (max - min || 1)));
     rings.push({ key: d.key, label: d.label, val, digits: d.digits, min, max, stops, pct, color: colorAt(stops, pct) });
     if (rings.length >= GAUGE_MAX_RINGS) break;
   }
   return rings;
+}
+
+/** The colours one gauge ring wears, in precedence order: a configured gradient
+ *  (2+ stops), a configured flat colour, the class's default gradient, the graph
+ *  palette, the accent. Exported so the editor's gradient rows and the tile
+ *  cannot drift — they had, on power's flat colour. Tolerant of hand-written
+ *  YAML: a scalar or a short list where a gradient belongs is ignored rather
+ *  than thrown on, since a render error takes the whole card down. */
+export function gaugeStops(
+  key: string,
+  opts: { colors?: Record<string, string>; gradients?: Record<string, string[]>; accent: string },
+): string[] {
+  const def = GAUGE_RING_DEFS.find(d => d.key === key);
+  const raw = opts.gradients?.[key];
+  const grad = Array.isArray(raw) ? raw.filter(c => typeof c === 'string' && c) : undefined;
+  if (grad && grad.length >= 2) return grad;
+  const flat = opts.colors?.[key];
+  if (typeof flat === 'string' && flat) return [flat];
+  if (def?.stops) return def.stops;
+  const graphColor = GRAPH_SENSOR_DEFS.find(g => g.key === key)?.defaultColor;
+  return [key === 'power' ? opts.accent : graphColor ?? opts.accent];
 }
 
 /**
@@ -1314,8 +1396,78 @@ export function migrateConfig<T extends {
     changed = true;
   }
 
+  // A media player used to be drawn by `delegated_controls` (a native HA tile);
+  // it now has the card's own `media_controls` block. A layout pinned before
+  // that change lists the old block and not the new one, and a pinned layout is
+  // taken verbatim — the device would silently lose its controls. Add the new
+  // block wherever the old one is named, keeping its position.
+  const layoutHolders = config as unknown as {
+    tile_layout?: unknown;
+    device_styles?: Record<string, { tile_layout?: unknown }>;
+    profile_styles?: Record<string, { tile_layout?: unknown }>;
+    area_styles?: Record<string, { tile_layout?: unknown }>;
+    views?: Array<{ tile_layout?: unknown }>;
+    custom_styles?: Record<string, { tile_layout?: unknown }>;
+    style_presets?: Record<string, { tile_layout?: unknown }>;
+  };
+  let layoutsChanged = false;
+  const withMedia = (layout: unknown): unknown => {
+    if (!Array.isArray(layout)) return layout;
+    // Rows form: recurse one level. Flat form: a list of block ids.
+    if (layout.some(r => Array.isArray(r))) {
+      let hit = false;
+      const rows = layout.map(r => {
+        if (!Array.isArray(r) || !r.includes('delegated_controls') || r.includes('media_controls')) return r;
+        hit = true;
+        return r.flatMap(b => (b === 'delegated_controls' ? ['media_controls', b] : [b]));
+      });
+      if (hit) { layoutsChanged = true; return rows; }
+      return layout;
+    }
+    if (!layout.includes('delegated_controls') || layout.includes('media_controls')) return layout;
+    layoutsChanged = true;
+    return layout.flatMap(b => (b === 'delegated_controls' ? ['media_controls', b] : [b]));
+  };
+  const mapHolder = <H extends Record<string, { tile_layout?: unknown }>>(holder: H | undefined): H | undefined => {
+    if (!holder) return holder;
+    let hit = false;
+    const next: Record<string, { tile_layout?: unknown }> = {};
+    for (const [k, v] of Object.entries(holder)) {
+      const l = withMedia(v?.tile_layout);
+      if (v && l !== v.tile_layout) { next[k] = { ...v, tile_layout: l }; hit = true; } else next[k] = v;
+    }
+    return hit ? (next as H) : holder;
+  };
+  const nextTileLayout = withMedia(layoutHolders.tile_layout);
+  const nextDeviceStyles = mapHolder(layoutHolders.device_styles);
+  const nextProfileStyles = mapHolder(layoutHolders.profile_styles);
+  const nextAreaStyles = mapHolder(layoutHolders.area_styles);
+  const nextCustomStyles = mapHolder(layoutHolders.custom_styles);
+  const nextStylePresets = mapHolder(layoutHolders.style_presets);
+  let nextViews = layoutHolders.views;
+  if (Array.isArray(nextViews)) {
+    let hit = false;
+    const mapped = nextViews.map(v => {
+      const l = withMedia(v?.tile_layout);
+      if (v && l !== v.tile_layout) { hit = true; return { ...v, tile_layout: l }; }
+      return v;
+    });
+    if (hit) nextViews = mapped;
+  }
+  if (layoutsChanged) changed = true;
+
   if (!changed) return config;
   const out: T = { ...config };
+  if (layoutsChanged) {
+    const o = out as unknown as typeof layoutHolders;
+    if (nextTileLayout !== layoutHolders.tile_layout) o.tile_layout = nextTileLayout;
+    if (nextDeviceStyles !== layoutHolders.device_styles) o.device_styles = nextDeviceStyles;
+    if (nextProfileStyles !== layoutHolders.profile_styles) o.profile_styles = nextProfileStyles;
+    if (nextAreaStyles !== layoutHolders.area_styles) o.area_styles = nextAreaStyles;
+    if (nextCustomStyles !== layoutHolders.custom_styles) o.custom_styles = nextCustomStyles;
+    if (nextStylePresets !== layoutHolders.style_presets) o.style_presets = nextStylePresets;
+    if (nextViews !== layoutHolders.views) o.views = nextViews;
+  }
   if (style !== config.style) {
     if (style === undefined) delete (out as { style?: unknown }).style;
     else (out as { style?: unknown }).style = style;
@@ -1536,10 +1688,11 @@ function outputChannelNumber(entityId: string): number | null {
  *  a multi-output device (2PM, 2.5) pairs by channel number — `input_0` drives
  *  `switch_0`. Config switches (the i4's "dimmer_control") carry an entity
  *  category and never count as outputs, so input-only hardware pairs nothing. */
-function pairedOutput(device: HADevice, inputNum: number | null): string | undefined {
+function pairedOutput(device: HADevice, inputNum: number | null, profile: DeviceProfile): string | undefined {
   // Input-only hardware wires its inputs to nothing — a script-made virtual
-  // switch on an i4 must not be mistaken for "the" output.
-  const profile = getDeviceProfile(device).type;
+  // switch on an i4 must not be mistaken for "the" output. The profile is
+  // passed in: detecting it per row meant a full re-detection per input per
+  // tile per render, bypassing the card's profile cache.
   if (profile === 'input' || profile === 'uni') return undefined;
   const outputs = device.entities.filter(e => (e.domain === 'switch' || e.domain === 'light')
     && !e.entity_category);
@@ -1552,14 +1705,24 @@ function pairedOutput(device: HADevice, inputNum: number | null): string | undef
   return undefined;
 }
 
+/** HA's friendly name is "<device> <entity>", so on the device's own tile the
+ *  device half is noise ("Oven relay Oven relay"). Strip it. One definition —
+ *  the tile label, the chip, the editor's rows and the channel row had five
+ *  near-copies that could disagree. Returns '' when nothing is left, so each
+ *  caller picks its own fallback. */
+export function stripDevicePrefix(friendly: string, deviceName: string | undefined): string {
+  const label = (friendly ?? '').trim();
+  const prefix = (deviceName ?? '').trim();
+  if (prefix && label.toLowerCase().startsWith(prefix.toLowerCase())) {
+    return label.slice(prefix.length).trim();
+  }
+  return label;
+}
+
 /** Row label: whatever HA calls the entity, minus the device-name prefix, so a
  *  renamed input ("Bedroom light") keeps its name instead of being relabelled. */
 function channelLabel(friendly: string, deviceName: string, num: number | null, entityId: string): string {
-  let label = friendly.trim();
-  const prefix = deviceName.trim();
-  if (prefix && label.toLowerCase().startsWith(prefix.toLowerCase())) {
-    label = label.slice(prefix.length).trim();
-  }
+  const label = stripDevicePrefix(friendly, deviceName);
   if (label) return label;
   return num != null ? `Input ${num}` : entityId.split('.')[1] ?? entityId;
 }
@@ -1580,6 +1743,8 @@ export function detectInputChannels(
   const evInputs = device.entities.filter(isInputEvent);
   const usedEvents = new Set<string>();
   const rows: Array<InputChannel & { _sort: number }> = [];
+  // Detected once for the whole device, not once per input row.
+  const profile = bsInputs.length || evInputs.length ? getDeviceProfile(device).type : 'generic';
 
   const eventFor = (bs: HAEntity, num: number | null): HAEntity | undefined => {
     const base = bs.entity_id.replace(/^binary_sensor\./, '');
@@ -1605,7 +1770,7 @@ export function detectInputChannels(
       channel: num ?? 0,
       lastEvent: evType ?? null,
       lastChanged: st?.last_changed ?? null,
-      output: pairedOutput(device, num),
+      output: pairedOutput(device, num, profile),
       _sort: num ?? 50 + i,
     });
   });
@@ -1624,7 +1789,7 @@ export function detectInputChannels(
       lastEvent: (st?.attributes?.event_type as string | undefined) ?? null,
       // An event entity's state IS the timestamp of the last press.
       lastChanged: st?.last_changed ?? live,
-      output: pairedOutput(device, num),
+      output: pairedOutput(device, num, profile),
       _sort: num ?? 50 + i,
     });
   });

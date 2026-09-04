@@ -37,6 +37,7 @@ export function renderCoverControlTile(ctx: TileCtx): TemplateResult {
           title="Position" aria-label="Cover position"
           @pointerdown=${(e: Event) => e.stopPropagation()}
           @change=${(e: Event) => ctx.setCoverPosition(cover.entityId, parseInt((e.target as HTMLInputElement).value, 10))}/>` : nothing}
-      ${ctx.showEl('graphs') ? html`<div class="ts-lower-section ts-lower-graphs">${ctx.renderSparklines(device)}</div>` : nothing}
+      ${ctx.showEl('graphs') && ctx.getGraphEntities(device).length
+        ? html`<div class="ts-lower-section ts-lower-graphs">${ctx.renderSparklines(device)}</div>` : nothing}
     </div>`;
 }

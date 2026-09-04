@@ -375,24 +375,32 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
       // Stations: the card's own list (HA has none for a Wall Display). The
       // device's list wins over the card-wide one. The current one is matched
       // by stream URL first, then by the title the player reports.
-      const stations = config.device_styles?.[device.device_id]?.radio_stations ?? config.radio_stations ?? [];
+      // Hand-written YAML can put a scalar or an object where a list belongs;
+      // a render throw takes the whole card down, so an unusable list is simply
+      // no list.
+      const rawStations = config.device_styles?.[device.device_id]?.radio_stations ?? config.radio_stations;
+      const stations = (Array.isArray(rawStations) ? rawStations : [])
+        .filter(s => s && typeof s.url === 'string' && s.url);
       // What the player itself offers — a Wall Display's radio favourites, a
       // receiver's presets — read through HA's browse tree on the first tap of
       // the dropdown (never eagerly: 37 players × a library each is a storm),
-      // plus the config streams. The option value carries the play_media target.
+      // plus the config streams. An option's value is the media id; its content
+      // type comes from this map, so nothing has to be encoded per render.
       const browse = can(F.BROWSE) ? ctx.getBrowseGroups(mp.entity_id) : null;
       const groups = Array.isArray(browse) ? browse : [];
-      const encode = (id: string, type: string) => JSON.stringify([id, type]);
+      const typeOf = new Map<string, string>();
+      for (const g of groups) for (const it of g.items) typeOf.set(it.id, it.type);
+      for (const s of stations) if (!typeOf.has(s.url)) typeOf.set(s.url, 'music');
       const currentId = a.media_content_id as string | undefined;
       const currentTitle = a.media_title as string | undefined;
-      let current = '';
-      for (const g of groups) for (const it of g.items) {
-        if (it.id === currentId || (currentTitle && it.title === currentTitle)) current = encode(it.id, it.type);
-      }
-      if (!current) {
-        const s = stations.find(x => x.url === currentId) ?? stations.find(x => x.name === currentTitle);
-        if (s) current = encode(s.url, 'music');
-      }
+      // What is playing, matched by media id first and by the title the player
+      // reports second (a Wall Display reports the station name, not the id).
+      const byTitle = () => {
+        for (const g of groups) for (const it of g.items) if (it.title === currentTitle) return it.id;
+        return stations.find(s => s.name === currentTitle)?.url;
+      };
+      const current = (currentId && typeOf.has(currentId) ? currentId : undefined)
+        ?? (currentTitle ? byTitle() : undefined) ?? '';
       const showSel = can(F.PLAY_MEDIA) && (can(F.BROWSE) || stations.length > 0);
       const nothingYet = Array.isArray(browse) && !groups.some(g => g.items.length) && !stations.length;
       const load = (e: Event) => { e.stopPropagation(); if (can(F.BROWSE)) ctx.requestBrowse(mp.entity_id); };
@@ -405,21 +413,20 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
               <select class="input-sel tile-media-sel" title="Play a station"
                 @pointerdown=${load} @focus=${load}
                 @change=${(e: Event) => {
-                  const v = (e.target as HTMLSelectElement).value;
-                  if (!v) return;
-                  const [id, type] = JSON.parse(v) as [string, string];
-                  call('play_media', { media_content_id: id, media_content_type: type });
+                  const id = (e.target as HTMLSelectElement).value;
+                  if (!id) return;
+                  call('play_media', { media_content_id: id, media_content_type: typeOf.get(id) ?? 'music' });
                 }}>
                 <option value="" ?selected=${!current}>Station…</option>
                 ${browse === 'pending' ? html`<option value="" disabled>Loading…</option>` : nothing}
                 ${nothingYet ? html`<option value="" disabled>No favourites — star stations on the display</option>` : nothing}
                 ${groups.filter(g => g.items.length).map(g => html`
                   <optgroup label=${g.label}>
-                    ${g.items.map(it => html`<option value=${encode(it.id, it.type)} ?selected=${encode(it.id, it.type) === current}>${it.title}</option>`)}
+                    ${g.items.map(it => html`<option value=${it.id} ?selected=${it.id === current}>${it.title}</option>`)}
                   </optgroup>`)}
                 ${stations.length ? html`
                   <optgroup label="Streams">
-                    ${stations.map(s => html`<option value=${encode(s.url, 'music')} ?selected=${encode(s.url, 'music') === current}>${s.name}</option>`)}
+                    ${stations.map(s => html`<option value=${s.url} ?selected=${s.url === current}>${s.name}</option>`)}
                   </optgroup>` : nothing}
               </select>` : nothing}
             ${can(F.BROWSE) ? html`

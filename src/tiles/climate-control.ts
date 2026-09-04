@@ -42,6 +42,7 @@ export function renderClimateControlTile(ctx: TileCtx): TemplateResult {
         <button class="trv-preset-btn ${trv.presetMode === p ? 'active' : ''}"
           @click=${() => ctx.setPresetMode(trv.entityId, p)}>${(PRESET_ICONS[p] ?? '') + p}</button>`)}
       </div>` : nothing}
-      ${ctx.showEl('graphs') ? html`<div class="ts-lower-section ts-lower-graphs">${ctx.renderSparklines(device)}</div>` : nothing}
+      ${ctx.showEl('graphs') && ctx.getGraphEntities(device).length
+        ? html`<div class="ts-lower-section ts-lower-graphs">${ctx.renderSparklines(device)}</div>` : nothing}
     </div>`;
 }

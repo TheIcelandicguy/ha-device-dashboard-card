@@ -22,7 +22,7 @@ import { renderEffectPicker } from './tiles/tile-parts';
 import * as cascade from './cascade';
 import {
   attentionItems, firmwareGroups, lightCounts, deviceFaults, environmentAlarms, hasUpdate,
-  isOnline as deviceIsOnline, isBetaUpdate, type AttentionItem, type AttentionKind,
+  isOnline as deviceIsOnline, isBetaUpdate, isOwn, ownDevice, type AttentionItem, type AttentionKind,
 } from './attention';
 import { renderSensorCardTile } from './tiles/sensor-card';
 import { renderPowerMonitorTile } from './tiles/power-monitor';
@@ -37,7 +37,7 @@ import {
   formatUptime, formatApparentPower, formatReactivePower,
   formatFrequency, formatHumidity, formatIlluminance, formatPpm, formatPercent,
   detectInputChannels, detectShellyGen, shellyClickTypes, shellyInputChannel, shellyHostname,
-  deviceSensorValues, attachExtraSensors,
+  deviceSensorValues, attachExtraSensors, stripDevicePrefix, colorAt,
 } from './helpers';
 import { renderAnimSvg } from './anim-icons';
 
@@ -122,6 +122,22 @@ export class HADeviceDashboard extends LitElement {
   private _cacheEntitiesRef: unknown = null;
   private _cacheDevicesRef: unknown = null;
   private _cacheConfigRef: HADeviceDashboardConfig | null = null;
+  /** How many `extra_sensors` ids had a state last time the list was built. */
+  private _cacheBorrowedReady = -1;
+
+  /** Borrowed ids that currently resolve to a state. Cheap: nearly every config
+   *  borrows nothing, and the loop then never runs. */
+  private _borrowedReadyCount(): number {
+    const styles = this._config?.device_styles;
+    if (!styles) return 0;
+    let n = 0;
+    for (const s of Object.values(styles)) {
+      const ids = s?.extra_sensors;
+      if (!Array.isArray(ids)) continue;
+      for (const id of ids) if (this.hass.states[id]) n++;
+    }
+    return n;
+  }
   /** Device profile is static per device; cache it, cleared whenever the
    *  device list is rebuilt (registry/config change). */
   private _profileCache = new Map<string, DeviceProfileResult>();
@@ -347,17 +363,24 @@ export class HADeviceDashboard extends LitElement {
 
     const entitiesRef = (this.hass as any).entities;
     const devicesRef  = (this.hass as any).devices;
+    // A borrowed sensor is skipped when it has no state yet, and a state
+    // arriving later replaces neither registry object — so without this the
+    // reading stayed missing until an unrelated rebuild. Count the ones that
+    // currently resolve; the count changes the moment one shows up.
+    const borrowedReady = this._borrowedReadyCount();
     if (
       this._cachedDevices &&
       entitiesRef === this._cacheEntitiesRef &&
       devicesRef  === this._cacheDevicesRef  &&
-      this._config === this._cacheConfigRef
+      this._config === this._cacheConfigRef  &&
+      borrowedReady === this._cacheBorrowedReady
     ) {
       return this._cachedDevices;
     }
     this._cacheEntitiesRef = entitiesRef;
     this._cacheDevicesRef  = devicesRef;
     this._cacheConfigRef   = this._config;
+    this._cacheBorrowedReady = borrowedReady;
     this._profileCache.clear();
 
     let devices = getAllDevices(this.hass, {
@@ -1036,15 +1059,10 @@ export class HADeviceDashboard extends LitElement {
       ? cfg.perform_action
       : entities[0];
     let friendly = target ? (this.hass.states[target]?.attributes as HassAttrs)?.friendly_name : undefined;
-    // HA's friendly name is "<device> <entity>"; on the device's own tile the
-    // device half is noise ("Oven relay Oven relay"). Keep the entity half,
-    // and fall back to the device name when the entity IS the device.
-    if (friendly && device) {
-      const prefix = device.name.trim().toLowerCase();
-      if (prefix && friendly.toLowerCase().startsWith(prefix)) {
-        friendly = friendly.slice(prefix.length).trim() || device.name;
-      }
-    }
+    // On the device's own tile the device half of the friendly name is noise
+    // ("Oven relay Oven relay"); fall back to the device name when the entity
+    // IS the device.
+    if (friendly && device) friendly = stripDevicePrefix(friendly, device.name) || device.name;
     const base = (friendly as string) ?? target ?? cfg.perform_action ?? 'Run';
     // Several targets on one channel: name the first, count the rest.
     return entities.length > 1 ? `${base} +${entities.length - 1}` : base;
@@ -1060,11 +1078,7 @@ export class HADeviceDashboard extends LitElement {
     const reg = (this.hass as unknown as { entities?: Record<string, { device_id?: string }>;
       devices?: Record<string, { name_by_user?: string; name?: string }> });
     const dev = reg.devices?.[reg.entities?.[entityId]?.device_id ?? ''];
-    const devName = (dev?.name_by_user ?? dev?.name ?? '').trim().toLowerCase();
-    if (devName && friendly.toLowerCase().startsWith(devName)) {
-      return friendly.slice(devName.length).trim() || friendly;
-    }
-    return friendly;
+    return stripDevicePrefix(friendly, dev?.name_by_user ?? dev?.name) || friendly;
   }
 
   /** The select-entity dropdown chip on a channel row, if configured. The chip
@@ -1618,8 +1632,10 @@ export class HADeviceDashboard extends LitElement {
   private _energyEntitiesFor(device: HADevice): string[] {
     const override = this._config.device_styles?.[device.device_id]?.energy_entity;
     if (override) return [override];
+    // Own meters only: a borrowed energy sensor is the lender's, and every room
+    // and fleet total that sums this device also sums the lender.
     return device.entities
-      .filter(e => e.domain === 'sensor' &&
+      .filter(e => isOwn(e) && e.domain === 'sensor' &&
         (this.hass.states[e.entity_id]?.attributes as HassAttrs)?.device_class === 'energy')
       .map(e => e.entity_id);
   }
@@ -1894,6 +1910,7 @@ export class HADeviceDashboard extends LitElement {
     const graphHours = hours ?? this._config.graph_hours ?? 24;
     const tickMs = graphHours <= 1 ? 60_000 : graphHours <= 5 ? 120_000 : 300_000;
     const sensorColors = this._config.graph_sensor_colors ?? {};
+    const gaugeGradients = this._config.graph_style?.gauge_gradients ?? {};
     const globalColor = this._config.graph_line_color;
     const pad = 4;
 
@@ -1908,7 +1925,13 @@ export class HADeviceDashboard extends LitElement {
     });
     const rows = repeat(rowData, (r) => r.e.entityId, ({ e, points }) => {
       const { entityId, label, unit, dc } = e;
-      const lineColor = sensorColors[dc] ?? globalColor ?? GRAPH_SENSOR_DEFS.find(s => s.key === dc)?.defaultColor ?? '#f4601e';
+      // A class shown as a gauge gradient has no separate flat colour to set,
+      // so the line takes the middle of that gradient rather than falling back
+      // to the palette and disagreeing with the arc above it.
+      const grad = gaugeGradients[dc];
+      const lineColor = sensorColors[dc]
+        ?? (Array.isArray(grad) && grad.length >= 2 ? colorAt(grad, 0.5) : undefined)
+        ?? globalColor ?? GRAPH_SENSOR_DEFS.find(s => s.key === dc)?.defaultColor ?? '#f4601e';
 
       if (!points) {
         return html`
@@ -2343,21 +2366,24 @@ export class HADeviceDashboard extends LitElement {
     temp: number | null; energy: number | null; energyLabel: string;
     rssi: number | null; uptime: number | null;
   } {
-    let power: number | null = null, voltage: number | null = null,
-        current: number | null = null, temp: number | null = null,
-        energy: number | null = null, rssi: number | null = null,
-        uptime: number | null = null;
+    // The measured classes come from the same resolver the gauge rings use, so
+    // the chips and the arcs on one tile cannot show different temperatures —
+    // they did, whenever a device had both a diagnostic board sensor and a
+    // primary (or borrowed) room sensor.
+    const vals = deviceSensorValues(device, this.hass.states as never);
+    const read = (dc: string) => vals[dc]?.value ?? null;
+    const power = read('power'), voltage = read('voltage'),
+      current = read('current'), temp = read('temperature');
+    let energy: number | null = null, rssi: number | null = null, uptime: number | null = null;
     for (const e of device.entities) {
       if (e.domain !== 'sensor') continue;
       const s = this.hass.states[e.entity_id];
       if (!s || s.state === 'unavailable' || s.state === 'unknown') continue;
       const dc = (s.attributes as HassAttrs).device_class as string ?? '';
       const v = parseFloat(s.state);
-      if (dc === 'power'       && power   == null) power   = isNaN(v) ? null : v;
-      if (dc === 'voltage'     && voltage == null) voltage = isNaN(v) ? null : v;
-      if (dc === 'current'     && current == null) current = isNaN(v) ? null : v;
-      if (dc === 'temperature' && temp    == null) temp    = isNaN(v) ? null : v;
-      if (dc === 'energy'      && energy  == null) energy  = isNaN(v) ? null : v;
+      // Energy stays on entity order: _energyEntitiesFor picks the same first
+      // meter for the period fetch, and the two must name one entity.
+      if (dc === 'energy' && energy == null) energy = isNaN(v) ? null : v;
       const uid = e.entity_id;
       if (uid.includes('rssi') || uid.includes('signal')) rssi = isNaN(v) ? null : v;
       if (uid.includes('uptime')) uptime = isNaN(v) ? null : v;
@@ -2509,11 +2535,12 @@ export class HADeviceDashboard extends LitElement {
       a.sum += v; a.count++; agg.set(k, a);
     };
     for (const d of devices) {
-      if (wantPower) { const p = this._getPower(d); if (p != null) add('power', p); }
+      if (wantPower) { const p = this._getPower(ownDevice(d)); if (p != null) add('power', p); }
       if (!dcKeys.length && !wantRssi) continue;
       const seen = new Set<string>();  // first match per device, matching _deviceMetric semantics
       for (const e of d.entities) {
-        if (e.domain !== 'sensor') continue;
+        // A borrowed reading belongs to the lender, which is in this same total.
+        if (e.domain !== 'sensor' || !isOwn(e)) continue;
         const s = this.hass.states[e.entity_id];
         if (!s || s.state === 'unavailable' || s.state === 'unknown') continue;
         const v = parseFloat(s.state); if (isNaN(v)) continue;
@@ -3158,7 +3185,9 @@ export class HADeviceDashboard extends LitElement {
     };
     for (const device of devices) {
       for (const e of device.entities) {
-        if (e.domain !== 'sensor') continue;
+        // Borrowed readings are the lender's, and the lender may well be in this
+        // same room — counting both would double a sum and skew an average.
+        if (e.domain !== 'sensor' || !isOwn(e)) continue;
         const s = this.hass.states[e.entity_id];
         if (!s || s.state === 'unavailable' || s.state === 'unknown') continue;
         const v = parseFloat(s.state);

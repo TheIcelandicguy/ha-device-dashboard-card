@@ -264,13 +264,22 @@ try {
   ok('a borrowed reading reaches the gauge values', h.deviceSensorValues(i4b, hass.states).temperature != null);
 
   console.log('\ngauge rings follow the device');
-  const wdVals = { temperature: 25.9, humidity: 37.6, illuminance: 5, signal_strength: -60 };
+  // Readings carry where they came from: a relay's only temperature is its own
+  // board (diagnostic) at 45–65 °C, which must not share a room-temperature range.
+  const prim = (v) => ({ value: v, diagnostic: false });
+  const diag = (v) => ({ value: v, diagnostic: true });
+  const wdVals = { temperature: prim(25.9), humidity: prim(37.6), illuminance: prim(5), signal_strength: prim(-60) };
   const wdRings = h.gaugeRings(wdVals, { accent: '#f00' });
   eq('one ring per reported class, in ring order', wdRings.map(r => r.key), ['temperature', 'humidity', 'illuminance']);
   eq('humidity range defaults to 0–100', [wdRings[1].min, wdRings[1].max], [0, 100]);
   eq('a configured range wins', h.gaugeRings(wdVals, { accent: '#f00', ranges: { temperature: { min: 15, max: 30 } } })[0].max, 30);
   eq('power takes the accent (flat), humidity its default gradient',
-    h.gaugeRings({ power: 5, humidity: 1 }, { accent: '#f00' }).map(r => r.stops), [['#f00'], ['#fde68a', '#2dd4bf', '#0ea5e9']]);
+    h.gaugeRings({ power: prim(5), humidity: prim(1) }, { accent: '#f00' }).map(r => r.stops), [['#f00'], ['#fde68a', '#2dd4bf', '#0ea5e9']]);
+  eq('a room sensor keeps the −10…40 °C range', [wdRings[0].min, wdRings[0].max], [-10, 40]);
+  eq("a relay's board temperature gets the 0–100 range instead",
+    (r => [r.min, r.max, +r.pct.toFixed(2)])(h.gaugeRings({ temperature: diag(52) }, { accent: '#f00' })[0]), [0, 100, 0.52]);
+  eq('a configured range still wins over both',
+    h.gaugeRings({ temperature: diag(52) }, { accent: '#f00', ranges: { temperature: { min: 40, max: 80 } } })[0].max, 80);
   eq('temperature runs blue → yellow → red by default', wdRings[0].stops, ['#38bdf8', '#fde047', '#f87171']);
   eq('a flat graph_sensor_colors entry overrides the gradient',
     h.gaugeRings(wdVals, { accent: '#f00', colors: { temperature: '#123456' } })[0].stops, ['#123456']);
@@ -284,7 +293,13 @@ try {
   eq('colorAt at the ends', [h.colorAt(['#000000', '#ffffff'], 0), h.colorAt(['#000000', '#ffffff'], 1)], ['#000000', '#ffffff']);
   eq('colorAt with three stops picks the middle at 0.5', h.colorAt(['#38bdf8', '#fde047', '#f87171'], 0.5), '#fde047');
   ok('the label colour is the gradient at the reading', wdRings[0].color === h.colorAt(wdRings[0].stops, wdRings[0].pct));
-  eq('capped at four rings', h.gaugeRings({ power: 1, voltage: 2, current: 3, temperature: 4, humidity: 5 }, { accent: '#f00' }).length, 4);
+  eq('capped at four rings', h.gaugeRings({ power: prim(1), voltage: prim(2), current: prim(3), temperature: prim(4), humidity: prim(5) }, { accent: '#f00' }).length, 4);
+  // Hand-written YAML puts scalars where lists belong; a throw here would take
+  // the whole card's render down.
+  eq('a scalar gauge_gradients entry is ignored, not thrown on',
+    h.gaugeRings(wdVals, { accent: '#f00', gradients: { temperature: '#38bdf8' } })[0].stops, ['#38bdf8', '#fde047', '#f87171']);
+  eq('a one-stop gradient is not a gradient', h.gaugeStops('temperature', { accent: '#f00', gradients: { temperature: ['#123456'] } }), ['#38bdf8', '#fde047', '#f87171']);
+  eq('gaugeStops is what the editor and the tile share', h.gaugeStops('power', { accent: '#f00' }), ['#f00']);
   const wd = { entities: [
     { entity_id: 'sensor.d_temp', domain: 'sensor' },
     { entity_id: 'sensor.d_hum', domain: 'sensor' },
@@ -295,9 +310,34 @@ try {
     'sensor.d_hum':     { state: '37.6', attributes: { device_class: 'humidity' } },
     'sensor.d_devtemp': { state: '48',   attributes: { device_class: 'temperature' } },
   };
-  eq('first non-diagnostic reading per class', h.deviceSensorValues(wd, wdSt), { temperature: 25.9, humidity: 37.6 });
-  eq('a diagnostic reading stands in only when nothing else reports the class',
-    h.deviceSensorValues({ entities: [wd.entities[2]] }, wdSt), { temperature: 48 });
+  eq('first non-diagnostic reading per class', h.deviceSensorValues(wd, wdSt),
+    { temperature: { value: 25.9, diagnostic: false }, humidity: { value: 37.6, diagnostic: false } });
+  eq('a diagnostic reading stands in only when nothing else reports the class, and says so',
+    h.deviceSensorValues({ entities: [wd.entities[2]] }, wdSt), { temperature: { value: 48, diagnostic: true } });
+
+  console.log('\ncolour parsing — the wheel must not eat an alpha');
+  eq('rgba keeps its alpha', h.parseCssColor('rgba(255, 244, 232, 0.035)'), { hex: '#fff4e8', alpha: 0.035 });
+  eq('plain hex is opaque', h.parseCssColor('#f4601e'), { hex: '#f4601e', alpha: 1 });
+  eq('short hex expands', h.parseCssColor('#abc'), { hex: '#aabbcc', alpha: 1 });
+  eq('8-digit hex carries alpha', h.parseCssColor('#ff000080').alpha > 0.49, true);
+  eq('transparent is not a colour', h.parseCssColor('transparent'), null);
+  eq('a CSS var is not a colour', h.parseCssColor('var(--accent)'), null);
+  eq('an alpha survives a round trip', h.withAlpha(h.parseCssColor('rgba(255, 244, 232, 0.035)').hex, 0.035), 'rgba(255, 244, 232, 0.035)');
+  eq('full alpha stays a plain hex', h.withAlpha('#f4601e', 1), '#f4601e');
+
+  console.log('\nmigrateConfig — a pinned layout keeps its media controls');
+  const pinned = h.migrateConfig({ tile_layout: ['name_row', 'delegated_controls', 'badges'] });
+  eq('media_controls is inserted before the old block', pinned.tile_layout, ['name_row', 'media_controls', 'delegated_controls', 'badges']);
+  eq('a layout that already has it is untouched',
+    h.migrateConfig({ tile_layout: ['media_controls', 'delegated_controls'] }).tile_layout, ['media_controls', 'delegated_controls']);
+  eq('row-form layouts are repaired too',
+    h.migrateConfig({ tile_layout: [['name_row'], ['delegated_controls', 'badges']] }).tile_layout,
+    [['name_row'], ['media_controls', 'delegated_controls', 'badges']]);
+  eq('a device style layout is repaired',
+    h.migrateConfig({ device_styles: { abc: { tile_layout: ['delegated_controls'] } } }).device_styles.abc.tile_layout,
+    ['media_controls', 'delegated_controls']);
+  ok('a config with no layouts is returned unchanged',
+    (c => h.migrateConfig(c) === c)({ tile_layout: ['name_row', 'sensors'] }));
 
   console.log('\ndeviceRelevance — media player');
   const radio = { entities: [{ entity_id: 'media_player.display', domain: 'media_player', attributes: {} }, { entity_id: 'switch.display', domain: 'switch', attributes: {} }] };

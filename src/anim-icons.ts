@@ -796,7 +796,10 @@ export const ANIM_CSS: CSSResult = css`
   @keyframes heat-rise      { 0%{transform:translateY(2px);opacity:0} 40%{opacity:.9} 100%{transform:translateY(-3px);opacity:0} }
   @keyframes drum-tumble    { 0%{transform:rotate(0)} 45%{transform:rotate(320deg)} 60%{transform:rotate(290deg)} 100%{transform:rotate(360deg)} }
   @keyframes led-chase      { 0%,100%{opacity:.25} 20%{opacity:1} }
-  @keyframes hue-cycle      { to{filter:hue-rotate(360deg)} }
+  /* Both keyframes carry the same filter functions in the same order: a list
+     that changes function type between endpoints (drop-shadow → hue-rotate)
+     interpolates discretely, so the card's copy never cycled at all. */
+  @keyframes hue-cycle      { from{filter:drop-shadow(0 0 4px currentColor) hue-rotate(0deg)} to{filter:drop-shadow(0 0 4px currentColor) hue-rotate(360deg)} }
   @keyframes garage-door    { 0%,15%{transform:scaleY(1)} 45%,55%{transform:scaleY(.12)} 85%,100%{transform:scaleY(1)} }
   @keyframes spark-pop      { 0%,70%,100%{opacity:0;transform:scale(.6)} 75%,85%{opacity:1;transform:scale(1)} }
 

@@ -5,12 +5,12 @@ import { keyed } from 'lit/directives/keyed.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent, LovelaceCardConfig } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout, EnergyPeriod, InputActionConfig } from './types';
-import { getAllDevices, GRAPH_SENSOR_DEFS, GAUGE_RING_DEFS, colorAt, hexToHsv, hsvToHex, getDeviceProfile,HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels,
+import { getAllDevices, GRAPH_SENSOR_DEFS, GAUGE_RING_DEFS, gaugeStops, colorAt, hexToHsv, hsvToHex, parseCssColor, withAlpha, deviceHasControllable, getDeviceProfile,HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels,
   CONFIG_KEYS, LOVELACE_KEYS } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, detectTheme, paletteFor, type ThemePalette } from './themes';
 import {
   GLOBAL_SCOPE, scopeCanSet, whyUnavailable, scopeKey, parseScopeKey, groupDevices,
-  scopeLabel, overrideCount, collectOverrides, ALL_DESIGN_KEYS,
+  scopeLabel, overrideCount, collectOverrides, keysForScope,
   type DesignScope, type GroupBy, type DesignFamily, type DesignOverride,
 } from './design-scope';
 import {
@@ -872,11 +872,25 @@ export class HADeviceDashboardEditor extends LitElement {
   // disc, a brightness slider, a hex field and the graph palette as presets.
   // The native <input type="color"> hands the job to the OS dialog, which on a
   // phone is a full-screen affair with no sense of the card's palette.
-  @state() private _wheel: { hex: string; h: number; s: number; v: number; onSelect: (hex: string) => void } | null = null;
+  // `alpha` is the transparency of the value being edited: tile and room
+  // backgrounds are stored as rgba() tints, and a picker that returned a plain
+  // hex turned a 3.5% wash into a solid slab. It rides along and is re-applied
+  // on the way out. `unparsed` holds a value the wheel cannot represent
+  // ('transparent', a CSS var) so the popover can say what is really set.
+  @state() private _wheel: {
+    hex: string; h: number; s: number; v: number; alpha: number;
+    unparsed?: string; onSelect: (color: string) => void;
+  } | null = null;
 
-  private _openWheel(hex: string, onSelect: (hex: string) => void): void {
-    const { h, s, v } = hexToHsv(hex);
-    this._wheel = { hex: hsvToHex(h, s, v), h, s, v, onSelect };
+  private _openWheel(value: string, onSelect: (color: string) => void): void {
+    const parsed = parseCssColor(value);
+    const { h, s, v } = hexToHsv(parsed?.hex ?? '#808080');
+    this._wheel = {
+      hex: hsvToHex(h, s, v), h, s, v,
+      alpha: parsed?.alpha ?? 1,
+      unparsed: parsed ? undefined : (value || undefined),
+      onSelect,
+    };
     this.updateComplete.then(() => {
       const pop = this.renderRoot.querySelector<HTMLElement>('#ha-dd-color-wheel') as (HTMLElement & { showPopover?: () => void; matches: (s: string) => boolean }) | null;
       if (!pop) return;
@@ -897,13 +911,16 @@ export class HADeviceDashboardEditor extends LitElement {
     if (!hit) this._closeWheel();
   };
 
-  /** Apply a change and push it to the caller live, so the preview follows. */
-  private _setWheel(patch: Partial<{ h: number; s: number; v: number }>): void {
+  /** Apply a change and push it to the caller live, so the preview follows.
+   *  The edited value's alpha rides along, so picking a colour for a tile
+   *  background keeps it a tint instead of turning it opaque. */
+  private _setWheel(patch: Partial<{ h: number; s: number; v: number; alpha: number }>): void {
     if (!this._wheel) return;
     const w = { ...this._wheel, ...patch };
     w.hex = hsvToHex(w.h, w.s, w.v);
+    w.unparsed = undefined;   // it has a real colour now
     this._wheel = w;
-    w.onSelect(w.hex);
+    w.onSelect(withAlpha(w.hex, w.alpha));
   }
 
   /** Pointer on the disc: angle clockwise from the top is hue, distance from
@@ -921,11 +938,12 @@ export class HADeviceDashboardEditor extends LitElement {
     e.preventDefault();
   };
 
-  /** The swatch that opens the wheel for one colour. */
-  private _wheelButton(hex: string, onSelect: (hex: string) => void, title = 'Pick a colour'): TemplateResult {
+  /** The swatch that opens the wheel for one colour. Takes any CSS colour the
+   *  config holds — the swatch shows it as-is, transparency included. */
+  private _wheelButton(color: string, onSelect: (color: string) => void, title = 'Pick a colour'): TemplateResult {
     return html`
-      <button class="cw-btn" style="background:${hex}" title=${title}
-        @click=${(e: Event) => { e.stopPropagation(); this._openWheel(hex, onSelect); }}></button>`;
+      <button class="cw-btn" style="background:${color}" title=${title}
+        @click=${(e: Event) => { e.stopPropagation(); this._openWheel(color, onSelect); }}></button>`;
   }
 
   private _renderColorWheel(): TemplateResult {
@@ -943,6 +961,8 @@ export class HADeviceDashboardEditor extends LitElement {
             @pointerdown=${this._wheelPointer} @pointermove=${this._wheelPointer}>
             <div class="cw-dot" style="left:${dotX.toFixed(1)}%;top:${dotY.toFixed(1)}%;background:${w.hex}"></div>
           </div>
+          ${w.unparsed ? html`
+            <div class="cw-note">Currently <b>${w.unparsed}</b> — picking a colour replaces it.</div>` : nothing}
           <div class="cw-row">
             <span class="cw-lbl">Brightness</span>
             <input type="range" min="0" max="100" .value=${String(Math.round(w.v * 100))}
@@ -950,7 +970,14 @@ export class HADeviceDashboardEditor extends LitElement {
               @input=${(e: Event) => this._setWheel({ v: parseInt((e.target as HTMLInputElement).value, 10) / 100 })}/>
           </div>
           <div class="cw-row">
-            <span class="cw-swatch" style="background:${w.hex}"></span>
+            <span class="cw-lbl">Opacity</span>
+            <input type="range" min="0" max="100" .value=${String(Math.round(w.alpha * 100))}
+              style="flex:1;accent-color:${w.hex}" title="Transparency of this colour"
+              @input=${(e: Event) => this._setWheel({ alpha: parseInt((e.target as HTMLInputElement).value, 10) / 100 })}/>
+            <span class="cw-lbl" style="min-width:34px;text-align:right">${Math.round(w.alpha * 100)}%</span>
+          </div>
+          <div class="cw-row">
+            <span class="cw-swatch" style="background:${withAlpha(w.hex, w.alpha)}"></span>
             <input type="text" class="inline-text" style="width:90px;font-family:monospace" .value=${w.hex} maxlength="7"
               @change=${(e: Event) => {
                 const v = (e.target as HTMLInputElement).value.trim();
@@ -2652,6 +2679,11 @@ export class HADeviceDashboardEditor extends LitElement {
 
   private _setDesignScope(scope: DesignScope): void {
     this._designScope = scope;
+    // The Input actions entity-search pill is a per-device choice, so it must
+    // not follow the user to the next device: leaving it set made an i4's
+    // picker search only the i4 after a relay had been narrowed, hiding the
+    // very lights the i4 exists to control.
+    this._iaAllEntities = null;
     try { localStorage.setItem(this._designScopeStorageKey(), scopeKey(scope)); } catch { /* ignore */ }
   }
 
@@ -2930,7 +2962,7 @@ export class HADeviceDashboardEditor extends LitElement {
     const cur = scopeKey(this._designScope);
     const groups = groupDevices(this._allDevices(), this._designGroupBy, (d) => this._deviceProfile(d));
     const badge = (scope: DesignScope) => {
-      const n = overrideCount(c, scope, ALL_DESIGN_KEYS);
+      const n = overrideCount(c, scope, keysForScope(scope));
       return n ? html`<span class="dsn-count">${n}</span>` : nothing;
     };
     const chip = (scope: DesignScope, label: string, extra = '') => html`
@@ -3008,7 +3040,7 @@ export class HADeviceDashboardEditor extends LitElement {
       viewName: (id) => (this._config.views ?? []).find(x => x.id === id)?.name || id,
       deviceName: (id) => devs.find(d => d.device_id === id)?.name ?? id,
     });
-    const setCount = ALL_DESIGN_KEYS.filter(k => v[k] !== undefined).length;
+    const setCount = keysForScope(sc).filter(k => v[k] !== undefined).length;
 
     const tileBody = () => {
       // The style in force at this layer decides which arranging surface is
@@ -3560,6 +3592,15 @@ export class HADeviceDashboardEditor extends LitElement {
     const devStyle: DeviceStyle = this._config.device_styles?.[deviceId] ?? {};
     const acts: Record<string, InputActionConfig> = devStyle.input_actions ?? {};
     const entText = (e?: string | string[]) => Array.isArray(e) ? e.join(', ') : (e ?? '');
+    // An action may be stored under the channel's entity id (what this editor
+    // writes) or its channel number (valid hand-written YAML, and what the card
+    // reads as a fallback). Edit whichever key the device actually has, or a
+    // number-keyed action could be neither changed nor cleared and a second,
+    // shadowing entry would appear beside it.
+    const keyFor = (ch: { entityId: string; channel: number }) =>
+      acts[ch.entityId] !== undefined ? ch.entityId
+      : acts[String(ch.channel)] !== undefined ? String(ch.channel)
+      : ch.entityId;
     const setAct = (key: string, patch: Partial<InputActionConfig> | null) => {
       const next: Record<string, InputActionConfig> = { ...acts };
       if (!patch) delete next[key];
@@ -3568,10 +3609,9 @@ export class HADeviceDashboardEditor extends LitElement {
     };
     const devEnts = dev ? dev.entities.map(e => e.entity_id) : [];
     // Input-only hardware's targets live on other devices, so it starts wide.
-    // Config/diagnostic entities (an i4's "dimmer control" switch) are not
-    // controls in this sense.
-    const hasOwnControls = (dev?.entities ?? []).some(e => !e.entity_category
-      && /^(switch|light|cover|climate|fan|valve|lock|media_player)\./.test(e.entity_id));
+    // One definition of "has a control of its own" — the regex here listed eight
+    // domains where the helper knows fourteen.
+    const hasOwnControls = dev ? deviceHasControllable(dev) : false;
     const scopeAll = this._iaAllEntities ?? !hasOwnControls;
     const field = (value: string | string[] | undefined, apply: (v: string | string[] | undefined) => void,
       placeholder: string, multi = true, note?: string) =>
@@ -3628,8 +3668,8 @@ export class HADeviceDashboardEditor extends LitElement {
                 <select class="inline-text" style="flex:1"
                   @change=${(e: Event) => {
                     const v = (e.target as HTMLSelectElement).value;
-                    if (v === 'default') setAct(ch.entityId, null);
-                    else setAct(ch.entityId, { action: v as InputActionConfig['action'] });
+                    if (v === 'default') setAct(keyFor(ch), null);
+                    else setAct(keyFor(ch), { action: v as InputActionConfig['action'] });
                   }}>
                   <option value="default" ?selected=${kind === 'default'}>${defaultLabel}</option>
                   ${ch.output ? html`<option value="none" ?selected=${kind === 'none'}>— status only, no tap action —</option>` : nothing}
@@ -3645,15 +3685,15 @@ export class HADeviceDashboardEditor extends LitElement {
                     <span class="ia-lbl">Service</span>
                     <input type="text" class="inline-text" placeholder="script.hall_lights — or light.turn_on"
                       .value=${cur?.perform_action ?? ''}
-                      @change=${(e: Event) => setAct(ch.entityId, { perform_action: (e.target as HTMLInputElement).value.trim() || undefined })}/>
+                      @change=${(e: Event) => setAct(keyFor(ch), { perform_action: (e.target as HTMLInputElement).value.trim() || undefined })}/>
                     <span class="ia-lbl">Target</span>
-                    <div>${field(cur?.entity, v => setAct(ch.entityId, { entity: v }), 'Target entity — optional')}</div>` : nothing}
+                    <div>${field(cur?.entity, v => setAct(keyFor(ch), { entity: v }), 'Target entity — optional')}</div>` : nothing}
                   ${kind === 'toggle' ? html`
                     <span class="ia-lbl">Toggles</span>
-                    <div>${field(cur?.entity, v => setAct(ch.entityId, { entity: v }), 'Entity to toggle')}</div>` : nothing}
+                    <div>${field(cur?.entity, v => setAct(keyFor(ch), { entity: v }), 'Entity to toggle')}</div>` : nothing}
                   ${kind === 'more-info' ? html`
                     <span class="ia-lbl">Shows</span>
-                    <div>${field(cur?.entity, v => setAct(ch.entityId, { entity: v }), 'Entity to show', false,
+                    <div>${field(cur?.entity, v => setAct(keyFor(ch), { entity: v }), 'Entity to show', false,
                       `Empty = this channel (${ch.entityId})`)}</div>` : nothing}
                   ${kind === 'press' ? html`
                     <div class="ia-hint">Fires the same <code>shelly.click</code> event as the wall button — device_id,
@@ -3667,14 +3707,14 @@ export class HADeviceDashboardEditor extends LitElement {
                         title="Button number as the automation editor counts it. Empty = read from the entity registry."
                         @change=${(e: Event) => {
                           const n = parseInt((e.target as HTMLInputElement).value, 10);
-                          setAct(ch.entityId, { channel: Number.isFinite(n) && n > 0 ? n : undefined });
+                          setAct(keyFor(ch), { channel: Number.isFinite(n) && n > 0 ? n : undefined });
                         }}/>` : nothing}` : nothing}
 
                   <span class="ia-lbl">On hold</span>
                   <select class="inline-text"
                     @change=${(e: Event) => {
                       const v = (e.target as HTMLSelectElement).value as 'none' | 'press' | 'dim';
-                      setAct(ch.entityId, { hold_action: v === 'none' ? undefined : { action: v } });
+                      setAct(keyFor(ch), { hold_action: v === 'none' ? undefined : { action: v } });
                     }}>
                     <option value="none" ?selected=${(cur?.hold_action?.action ?? 'none') === 'none'}>— nothing —</option>
                     ${canPress ? html`<option value="press" ?selected=${cur?.hold_action?.action === 'press'}>Replay a long push</option>` : nothing}
@@ -3683,7 +3723,7 @@ export class HADeviceDashboardEditor extends LitElement {
                   ${cur?.hold_action?.action === 'dim' ? html`
                     <span class="ia-lbl">Dims</span>
                     <div>${field(cur.hold_action.entity,
-                      v => setAct(ch.entityId, { hold_action: { ...(cur.hold_action ?? { action: 'dim' }), entity: v } }),
+                      v => setAct(keyFor(ch), { hold_action: { ...(cur.hold_action ?? { action: 'dim' }), entity: v } }),
                       'Light to dim', false,
                       entText(cur.entity) ? `Empty = the tap target (${entText(cur.entity)})` : undefined)}</div>
                     <div class="ia-hint">Hold brightens; release and hold again darkens — it alternates each hold.</div>` : nothing}
@@ -3692,7 +3732,7 @@ export class HADeviceDashboardEditor extends LitElement {
                   <select class="inline-text"
                     @change=${(e: Event) => {
                       const v = (e.target as HTMLSelectElement).value as InputActionConfig['action'];
-                      setAct(ch.entityId, { double_tap_action: v === 'none' ? undefined : { action: v } });
+                      setAct(keyFor(ch), { double_tap_action: v === 'none' ? undefined : { action: v } });
                     }}>
                     <option value="none" ?selected=${(dbl?.action ?? 'none') === 'none'}>— nothing —</option>
                     ${canPress ? html`<option value="press" ?selected=${dbl?.action === 'press'}>Replay a double push</option>` : nothing}
@@ -3703,12 +3743,12 @@ export class HADeviceDashboardEditor extends LitElement {
                     <span class="ia-lbl">Service</span>
                     <input type="text" class="inline-text" placeholder="light.turn_on"
                       .value=${dbl.perform_action ?? ''}
-                      @change=${(e: Event) => setAct(ch.entityId, { double_tap_action: {
+                      @change=${(e: Event) => setAct(keyFor(ch), { double_tap_action: {
                         ...dbl, perform_action: (e.target as HTMLInputElement).value.trim() || undefined } })}/>`
                   : dbl?.action === 'toggle' ? html`
                     <span class="ia-lbl">Toggles</span>
                     <div>${field(dbl.entity,
-                      v => setAct(ch.entityId, { double_tap_action: { ...dbl, entity: v } }),
+                      v => setAct(keyFor(ch), { double_tap_action: { ...dbl, entity: v } }),
                       'Entity to toggle', true,
                       entText(cur?.entity) ? `Empty = the tap target (${entText(cur?.entity)})` : undefined)}</div>`
                   : nothing}
@@ -3718,7 +3758,7 @@ export class HADeviceDashboardEditor extends LitElement {
                   ${this._advanced ? html`
                     <span class="ia-lbl">Dropdown</span>
                     <div>${field(cur?.select_chip?.entity,
-                      v => { const id = one(v); setAct(ch.entityId, { select_chip: id ? { entity: id } : undefined }); },
+                      v => { const id = one(v); setAct(keyFor(ch), { select_chip: id ? { entity: id } : undefined }); },
                       'A select entity — WLED presets, say (optional)', false)}</div>` : nothing}
                 </div>` : nothing}
             </div>`;
@@ -4953,7 +4993,9 @@ export class HADeviceDashboardEditor extends LitElement {
       const label = meta?.label ?? def.key;
       const custom = gradients[def.key];
       const flat = sensorColors[def.key];
-      const stops = custom ?? (flat ? [flat] : def.stops ?? [meta?.defaultColor ?? '#f4601e']);
+      // The same resolver the tile draws with, so the preview bar cannot
+      // disagree with the arc — it did on power, which takes the accent.
+      const stops = gaugeStops(def.key, { colors: sensorColors, gradients, accent: '#f4601e' });
       const isGrad = stops.length > 1;
       const range = gs.sensor_ranges?.[def.key] ?? {};
       const lo = range.min ?? def.min, hi = range.max ?? def.max;
@@ -5009,11 +5051,12 @@ export class HADeviceDashboardEditor extends LitElement {
     };
 
     const colorBody = html`
-      <div class="field-lbl" style="margin-bottom:6px">Gauge ring colours
-        <span class="dev-style-hint">a gradient runs along the arc from the empty end to the full end — the value label takes the colour at the reading</span></div>
+      <div class="field-lbl" style="margin-bottom:6px">Gauge ring &amp; sparkline colours
+        <span class="dev-style-hint">one colour per sensor: a gradient runs along the arc from the empty end to the full end, the value label takes the colour at the reading, and the sparkline takes the middle of it</span></div>
       ${GAUGE_RING_DEFS.map(d => gaugeRow(d))}
       ${selectedGraphs.filter(k => !GAUGE_RING_DEFS.find(g => g.key === k)).length ? html`
-        <div class="field-lbl" style="margin:10px 0 6px">Sparkline colours</div>
+        <div class="field-lbl" style="margin:10px 0 6px">Sparkline colours
+          <span class="dev-style-hint">sensors with no gauge ring</span></div>
         ${selectedGraphs.filter(k => !GAUGE_RING_DEFS.find(g => g.key === k)).map(key => {
           const meta = GRAPH_SENSOR_DEFS.find(s => s.key === key);
           return colorRow(key, meta?.label ?? key, getColor(key));
@@ -5411,6 +5454,24 @@ export class HADeviceDashboardEditor extends LitElement {
       out.push({
         title: `Input action for a channel that is not there: ${orphaned.join('; ')}`,
         detail: 'That channel entity was renamed or removed, so the key never renders. Re-add the action against the current channel.',
+      });
+    }
+
+    // A double tap has no ramp to run. The type says so, but hand-written YAML
+    // is not type-checked: it would delay the single tap by 250 ms and then do
+    // nothing at all, which reads as a broken channel.
+    const dimDoubles: string[] = [];
+    for (const [devId, ds] of Object.entries(c.device_styles ?? {})) {
+      for (const [k, act] of Object.entries(ds.input_actions ?? {})) {
+        if ((act.double_tap_action as { action?: string } | undefined)?.action === 'dim') {
+          dimDoubles.push(`${this._allDevices().find(d => d.device_id === devId)?.name ?? devId} → ${k}`);
+        }
+      }
+    }
+    if (dimDoubles.length) {
+      out.push({
+        title: `Double tap set to "dim": ${dimDoubles.join('; ')}`,
+        detail: 'Dimming is a press-and-hold ramp, so a double tap has nothing to run — it delays the single tap and then does nothing. Move it to On hold.',
       });
     }
 
@@ -6230,6 +6291,7 @@ export class HADeviceDashboardEditor extends LitElement {
     .cw-row { display:flex; align-items:center; gap:8px; margin-top:8px; }
     .cw-lbl { font-size:10px; color:var(--t3); text-transform:uppercase; letter-spacing:.04em; }
     .cw-swatch { width:22px; height:22px; border-radius:5px; border:1px solid rgba(255,255,255,0.25); flex-shrink:0; }
+    .cw-note { font-size:10px; color:var(--t2); background:var(--s3); border-radius:6px; padding:5px 8px; margin-bottom:8px; }
     .cw-presets { display:flex; gap:5px; flex-wrap:wrap; margin-top:10px; }
     .cw-preset { width:18px; height:18px; border-radius:4px; cursor:pointer; border:1px solid rgba(255,255,255,0.18); }
     .cw-preset.on, .cw-preset:hover { border-color:#fff; }

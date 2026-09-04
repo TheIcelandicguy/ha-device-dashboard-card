@@ -6,6 +6,7 @@ import type {
   DeviceProfileResult,
   DetailHistoryRange,
 } from '../types';
+import type { SensorReading } from '../helpers';
 
 // Placeholder shapes — mirrored from anonymous return types in ha-device-dashboard.ts.
 // TODO: lift these into types.ts as tiles are extracted in later phases.
@@ -144,8 +145,10 @@ export interface TileCtx {
   /** Playable items from the browse tree, grouped by the folder they came
    *  from. null = never asked, 'pending' = loading, [] = nothing offered. */
   getBrowseGroups: (entityId: string) => BrowseGroup[] | 'pending' | null;
-  /** First live reading per device_class — what the gauge rings draw. */
-  sensorValues: (d: HADevice) => Record<string, number>;
+  /** First live reading per device_class, with where it came from — what the
+   *  gauge rings draw. Primary entities win; a diagnostic one only stands in
+   *  for a class nothing else reports. */
+  sensorValues: (d: HADevice) => Record<string, SensorReading>;
   getPowerSparks: (d: HADevice) => SparkPoint[];
   ensureGraphData: (d: HADevice) => void;
 

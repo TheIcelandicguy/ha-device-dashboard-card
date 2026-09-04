@@ -5,6 +5,70 @@ installs from them.
 
 ## Unreleased
 
+### Fixes from the v1.1.0 audit
+
+Seventeen confirmed findings from a review of everything since v1.1.0:
+
+- **A hand-written scalar no longer takes the card down.** `gauge_gradients`
+  and `radio_stations` expect lists; a string or an object where one belongs
+  threw inside render. Both are now ignored when unusable.
+- **Gauge arcs wear their gradient correctly.** The gradient was resolved
+  against the *drawn* part of the arc, so every arc ran the full colour range
+  and its tip was always the last stop — a cold reading showed a red tip under
+  a blue label. It now spans the ring, so the arc's colour at the tip is the
+  label's colour.
+- **A pinned layout keeps its media controls.** Media players stopped being
+  "delegated" in this release; a layout saved before that named only the old
+  block and silently lost its controls. `migrateConfig` inserts the new
+  `media_controls` block wherever the old one is named, at every rung.
+- **Borrowed readings stay the lender's.** Only the online check skipped
+  `extra_sensors`; faults, alarms, battery, updates and every room and fleet
+  total counted them too — a borrowed BLU battery at 15% put a mains-powered
+  Wall Display in Needs attention, and a borrowed power sensor was summed
+  twice. One rule now, `isOwn`, used by every reader that judges the device or
+  adds up a room.
+- **The colour wheel keeps transparency.** Tile and room backgrounds are rgba
+  tints; the wheel opened on black and the first touch wrote an opaque colour,
+  losing the tint for good. It now reads rgba and short hex, carries the alpha
+  through on an Opacity slider, and says so when a value is `transparent` or a
+  CSS variable rather than pretending it is black.
+- **A relay's gauge no longer reads as overheating.** The temperature ring's
+  −10…40 °C range is a room range, but on a relay the only temperature is its
+  own board at 45–65 °C, which pegged the arc full red. A reading now knows
+  whether it came from a diagnostic entity and takes the 0–100 range if so.
+- **Channel-numbered input actions are editable.** An action written in YAML
+  under its channel number could be neither changed nor cleared: the editor
+  read that key but always wrote the entity-id one, leaving a stale entry
+  behind a new shadowing one.
+- **No empty band under light, climate and cover tiles.** The new Sensor
+  graphs element rendered its padded wrapper even with graphs off, which is
+  the default.
+- **Device-only settings count as customisation.** A tile photo, animated
+  icons, borrowed sensors and input actions were invisible to the "n set
+  here" badge, the scope tree, the Changes panel and Reset all.
+- **One colour per sensor class.** A class shown as a gauge gradient had no
+  sparkline colour control at all, and its line fell back to the palette while
+  the arc above it ran the gradient; the line now takes the middle of the
+  gradient, and the editor's row is labelled for both. The row's preview also
+  used a different resolver from the tile, so power previewed the wrong colour.
+- **The Rainbow icon cycles again.** Its glow and its hue rotation were
+  different filter functions, which CSS interpolates discretely, so the card's
+  copy never cycled while the editor's did.
+- **The entity-search scope is per device.** Choosing "This device's entities"
+  on one device narrowed the picker on every device opened afterwards, hiding
+  the lights an i4 exists to control.
+- **A borrowed sensor that reports late shows up.** One whose state arrived
+  after the first render stayed missing until an unrelated rebuild.
+- **Chips and gauge agree.** The chips took the first temperature sensor while
+  the gauge preferred a primary one, so one tile could show two temperatures.
+- **`dim` on a double tap is rejected.** It type-checks no more, and a
+  hand-written one is named in the Conflicts panel instead of silently doing
+  nothing.
+- **One definition of "has a control of its own"**, so a device whose only
+  control is a vacuum or a siren is no longer treated as input-only.
+- **Input rows stop re-detecting the device profile** once per row per render,
+  which bypassed the card's profile cache.
+
 ### Inputs that do something
 
 - **Replay the press.** `input_actions[...].action: press` fires the same

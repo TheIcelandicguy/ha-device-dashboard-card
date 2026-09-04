@@ -438,8 +438,9 @@ export interface InputActionConfig {
   /** Double-tap behaviour, mirroring a wall switch's double push (Shelly's own
    *  dimmer script uses double = on at 100%). Configuring this delays the single
    *  tap by ~250ms so the card can tell the two apart; channels without one keep
-   *  firing instantly. `action: 'dim'` is meaningless here — hold only. */
-  double_tap_action?: InputGestureConfig;
+   *  firing instantly. `dim` is hold-only and the type says so — it used to be
+   *  accepted here and then silently did nothing. */
+  double_tap_action?: InputDoubleTapConfig;
   /** Optional second chip on the row: a dropdown of a `select` entity's options.
    *  A row only has tap and hold, so anything a third gesture used to do at the
    *  wall — cycling WLED presets, say — needs its own control. */
@@ -476,6 +477,12 @@ export interface InputGestureConfig {
 
 /** Hold behaviour — the same shape as any other secondary gesture. */
 export type InputHoldConfig = InputGestureConfig;
+
+/** A double tap has no ramp to run, so it cannot `dim`. Spelling that in the
+ *  type keeps a hand-written `double_tap_action: { action: dim }` from
+ *  type-checking, delaying the single tap by 250 ms and then doing nothing. */
+export type InputDoubleTapConfig =
+  Omit<InputGestureConfig, 'action'> & { action: Exclude<InputGestureConfig['action'], 'dim'> };
 
 /** The subset of DeviceStyle the per-type ("all relays") layer actually resolves.
  *  It used to be typed as the whole of DeviceStyle, which let the editor and YAML

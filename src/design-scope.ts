@@ -187,9 +187,31 @@ export const DESIGN_KEYS = {
   chrome: ['style'],
 } as const;
 
+/**
+ * Settings that exist only on a device and have no ladder above them, each with
+ * its own block in the Design panel: the tile's backdrop photo, its animated
+ * icons, the readings it borrows from other devices, and what its inputs do.
+ *
+ * They are design keys for every purpose the panel serves — the "n set here"
+ * badge, the scope tree's counts, the Changes panel and "Reset all" — and were
+ * invisible to all four, so a device with a photo and input actions reported
+ * "nothing set — all inherited" and survived a reset.
+ */
+export const DEVICE_ONLY_KEYS: string[] = [
+  'bg_image', 'bg_image_size',
+  'tile_icon', 'tile_icon_off', 'tile_icon_speed', 'tile_icon_size', 'entity_animations',
+  'extra_sensors', 'radio_stations', 'input_actions',
+];
+
 export const ALL_DESIGN_KEYS: string[] = [
   ...DESIGN_KEYS.tile, ...DESIGN_KEYS.container, ...DESIGN_KEYS.chrome,
 ];
+
+/** Every key a scope of this kind can hold. Only a device carries the
+ *  ladder-less extras, so only a device counts them. */
+export function keysForScope(scope: DesignScope): string[] {
+  return scope.kind === 'device' ? [...ALL_DESIGN_KEYS, ...DEVICE_ONLY_KEYS] : ALL_DESIGN_KEYS;
+}
 
 /** One thing the config changes away from the built-in look. */
 export interface DesignOverride {
@@ -246,7 +268,8 @@ export function collectOverrides(
     push({ kind: 'type', profile: profile as DeviceProfile }, block as unknown as Record<string, unknown>, ALL_DESIGN_KEYS);
   }
   for (const [id, block] of Object.entries(config.device_styles ?? {})) {
-    push({ kind: 'device', id }, block as unknown as Record<string, unknown>, ALL_DESIGN_KEYS);
+    push({ kind: 'device', id }, block as unknown as Record<string, unknown>,
+      [...ALL_DESIGN_KEYS, ...DEVICE_ONLY_KEYS]);
   }
   return out;
 }

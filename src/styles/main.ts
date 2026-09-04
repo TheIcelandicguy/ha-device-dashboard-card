@@ -803,7 +803,9 @@ export const mainCss = css`
     @keyframes heat-rise      { 0%{transform:translateY(2px);opacity:0} 40%{opacity:.9} 100%{transform:translateY(-3px);opacity:0} }
     @keyframes drum-tumble    { 0%{transform:rotate(0)} 45%{transform:rotate(320deg)} 60%{transform:rotate(290deg)} 100%{transform:rotate(360deg)} }
     @keyframes led-chase      { 0%,100%{opacity:.25} 20%{opacity:1} }
-    @keyframes hue-cycle      { to{filter:hue-rotate(360deg)} }
+    /* Same function list at both ends, or the filter interpolates discretely
+       and the hue never rotates — see anim-icons.ts. */
+    @keyframes hue-cycle      { from{filter:drop-shadow(0 0 4px currentColor) hue-rotate(0deg)} to{filter:drop-shadow(0 0 4px currentColor) hue-rotate(360deg)} }
     @keyframes garage-door    { 0%,15%{transform:scaleY(1)} 45%,55%{transform:scaleY(.12)} 85%,100%{transform:scaleY(1)} }
     @keyframes spark-pop      { 0%,70%,100%{opacity:0;transform:scale(.6)} 75%,85%{opacity:1;transform:scale(1)} }
 
@@ -852,7 +854,7 @@ export const mainCss = css`
 
     .ent-icon-strip.off,.ent-icon-strip2.off { color:#4b5563; }
     .ent-icon-strip.on  { color:#c084fc; filter:drop-shadow(0 0 4px rgba(192,132,252,0.45)); }
-    .ent-icon-strip2.on { color:#f472b6; filter:drop-shadow(0 0 4px rgba(244,114,182,0.4)); animation:hue-cycle calc(4s / var(--ent-spd,1)) linear infinite; }
+    .ent-icon-strip2.on { color:#f472b6; animation:hue-cycle calc(4s / var(--ent-spd,1)) linear infinite; }
     .ent-icon-strip.on .led-1 { animation:led-chase calc(1.5s / var(--ent-spd,1)) ease-in-out infinite; }
     .ent-icon-strip.on .led-2 { animation:led-chase calc(1.5s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-1.2s / var(--ent-spd,1)); }
     .ent-icon-strip.on .led-3 { animation:led-chase calc(1.5s / var(--ent-spd,1)) ease-in-out infinite; animation-delay:calc(-0.9s / var(--ent-spd,1)); }

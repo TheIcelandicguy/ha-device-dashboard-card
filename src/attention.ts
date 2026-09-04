@@ -32,13 +32,26 @@ type States = Record<string, StateLike | undefined>;
 
 const DEAD = new Set(['unavailable', 'unknown']);
 
+/** One rule for every reader that judges the device itself rather than showing
+ *  a reading: a borrowed entity (`extra_sensors`) belongs to the lender. It says
+ *  nothing about this device's reachability, its faults are the lender's faults,
+ *  and its battery is the lender's battery — and counting it in a room or fleet
+ *  total would count it twice, since the lender is in the same total. */
+export const isOwn = (e: { borrowed_from?: string }): boolean => !e.borrowed_from;
+
+/** The device minus its borrowed readings, for aggregates and health checks.
+ *  Returns the same reference when nothing is borrowed, so callers can pass it
+ *  straight into memoised helpers without busting their caches. */
+export function ownDevice<T extends HADevice>(device: T): T {
+  if (!device.entities.some(e => e.borrowed_from)) return device;
+  return { ...device, entities: device.entities.filter(isOwn) };
+}
+
 /** Same rule the tiles use: a device is online if any of its entities has a
  *  usable state. A battery sensor still reporting counts. */
 export function isOnline(device: HADevice, states: States): boolean {
-  // A reading lent by another device (extra_sensors) says nothing about this
-  // one's reachability — a live BLU H&T must not keep a dead Wall Display green.
   return device.entities.some(e => {
-    if (e.borrowed_from) return false;
+    if (!isOwn(e)) return false;
     const s = states[e.entity_id];
     return !!s && !DEAD.has(s.state ?? '');
   });
@@ -59,7 +72,7 @@ export function isOnline(device: HADevice, states: States): boolean {
 export function deviceFaults(device: HADevice, states: States): string[] {
   const out: string[] = [];
   for (const e of device.entities) {
-    if (e.domain !== 'binary_sensor') continue;
+    if (e.domain !== 'binary_sensor' || !isOwn(e)) continue;
     const s = states[e.entity_id];
     if (!s || s.state !== 'on') continue;
     const dc = (s.attributes?.device_class as string) ?? '';
@@ -72,7 +85,7 @@ export function deviceFaults(device: HADevice, states: States): string[] {
 export function environmentAlarms(device: HADevice, states: States): string[] {
   const out: string[] = [];
   for (const e of device.entities) {
-    if (e.domain !== 'binary_sensor') continue;
+    if (e.domain !== 'binary_sensor' || !isOwn(e)) continue;
     const s = states[e.entity_id];
     if (!s || s.state !== 'on') continue;
     const dc = (s.attributes?.device_class as string) ?? '';
@@ -104,7 +117,7 @@ export function hasUpdate(
 export function batteryLevel(device: HADevice, states: States): number | null {
   let low: number | null = null;
   for (const e of device.entities) {
-    if (e.domain !== 'sensor') continue;
+    if (e.domain !== 'sensor' || !isOwn(e)) continue;
     const s = states[e.entity_id];
     if (!s || (s.attributes?.device_class as string) !== 'battery') continue;
     const v = parseFloat(s.state ?? '');
@@ -131,7 +144,7 @@ export function pendingUpdate(
   opts: { includeBeta?: boolean } = {},
 ): { current: string; next: string; entityId: string } | null {
   for (const e of device.entities) {
-    if (e.domain !== 'update') continue;
+    if (e.domain !== 'update' || !isOwn(e)) continue;
     const s = states[e.entity_id];
     if (!s || s.state !== 'on') continue;
     if (!opts.includeBeta && isBetaUpdate(e.entity_id, s.attributes)) continue;

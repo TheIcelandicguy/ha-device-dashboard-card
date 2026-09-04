@@ -151,6 +151,7 @@ export function renderLightControlTile(ctx: TileCtx): TemplateResult {
             fx => hass.callService('light', 'turn_on', { entity_id: sw.entityId, effect: fx }))
         : nothing}
       ${s.power != null && ctx.showEl('power') ? html`<div style="font-size:.72em;color:var(--sc-text-muted);margin-top:6px">${formatPower(s.power)}</div>` : nothing}
-      ${ctx.showEl('graphs') ? html`<div class="ts-lower-section ts-lower-graphs">${ctx.renderSparklines(device)}</div>` : nothing}
+      ${ctx.showEl('graphs') && ctx.getGraphEntities(device).length
+        ? html`<div class="ts-lower-section ts-lower-graphs">${ctx.renderSparklines(device)}</div>` : nothing}
     </div>`;
 }
