@@ -1543,7 +1543,11 @@ export class HADeviceDashboard extends LitElement {
     if (this._graphFetching.has(key)) return;
     const age = Date.now() - (this._graphFetchedAt.get(key) ?? 0);
     // Long ranges change slowly — no point refetching a 7d/30d series every 5 minutes.
-    const ttl = h >= 168 ? 30 * 60_000 : 5 * 60_000;
+    // A series too short to draw is a different case: it is what a sensor added
+    // minutes ago looks like, and holding "no history" for five minutes reads as
+    // broken rather than as new. Ask again shortly, and it fills itself in.
+    const drawable = (this._graphData.get(key)?.length ?? 0) >= 2;
+    const ttl = !drawable ? 30_000 : h >= 168 ? 30 * 60_000 : 5 * 60_000;
     if (age < ttl && this._graphData.has(key)) return;
     if (!this._fetchQueue.includes(key)) {
       this._fetchQueue.push(key);
@@ -1577,9 +1581,13 @@ export class HADeviceDashboard extends LitElement {
    *  for 24h (or hourly rows beyond 48h) instead of tens of thousands of raw
    *  state changes. Returns null when the entity has no statistics (no
    *  state_class) so the caller can fall back to raw history. */
-  private async _fetchStatistics(entityId: string, hours: number): Promise<Array<{ t: number; v: number }> | null> {
+  private async _fetchStatistics(
+    entityId: string,
+    hours: number,
+    periodOverride?: 'hour' | '5minute',
+  ): Promise<Array<{ t: number; v: number }> | null> {
     try {
-      const period = hours > 48 ? 'hour' : '5minute';
+      const period = periodOverride ?? (hours > 48 ? 'hour' : '5minute');
       const rows = await (this.hass as any).callWS({
         type: 'recorder/statistics_during_period',
         start_time: new Date(Date.now() - hours * 3600_000).toISOString(),
@@ -1605,7 +1613,14 @@ export class HADeviceDashboard extends LitElement {
    *  fallback when an entity has no recorder statistics. */
   private async _fetchRawHistory(entityId: string, hours: number): Promise<Array<{ t: number; v: number }>> {
     const start = new Date(Date.now() - hours * 3600_000);
-    const path = `history/period/${start.toISOString()}?filter_entity_id=${entityId}&minimal_response=true&no_attributes=true`;
+    // end_time is NOT optional in practice: without it HA returns one day
+    // starting at start_time, so every range over 24h read the OLDEST day of
+    // the window instead of the newest — a 115h graph showed the slice from
+    // 115h ago to 91h ago, and a sensor added today (which did not exist then)
+    // came back empty while its 24h graph drew fine.
+    const end = new Date();
+    const path = `history/period/${start.toISOString()}?filter_entity_id=${entityId}`
+      + `&end_time=${encodeURIComponent(end.toISOString())}&minimal_response=true&no_attributes=true`;
     const raw = await (this.hass as any).callApi('GET', path) as Array<Array<{ state: string; last_changed: string }>>;
     const series = raw?.[0] ?? [];
     const points = series.map(p => ({ t: new Date(p.last_changed).getTime(), v: parseFloat(p.state) })).filter(p => !isNaN(p.v));
@@ -1868,6 +1883,11 @@ export class HADeviceDashboard extends LitElement {
     try {
       // Statistics first for 24h+ ranges (tiny payload); raw history otherwise.
       let points = hours >= 24 ? await this._fetchStatistics(entityId, hours) : null;
+      // A window over 48h asks for hourly rows, and an entity created an hour
+      // or two ago has at most one of those — not enough to draw a line. Its
+      // 5-minute rows cover the same span and cost the same call, so ask for
+      // those before falling back to a wide raw-history fetch.
+      if (!points && hours > 48) points = await this._fetchStatistics(entityId, hours, '5minute');
       if (!points) points = await this._fetchRawHistory(entityId, hours);
       points = downsamplePoints(points);
       this._commitGraphPoints(key, points);
@@ -1945,7 +1965,7 @@ export class HADeviceDashboard extends LitElement {
         return html`
           <div class="spark-row">
             <span class="spark-lbl">${label}</span>
-            <span class="spark-no-data">no history</span>
+            <span class="spark-no-data" title="The recorder has nothing to plot for this sensor yet. A sensor added in the last few minutes fills in on its own.">no history yet</span>
             <button class="spark-retry" @click=${(e: Event) => { e.stopPropagation(); this._retryGraphData(entityId, graphHours); }}>↺</button>
           </div>`;
       }

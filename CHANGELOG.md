@@ -5,6 +5,27 @@ installs from them.
 
 ## Unreleased
 
+### Graphs over a range longer than a day read the wrong day
+
+`graph_hours: 115` drew nothing while the same sensor's detail sheet — which
+asks for 24h — drew fine. Two causes, both real:
+
+- **The raw-history fetch never sent `end_time`.** Home Assistant answers
+  `history/period/<start>` with *one day starting at start*, so every range
+  over 24h read the OLDEST day of the window rather than the newest. A 115h
+  graph was showing the slice from 115h ago to 91h ago; a sensor added today
+  did not exist then, so it came back empty. Long ranges now send `end_time`,
+  and a sensor added an hour ago returns 22 states over 115h instead of none.
+- **A young entity has no hourly statistics to draw.** Beyond 48h the card asks
+  for hourly rows, and an entity created an hour or two ago has at most one —
+  not enough for a line. Its 5-minute rows cover the same span at the same
+  cost, so those are tried before falling back to raw history.
+
+Also: a series too short to draw is retried after 30 seconds rather than five
+minutes, and the row reads "no history yet", so a sensor added moments ago
+fills itself in instead of looking broken. A series that draws keeps the
+five-minute cache and a long range keeps its thirty.
+
 ### Fixes from the v1.1.0 audit
 
 Seventeen confirmed findings from a review of everything since v1.1.0:
