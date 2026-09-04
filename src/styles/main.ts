@@ -1254,8 +1254,12 @@ export const mainCss = css`
     /* Delegated (native HA) controls for long-tail domains — Phase 3 fallback */
     .tile-delegated { display:flex; flex-direction:column; gap:6px; margin-top:2px; }
 
-    /* Embedded user cards (header_cards / footer_cards) */
-    .extra-cards { display:flex; flex-direction:column; gap:12px; padding:12px; }
+    /* Embedded user cards (header_cards / footer_cards / area_cards).
+       A twelve-column strip so a card's own grid_options.columns can place it,
+       the way a sections view does. A card that sets none spans all twelve, so
+       a config written before this stays full-width. */
+    .extra-cards { display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:12px; padding:12px; }
+    .extra-cards > * { grid-column:span 12; min-width:0; }
     .extra-cards:empty { display:none; }
 
     /* One-time notice: native controls available but off by default */

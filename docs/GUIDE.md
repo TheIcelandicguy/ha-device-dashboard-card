@@ -148,6 +148,15 @@ It is set per device on purpose. Two identical plugs in the same room can disagr
 3. Tapping OFF now opens a prompt. Cancel is the wide button; the red "Turn off" is the narrow one.
 4. It covers every on/off the card draws for that device, including the per-channel relay rows and the detail sheet. It cannot cover a control drawn by Home Assistant itself under Native controls.
 
+### Show an embedded card only sometimes, or put two side by side
+
+Cards you embed under Extra cards are rendered by Home Assistant itself, so anything a card can normally do in a dashboard it can do here.
+
+1. Extra cards → pick the placement (header, footer or a room) → Add card.
+2. To show it conditionally, give the card a `visibility:` block — the same state, user and screen conditions a dashboard card takes. A card hidden by its condition leaves no gap.
+3. To make it narrower, give it `grid_options: {columns: 6}` — the strip is twelve columns wide, so two sixes sit side by side. Leave `grid_options` out for full width.
+4. `rows` sets a minimum height; the strip grows to fit its content rather than clipping.
+
 ### Hide the on/off button on a tile
 
 For a device you only want to watch, or one whose switching belongs somewhere else.

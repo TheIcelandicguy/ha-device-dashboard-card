@@ -3833,10 +3833,35 @@ export class HADeviceDashboard extends LitElement {
   /** Embed the user's own Lovelace cards (built-in or HACS) across the dashboard. */
   private _renderExtraCards(cards?: LovelaceCardConfig[]): TemplateResult {
     if (!cards?.length) return html``;
+    const preview = this.preview || this.hasAttribute('data-edit-preview');
     return html`
       <div class="extra-cards">
-        ${cards.map(c => html`<hdd-card .hass=${this.hass} .config=${c}></hdd-card>`)}
+        ${cards.map(c => html`
+          <hdd-card style=${styleMap(this._extraCardGrid(c))}
+            .hass=${this.hass} .config=${c} .preview=${preview}></hdd-card>`)}
       </div>`;
+  }
+
+  /**
+   * A card's own `grid_options`, as placement in the twelve-column strip.
+   *
+   * Only what the USER wrote is read, never the element's own defaults — a tile
+   * card reports a default of six columns, and honouring that would silently
+   * halve the width of every embedded tile in every existing config. So: no
+   * `grid_options` means full width, exactly as before, and someone who writes
+   * `columns: 6` gets half. `rows` becomes a minimum height rather than a fixed
+   * one, since this strip grows to its content instead of clipping to a row
+   * grid the way a sections view does.
+   */
+  private _extraCardGrid(card: LovelaceCardConfig): Record<string, string> {
+    const g = (card as { grid_options?: { columns?: number | string; rows?: number | string } }).grid_options;
+    if (!g || typeof g !== 'object') return {};
+    const out: Record<string, string> = {};
+    const cols = g.columns;
+    if (typeof cols === 'number' && cols > 0 && cols < 12) out['grid-column'] = `span ${Math.round(cols)}`;
+    const rows = g.rows;
+    if (typeof rows === 'number' && rows > 1) out['min-height'] = `calc(${Math.round(rows)} * var(--hdd-grid-row, 56px))`;
+    return out;
   }
 
   /** One-time dismissible banner: some devices have native controls (media, fan,

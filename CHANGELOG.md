@@ -3,6 +3,32 @@
 All notable changes to HA Device Dashboard. Versions are git tags; HACS
 installs from them.
 
+## Unreleased
+
+### Embedded cards go through Home Assistant's own wrapper
+
+An embedded card (`header_cards` / `footer_cards` / `area_cards`) was built with
+`createCardElement`, the low-level factory. A real dashboard view uses
+`<hui-card>`, the wrapper *above* it — so three things a Lovelace card can
+normally do were quietly dropped on the way in. All three now work:
+
+- **`visibility:` conditions are honoured.** State, user and screen-size
+  conditions did nothing on an embedded card: the YAML validated and the card
+  then always showed. A card hidden by a condition now leaves the strip
+  entirely, taking its gap with it, rather than sitting there as a blank slot.
+- **`grid_options` place the card.** The strip is a twelve-column grid, so
+  `grid_options: {columns: 6}` gives a half-width card and two of them sit side
+  by side. Only what *you* wrote is read, never the card element's own default —
+  a tile card reports a default of six columns, and honouring that would have
+  silently halved every embedded tile in every existing config. No
+  `grid_options` still means full width. `rows` becomes a minimum height, since
+  this strip grows to its content instead of clipping to a row grid.
+- **Preview mode reaches the card**, so an embedded card in the edit dialog can
+  render its edit-mode affordances instead of acting live.
+
+`createCardElement` remains the fallback for a Home Assistant old enough not to
+define `hui-card`.
+
 ## 1.2.0 — 2026-09-04
 
 ### Ask before turning a device off

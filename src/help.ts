@@ -166,6 +166,19 @@ export const HELP_RECIPES: HelpTopic[] = [
     ],
   },
   {
+    id: 'extra-card-layout',
+    title: 'Show an embedded card only sometimes, or put two side by side',
+    body: [
+      'Cards you embed under Extra cards are rendered by Home Assistant itself, so anything a card can normally do in a dashboard it can do here.',
+    ],
+    steps: [
+      'Extra cards → pick the placement (header, footer or a room) → Add card.',
+      'To show it conditionally, give the card a `visibility:` block — the same state, user and screen conditions a dashboard card takes. A card hidden by its condition leaves no gap.',
+      'To make it narrower, give it `grid_options: {columns: 6}` — the strip is twelve columns wide, so two sixes sit side by side. Leave `grid_options` out for full width.',
+      '`rows` sets a minimum height; the strip grows to fit its content rather than clipping.',
+    ],
+  },
+  {
     id: 'hide-onoff',
     title: 'Hide the on/off button on a tile',
     body: ['For a device you only want to watch, or one whose switching belongs somewhere else.'],
