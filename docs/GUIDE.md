@@ -153,9 +153,11 @@ It is set per device on purpose. Two identical plugs in the same room can disagr
 Cards you embed under Extra cards are rendered by Home Assistant itself, so anything a card can normally do in a dashboard it can do here.
 
 1. Extra cards → pick the placement (header, footer or a room) → Add card.
-2. To show it conditionally, give the card a `visibility:` block — the same state, user and screen conditions a dashboard card takes. A card hidden by its condition leaves no gap.
-3. To make it narrower, give it `grid_options: {columns: 6}` — the strip is twelve columns wide, so two sixes sit side by side. Leave `grid_options` out for full width.
-4. `rows` sets a minimum height; the strip grows to fit its content rather than clipping.
+2. Header and footer cards can differ per view: set "Applies to" to a view and that view gets its own list, replacing the card-wide one. An empty list on a view means no cards there at all. "Use the card-wide list" clears the override.
+3. Use ▲ ▼ on a row to reorder.
+4. To show it conditionally, give the card a `visibility:` block — the same state, user and screen conditions a dashboard card takes. A card hidden by its condition leaves no gap.
+5. To make it narrower, give it `grid_options: {columns: 6}` — the strip is twelve columns wide, so two sixes sit side by side. Leave `grid_options` out for full width.
+6. `rows` sets a minimum height; the strip grows to fit its content rather than clipping.
 
 ### Hide the on/off button on a tile
 

@@ -200,6 +200,10 @@ export class HADeviceDashboardEditor extends LitElement {
   /** Extra-cards manager state. */
   @state() private _xcPlacement: 'header' | 'footer' | 'room' = 'header';
   @state() private _xcRoom = '';
+  /** Which view's header/footer cards are being edited; '' = the card-wide list
+   *  every view falls back to. Rooms are unaffected — area_cards sit inside the
+   *  room block, which is not chrome. */
+  @state() private _xcView = '';
   @state() private _xcAdding = false;
   @state() private _xcEditIndex: number | null = null;
   /** Initial config handed to ha-yaml-editor as defaultValue (stable while editing). */
@@ -1645,21 +1649,49 @@ export class HADeviceDashboardEditor extends LitElement {
   }
 
   // ── Extra cards manager ──────────────────────────────────────────
+  /** The header/footer key the placement pills currently point at. */
+  private _xcKey(): 'header_cards' | 'footer_cards' {
+    return this._xcPlacement === 'header' ? 'header_cards' : 'footer_cards';
+  }
+
   private _xcArray(): LovelaceCardConfig[] {
     const c = this._config;
-    if (this._xcPlacement === 'header') return c.header_cards ?? [];
-    if (this._xcPlacement === 'footer') return c.footer_cards ?? [];
-    return (c.area_cards?.[this._xcRoom]) ?? [];
+    if (this._xcPlacement === 'room') return (c.area_cards?.[this._xcRoom]) ?? [];
+    const key = this._xcKey();
+    if (this._xcView) {
+      // A view with no override of its own shows the card-wide list, because
+      // that is what actually renders there. Returning an empty list instead
+      // said "no cards here" under a hint saying the opposite.
+      const v = (this._config.views ?? []).find(x => x.id === this._xcView);
+      return v?.[key] ?? c[key] ?? [];
+    }
+    return c[key] ?? [];
   }
 
   private _xcSetArray(arr: LovelaceCardConfig[]): void {
-    if (this._xcPlacement === 'header') this._set('header_cards', arr.length ? arr : undefined);
-    else if (this._xcPlacement === 'footer') this._set('footer_cards', arr.length ? arr : undefined);
-    else {
+    if (this._xcPlacement === 'room') {
       const map: Record<string, LovelaceCardConfig[]> = { ...(this._config.area_cards ?? {}) };
       if (arr.length) map[this._xcRoom] = arr; else delete map[this._xcRoom];
       this._set('area_cards', Object.keys(map).length ? map : undefined);
+      return;
     }
+    const key = this._xcKey();
+    if (this._xcView) {
+      // An empty list on a view is a real value — "none on this view" — so it is
+      // kept rather than deleted, which is what would make it inherit again.
+      // "Use the card-wide list" is the separate Clear override button.
+      this._updateView(this._xcView, { [key]: arr } as Partial<ViewConfig>);
+      return;
+    }
+    this._set(key, arr.length ? arr : undefined);
+  }
+
+  /** Whether this view overrides the card-wide list at all (as opposed to
+   *  holding an empty override, which is a different thing). */
+  private _xcViewOverrides(): boolean {
+    if (!this._xcView || this._xcPlacement === 'room') return false;
+    const v = (this._config.views ?? []).find(x => x.id === this._xcView);
+    return v ? v[this._xcKey()] !== undefined : false;
   }
 
   private _xcCancel(): void {
@@ -1877,9 +1909,20 @@ export class HADeviceDashboardEditor extends LitElement {
       this._sciDone ? this._badge('imported', '#3ea1f5', 'rgba(62,161,245,0.12)') : nothing, body);
   }
 
+  /** Swap a card with its neighbour. Reordering used to mean deleting the card
+   *  and adding it back in the right place. */
+  private _xcMove(i: number, delta: number): void {
+    const arr = this._xcArray().slice();
+    const j = i + delta;
+    if (j < 0 || j >= arr.length) return;
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+    this._xcSetArray(arr);
+  }
+
   private _renderExtraCardsSection(): TemplateResult {
     const arr = this._xcArray();
     const rooms = this._getAreas().map(a => a.name);
+    const views = this._config.views ?? [];
     // NB: we deliberately do NOT embed hui-card-element-editor (the visual/form
     // editor). Nested inside our own card editor its events bubble to HA's
     // edit-card dialog, which hijacks and replaces our editor. HA's native YAML
@@ -1902,11 +1945,38 @@ export class HADeviceDashboardEditor extends LitElement {
           <select @change=${(e: Event) => { this._xcRoom = (e.target as HTMLSelectElement).value; this._xcCancel(); }}>
             ${rooms.map(r => html`<option value=${r} ?selected=${r === this._xcRoom}>${r}</option>`)}
           </select>
+        </div>` : views.length ? html`
+        <div class="field">
+          <div class="field-lbl">Applies to</div>
+          <select @change=${(e: Event) => { this._xcView = (e.target as HTMLSelectElement).value; this._xcCancel(); }}>
+            <option value="" ?selected=${!this._xcView}>Every view</option>
+            ${views.map(v => html`
+              <option value=${v.id} ?selected=${v.id === this._xcView}>
+                ${v.name || v.id}${v[this._xcKey()] !== undefined ? ' ✓' : ''}
+              </option>`)}
+          </select>
+          <div class="dp-hint-inline">
+            ${!this._xcView
+              ? 'The list every view falls back to.'
+              : this._xcViewOverrides()
+                ? html`This view has its own list, replacing the card-wide one. An empty list here means no
+                    ${this._xcPlacement} cards on this view.
+                    <button class="xc-btn" style="margin-left:6px" @click=${() => {
+                      this._updateView(this._xcView, { [this._xcKey()]: undefined } as Partial<ViewConfig>);
+                      this._xcCancel();
+                    }}>Use the card-wide list</button>`
+                : 'Showing the card-wide list, which is what renders here. Adding, editing or reordering '
+                  + 'from this view gives it a list of its own, replacing the card-wide one.'}
+          </div>
         </div>` : nothing}
       <div class="xc-list">
         ${arr.length ? arr.map((card, i) => html`
           <div class="xc-row">
             <span class="xc-type">${(card as { type?: string }).type ?? '?'}</span>
+            <button class="xc-btn" ?disabled=${i === 0} title="Move up"
+              @click=${() => this._xcMove(i, -1)}>▲</button>
+            <button class="xc-btn" ?disabled=${i === arr.length - 1} title="Move down"
+              @click=${() => this._xcMove(i, 1)}>▼</button>
             <button class="xc-btn" @click=${() => { this._xcEditIndex = i; this._xcAdding = false; this._setXcDraft({ ...card }); }}>Edit</button>
             <button class="xc-btn xc-del" @click=${() => { const next = arr.slice(); next.splice(i, 1); this._xcSetArray(next); }}>✕</button>
           </div>`) : html`<div class="dp-hint-inline">No cards here yet.</div>`}
@@ -5339,6 +5409,23 @@ export class HADeviceDashboardEditor extends LitElement {
           detail: `style: overrides the theme on every palette key it sets, so the card renders ${
             actual === 'custom' ? 'your custom colours' : `"${THEME_LABELS[actual] ?? actual}"`
           } instead. Re-pick a theme here to bring the two back in step.`,
+        });
+      }
+    }
+
+    // A view's header/footer cards REPLACE the card-wide list. With one view per
+    // list the card-wide one is never reached, so it reads as configured-but-dead:
+    // you edit it, nothing changes, and the reason is a setting on another tab.
+    for (const key of ['header_cards', 'footer_cards'] as const) {
+      const views = c.views ?? [];
+      if (!c[key]?.length || views.length === 0) continue;
+      if (views.every(v => v[key] !== undefined)) {
+        const where = key === 'header_cards' ? 'Header' : 'Footer';
+        out.push({
+          title: `The card-wide ${where.toLowerCase()} cards never show`,
+          detail: `Every view sets its own ${key}, and a view's list replaces the card-wide one `
+            + `rather than adding to it — so these ${c[key]!.length} card(s) are unreachable. `
+            + `Clear one view's override to let it fall back, or remove the card-wide list.`,
         });
       }
     }

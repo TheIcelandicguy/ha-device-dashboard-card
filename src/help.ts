@@ -173,6 +173,8 @@ export const HELP_RECIPES: HelpTopic[] = [
     ],
     steps: [
       'Extra cards → pick the placement (header, footer or a room) → Add card.',
+      'Header and footer cards can differ per view: set "Applies to" to a view and that view gets its own list, replacing the card-wide one. An empty list on a view means no cards there at all. "Use the card-wide list" clears the override.',
+      'Use ▲ ▼ on a row to reorder.',
       'To show it conditionally, give the card a `visibility:` block — the same state, user and screen conditions a dashboard card takes. A card hidden by its condition leaves no gap.',
       'To make it narrower, give it `grid_options: {columns: 6}` — the strip is twelve columns wide, so two sixes sit side by side. Leave `grid_options` out for full width.',
       '`rows` sets a minimum height; the strip grows to fit its content rather than clipping.',

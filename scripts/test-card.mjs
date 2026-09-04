@@ -684,6 +684,29 @@ try {
     ds.overrideCount({ device_styles: { a: { confirm_off: true } } },
       { kind: 'device', id: 'a' }, ds.keysForScope({ kind: 'device', id: 'a' })), 1);
 
+  console.log('\ncascade — embedded chrome cards (view → card)');
+  const A = [{ type: 'markdown', content: 'a' }];
+  const B = [{ type: 'markdown', content: 'b' }];
+  const view = (extra) => ({ id: 'v', name: 'V', ...extra });
+  eq('unset anywhere is undefined', cas.chromeCards({}, undefined, 'header_cards'), undefined);
+  eq('the card-wide list is the fallback',
+    cas.chromeCards({ header_cards: A }, view({}), 'header_cards'), A);
+  eq('a view replaces it, it does not append',
+    cas.chromeCards({ header_cards: A }, view({ header_cards: B }), 'header_cards'), B);
+  // The reason replace beats append: it is the only way a view can say "none".
+  eq('an empty list on a view means none here',
+    cas.chromeCards({ header_cards: A }, view({ header_cards: [] }), 'header_cards'), []);
+  eq('header and footer do not cross',
+    cas.chromeCards({ header_cards: A, footer_cards: B }, view({ header_cards: B }), 'footer_cards'), B);
+  eq('with no active view the card-wide list stands',
+    cas.chromeCards({ footer_cards: A }, undefined, 'footer_cards'), A);
+  ok('both are chrome-family design keys',
+    ds.DESIGN_KEYS.chrome.includes('header_cards') && ds.DESIGN_KEYS.chrome.includes('footer_cards'));
+  eq('a view override shows up in the Changes panel',
+    ds.collectOverrides({ views: [view({ header_cards: B })] }, pal)
+      .map(o => ds.scopeKey(o.scope) + '/' + o.key),
+    ['view:v/header_cards']);
+
   console.log('\ncascade — elements');
   eq('unset elements are shown', cas.elementVisible(cin({}), 'toggle'), true);
   eq('a preset can hide one', cas.elementVisible(cin({

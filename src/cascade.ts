@@ -34,6 +34,7 @@ import type {
   ViewConfig, EnergyPeriod, CustomStyleDef, PowerMonitorVariant, ThemePreset, TileSize,
   RadioStation, SortBy,
 } from './types';
+import type { LovelaceCardConfig } from 'custom-card-helpers';
 import { PROFILE_DEFAULT_BLOCKS, PROFILE_DEFAULT_SENSORS, profileDefaultTileStyle, STYLE_ELEMENTS } from './helpers';
 
 /** Everything the cascades need to resolve one device. */
@@ -219,6 +220,23 @@ export function powerMonitorVariant(i: CascadeInput, legacy: PowerMonitorVariant
 export function radioStations(config: HADeviceDashboardConfig, device: HADevice): RadioStation[] {
   const raw = config.device_styles?.[device.device_id]?.radio_stations ?? config.radio_stations;
   return (Array.isArray(raw) ? raw : []).filter(s => s && typeof s.url === 'string' && !!s.url);
+}
+
+/**
+ * The embedded cards framing the dashboard: view → card. Card chrome, so a room
+ * cannot set one — a room does not contain the card's header. (Its own
+ * `area_cards` sit inside the room block and are a different thing.)
+ *
+ * A view's list REPLACES the card-wide one rather than adding to it, so a view
+ * that sets `[]` shows no header cards at all. Appending would make that
+ * impossible to say.
+ */
+export function chromeCards(
+  config: HADeviceDashboardConfig,
+  view: ViewConfig | undefined,
+  where: 'header_cards' | 'footer_cards',
+): LovelaceCardConfig[] | undefined {
+  return view?.[where] ?? config[where];
 }
 
 /**

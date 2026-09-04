@@ -3759,7 +3759,7 @@ export class HADeviceDashboard extends LitElement {
         ${this._renderHeaderDetail(devices)}
         ${this._renderViewTabs()}
         ${this._renderDelegateNotice(devices)}
-        ${this._renderExtraCards(this._config.header_cards)}
+        ${this._renderExtraCards(cascade.chromeCards(this._config, activeView ?? undefined, 'header_cards'))}
         <div class="dash-body">
           ${this._renderAttention(viewDevices)}
           ${showFavourites ? this._renderFavoritesSection(devices) : nothing}
@@ -3772,7 +3772,7 @@ export class HADeviceDashboard extends LitElement {
                 ${repeat(viewDevices, (d) => d.device_id, (d) => this._renderTile(d, this._config.area_styles?.[d.area ?? '']?.tile_style))}
               </div>`}
         </div>
-        ${this._renderExtraCards(this._config.footer_cards)}
+        ${this._renderExtraCards(cascade.chromeCards(this._config, activeView ?? undefined, 'footer_cards'))}
       </ha-card>
     `;
 

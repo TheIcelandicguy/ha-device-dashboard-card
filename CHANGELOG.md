@@ -5,6 +5,26 @@ installs from them.
 
 ## Unreleased
 
+### Header and footer cards can differ per view
+
+They were card-wide only: with three views, the same header cards showed on all
+three. A view can now carry its own `header_cards` / `footer_cards`. Card chrome,
+so the ladder is view → card, and a view's list **replaces** the card-wide one
+rather than adding to it — which is what makes `[]` a real value, "no header
+cards on this view". Appending could not express that.
+
+Unset falls through to the card-wide list, so nothing written before this moves.
+In the editor, Extra cards gains an **Applies to** picker; selecting a view shows
+the list that actually renders there, and adding, editing or reordering from it
+gives that view a list of its own. "Use the card-wide list" clears the override.
+Conflicts names the case where every view overrides, since the card-wide list is
+then unreachable and editing it does nothing.
+
+### Extra cards can be reordered
+
+Each row has ▲ ▼. Changing the order used to mean deleting a card and adding it
+back in the right place.
+
 ### Embedded cards go through Home Assistant's own wrapper
 
 An embedded card (`header_cards` / `footer_cards` / `area_cards`) was built with

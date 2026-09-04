@@ -589,6 +589,15 @@ export interface ViewConfig {
   elements?: Record<string, boolean>;
   /** Energy window for this view (total / today / week / month). */
   energy_period?: EnergyPeriod;
+  /** Embedded Lovelace cards shown across the top / bottom while THIS view is
+   *  active. Card chrome, so the ladder is view → card: a view's list REPLACES
+   *  the card-wide `header_cards` / `footer_cards` rather than adding to it,
+   *  the same rule as every other setting here. That makes `[]` a real value —
+   *  "no header cards on this view" — which appending could not express.
+   *  Unset falls through to the card-wide list, so a config written before
+   *  views could carry these behaves exactly as it did. */
+  header_cards?: LovelaceCardConfig[];
+  footer_cards?: LovelaceCardConfig[];
   /** Tile block order/visibility while this view is showing. */
   tile_layout?: TileLayout;
   /** Sensor chips for this view. An explicit (possibly empty) list is
