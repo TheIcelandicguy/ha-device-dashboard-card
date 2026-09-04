@@ -277,6 +277,10 @@ try {
   eq('gauge_gradients wins over everything',
     h.gaugeRings(wdVals, { accent: '#f00', colors: { temperature: '#123456' }, gradients: { temperature: ['#000000', '#ffffff'] } })[0].stops, ['#000000', '#ffffff']);
   eq('colorAt blends between stops', h.colorAt(['#000000', '#ffffff'], 0.5), '#808080');
+  eq('hex ↔ hsv round-trips', h.hsvToHex(h.hexToHsv('#f4601e').h, h.hexToHsv('#f4601e').s, h.hexToHsv('#f4601e').v), '#f4601e');
+  eq('pure red is hue 0, full sat and value', h.hexToHsv('#ff0000'), { h: 0, s: 1, v: 1 });
+  eq('hsv → hex for cyan', h.hsvToHex(180, 1, 1), '#00ffff');
+  eq('grey has no saturation', h.hexToHsv('#808080').s, 0);
   eq('colorAt at the ends', [h.colorAt(['#000000', '#ffffff'], 0), h.colorAt(['#000000', '#ffffff'], 1)], ['#000000', '#ffffff']);
   eq('colorAt with three stops picks the middle at 0.5', h.colorAt(['#38bdf8', '#fde047', '#f87171'], 0.5), '#fde047');
   ok('the label colour is the gradient at the reading', wdRings[0].color === h.colorAt(wdRings[0].stops, wdRings[0].pct));

@@ -50,8 +50,11 @@ installs from them.
 - **Gauge arcs can be gradients.** A ring runs 2–3 colours along its sweep,
   empty end to full end, so temperature climbs blue → yellow → red, humidity
   dry → wet, battery red → green; the value label wears the colour at the
-  reading. `graph_style.gauge_gradients[key]`, with the Graphs tab's "Gauge
-  ring colours" rows switching each class between flat and gradient. Value
+  reading. `graph_style.gauge_gradients[key]`; the Graphs tab's "Gauge ring
+  colours" shows each class as a Flat / Gradient choice over a preview bar,
+  with the stop pickers laid out under the bar at the range values they sit
+  at (−10 °C · 15 °C · 40 °C) and a + mid / − mid switch between two and
+  three stops. Illuminance runs dusk-grey → yellow → white. Value
   label now sits centred just under the crown of its own arc — outer arc, its
   value, middle arc, its value — instead of piling onto the two arc ends.
 - **The sensor card graphs every selected sensor**, primary first, instead of
@@ -116,6 +119,12 @@ dead code. The features were rewired, the rest removed:
 
 ### Editor
 
+- **Every colour control opens the editor's own colour wheel** — a
+  hue/saturation disc, a brightness slider, a hex field and the graph palette
+  as presets — instead of the browser's colour dialog, which on a phone is a
+  full-screen detour with no sense of the card's palette. Theme colours, room
+  chrome, tile colours, header colours, the gauge gradient stops and the
+  sparkline colours all use it; picks apply live.
 - **Animated icons are back at device scope.** The tile's ON/OFF header icon
   and speed (`tile_icon`, `tile_icon_off`, `tile_icon_speed`) and, under
   Advanced, the per-switch icons (`entity_animations`) had the same fate: the

@@ -667,7 +667,7 @@ export const GAUGE_RING_DEFS: Array<{
   { key: 'current',        label: 'A',   min: 0,   max: 16,   digits: 2 },
   { key: 'temperature',    label: '°C',  min: -10, max: 40,   digits: 1, stops: ['#38bdf8', '#fde047', '#f87171'] },
   { key: 'humidity',       label: '%',   min: 0,   max: 100,  digits: 0, stops: ['#fde68a', '#2dd4bf', '#0ea5e9'] },
-  { key: 'illuminance',    label: 'lx',  min: 0,   max: 2000, digits: 0, stops: ['#a8a29e', '#fde047'] },
+  { key: 'illuminance',    label: 'lx',  min: 0,   max: 2000, digits: 0, stops: ['#94a3b8', '#fde047', '#fffbeb'] },
   { key: 'carbon_dioxide', label: 'ppm', min: 400, max: 2000, digits: 0, stops: ['#4ade80', '#fde047', '#f87171'] },
   { key: 'battery',        label: '%',   min: 0,   max: 100,  digits: 0, stops: ['#f87171', '#fde047', '#4ade80'] },
 ];
@@ -682,6 +682,28 @@ export interface GaugeRing {
   color: string;
   /** Where the reading sits in the range, 0–1. */
   pct: number;
+}
+
+/** `#rrggbb` → HSV (h 0–360, s 0–1, v 0–1). Non-hex input reads as black. */
+export function hexToHsv(hex: string): { h: number; s: number; v: number } {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return { h: 0, s: 0, v: 0 };
+  const r = parseInt(m[1].slice(0, 2), 16) / 255, g = parseInt(m[1].slice(2, 4), 16) / 255, b = parseInt(m[1].slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  let h = 0;
+  if (d > 0) {
+    h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    h = (h * 60 + 360) % 360;
+  }
+  return { h, s: max === 0 ? 0 : d / max, v: max };
+}
+
+/** HSV (h 0–360, s 0–1, v 0–1) → `#rrggbb`. */
+export function hsvToHex(h: number, s: number, v: number): string {
+  const c = v * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = v - c;
+  const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x]
+    : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  return '#' + [r, g, b].map(ch => Math.round((ch + m) * 255).toString(16).padStart(2, '0')).join('');
 }
 
 /** Linear blend between gradient stops at position t (0–1). Hex stops only —

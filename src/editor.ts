@@ -5,7 +5,7 @@ import { keyed } from 'lit/directives/keyed.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent, LovelaceCardConfig } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout, EnergyPeriod, InputActionConfig } from './types';
-import { getAllDevices, GRAPH_SENSOR_DEFS, GAUGE_RING_DEFS, getDeviceProfile,HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels,
+import { getAllDevices, GRAPH_SENSOR_DEFS, GAUGE_RING_DEFS, colorAt, hexToHsv, hsvToHex, getDeviceProfile,HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels,
   CONFIG_KEYS, LOVELACE_KEYS } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, detectTheme, paletteFor, type ThemePalette } from './themes';
 import {
@@ -673,6 +673,7 @@ export class HADeviceDashboardEditor extends LitElement {
     super.connectedCallback();
     ensureCdnFontsLoaded();
     window.addEventListener('mousedown', this._onIconPickerOutsideClick, true);
+    window.addEventListener('mousedown', this._onWheelOutsideClick, true);
     // The card can't reach the editor directly — in HA's edit dialog the two are
     // siblings — so a window event is the channel. Fired by the delegate notice.
     window.addEventListener('hdd-editor-goto', this._onEditorGoto);
@@ -799,6 +800,7 @@ export class HADeviceDashboardEditor extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     window.removeEventListener('mousedown', this._onIconPickerOutsideClick, true);
+    window.removeEventListener('mousedown', this._onWheelOutsideClick, true);
     window.removeEventListener('hdd-editor-goto', this._onEditorGoto);
     if (this._flashTimer) { clearTimeout(this._flashTimer); this._flashTimer = null; }
     clearTimeout(this._styleClipTimer);
@@ -863,6 +865,105 @@ export class HADeviceDashboardEditor extends LitElement {
     );
     if (!hit) this._closeIconPicker();
   };
+
+  // ── Colour wheel ──────────────────────────────────────────────────────────
+  // A shared popover (one per editor, like the icon grid) with a hue/saturation
+  // disc, a brightness slider, a hex field and the graph palette as presets.
+  // The native <input type="color"> hands the job to the OS dialog, which on a
+  // phone is a full-screen affair with no sense of the card's palette.
+  @state() private _wheel: { hex: string; h: number; s: number; v: number; onSelect: (hex: string) => void } | null = null;
+
+  private _openWheel(hex: string, onSelect: (hex: string) => void): void {
+    const { h, s, v } = hexToHsv(hex);
+    this._wheel = { hex: hsvToHex(h, s, v), h, s, v, onSelect };
+    this.updateComplete.then(() => {
+      const pop = this.renderRoot.querySelector<HTMLElement>('#ha-dd-color-wheel') as (HTMLElement & { showPopover?: () => void; matches: (s: string) => boolean }) | null;
+      if (!pop) return;
+      try { if (pop.showPopover && !pop.matches(':popover-open')) pop.showPopover(); } catch { /* already open */ }
+    });
+  }
+
+  private _closeWheel = (): void => {
+    const pop = this.renderRoot.querySelector<HTMLElement>('#ha-dd-color-wheel') as (HTMLElement & { hidePopover?: () => void; matches: (s: string) => boolean }) | null;
+    if (pop?.hidePopover && pop.matches(':popover-open')) pop.hidePopover();
+    this._wheel = null;
+  };
+
+  private _onWheelOutsideClick = (e: MouseEvent): void => {
+    if (!this._wheel) return;
+    const hit = e.composedPath().some(n => n instanceof HTMLElement
+      && (n.id === 'ha-dd-color-wheel' || n.classList?.contains('cw-btn')));
+    if (!hit) this._closeWheel();
+  };
+
+  /** Apply a change and push it to the caller live, so the preview follows. */
+  private _setWheel(patch: Partial<{ h: number; s: number; v: number }>): void {
+    if (!this._wheel) return;
+    const w = { ...this._wheel, ...patch };
+    w.hex = hsvToHex(w.h, w.s, w.v);
+    this._wheel = w;
+    w.onSelect(w.hex);
+  }
+
+  /** Pointer on the disc: angle clockwise from the top is hue, distance from
+   *  the centre is saturation. Handles both press and drag. */
+  private _wheelPointer = (e: PointerEvent): void => {
+    if (e.type === 'pointermove' && !(e.buttons & 1)) return;
+    const el = e.currentTarget as HTMLElement;
+    if (e.type === 'pointerdown') el.setPointerCapture(e.pointerId);
+    const rect = el.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+    const dx = e.clientX - cx, dy = e.clientY - cy;
+    const s = Math.min(1, Math.hypot(dx, dy) / (rect.width / 2));
+    const h = (Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360;
+    this._setWheel({ h, s });
+    e.preventDefault();
+  };
+
+  /** The swatch that opens the wheel for one colour. */
+  private _wheelButton(hex: string, onSelect: (hex: string) => void, title = 'Pick a colour'): TemplateResult {
+    return html`
+      <button class="cw-btn" style="background:${hex}" title=${title}
+        @click=${(e: Event) => { e.stopPropagation(); this._openWheel(hex, onSelect); }}></button>`;
+  }
+
+  private _renderColorWheel(): TemplateResult {
+    const w = this._wheel;
+    const presets = [...new Set([
+      ...GRAPH_SENSOR_DEFS.map(d => d.defaultColor),
+      '#ffffff', '#e2e8f0', '#94a3b8', '#4b5563', '#000000',
+    ])];
+    const dotX = w ? 50 + 50 * w.s * Math.sin(w.h * Math.PI / 180) : 50;
+    const dotY = w ? 50 - 50 * w.s * Math.cos(w.h * Math.PI / 180) : 50;
+    return html`
+      <div popover="manual" id="ha-dd-color-wheel" class="cw-pop" @click=${(e: Event) => e.stopPropagation()}>
+        ${w ? html`
+          <div class="cw-disc" style="--cw-v:${w.v}"
+            @pointerdown=${this._wheelPointer} @pointermove=${this._wheelPointer}>
+            <div class="cw-dot" style="left:${dotX.toFixed(1)}%;top:${dotY.toFixed(1)}%;background:${w.hex}"></div>
+          </div>
+          <div class="cw-row">
+            <span class="cw-lbl">Brightness</span>
+            <input type="range" min="0" max="100" .value=${String(Math.round(w.v * 100))}
+              style="flex:1;accent-color:${w.hex}"
+              @input=${(e: Event) => this._setWheel({ v: parseInt((e.target as HTMLInputElement).value, 10) / 100 })}/>
+          </div>
+          <div class="cw-row">
+            <span class="cw-swatch" style="background:${w.hex}"></span>
+            <input type="text" class="inline-text" style="width:90px;font-family:monospace" .value=${w.hex} maxlength="7"
+              @change=${(e: Event) => {
+                const v = (e.target as HTMLInputElement).value.trim();
+                if (/^#[0-9a-f]{6}$/i.test(v)) { const { h, s, v: val } = hexToHsv(v); this._setWheel({ h, s, v: val }); }
+              }}/>
+            <button class="color-reset" style="margin-left:auto" @click=${this._closeWheel}>Done</button>
+          </div>
+          <div class="cw-presets">
+            ${presets.map(c => html`
+              <span class="cw-preset ${c === w.hex ? 'on' : ''}" style="background:${c}" title=${c}
+                @click=${() => { const { h, s, v } = hexToHsv(c); this._setWheel({ h, s, v }); }}></span>`)}
+          </div>` : nothing}
+      </div>`;
+  }
 
   /** Render an icon picker button. Opens the shared popover positioned below the button. */
   private _iconPicker(
@@ -3046,8 +3147,7 @@ export class HADeviceDashboardEditor extends LitElement {
         <div class="color-row">
           <div class="color-preview-swatch" style="background:${(vs[key] as string) ?? def}"></div>
           <span class="color-key">${lbl}</span>
-          <input type="color" .value=${(vs[key] as string) ?? def}
-            @input=${(e: Event) => patchChrome(key, (e.target as HTMLInputElement).value)}/>
+          ${this._wheelButton((vs[key] as string) ?? def, v => patchChrome(key, v), label)}
           ${vs[key] !== undefined
             ? html`<button class="color-reset" @click=${() => patchChrome(key, undefined)}>↺</button>`
             : nothing}
@@ -3641,8 +3741,7 @@ export class HADeviceDashboardEditor extends LitElement {
         <div class="color-row">
           <div class="color-preview-swatch" style="background:${cur}"></div>
           <span class="color-key">${label}</span>
-          <input type="color" .value=${cur}
-            @input=${(e:Event) => this._setAreaStyle(name, key, (e.target as HTMLInputElement).value)}/>
+          ${this._wheelButton(cur, v => this._setAreaStyle(name, key, v), label)}
           ${(st as any)[key] ? html`<button class="color-reset" @click=${()=>this._setAreaStyle(name,key,undefined)}>↺</button>` : nothing}
         </div>`;
     };
@@ -4218,8 +4317,7 @@ export class HADeviceDashboardEditor extends LitElement {
         <div class="color-row">
           <div class="color-preview-swatch" style="background:${cur}"></div>
           <span class="color-key">${label}</span>
-          <input type="color" .value=${cur}
-            @input=${(e:Event) => hStyleSet(key, (e.target as HTMLInputElement).value)}/>
+          ${this._wheelButton(String(cur), v => hStyleSet(key, v))}
           ${sty[key] ? html`<button class="color-reset" @click=${() => hStyleDel(key)}>↺</button>` : nothing}
         </div>`;
     };
@@ -4354,8 +4452,7 @@ export class HADeviceDashboardEditor extends LitElement {
         <div class="color-row">
           <div class="color-preview-swatch" style="background:${cur}"></div>
           <span class="color-key">${label}</span>
-          <input type="color" .value=${cur}
-            @input=${(e:Event)=>this._set('style',{...sty,[key]:(e.target as HTMLInputElement).value})}/>
+          ${this._wheelButton(String(cur), v => this._set('style', { ...sty, [key]: v }))}
           ${sty[key] ? html`<button class="color-reset" @click=${()=>{const s={...sty};delete s[key];this._set('style',s)}}>↺</button>` : nothing}
         </div>`;
     };
@@ -4769,8 +4866,7 @@ export class HADeviceDashboardEditor extends LitElement {
       <div class="color-row">
         <div class="color-preview-swatch" style="background:${c.graph_line_color ?? '#f4601e'}"></div>
         <span class="color-key">Fallback line colour <span class="dev-style-hint">sensors with no colour of their own</span></span>
-        <input type="color" .value=${c.graph_line_color ?? '#f4601e'}
-          @input=${(e:Event)=>this._set('graph_line_color', (e.target as HTMLInputElement).value)}/>
+        ${this._wheelButton(c.graph_line_color ?? '#f4601e', v => this._set('graph_line_color', v), 'Fallback line colour')}
         ${c.graph_line_color ? html`<button class="color-reset" @click=${()=>this._clearCfg('graph_line_color')}>↺</button>` : nothing}
       </div>
       <div class="tog-row">
@@ -4824,32 +4920,52 @@ export class HADeviceDashboardEditor extends LitElement {
       if (color) next[key] = color; else delete next[key];
       this._set('graph_sensor_colors', Object.keys(next).length ? next : undefined);
     };
+    // One block per ring class: Flat / Gradient pills, a preview bar, and the
+    // stop pickers laid out under the bar at the range values they sit at
+    // (−10 °C · 15 °C · 40 °C), so a stop reads as "the colour at this
+    // reading" rather than an anonymous square.
     const gaugeRow = (def: typeof GAUGE_RING_DEFS[number]) => {
       const meta = GRAPH_SENSOR_DEFS.find(s => s.key === def.key);
-      const label = `${meta?.label ?? def.key} (${def.label})`;
+      const label = meta?.label ?? def.key;
       const custom = gradients[def.key];
       const flat = sensorColors[def.key];
       const stops = custom ?? (flat ? [flat] : def.stops ?? [meta?.defaultColor ?? '#f4601e']);
       const isGrad = stops.length > 1;
-      const stopTitle = (i: number) => stops.length === 3 ? ['Empty end', 'Middle', 'Full end'][i] : ['Empty end', 'Full end'][i];
+      const range = gs.sensor_ranges?.[def.key] ?? {};
+      const lo = range.min ?? def.min, hi = range.max ?? def.max;
+      const fmt = (v: number) => `${Number.isInteger(v) ? v : v.toFixed(1)} ${def.label}`;
+      const stopLabel = (i: number) => !isGrad ? 'Colour'
+        : stops.length === 3 ? [fmt(lo), fmt((lo + hi) / 2), fmt(hi)][i]
+        : [fmt(lo), fmt(hi)][i];
+      const setStop = (i: number, v: string) => {
+        if (isGrad) { const n = [...stops]; n[i] = v; setGradient(def.key, n); }
+        else setFlat(def.key, v);
+      };
+      const toFlat = () => { setGradient(def.key, undefined); setFlat(def.key, stops[stops.length - 1]); };
+      const toGrad = () => { setFlat(def.key, undefined); setGradient(def.key, def.stops ?? [stops[0], '#fde047', '#f87171']); };
+      const addMid = () => setGradient(def.key, [stops[0], colorAt(stops, 0.5), stops[1]]);
+      const dropMid = () => setGradient(def.key, [stops[0], stops[2]]);
       return html`
-        <div class="color-row">
-          <div class="color-preview-swatch" style="background:${isGrad ? `linear-gradient(to right, ${stops.join(', ')})` : stops[0]}"></div>
-          <span class="color-key">${label}</span>
-          ${stops.map((col, i) => html`
-            <input type="color" .value=${col} title=${isGrad ? stopTitle(i) : 'Colour'}
-              @input=${(e: Event) => {
-                const v = (e.target as HTMLInputElement).value;
-                if (isGrad) { const n = [...stops]; n[i] = v; setGradient(def.key, n); }
-                else setFlat(def.key, v);
-              }}/>`)}
-          <button class="color-reset" title=${isGrad ? 'One flat colour instead' : 'Gradient along the arc instead'}
-            @click=${() => {
-              if (isGrad) { setGradient(def.key, undefined); setFlat(def.key, stops[stops.length - 1]); }
-              else { setFlat(def.key, undefined); setGradient(def.key, def.stops ?? [stops[0], '#fde047', '#f87171']); }
-            }}>${isGrad ? '▬' : '▦'}</button>
-          ${custom || flat ? html`<button class="color-reset" title="Back to the default"
-            @click=${() => { setGradient(def.key, undefined); setFlat(def.key, undefined); }}>↺</button>` : nothing}
+        <div class="gg-row">
+          <div class="gg-hdr">
+            <span class="color-key">${label} <span class="dev-style-hint">${def.label}</span></span>
+            <div class="pill-grp">
+              <span class="pill ${!isGrad ? 'on' : ''}" @click=${() => { if (isGrad) toFlat(); }}>Flat</span>
+              <span class="pill ${isGrad ? 'on' : ''}" @click=${() => { if (!isGrad) toGrad(); }}>Gradient</span>
+            </div>
+            ${isGrad ? html`<button class="color-reset" title=${stops.length === 3 ? 'Drop the middle stop' : 'Add a middle stop'}
+              @click=${stops.length === 3 ? dropMid : addMid}>${stops.length === 3 ? '− mid' : '+ mid'}</button>` : nothing}
+            ${custom || flat ? html`<button class="color-reset" title="Back to the default"
+              @click=${() => { setGradient(def.key, undefined); setFlat(def.key, undefined); }}>↺</button>` : nothing}
+          </div>
+          <div class="gg-bar" style="background:${isGrad ? `linear-gradient(to right, ${stops.join(', ')})` : stops[0]}"></div>
+          <div class="gg-stops ${isGrad ? '' : 'single'}">
+            ${stops.map((col, i) => html`
+              <span class="gg-stop">
+                ${this._wheelButton(col, v => setStop(i, v), stopLabel(i))}
+                <span>${stopLabel(i)}</span>
+              </span>`)}
+          </div>
         </div>`;
     };
 
@@ -4860,11 +4976,7 @@ export class HADeviceDashboardEditor extends LitElement {
         <div class="color-row">
           <div class="color-preview-swatch" style="background:${color}"></div>
           <span class="color-key">${label}</span>
-          <input type="color" .value=${color}
-            @input=${(e:Event) => {
-              const v = (e.target as HTMLInputElement).value;
-              this._set('graph_sensor_colors', { ...sensorColors, [key]: v });
-            }}/>
+          ${this._wheelButton(color, v => this._set('graph_sensor_colors', { ...sensorColors, [key]: v }), label)}
           ${isCustom ? html`<button class="color-reset" @click=${() => {
             const next = { ...sensorColors }; delete next[key];
             this._set('graph_sensor_colors', Object.keys(next).length ? next : undefined);
@@ -4874,7 +4986,7 @@ export class HADeviceDashboardEditor extends LitElement {
 
     const colorBody = html`
       <div class="field-lbl" style="margin-bottom:6px">Gauge ring colours
-        <span class="dev-style-hint">▦ turns a ring into a gradient along the arc — the value label takes the colour at the reading</span></div>
+        <span class="dev-style-hint">a gradient runs along the arc from the empty end to the full end — the value label takes the colour at the reading</span></div>
       ${GAUGE_RING_DEFS.map(d => gaugeRow(d))}
       ${selectedGraphs.filter(k => !GAUGE_RING_DEFS.find(g => g.key === k)).length ? html`
         <div class="field-lbl" style="margin:10px 0 6px">Sparkline colours</div>
@@ -5694,6 +5806,7 @@ export class HADeviceDashboardEditor extends LitElement {
           })()}
         </div>
         ${this._renderIconGridPopover()}
+        ${this._renderColorWheel()}
       </div>`;
   }
 
@@ -5997,7 +6110,6 @@ export class HADeviceDashboardEditor extends LitElement {
     .color-reset:hover { color:var(--accent); }
     .field-reset { font-size:10px; color:var(--t3); background:none; border:none; cursor:pointer; padding:0 4px; margin-left:4px; border-radius:3px; transition:color .15s; vertical-align:middle; }
     .field-reset:hover { color:var(--accent); }
-    input[type="color"] { width:36px; height:28px; border:1px solid var(--border2); border-radius:5px; padding:2px 3px; background:var(--s2); cursor:pointer; flex-shrink:0; }
     .color-preview-swatch { width:20px; height:20px; border-radius:4px; border:1px solid rgba(255,255,255,0.2); flex-shrink:0; }
     .sl-row { display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--border); }
     .sl-row:last-child { border-bottom:none; }
@@ -6070,6 +6182,32 @@ export class HADeviceDashboardEditor extends LitElement {
     .ia-ch-name { flex:0 0 34%; font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .ia-grid { display:grid; grid-template-columns:84px minmax(0,1fr); gap:6px 10px; align-items:center; margin-top:8px; }
     .dsn-save-row { display:flex; align-items:center; gap:6px; margin:0 0 8px; }
+    /* Gauge ring colour block: header row, gradient bar, stops under the bar */
+    .gg-row { padding:8px 0 10px; border-bottom:1px solid var(--border); }
+    .gg-row:last-child { border-bottom:none; }
+    .gg-hdr { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .gg-hdr .color-key { flex:1; min-width:120px; }
+    .gg-bar { height:12px; border-radius:6px; margin:8px 0 6px; border:1px solid var(--border); }
+    .gg-stops { display:flex; justify-content:space-between; align-items:flex-start; }
+    .gg-stops.single { justify-content:flex-start; }
+    .gg-stop { display:flex; flex-direction:column; align-items:center; gap:3px; font-size:10px; color:var(--t3); cursor:pointer; }
+    /* Colour wheel */
+    .cw-btn { width:36px; height:26px; padding:0; border:1px solid rgba(255,255,255,0.25); border-radius:5px; cursor:pointer; flex-shrink:0; box-shadow:inset 0 0 0 1px rgba(0,0,0,0.35); }
+    .gg-stop .cw-btn { height:22px; }
+    .cw-btn:hover { border-color:var(--accent); }
+    .cw-pop { margin:auto; inset:0; width:min(280px, 92vw); padding:12px; background:var(--s1,#17171c); border:1px solid rgba(255,255,255,0.15); border-radius:10px; box-shadow:0 12px 40px rgba(0,0,0,0.85); color:var(--text); }
+    .cw-disc { position:relative; width:200px; height:200px; margin:0 auto 10px; border-radius:50%; touch-action:none; cursor:crosshair; user-select:none;
+      background:radial-gradient(circle, #fff 0%, rgba(255,255,255,0) 72%), conic-gradient(#f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+    .cw-disc::after { content:''; position:absolute; inset:0; border-radius:50%; background:#000; opacity:calc(1 - var(--cw-v, 1)); pointer-events:none; }
+    .cw-dot { position:absolute; width:16px; height:16px; margin:-8px 0 0 -8px; border:2px solid #fff; border-radius:50%; box-shadow:0 0 0 1px rgba(0,0,0,0.6); pointer-events:none; z-index:1; }
+    .cw-row { display:flex; align-items:center; gap:8px; margin-top:8px; }
+    .cw-lbl { font-size:10px; color:var(--t3); text-transform:uppercase; letter-spacing:.04em; }
+    .cw-swatch { width:22px; height:22px; border-radius:5px; border:1px solid rgba(255,255,255,0.25); flex-shrink:0; }
+    .cw-presets { display:flex; gap:5px; flex-wrap:wrap; margin-top:10px; }
+    .cw-preset { width:18px; height:18px; border-radius:4px; cursor:pointer; border:1px solid rgba(255,255,255,0.18); }
+    .cw-preset.on, .cw-preset:hover { border-color:#fff; }
+    .gg-stop:first-child { align-items:flex-start; }
+    .gg-stop:last-child:not(:first-child) { align-items:flex-end; }
     .anim-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
     .anim-row .icon-picker-wrap { flex:0 1 150px; min-width:64px; }
     .anim-row .icon-picker-btn { width:100%; justify-content:center; }
