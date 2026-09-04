@@ -273,7 +273,7 @@ const RECOGNIZED_SENSOR_DCS = new Set([
 ]);
 
 /** Controllable domains this card renders with its own tiles — never delegated. */
-export const NATIVE_CONTROL_DOMAINS = new Set(['switch', 'light', 'cover', 'climate', 'valve']);
+export const NATIVE_CONTROL_DOMAINS = new Set(['switch', 'light', 'cover', 'climate', 'valve', 'media_player']);
 
 /** Native HA tile `features` per delegated domain (Phase 3 fallback rendering). */
 export const DELEGATE_FEATURES: Record<string, Array<Record<string, unknown>>> = {
@@ -507,12 +507,12 @@ export const PROFILE_DEFAULT_BLOCKS: Record<DeviceProfile, TileBlockId[]> = {
   cover:        ['name_row', 'cover_controls', 'sensors', 'virtual_controls', 'delegated_controls', 'badges'],
   valve:        ['name_row', 'sensors', 'valve_controls', 'virtual_controls', 'delegated_controls', 'badges'],
   lock:         ['name_row', 'sensors', 'virtual_controls', 'delegated_controls', 'badges'],
-  media:        ['name_row', 'sensors', 'virtual_controls', 'delegated_controls', 'badges'],
+  media:        ['name_row', 'media_controls', 'sensors', 'virtual_controls', 'delegated_controls', 'badges'],
   energy:       ['name_row', 'sensors', 'graph', 'virtual_controls', 'delegated_controls', 'badges'],
   sensor:       ['name_row', 'sensors', 'graph', 'virtual_controls', 'delegated_controls', 'badges'],
   input:        ['name_row', 'sensors', 'input_channels', 'virtual_controls', 'delegated_controls', 'badges'],
   uni:          ['name_row', 'input_channels', 'sensors', 'virtual_controls', 'delegated_controls', 'badges'],
-  wall_display: ['name_row', 'sensors', 'graph', 'trv_control', 'virtual_controls', 'delegated_controls', 'badges'],
+  wall_display: ['name_row', 'sensors', 'graph', 'trv_control', 'media_controls', 'virtual_controls', 'delegated_controls', 'badges'],
   generic:      ['name_row', 'sensors', 'virtual_controls', 'delegated_controls', 'badges'],
 };
 
@@ -1443,7 +1443,7 @@ export const CONFIG_KEYS: readonly string[] = [
   'light_labels', 'light_entities',
   'show_attention', 'attention_battery', 'show_firmware_summary', 'include_beta_updates',
   'style', 'area_styles', 'device_styles', 'profile_styles', 'style_presets', 'custom_styles',
-  'energy_period', 'graph_sensors', 'graph_hours', 'graph_style', 'graph_line_color',
+  'energy_period', 'graph_sensors', 'graph_hours', 'graph_style', 'graph_line_color', 'radio_stations',
   'graph_sensor_colors', 'sensors'
 ];
 
@@ -1728,7 +1728,8 @@ export function deviceRelevance(
   if (countOf('switch') + countOf('light') > 1) blocks.add('relay_channels');
   if (chips.has('power')) blocks.add('power_bar');
   if (device.entities.some(e => VIRTUAL_SUFFIX[e.domain]?.test(e.entity_id))) blocks.add('virtual_controls');
-  if (['lock', 'media_player', 'fan', 'vacuum'].some(has)) blocks.add('delegated_controls');
+  if (has('media_player')) blocks.add('media_controls');
+  if (['lock', 'fan', 'vacuum'].some(has)) blocks.add('delegated_controls');
 
   return {
     chips,

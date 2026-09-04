@@ -60,7 +60,8 @@ export type TileBlockId =
   | 'relay_channels'  // per-channel toggles for multi-channel relays
   | 'power_bar'       // mini usage bar at tile bottom
   | 'virtual_controls' // virtual component controls (select, number, button, text, boolean)
-  | 'delegated_controls' // native HA controls for long-tail domains (lock, media, fan, vacuum …)
+  | 'media_controls'  // the card's own media player control: state, now playing, transport, volume, browse
+  | 'delegated_controls' // native HA controls for long-tail domains (lock, fan, vacuum …)
   | 'badges';         // type badge + gen badge + UI link
 
 /** One row of the tile face. Two or more blocks in a row sit side by side. */
@@ -357,6 +358,9 @@ export interface DeviceStyle {
    *  discovery (`attachExtraSensors`), so chips, graphs, gauge rings, the sensor
    *  card and the detail sheet all see them; the lender still shows them too. */
   extra_sensors?: string[];
+  /** This device's own station list for the media block; unset = the card-wide
+   *  `radio_stations`. */
+  radio_stations?: RadioStation[];
   tile_layout?: TileLayout; // per-device block order/visibility
   /** Override the auto-detected device profile (categorisation). undefined = auto. */
   profile?: DeviceProfile;
@@ -391,6 +395,15 @@ export interface DeviceStyle {
    *  row runs the action you assign instead, mirroring what the physical button
    *  is wired to do. Unmapped channels stay read-only status rows. */
   input_actions?: Record<string, InputActionConfig>;
+}
+
+/** A stream the media block can start with `media_player.play_media`. The
+ *  Shelly integration exposes no station list for a Wall Display (its browse
+ *  tree's "Radio stations" folder is empty), so the card keeps its own. */
+export interface RadioStation {
+  name: string;
+  /** Stream URL, e.g. https://…/fm957.mp3 — anything the player accepts. */
+  url: string;
 }
 
 /** An action bound to one input channel. `perform-action` covers scripts and
@@ -653,6 +666,10 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   /** Global default power-monitor variant, used when tile_style resolves to
    *  power-monitor and no closer scope sets one. */
   power_monitor_variant?: PowerMonitorVariant;
+  /** Stations the media block offers on every media player that can play a
+   *  stream (`play_media`): a dropdown next to what is playing. A device can
+   *  carry its own list in `device_styles[id].radio_stations`. */
+  radio_stations?: RadioStation[];
   /** Master switch for tile sparkline graphs (the graph_sensors-driven graph
    *  section). undefined = off — tiles are lean by default and graphs are opt-in.
    *  Overridable per view, type, area and device. `graph_sensors` stays the

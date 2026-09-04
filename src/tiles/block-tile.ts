@@ -349,9 +349,107 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
       ` : html``;
     }
 
+    case 'media_controls': {
+      // The card's own media control — a Wall Display's radio, a receiver — so
+      // a media player no longer needs Native controls (which embeds HA's tile
+      // element, with the render cost that carries). Only what the entity
+      // declares in supported_features is drawn: the display's radio has
+      // play/pause/stop, next/previous, volume and browse; no power, no mute.
+      const mp = device.entities.find(e => e.domain === 'media_player' && !e.entity_category);
+      const ms = mp ? hass.states[mp.entity_id] : undefined;
+      if (!mp || !ms) return html``;
+      const a = ms.attributes as Record<string, unknown>;
+      const feat = Number(a.supported_features ?? 0);
+      const F = { PAUSE: 1, VOLUME_SET: 4, VOLUME_MUTE: 8, PREV: 16, NEXT: 32, TURN_ON: 128, TURN_OFF: 256, PLAY_MEDIA: 512, STOP: 4096, PLAY: 16384, BROWSE: 131072 };
+      const can = (b: number) => (feat & b) !== 0;
+      const state = ms.state;
+      const playing = state === 'playing';
+      const isOff = state === 'off' || state === 'standby' || state === 'unavailable';
+      const title = [a.media_title, a.media_artist].filter(Boolean).join(' · ') || (a.source as string | undefined) || '';
+      const vol = typeof a.volume_level === 'number' ? Math.round(a.volume_level * 100) : null;
+      const muted = a.is_volume_muted === true;
+      const call = (svc: string, data: Record<string, unknown> = {}) =>
+        hass.callService('media_player', svc, { entity_id: mp.entity_id, ...data });
+      const stateLabel = playing ? 'Playing' : state === 'paused' ? 'Paused' : state === 'idle' ? 'Idle'
+        : state === 'unavailable' ? 'Unavailable' : isOff ? 'Off' : state;
+      // Stations: the card's own list (HA has none for a Wall Display). The
+      // device's list wins over the card-wide one. The current one is matched
+      // by stream URL first, then by the title the player reports.
+      const stations = config.device_styles?.[device.device_id]?.radio_stations ?? config.radio_stations ?? [];
+      // What the player itself offers — a Wall Display's radio favourites, a
+      // receiver's presets — read through HA's browse tree on the first tap of
+      // the dropdown (never eagerly: 37 players × a library each is a storm),
+      // plus the config streams. The option value carries the play_media target.
+      const browse = can(F.BROWSE) ? ctx.getBrowseGroups(mp.entity_id) : null;
+      const groups = Array.isArray(browse) ? browse : [];
+      const encode = (id: string, type: string) => JSON.stringify([id, type]);
+      const currentId = a.media_content_id as string | undefined;
+      const currentTitle = a.media_title as string | undefined;
+      let current = '';
+      for (const g of groups) for (const it of g.items) {
+        if (it.id === currentId || (currentTitle && it.title === currentTitle)) current = encode(it.id, it.type);
+      }
+      if (!current) {
+        const s = stations.find(x => x.url === currentId) ?? stations.find(x => x.name === currentTitle);
+        if (s) current = encode(s.url, 'music');
+      }
+      const showSel = can(F.PLAY_MEDIA) && (can(F.BROWSE) || stations.length > 0);
+      const nothingYet = Array.isArray(browse) && !groups.some(g => g.items.length) && !stations.length;
+      const load = (e: Event) => { e.stopPropagation(); if (can(F.BROWSE)) ctx.requestBrowse(mp.entity_id); };
+      return html`
+        <div class="tile-media" @click=${(e: Event) => e.stopPropagation()}>
+          <div class="tile-media-now">
+            <span class="tile-media-state ${playing ? 'on' : ''}">${stateLabel}</span>
+            <span class="tile-media-title" title=${title}>${title || '—'}</span>
+            ${showSel ? html`
+              <select class="input-sel tile-media-sel" title="Play a station"
+                @pointerdown=${load} @focus=${load}
+                @change=${(e: Event) => {
+                  const v = (e.target as HTMLSelectElement).value;
+                  if (!v) return;
+                  const [id, type] = JSON.parse(v) as [string, string];
+                  call('play_media', { media_content_id: id, media_content_type: type });
+                }}>
+                <option value="" ?selected=${!current}>Station…</option>
+                ${browse === 'pending' ? html`<option value="" disabled>Loading…</option>` : nothing}
+                ${nothingYet ? html`<option value="" disabled>No favourites — star stations on the display</option>` : nothing}
+                ${groups.filter(g => g.items.length).map(g => html`
+                  <optgroup label=${g.label}>
+                    ${g.items.map(it => html`<option value=${encode(it.id, it.type)} ?selected=${encode(it.id, it.type) === current}>${it.title}</option>`)}
+                  </optgroup>`)}
+                ${stations.length ? html`
+                  <optgroup label="Streams">
+                    ${stations.map(s => html`<option value=${encode(s.url, 'music')} ?selected=${encode(s.url, 'music') === current}>${s.name}</option>`)}
+                  </optgroup>` : nothing}
+              </select>` : nothing}
+            ${can(F.BROWSE) ? html`
+              <button class="tile-media-btn" title="Browse media in Home Assistant" @click=${() => ctx.fireMoreInfo(mp.entity_id)}>☰</button>` : nothing}
+          </div>
+          <div class="tile-media-row">
+            ${can(F.TURN_ON) || can(F.TURN_OFF) ? html`
+              <button class="tile-media-btn ${isOff ? '' : 'on'}" title=${isOff ? 'Turn on' : 'Turn off'}
+                @click=${() => call(isOff ? 'turn_on' : 'turn_off')}>⏻</button>` : nothing}
+            ${can(F.PREV) ? html`<button class="tile-media-btn" title="Previous" @click=${() => call('media_previous_track')}>⏮</button>` : nothing}
+            ${can(F.PLAY) || can(F.PAUSE) ? html`
+              <button class="tile-media-btn tile-media-play ${playing ? 'on' : ''}" title=${playing ? 'Pause' : 'Play'}
+                @click=${() => call(playing ? (can(F.PAUSE) ? 'media_pause' : 'media_stop') : 'media_play')}>${playing ? '⏸' : '▶'}</button>` : nothing}
+            ${can(F.STOP) ? html`<button class="tile-media-btn" title="Stop" @click=${() => call('media_stop')}>⏹</button>` : nothing}
+            ${can(F.NEXT) ? html`<button class="tile-media-btn" title="Next" @click=${() => call('media_next_track')}>⏭</button>` : nothing}
+            ${vol != null && can(F.VOLUME_SET) ? html`
+              ${can(F.VOLUME_MUTE) ? html`
+                <button class="tile-media-btn" title=${muted ? 'Unmute' : 'Mute'}
+                  @click=${() => call('volume_mute', { is_volume_muted: !muted })}>${muted ? '🔇' : '🔊'}</button>` : nothing}
+              <input type="range" class="tile-media-vol" min="0" max="100" .value=${String(vol)} title="Volume ${vol}%"
+                @pointerdown=${(e: Event) => e.stopPropagation()}
+                @change=${(e: Event) => call('volume_set', { volume_level: parseInt((e.target as HTMLInputElement).value, 10) / 100 })}/>
+              <span class="tile-media-pct">${vol}%</span>` : nothing}
+          </div>
+        </div>`;
+    }
+
     case 'delegated_controls': {
       // Native HA controls for long-tail domains our own tiles don't render
-      // (lock, media_player, fan, vacuum, …). Opt-in: each embeds a native tile
+      // (lock, fan, vacuum, …). Opt-in: each embeds a native tile
       // element, so it's off unless delegate_controls is enabled.
       if (!config.delegate_controls) return html``;
       const dels = delegatableEntities(device);

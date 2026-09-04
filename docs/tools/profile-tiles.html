@@ -142,7 +142,7 @@ const BLOCKS = [
   ['name_row','Name & toggle'],['sensors','Sensor chips'],['graph','Graph'],['dimmer','Brightness / colour'],
   ['cover_controls','Cover controls'],['trv_control','Temperature control'],['valve_controls','Valve controls'],
   ['input_channels','Input channels'],['relay_channels','Relay channels'],['power_bar','Power bar'],
-  ['virtual_controls','Virtual controls'],['delegated_controls','Native controls'],['badges','Type & gen badges'],
+  ['virtual_controls','Virtual controls'],['media_controls','Media controls'],['delegated_controls','Native controls'],['badges','Type & gen badges'],
 ];
 const BLABEL = Object.fromEntries(BLOCKS);
 
@@ -172,12 +172,12 @@ const BLOCK_ORDER = {
   cover:['name_row','cover_controls','sensors','virtual_controls','delegated_controls','badges'],
   valve:['name_row','sensors','valve_controls','virtual_controls','delegated_controls','badges'],
   lock:['name_row','sensors','virtual_controls','delegated_controls','badges'],
-  media:['name_row','sensors','virtual_controls','delegated_controls','badges'],
+  media:['name_row','media_controls','sensors','virtual_controls','delegated_controls','badges'],
   energy:['name_row','sensors','graph','virtual_controls','delegated_controls','badges'],
   sensor:['name_row','sensors','graph','virtual_controls','delegated_controls','badges'],
   input:['name_row','sensors','input_channels','virtual_controls','delegated_controls','badges'],
   uni:['name_row','input_channels','sensors','virtual_controls','delegated_controls','badges'],
-  wall_display:['name_row','sensors','graph','trv_control','virtual_controls','delegated_controls','badges'],
+  wall_display:['name_row','sensors','graph','trv_control','media_controls','virtual_controls','delegated_controls','badges'],
   generic:['name_row','sensors','virtual_controls','delegated_controls','badges'],
 };
 const TILE_STYLES = [['default','Default (blocks)'],['power-monitor','Power monitor'],['light-control','Light control'],['climate-control','Climate control'],['cover-control','Cover control'],['sensor-card','Sensor card'],['input-control','Input keypad'],['scene-button','Scene button']];

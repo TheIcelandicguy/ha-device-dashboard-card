@@ -282,7 +282,7 @@ Each tile style is a standalone render function called by the main card:
   graph, dimmer, cover/valve/trv controls, relay/input channels, power_bar,
   virtual_controls, badges).
 - `delegated-control.ts` — native HA control elements for long-tail domains
-  (lock/media/fan/vacuum/…), used by the `delegated_controls` block when
+  (lock/fan/vacuum/…; media players have their own `media_controls` block), used by the `delegated_controls` block when
   `delegate_controls` is on. Imported directly from `src/index.ts`.
 - `tile-parts.ts` — shared sub-components used across tiles, including
   `chipsInHeader()`, the single predicate for the opt-in `header_chips`

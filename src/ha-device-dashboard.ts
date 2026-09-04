@@ -11,7 +11,7 @@ import { mainCss } from './styles/main';
 import { tilesCss } from './styles/tiles';
 import { detailCss } from './styles/detail';
 import type {
-  TileCtx, TrvInfo, CoverInfo, ValveInfo, GraphEntity,
+  TileCtx, TrvInfo, CoverInfo, ValveInfo, GraphEntity, BrowseGroup,
   FirmwareInfo, SensorChip, SensorChipTier, VirtualControl, InputChannel, DeviceAlert,
 } from './tiles/tile-context';
 import { renderClimateControlTile } from './tiles/climate-control';
@@ -658,7 +658,9 @@ export class HADeviceDashboard extends LitElement {
       map.get(key)!.push(d);
     }
 
-    const sortBy = this._config.sort_by ?? 'name';
+    // A view can carry its own sort (ViewConfig.sort_by); the card-wide one is
+    // the fallback. The key was declared and documented but never read here.
+    const sortBy = this._getActiveView()?.sort_by ?? this._config.sort_by ?? 'name';
     // Precompute the sort key once per device (Schwartzian transform) so the
     // comparator doesn't rescan the device's entities on every comparison.
     let comparator: (a: HADevice, b: HADevice) => number;
@@ -1251,6 +1253,50 @@ export class HADeviceDashboard extends LitElement {
       if (targets.length) data.entity_id = targets;
       this.hass.callService(domain, service, data);
     }
+  }
+
+  // ── Media browse ──────────────────────────────────────────────────────────
+  /** A media player's playable items, one folder deep, keyed by entity id. For
+   *  a Wall Display the root holds "Radio stations" (its favourites) and
+   *  "Audio files"; for a receiver, presets. Fetched through HA's websocket —
+   *  the device itself sends no CORS header, so the browser cannot ask it. */
+  private _browseCache = new Map<string, { at: number; groups: BrowseGroup[] } | 'pending'>();
+
+  private _requestBrowse(entityId: string): void {
+    const c = this._browseCache.get(entityId);
+    if (c === 'pending' || (c && Date.now() - c.at < 5 * 60_000)) return;
+    this._browseCache.set(entityId, 'pending');
+    type Node = { title: string; media_content_id: string; media_content_type: string; can_play: boolean; can_expand: boolean; children?: Node[] };
+    const ws = (extra: Record<string, unknown> = {}) =>
+      (this.hass as unknown as { callWS: (m: Record<string, unknown>) => Promise<Node> })
+        .callWS({ type: 'media_player/browse_media', entity_id: entityId, ...extra });
+    const playable = (nodes: Node[] | undefined) => (nodes ?? []).filter(n => n.can_play)
+      .map(n => ({ title: n.title, id: n.media_content_id, type: n.media_content_type }));
+    (async () => {
+      const groups: BrowseGroup[] = [];
+      try {
+        const root = await ws();
+        const top = playable(root.children);
+        if (top.length) groups.push({ label: root.title || 'Media', items: top });
+        // One level down: each folder becomes a group. Capped so a huge
+        // library integration cannot turn a tile into a request storm.
+        for (const dir of (root.children ?? []).filter(n => n.can_expand && !n.can_play).slice(0, 4)) {
+          try {
+            const sub = await ws({ media_content_id: dir.media_content_id, media_content_type: dir.media_content_type });
+            const items = playable(sub.children).slice(0, 60);
+            if (items.length) groups.push({ label: dir.title, items });
+          } catch { /* a folder that refuses to list is simply absent */ }
+        }
+      } catch { /* player has no browse tree — the dropdown stays on the config list */ }
+      this._browseCache.set(entityId, { at: Date.now(), groups });
+      this.requestUpdate();
+    })();
+  }
+
+  private _getBrowseGroups(entityId: string): BrowseGroup[] | 'pending' | null {
+    const c = this._browseCache.get(entityId);
+    if (!c) return null;
+    return c === 'pending' ? 'pending' : c.groups;
   }
 
   /** Registry unique_id of an entity, fetched once per entity. The registry
@@ -2851,6 +2897,8 @@ export class HADeviceDashboard extends LitElement {
       sensorValues: memo((d) => deviceSensorValues(d, this.hass.states as never)),
       getGraphEntities: memo((d) => this._getGraphEntities(d)),
       getGraphSensors: memo((d) => this._graphSensorEntities(d)),
+      requestBrowse: (id) => this._requestBrowse(id),
+      getBrowseGroups: (id) => this._getBrowseGroups(id),
       getPowerSparks: memo((d) => this._getPowerSparks(d)),
       ensureGraphData: (d) => this._ensureGraphData(d),
       renderEntityAnim: (id, on, devId) => this._renderEntityAnim(id, on, devId),
@@ -3716,7 +3764,7 @@ export class HADeviceDashboard extends LitElement {
       <div class="delegate-notice">
         <span class="dn-icon">◈</span>
         <span class="dn-text">${n} ${n === 1 ? 'device has' : 'devices have'} extra controls
-          (media, fan, vacuum…). Turn on ${setting} ${inEditor ? 'to show them.' : 'in the editor to show them.'}</span>
+          (fan, vacuum, lock…). Turn on ${setting} ${inEditor ? 'to show them.' : 'in the editor to show them.'}</span>
         <button class="dn-dismiss" title="Dismiss"
           @click=${(e: Event) => { e.stopPropagation(); this._dismissDelegateNotice(); }}>×</button>
       </div>`;

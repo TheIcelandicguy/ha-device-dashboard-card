@@ -28,6 +28,24 @@ installs from them.
 - **Dropdown chips name themselves** — "Preset: Boot master on" rather than the
   bare option; `select_chip.label` still overrides.
 
+### The card's own media control
+
+- **`media_controls` block.** A Wall Display's radio, a receiver, any
+  `media_player`: a state pill, what is playing (the station name on the
+  display), play/pause, stop, previous/next, a volume slider, a station
+  dropdown and a ☰ button into Home Assistant's Browse media dialog. Draws only
+  what the entity's `supported_features` declares. On by default for the
+  media and wall_display profiles, and available on the Blocks canvas for any
+  device that has a media player. Media players no longer count as
+  "delegated" — Native controls is now only for locks, fans, vacuums and the
+  rest of the long tail.
+- **Station dropdown.** Lists what the player itself offers, read through
+  Home Assistant's browse-media API one folder deep — a Wall Display's radio
+  favourites (star a station on the display and it appears), a receiver's
+  presets — and starts one with `play_media`. Plus the card's own streams:
+  `radio_stations`, name + stream URL rows under Global → Tiles → Radio
+  stations, or per device in `device_styles[id].radio_stations`.
+
 ### Borrowed readings
 
 - **`extra_sensors`** — show sensor entities from another device on this tile
@@ -107,7 +125,9 @@ dead code. The features were rewired, the rest removed:
   Global Tiles: the card-wide **ON/OFF button shape / variant / size** and the
   **power bar** (on/off + full scale). Room chrome: **tile text colour**,
   **border colour** and **style**, **shadow**, header **gradient direction**,
-  **font weight** and **font style**. Views: per-view **device sort**. Graphs:
+  **font weight** and **font style**. Views: per-view **device sort** (the
+  key existed but the card never read it — it now beats the card-wide sort
+  while that view is showing). Graphs:
   **bar corner radius** and the **fallback line colour**. Chips & metrics: the
   detail sheet's **entity list** toggle. Three room keys that were documented
   but never rendered now render: `headerTextColor` (as a fallback for

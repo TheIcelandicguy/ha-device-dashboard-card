@@ -299,6 +299,13 @@ try {
   eq('a diagnostic reading stands in only when nothing else reports the class',
     h.deviceSensorValues({ entities: [wd.entities[2]] }, wdSt), { temperature: 48 });
 
+  console.log('\ndeviceRelevance — media player');
+  const radio = { entities: [{ entity_id: 'media_player.display', domain: 'media_player', attributes: {} }, { entity_id: 'switch.display', domain: 'switch', attributes: {} }] };
+  const relM = h.deviceRelevance(radio, {});
+  ok('a media player offers the card\'s own media block', relM.blocks.has('media_controls'));
+  ok('and is no longer a delegated (native) control', !relM.blocks.has('delegated_controls'));
+  eq('delegatableEntities skips media players', h.delegatableEntities(radio).length, 0);
+
   console.log('\ndeviceRelevance');
   const rel4 = h.deviceRelevance(i4, hass.states);
   ok('no energy controls for a switch that meters nothing', !rel4.hasEnergy);

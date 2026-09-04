@@ -106,6 +106,7 @@
     { "id": "relay_channels",   "label": "Relay channels" },
     { "id": "power_bar",        "label": "Power bar" },
     { "id": "virtual_controls", "label": "Virtual controls" },
+    { "id": "media_controls", "label": "Media controls" },
     { "id": "delegated_controls", "label": "Native controls" },
     { "id": "badges",           "label": "Type & gen badges" }
   ],
@@ -119,12 +120,12 @@
     "cover":        ["name_row","cover_controls","sensors","virtual_controls","delegated_controls","badges"],
     "valve":        ["name_row","sensors","valve_controls","virtual_controls","delegated_controls","badges"],
     "lock":         ["name_row","sensors","virtual_controls","delegated_controls","badges"],
-    "media":        ["name_row","sensors","virtual_controls","delegated_controls","badges"],
+    "media":        ["name_row","media_controls","sensors","virtual_controls","delegated_controls","badges"],
     "energy":       ["name_row","sensors","graph","virtual_controls","delegated_controls","badges"],
     "sensor":       ["name_row","sensors","graph","virtual_controls","delegated_controls","badges"],
     "input":        ["name_row","sensors","input_channels","virtual_controls","delegated_controls","badges"],
     "uni":          ["name_row","input_channels","sensors","virtual_controls","delegated_controls","badges"],
-    "wall_display": ["name_row","sensors","graph","trv_control","virtual_controls","delegated_controls","badges"],
+    "wall_display": ["name_row","sensors","graph","trv_control","media_controls","virtual_controls","delegated_controls","badges"],
     "generic":      ["name_row","sensors","virtual_controls","delegated_controls","badges"]
   },
 
@@ -318,7 +319,8 @@
           { "control": "Energy entity", "fn": "Entity id whose energy value stands in for this device — typically a Utility Meter helper. Replaces the device's own energy sensors on the tile, in room totals and in the header chip.", "key": "device_styles[id].energy_entity", "scope": "device", "default": "the device's own energy sensors", "advanced": true },
           { "control": "Show graphs", "fn": "Per-device sparkline override (Inherit / On / Off)", "key": "device_styles[id].show_graphs", "scope": "device", "default": "Inherit", "advanced": false },
           { "control": "Visible blocks", "fn": "Show / hide + reorder each tile block (style = default)", "key": "device_styles[id].tile_layout", "scope": "device", "default": "inherits global", "advanced": false },
-          { "control": "Extra sensors", "fn": "Sensor entities that live on another device, shown on this tile as if it reported them (a BLU H&T's temperature on a Wall Display XL). Merged at discovery, so chips, graphs, gauge rings, the sensor card and the detail sheet all see them; the lender keeps them too, and they never count toward the device's online state.", "key": "device_styles[id].extra_sensors", "scope": "device", "default": "none", "advanced": false },
+          { "control": "Radio stations", "fn": "Extra streams for the media block's station dropdown — a name and a stream URL each, started with media_player.play_media. The dropdown also lists what the player itself offers through HA's browse tree (a Wall Display's radio favourites, a receiver's presets); device_styles[id].radio_stations gives one device its own list.", "key": "radio_stations[]", "scope": "global", "default": "none", "advanced": false },
+          { "control": "Extra sensors", "fn":"Sensor entities that live on another device, shown on this tile as if it reported them (a BLU H&T's temperature on a Wall Display XL). Merged at discovery, so chips, graphs, gauge rings, the sensor card and the detail sheet all see them; the lender keeps them too, and they never count toward the device's online state.", "key": "device_styles[id].extra_sensors", "scope": "device", "default": "none", "advanced": false },
           { "control": "Input actions", "fn":"Per input channel (i3/i4/UNI): replay the physical press (fires the same shelly.click event as the wall button, so existing device-trigger automations run unchanged), run a script or service, toggle one entity or a list of them, or open more-info, plus an optional press-and-hold action (dim while held, alternating direction between holds, or replay a long push) and an optional dropdown chip listing a select entity's options. Input hardware has no output, so a channel row is a status row until it is given an action.", "key": "device_styles[id].input_actions[entity_id]", "scope": "device", "default": "none — status only", "advanced": false },
           { "control": "Sensor chips", "fn": "Whitelist of sensor chips for this device", "key": "device_styles[id].sensors", "scope": "device", "default": "inherit", "advanced": false },
           { "control": "Style elements", "fn": "Show / hide the parts of the chosen tile style (toggle, graph, secondary readings…). Options come from STYLE_ELEMENTS per style.", "key": "device_styles[id].elements", "scope": "device", "default": "per STYLE_ELEMENTS (visible unless def: false; header_chips is opt-in)", "advanced": false },

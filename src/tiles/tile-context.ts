@@ -51,6 +51,9 @@ export interface TileSensors {
   uptime: number | null;
 }
 export interface GraphEntity { entityId: string; label: string; dc: string; unit: string }
+/** One playable entry of a media player's browse tree. */
+export interface BrowseItem { title: string; id: string; type: string }
+export interface BrowseGroup { label: string; items: BrowseItem[] }
 /** `live` marks the synthetic "now" point appended from the current state —
  *  drawn like any other, but excluded from auto-scaling and peak dots so an
  *  instantaneous spike can't flatten a series of statistic means. */
@@ -133,6 +136,14 @@ export interface TileCtx {
   /** Selected graph sensors regardless of Show graphs — for surfaces that are
    *  about history (sensor card, detail sheet) and carry their own switch. */
   getGraphSensors: (d: HADevice) => GraphEntity[];
+  /** Kick off (or refresh) a media player's browse tree — one level down from
+   *  the root, which for a Wall Display is its radio favourites. Cached, and
+   *  only ever called on demand: a fleet of media players must not start a
+   *  request storm on first render. */
+  requestBrowse: (entityId: string) => void;
+  /** Playable items from the browse tree, grouped by the folder they came
+   *  from. null = never asked, 'pending' = loading, [] = nothing offered. */
+  getBrowseGroups: (entityId: string) => BrowseGroup[] | 'pending' | null;
   /** First live reading per device_class — what the gauge rings draw. */
   sensorValues: (d: HADevice) => Record<string, number>;
   getPowerSparks: (d: HADevice) => SparkPoint[];

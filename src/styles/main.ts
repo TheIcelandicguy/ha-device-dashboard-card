@@ -782,6 +782,20 @@ export const mainCss = css`
     .ent-icon-star3.on { color:#fde047; filter:drop-shadow(0 0 4px rgba(253,224,71,0.4)); animation:star-shoot calc(1.5s / var(--ent-spd,1)) ease-in-out infinite alternate; }
 
 
+    /* ── Media block: the card's own media player control ── */
+    .tile-media { display:flex; flex-direction:column; gap:6px; padding:4px 0 2px; }
+    .tile-media-now { display:flex; align-items:center; gap:8px; min-width:0; }
+    .tile-media-state { font-size:.65em; font-weight:700; letter-spacing:.06em; text-transform:uppercase; padding:2px 7px; border-radius:10px; background:rgba(255,255,255,.07); color:var(--sc-text-muted); flex-shrink:0; }
+    .tile-media-state.on { background:color-mix(in srgb,var(--sc-accent) 20%,transparent); color:var(--sc-accent); }
+    .tile-media-title { flex:1; min-width:0; font-size:.82em; color:var(--sc-text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .tile-media-sel { max-width:45%; flex-shrink:0; }
+    .tile-media-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+    .tile-media-btn { width:30px; height:28px; border:1px solid var(--sc-tog-off-border); border-radius:8px; background:var(--sc-tog-off-bg); color:var(--sc-text-primary); font-size:.9em; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; flex-shrink:0; transition:border-color .15s,color .15s,background .15s; }
+    .tile-media-btn:hover { border-color:var(--sc-accent); color:var(--sc-accent); }
+    .tile-media-btn.on { background:var(--sc-accent); border-color:var(--sc-accent); color:#fff; }
+    .tile-media-vol { flex:1; min-width:60px; accent-color:var(--sc-accent); cursor:pointer; }
+    .tile-media-pct { font-size:.72em; color:var(--sc-text-muted); font-variant-numeric:tabular-nums; min-width:32px; text-align:right; }
+
     /* ── Screens, appliances, heating, safety, strips, doors (2026-09) ── */
     @keyframes screen-flicker { 0%,100%{opacity:.35} 7%{opacity:.5} 11%{opacity:.22} 30%{opacity:.42} 46%{opacity:.18} 60%{opacity:.46} 78%{opacity:.3} }
     @keyframes scanline       { 0%{transform:translateY(0)} 100%{transform:translateY(6.8px)} }

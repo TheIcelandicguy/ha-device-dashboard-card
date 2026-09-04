@@ -360,7 +360,30 @@ Nest arrays to put blocks side by side: `[[name_row], [sensors, graph]]`.
 
 `name_row`, `sensors`, `graph`, `dimmer`, `cover_controls`, `trv_control`,
 `valve_controls`, `input_channels`, `relay_channels`, `power_bar`,
-`virtual_controls`, `delegated_controls`, `badges`.
+`virtual_controls`, `media_controls`, `delegated_controls`, `badges`.
+
+`media_controls` is the card's own media player: a state pill, what is playing
+(a Wall Display's radio shows the station), play/pause, stop, previous/next,
+a volume slider, a station dropdown, and a ☰ button into Home Assistant's
+Browse media dialog. Only what the entity's `supported_features` declares is
+drawn. Media players therefore no longer need Native controls.
+
+The station dropdown lists what the player itself offers, read through Home
+Assistant's browse-media API one folder deep: a Wall Display's **radio
+favourites** (star a station on the display and it appears here), a
+receiver's presets. Nothing starred means an empty folder, on the display and
+here alike. On top of that the card can keep its own streams in
+`radio_stations` — Design → Global → Tiles → Radio stations, a name and a
+stream URL each, started with `media_player.play_media`. A device can carry
+its own list in `device_styles[id].radio_stations`.
+
+```yaml
+radio_stations:
+  - name: FM957
+    url: https://stream.example.is/fm957
+  - name: Rás 2
+    url: https://stream.example.is/ras2
+```
 
 The editor enforces this visibly: when the scope you're editing renders a
 non-default style, the Blocks drag canvas is replaced by a notice naming the

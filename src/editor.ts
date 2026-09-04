@@ -141,7 +141,8 @@ const TILE_BLOCKS: Array<{ id: TileBlockId; label: string; sub: string }> = [
   { id: 'relay_channels',  label: 'Relay channels',     sub: 'Per-channel toggles for multi-relay devices' },
   { id: 'power_bar',       label: 'Power bar',          sub: 'Mini usage bar at tile bottom' },
   { id: 'virtual_controls',label: 'Virtual controls',   sub: 'Script-defined switches, selectors & actions' },
-  { id: 'delegated_controls', label: 'Native controls', sub: 'HA’s own controls for locks, media, fans, vacuums — needs Native controls on' },
+  { id: 'media_controls',     label: 'Media controls',  sub: 'the card’s own player: now playing, play/pause, volume, browse' },
+  { id: 'delegated_controls', label: 'Native controls', sub: 'HA’s own controls for locks, fans, vacuums — needs Native controls on' },
   { id: 'badges',          label: 'Type & gen badges',  sub: 'Dimmer · G3 · Relay labels' },
 ];
 
@@ -2321,6 +2322,7 @@ export class HADeviceDashboardEditor extends LitElement {
       case 'relay_channels':  return html`<div class="tp-row tp-chips"><span class="tp-chip" style="background:${accent}20;color:${accent}">CH1 ON</span><span class="tp-chip">CH2 OFF</span></div>`;
       case 'power_bar':       return html`<div class="tp-row" style="gap:8px"><div class="tp-strack" style="flex:1"><div class="tp-sfill" style="width:22%;background:${accent}"></div></div><span class="tp-val">4.1 W</span></div>`;
       case 'virtual_controls':return html`<div class="tp-row tp-chips"><span class="tp-chip">Mode ▾</span><span class="tp-chip" style="background:${accent}20;color:${accent}">Script</span></div>`;
+      case 'media_controls': return html`<div class="tp-row" style="gap:6px"><span class="tp-lbl">▶ FM957</span><div class="tp-strack" style="flex:1"><div class="tp-sfill" style="width:50%;background:${accent}"></div></div><span class="tp-val">50%</span></div>`;
       case 'delegated_controls': return html`<div class="tp-row" style="gap:6px"><span class="tp-lbl">🔒 Front door</span><div class="tp-strack" style="flex:1"><div class="tp-sfill" style="width:100%;background:${accent}20"></div></div><span class="tp-val">Locked</span></div>`;
       case 'badges':          return html`<div class="tp-row tp-chips"><span class="tp-chip" style="background:rgba(234,179,8,.18);color:#fde047">Dimmer</span><span class="tp-chip" style="background:rgba(34,197,94,.18);color:#86efac">G3</span></div>`;
       default: return nothing;
@@ -4521,7 +4523,7 @@ export class HADeviceDashboardEditor extends LitElement {
       </div>
       <div class="tog-row ${this._flashControl === 'delegate_controls' ? 'ctl-flash' : ''}" data-ctl="delegate_controls">
         <div class="tog-lbl">Native controls
-          <div class="hint">Show controls for media players, fans, vacuums, locks and other devices this card doesn't draw itself, using Home Assistant's own tiles. Off by default — each one embeds a native element, so it costs a little render time on big media fleets.</div>
+          <div class="hint">Show controls for fans, vacuums, locks and other devices this card doesn't draw itself, using Home Assistant's own tiles. Media players have the card's own Media controls block and don't need this. Off by default — each one embeds a native element, so it costs a little render time on big fleets.</div>
         </div>
         <label class="sw"><input type="checkbox" .checked=${c.delegate_controls === true}
           @change=${(e: Event) => this._set('delegate_controls', (e.target as HTMLInputElement).checked || undefined)}>
@@ -4582,6 +4584,28 @@ export class HADeviceDashboardEditor extends LitElement {
         <input type="range" min="100" max="5000" step="100" .value=${String(c.power_bar_max ?? 2000)}
           @input=${(e:Event)=>this._set('power_bar_max', parseInt((e.target as HTMLInputElement).value, 10))}/>
       </div>` : nothing}
+      ${(() => {
+        // Stations for the media block. Home Assistant has no station list for
+        // a Wall Display, so the card keeps one: a name and a stream URL each,
+        // offered as a dropdown on every media player that can play a stream.
+        const list = c.radio_stations ?? [];
+        const setList = (next: Array<{ name: string; url: string }>) => this._set('radio_stations', next.length ? next : undefined);
+        const patch = (i: number, p: Partial<{ name: string; url: string }>) =>
+          setList(list.map((s, j) => (j === i ? { ...s, ...p } : s)));
+        return html`
+          <div class="tiles-divider">Radio stations
+            <span class="dev-style-hint">shown as a dropdown on the media block — name and stream URL</span></div>
+          ${list.map((s, i) => html`
+            <div class="rs-row">
+              <input type="text" class="inline-text rs-name" placeholder="FM957" .value=${s.name}
+                @change=${(e: Event) => patch(i, { name: (e.target as HTMLInputElement).value.trim() })}/>
+              <input type="text" class="inline-text rs-url" placeholder="https://…/stream.mp3" .value=${s.url}
+                @change=${(e: Event) => patch(i, { url: (e.target as HTMLInputElement).value.trim() })}/>
+              <button class="color-reset" title="Remove" @click=${() => setList(list.filter((_, j) => j !== i))}>✕</button>
+            </div>`)}
+          <button class="color-reset" style="margin-top:4px" @click=${() => setList([...list, { name: '', url: '' }])}>+ Add station</button>
+          <div class="dp-hint-inline">The dropdown also lists what the player itself offers — a Wall Display's radio favourites (star a station on the display), a receiver's presets. These streams are extras on top of that.</div>`;
+      })()}
       ${this._adv(html`
       <div class="field">
         <div class="field-lbl">Tile border width — <span style="color:#f4601e">${sty.tile_border_width ?? 1}px</span>${this._resetBtn(sty.tile_border_width !== undefined, () => this._clearStyle('tile_border_width'))}</div>
@@ -6182,6 +6206,9 @@ export class HADeviceDashboardEditor extends LitElement {
     .ia-ch-name { flex:0 0 34%; font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .ia-grid { display:grid; grid-template-columns:84px minmax(0,1fr); gap:6px 10px; align-items:center; margin-top:8px; }
     .dsn-save-row { display:flex; align-items:center; gap:6px; margin:0 0 8px; }
+    .rs-row { display:flex; align-items:center; gap:6px; margin:4px 0; }
+    .rs-row .rs-name { flex:0 1 140px; }
+    .rs-row .rs-url { flex:1; min-width:0; }
     /* Gauge ring colour block: header row, gradient bar, stops under the bar */
     .gg-row { padding:8px 0 10px; border-bottom:1px solid var(--border); }
     .gg-row:last-child { border-bottom:none; }
