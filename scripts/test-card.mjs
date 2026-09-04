@@ -207,7 +207,7 @@ try {
   eq('finds three channels', ch3.length, 3);
   eq('labels match HA, not shifted by one', ch3.map(c => c.label), ['Input 1', 'Input 2', 'Input 3']);
   eq('channel numbers', ch3.map(c => c.channel), [1, 2, 3]);
-  ok('all are button-style', ch3.every(c => c.isButton));
+  ok('all are button-style', ch3.every(c => c.kind === 'button'));
   eq('last event is carried', ch3[0].lastEvent, 'single');
   ok('the cloud binary_sensor is not an input', !ch3.some(c => c.entityId.includes('cloud')));
 

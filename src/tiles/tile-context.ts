@@ -75,8 +75,10 @@ export interface InputChannel {
   entityId: string;
   label: string;
   isOn: boolean;
-  /** Kept for renderers that only care about momentary vs steady. Equals kind === 'button'. */
-  isButton: boolean;
+  /** Momentary (an `event` entity, fed by a physical push) or steady (a
+   *  `binary_sensor` that holds its state). There used to be an `isButton`
+   *  boolean beside this saying the same thing twice, set independently at two
+   *  construction sites. */
   kind: 'button' | 'switch';
   channel: number;
   lastEvent: string | null;

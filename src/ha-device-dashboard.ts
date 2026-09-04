@@ -684,9 +684,7 @@ export class HADeviceDashboard extends LitElement {
       map.get(key)!.push(d);
     }
 
-    // A view can carry its own sort (ViewConfig.sort_by); the card-wide one is
-    // the fallback. The key was declared and documented but never read here.
-    const sortBy = this._getActiveView()?.sort_by ?? this._config.sort_by ?? 'name';
+    const sortBy = cascade.sortBy(this._config, this._getActiveView() ?? undefined);
     // Precompute the sort key once per device (Schwartzian transform) so the
     // comparator doesn't rescan the device's entities on every comparison.
     let comparator: (a: HADevice, b: HADevice) => number;

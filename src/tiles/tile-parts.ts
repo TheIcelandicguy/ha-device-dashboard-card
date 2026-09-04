@@ -53,9 +53,9 @@ export function renderInputRow(
   // button's press history, a switch's state log — instead of doing nothing.
   const open = hasAction ? undefined : (e: Event) => { e.stopPropagation(); ctx.fireMoreInfo(ch.entityId); };
   return html`
-    <div class="input-row ${ch.isButton ? 'btn-mode' : 'sw-mode'} ${ch.isOn ? 'active' : ''} ${open ? 'tappable' : ''}"
+    <div class="input-row ${ch.kind === 'button' ? 'btn-mode' : 'sw-mode'} ${ch.isOn ? 'active' : ''} ${open ? 'tappable' : ''}"
       title=${open ? 'Show history' : ''} @click=${open}>
-      <span class="${ch.isButton ? 'input-btn-dot' : 'input-row-dot'}"></span>
+      <span class="${ch.kind === 'button' ? 'input-btn-dot' : 'input-row-dot'}"></span>
       <span class="input-row-name">${ch.label}</span>
       <span class="input-row-event ${ch.kind === 'switch' ? (ch.isOn ? 'is-on' : 'is-off') : ''}">${status}</span>
       <span class="input-row-time">${ctx.timeAgo(ch.lastChanged)}</span>

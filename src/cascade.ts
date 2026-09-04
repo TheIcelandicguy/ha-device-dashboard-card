@@ -32,6 +32,7 @@
 import type {
   HADeviceDashboardConfig, HADevice, DeviceProfile, TileStyle, TileLayout,
   ViewConfig, EnergyPeriod, CustomStyleDef, PowerMonitorVariant, ThemePreset, TileSize,
+  RadioStation, SortBy,
 } from './types';
 import { PROFILE_DEFAULT_BLOCKS, PROFILE_DEFAULT_SENSORS, profileDefaultTileStyle, STYLE_ELEMENTS } from './helpers';
 
@@ -203,6 +204,30 @@ export function powerMonitorVariant(i: CascadeInput, legacy: PowerMonitorVariant
     ?? customDef(i)?.variant
     ?? i.config.style_presets?.['power-monitor']?.variant
     ?? legacy;
+}
+
+/**
+ * The stations the media block offers: this device's own list, else the
+ * card-wide one. Device → card, with no layer between — a station list is a
+ * property of what the speaker can reach, not of a room's or a view's look.
+ *
+ * The array guard lives here rather than at the call site: hand-written YAML
+ * can put a scalar or an object where a list belongs, and a throw inside
+ * render takes the whole card down. An unusable list is simply no list, and a
+ * station with no stream URL is dropped.
+ */
+export function radioStations(config: HADeviceDashboardConfig, device: HADevice): RadioStation[] {
+  const raw = config.device_styles?.[device.device_id]?.radio_stations ?? config.radio_stations;
+  return (Array.isArray(raw) ? raw : []).filter(s => s && typeof s.url === 'string' && !!s.url);
+}
+
+/**
+ * Device order within a group: view → card → by name. Not a per-device
+ * setting — it orders devices against each other — so it takes the view
+ * directly rather than a CascadeInput, the same shape as columnsFor.
+ */
+export function sortBy(config: HADeviceDashboardConfig, view: ViewConfig | undefined): SortBy {
+  return view?.sort_by ?? config.sort_by ?? 'name';
 }
 
 /**

@@ -3,7 +3,7 @@
 All notable changes to HA Device Dashboard. Versions are git tags; HACS
 installs from them.
 
-## Unreleased
+## 1.2.0 — 2026-09-04
 
 ### Ask before turning a device off
 
@@ -274,6 +274,21 @@ dead code. The features were rewired, the rest removed:
 - **Larger helper text** throughout the Design tab and Controls; the live tile
   preview under the style picker is gone (the edit dialog's preview does that
   job).
+
+### Internal: three resolvers and two mappings that existed twice
+
+No behaviour change, but the kind of duplication that produced the bugs in this
+release.
+`radio_stations` and a view's `sort_by` were resolved inline at their call
+sites rather than in `cascade.ts`, where every other ladder lives; both are now
+`cascade.radioStations()` and `cascade.sortBy()`. Discovery and
+`attachExtraSensors` each built an entity from a registry row with their own
+copy of the same eight-field mapping — one `toEntity()` now, so a borrowed
+entity cannot quietly lack a field an owned one has. `InputChannel.isButton`
+was a second spelling of `kind === 'button'`, set independently at two
+construction sites, and is gone. The editor's pill row is one `_pills()`
+helper, and the device-sort options are one list instead of two that could
+drift apart.
 
 ## v1.1.0 — 2026-09-02
 

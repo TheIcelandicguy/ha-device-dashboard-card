@@ -393,7 +393,7 @@ function renderSheetInput(ctx: TileCtx): TemplateResult {
                 ${action
                   ? html`<span class="ds-chip ${state === 'on' ? 'ds-chip--on' : ''}">${action}</span>`
                   : html`<span class="ds-chip ${ch.isOn ? 'ds-chip--on' : ''}">
-                      ${ch.isButton ? (ch.lastEvent ? ch.lastEvent.replace(/_/g, ' ') : '—') : (ch.isOn ? 'ON' : 'OFF')}
+                      ${ch.kind === 'button' ? (ch.lastEvent ? ch.lastEvent.replace(/_/g, ' ') : '—') : (ch.isOn ? 'ON' : 'OFF')}
                     </span>`}
                 ${lc ? html`<span class="ds-ent-age">${lc}</span>` : nothing}
               </div>`;

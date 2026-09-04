@@ -4,7 +4,7 @@ import { ref } from 'lit/directives/ref.js';
 import { keyed } from 'lit/directives/keyed.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent, LovelaceCardConfig } from 'custom-card-helpers';
-import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout, EnergyPeriod, InputActionConfig } from './types';
+import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout, EnergyPeriod, InputActionConfig, SortBy } from './types';
 import { getAllDevices, GRAPH_SENSOR_DEFS, GAUGE_RING_DEFS, gaugeStops, colorAt, hexToHsv, hsvToHex, parseCssColor, withAlpha, deviceHasControllable, getDeviceProfile,HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels,
   CONFIG_KEYS, LOVELACE_KEYS } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, detectTheme, paletteFor, type ThemePalette } from './themes';
@@ -27,6 +27,12 @@ import { randomPalette, randomTheme } from './palette';
 
 /** The global `style` sub-object — typed so key access catches typos. */
 type StyleCfg = NonNullable<HADeviceDashboardConfig['style']>;
+
+/** How devices can be ordered, offered card-wide and per view. One list: two
+ *  copies is how one of them ends up missing an option the other has. */
+const SORT_OPTIONS = [
+  ['Name', 'name'], ['Power', 'power'], ['Online', 'online'], ['Room', 'area'],
+] as const satisfies ReadonlyArray<readonly [string, SortBy]>;
 
 /** A collapsible editor section, ready to hand to `_sec()`. Built per-tab, then
  *  ordered/gated by EDITOR_LAYOUT so the editor's structure is data-driven. */
@@ -1469,11 +1475,7 @@ export class HADeviceDashboardEditor extends LitElement {
           </div>` : nothing}
         <div class="toolbar-group">
           <span class="toolbar-lbl">Sort</span>
-          <div class="pill-grp">
-            ${([['name','Name'],['power','Power'],['online','Online'],['area','Room']] as const).map(([v,lbl]) => html`
-              <span class="pill ${(c.sort_by ?? 'name') === v ? 'on' : ''}"
-                @click=${()=>this._set('sort_by',v)}>${lbl}</span>`)}
-          </div>
+          ${this._pills(c.sort_by ?? 'name', SORT_OPTIONS, v => this._set('sort_by', v))}
         </div>
         <div class="toolbar-group">
           <span class="toolbar-lbl">Rooms</span>
@@ -2009,7 +2011,19 @@ export class HADeviceDashboardEditor extends LitElement {
     const opts: Array<[string, EnergyPeriod | undefined]> = includeInherit
       ? [['Inherit', undefined], ['Total', 'total'], ['Today', 'today'], ['Week', 'week'], ['Month', 'month']]
       : [['Total', 'total'], ['Today', 'today'], ['Week', 'week'], ['Month', 'month']];
-    const cur = current ?? (includeInherit ? undefined : 'total');
+    return this._pills(current ?? (includeInherit ? undefined : 'total'), opts, onChange);
+  }
+
+  /**
+   * One row of mutually-exclusive pills — the shape of nearly every picker in
+   * this editor, hand-rolled at each call site until now. `undefined` in the
+   * value slot is a real option (an "inherit" pill), not "nothing selected".
+   */
+  private _pills<T>(
+    cur: T,
+    opts: ReadonlyArray<readonly [string, T]>,
+    onChange: (v: T) => void,
+  ): TemplateResult {
     return html`
       <div class="pill-grp">
         ${opts.map(([lbl, v]) => html`
@@ -4338,13 +4352,11 @@ export class HADeviceDashboardEditor extends LitElement {
 
             <div class="field">
               <div class="field-lbl">Sort devices</div>
-              <div class="pill-grp">
-                ${([['name', 'Name'], ['power', 'Power'], ['online', 'Online'], ['area', 'Room']] as const).map(([sv, lbl]) => html`
-                  <span class="pill ${v.sort_by === sv ? 'on' : ''}"
-                    @click=${() => setViewField('sort_by', sv)}>${lbl}</span>`)}
-                <span class="pill ${v.sort_by === undefined ? 'on' : ''}"
-                  @click=${() => setViewField('sort_by', undefined)}>inherit</span>
-              </div>
+              ${this._pills<SortBy | undefined>(
+                v.sort_by,
+                [...SORT_OPTIONS, ['inherit', undefined]],
+                sv => setViewField('sort_by', sv),
+              )}
             </div>`)}
           </div>` : nothing}
       </div>`;

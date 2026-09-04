@@ -21,6 +21,33 @@ const DEVICE_DOMAINS = new Set([
 // ─── Device discovery ──────────────────────────────────────────────────────────
 
 /**
+ * One entity-registry row plus its live state, as an `HAEntity`.
+ *
+ * Discovery and `attachExtraSensors` both build these. They were two copies of
+ * the same eight-field mapping, which is one edit away from a field that an
+ * owned entity carries and a borrowed one silently does not. `over` is for the
+ * few fields the borrowed path adds (`borrowed_from`) rather than derives.
+ */
+function toEntity(
+  entityId: string,
+  reg: { device_id?: string; area_id?: string; platform?: string; entity_category?: string } | undefined,
+  state: { state?: string; attributes?: unknown } | undefined,
+  over?: Partial<HAEntity>,
+): HAEntity {
+  return {
+    entity_id:  entityId,
+    domain:     entityId.split('.')[0],
+    state:      state?.state ?? 'unavailable',
+    attributes: (state?.attributes ?? {}) as Record<string, unknown>,
+    device_id:  reg?.device_id,
+    area_id:    reg?.area_id,
+    platform:   reg?.platform ? String(reg.platform).toLowerCase() : undefined,
+    entity_category: reg?.entity_category ?? undefined,
+    ...over,
+  };
+}
+
+/**
  * Returns all Shelly devices, each with all their entities attached.
  */
 export function getAllDevices(
@@ -114,17 +141,7 @@ export function getAllDevices(
     }
 
     // Get live state from hass.states (O(1) lookup by key, not iteration)
-    const state = hass.states[entityId];
-    device.entities.push({
-      entity_id:  entityId,
-      domain,
-      state:      state?.state ?? 'unavailable',
-      attributes: (state?.attributes ?? {}) as Record<string, unknown>,
-      device_id:  deviceId,
-      area_id:    regEntry.area_id,
-      platform,
-      entity_category: regEntry.entity_category ?? undefined,
-    });
+    device.entities.push(toEntity(entityId, regEntry, hass.states[entityId]));
   }
 
   // Merge sub-devices into their parent when they represent the same physical
@@ -656,17 +673,7 @@ export function attachExtraSensors(
       const lender = lenderId
         ? (byId.get(lenderId)?.name ?? deviceRegistry[lenderId]?.name_by_user ?? deviceRegistry[lenderId]?.name)
         : undefined;
-      extra.push({
-        entity_id: id,
-        domain: id.split('.')[0],
-        state: st.state,
-        attributes: (st.attributes ?? {}) as Record<string, unknown>,
-        device_id: lenderId,
-        area_id: reg?.area_id,
-        platform: reg?.platform ? String(reg.platform).toLowerCase() : undefined,
-        entity_category: reg?.entity_category ?? undefined,
-        borrowed_from: lender ?? 'another device',
-      });
+      extra.push(toEntity(id, reg, st, { borrowed_from: lender ?? 'another device' }));
     }
     return extra.length ? { ...d, entities: [...d.entities, ...extra] } : d;
   });
@@ -1773,7 +1780,6 @@ export function detectInputChannels(
       entityId: e.entity_id,
       label: channelLabel((st?.attributes?.friendly_name as string) ?? '', device.name, num, e.entity_id),
       isOn: st?.state === 'on',
-      isButton: !!ev,
       kind: ev ? 'button' : 'switch',
       channel: num ?? 0,
       lastEvent: evType ?? null,
@@ -1791,7 +1797,6 @@ export function detectInputChannels(
       entityId: e.entity_id,
       label: channelLabel((st?.attributes?.friendly_name as string) ?? '', device.name, num, e.entity_id),
       isOn: false,
-      isButton: true,
       kind: 'button',
       channel: num ?? 0,
       lastEvent: (st?.attributes?.event_type as string | undefined) ?? null,

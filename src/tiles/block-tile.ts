@@ -5,6 +5,7 @@ import { formatPower, getIntegrationLabel, isPrivateIp, delegatableEntities, DEL
 import type { EntityAnimationType, TileBlockId, HassAttrs } from '../types';
 import type { TileCtx, SensorChip } from './tile-context';
 import { renderInputRow, renderEffectPicker } from './tile-parts';
+import * as cascade from '../cascade';
 
 /** Default block-based tile renderer — dispatches to per-block sub-renderers. */
 export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateResult {
@@ -375,12 +376,7 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
       // Stations: the card's own list (HA has none for a Wall Display). The
       // device's list wins over the card-wide one. The current one is matched
       // by stream URL first, then by the title the player reports.
-      // Hand-written YAML can put a scalar or an object where a list belongs;
-      // a render throw takes the whole card down, so an unusable list is simply
-      // no list.
-      const rawStations = config.device_styles?.[device.device_id]?.radio_stations ?? config.radio_stations;
-      const stations = (Array.isArray(rawStations) ? rawStations : [])
-        .filter(s => s && typeof s.url === 'string' && s.url);
+      const stations = cascade.radioStations(config, device);
       // What the player itself offers — a Wall Display's radio favourites, a
       // receiver's presets — read through HA's browse tree on the first tap of
       // the dropdown (never eagerly: 37 players × a library each is a storm),
