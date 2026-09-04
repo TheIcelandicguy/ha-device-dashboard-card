@@ -68,7 +68,7 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
       const swAnimIcon = sw ? ctx.renderEntityAnim(sw.entityId, isOn, device.device_id) : html``;
       // The on/off control leads the row, in front of the name (cover keeps its
       // three-button cluster on the right — it isn't a single on/off button).
-      const primaryToggle = sw ? html`
+      const primaryToggle = sw && ctx.showEl('toggle') ? html`
         <button class="tog ${isOn ? 'on' : 'off'}"
           @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>
           ${isOn ? 'ON' : 'OFF'}

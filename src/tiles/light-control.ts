@@ -24,10 +24,11 @@ export function renderLightControlTile(ctx: TileCtx): TemplateResult {
           <div class="ts-light-name"><span class="dot ${online ? 'online' : 'offline'}"></span>${device.name}</div>
         </div>
         <div style="display:flex;justify-content:center;align-items:center;flex:1;padding:16px 0">
-          <button class="tog ${isOn ? 'on' : 'off'}" style="font-size:1.1em;padding:10px 28px;border-radius:24px"
-            @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>
-            ${isOn ? 'ON' : 'OFF'}
-          </button>
+          ${ctx.showEl('toggle') ? html`
+            <button class="tog ${isOn ? 'on' : 'off'}" style="font-size:1.1em;padding:10px 28px;border-radius:24px"
+              @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>
+              ${isOn ? 'ON' : 'OFF'}
+            </button>` : nothing}
         </div>
         ${s.power != null ? html`<div style="font-size:.72em;color:var(--sc-text-muted);text-align:center">${formatPower(s.power)}</div>` : nothing}
       </div>`;
@@ -96,7 +97,9 @@ export function renderLightControlTile(ctx: TileCtx): TemplateResult {
     <div class="ts-light" style="--ts-accent:${accent}" @click=${(e: Event) => e.stopPropagation()}>
       <div class="ts-light-top">
         <div class="ts-light-name"><span class="dot ${online ? 'online' : 'offline'}"></span>${device.name}</div>
-        <button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>
+        ${ctx.showEl('toggle')
+          ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>`
+          : nothing}
       </div>
       ${hasColor && ctx.showEl('color_wheel') ? html`
         <div class="ts-light-wheel-wrap">

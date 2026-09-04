@@ -100,6 +100,9 @@ export class HADeviceDashboard extends LitElement {
   /** Which header drill-down is open: 'on'/'off'/'unavailable' (cloud chips) or 'm:<metric>' (stat chips). */
   @state() private _cloudDetailOpen: string | null = null;
   @state() private _detailDevice: string | null = null;
+  /** A turn-off waiting on the `confirm_off` prompt: the entity to switch and
+   *  the device name to put in the question. Null when nothing is pending. */
+  @state() private _confirmOff: { entityId: string; name: string } | null = null;
   @state() private _detailHistoryRange: DetailHistoryRange = 24;
   @state() private _activeViewId: string | null = null;
   /** One-time notice: delegatable devices exist but native controls are off. */
@@ -1364,10 +1367,57 @@ export class HADeviceDashboard extends LitElement {
 
   // ── Actions ───────────────────────────────────────────────────────────────
 
-  private async _toggle(entityId: string, isOn: boolean, e: Event) {
+  /**
+   * The one place the card switches something on or off — every tile style, the
+   * per-channel relay rows and the detail sheet all reach it through
+   * `TileCtx.toggle`. `confirm_off` is therefore checked here and nowhere else:
+   * a new on/off button cannot forget the guard, and the guard cannot disagree
+   * with itself between two surfaces.
+   *
+   * `isOn` is the state the button was drawn in, so `isOn === true` means this
+   * tap turns the device OFF — the only direction worth confirming.
+   */
+  private async _toggle(entityId: string, isOn: boolean, e: Event, device?: HADevice) {
     e.stopPropagation();
+    if (isOn && device && this._config.device_styles?.[device.device_id]?.confirm_off) {
+      this._confirmOff = { entityId, name: device.name };
+      return;
+    }
+    await this._applyToggle(entityId, isOn);
+  }
+
+  private async _applyToggle(entityId: string, isOn: boolean) {
     const domain = entityId.split('.')[0];
     await this.hass.callService(domain, isOn ? 'turn_off' : 'turn_on', { entity_id: entityId });
+  }
+
+  /**
+   * The `confirm_off` prompt. A deliberate two-button dialog rather than an
+   * arm-then-tap on the button itself: the whole point is that a stray tap must
+   * not switch the load, and a double tap defeats arming. Cancel is the wide,
+   * default-looking button; the destructive one is the narrower red one, so the
+   * reflex press is the safe one.
+   */
+  private _renderConfirmOff(): TemplateResult | typeof nothing {
+    const pending = this._confirmOff;
+    if (!pending) return nothing;
+    const close = () => { this._confirmOff = null; };
+    return html`
+      <div class="cf-backdrop" @click=${close}>
+        <div class="cf-box" role="alertdialog" aria-modal="true" aria-label="Confirm turn off"
+          @click=${(e: Event) => e.stopPropagation()}>
+          <div class="cf-title">Turn off ${pending.name}?</div>
+          <div class="cf-sub">This device is set to ask before switching off.</div>
+          <div class="cf-actions">
+            <button class="cf-cancel" @click=${close}>Cancel</button>
+            <button class="cf-go" @click=${async () => {
+              const p = pending;
+              this._confirmOff = null;
+              await this._applyToggle(p.entityId, true);
+            }}>Turn off</button>
+          </div>
+        </div>
+      </div>`;
   }
 
   private async _setBrightness(entityId: string, pct: number) {
@@ -2958,7 +3008,7 @@ export class HADeviceDashboard extends LitElement {
       setPresetMode: (id, p) => this._setPresetMode(id, p),
       coverAction: (id, a, e) => this._coverAction(id, a, e),
       valveAction: (id, a, e) => this._valveAction(id, a, e),
-      toggle: (id, on, e) => this._toggle(id, on, e),
+      toggle: (id, on, e) => this._toggle(id, on, e, device),
       pressButton: (id, e) => this._pressButton(id, e),
       setNumberValue: (id, v) => this._setNumberValue(id, v),
       selectOption: (id, opt) => this._selectOption(id, opt),
@@ -3667,6 +3717,7 @@ export class HADeviceDashboard extends LitElement {
     const dashboard = html`
       <ha-card class=${(this._config.effects ?? false) ? '' : 'no-fx'} style=${styleMap(cardInlineStyles)} @click=${() => { if (this._cloudDetailOpen) this._cloudDetailOpen = null; }}>
         ${detailSheet}
+        ${this._renderConfirmOff()}
         <div class="dash-header">
           <div class="dash-header-bg"></div>
           ${this._config.header_show_title !== false ? html`

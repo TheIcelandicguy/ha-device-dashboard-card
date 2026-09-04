@@ -137,6 +137,26 @@ A new card discovers your Shelly and BTHome devices and groups them by room. Eve
 3. Set the look once under ◆ Defaults (theme, columns, tile size).
 4. Use ◆ Defaults → Reset look if you want the factory appearance back without losing rooms, devices or actions.
 
+### Guard a device you must not switch off by accident
+
+A freezer, a server, the router, the heating — a mis-tap costs you something real. Turning the device ON is never confirmed, so the guard only slows you down in the direction that hurts.
+
+It is set per device on purpose. Two identical plugs in the same room can disagree, which is what you want: arming a whole type or room would put the prompt in front of you constantly and train you to tap straight through it.
+
+1. Design → pick the device in the scope picker.
+2. Under "Safety — this device only", turn on "Ask before turning off".
+3. Tapping OFF now opens a prompt. Cancel is the wide button; the red "Turn off" is the narrow one.
+4. It covers every on/off the card draws for that device, including the per-channel relay rows and the detail sheet. It cannot cover a control drawn by Home Assistant itself under Native controls.
+
+### Hide the on/off button on a tile
+
+For a device you only want to watch, or one whose switching belongs somewhere else.
+
+1. Design → pick the scope (device, type, room, view or Global).
+2. Open the tile style block and untick "On/off button".
+3. Available on the default, Power and Light tile styles — the three that draw a primary on/off button.
+4. The device can still be switched from its detail sheet; this hides the button on the tile.
+
 ### Quieten a noisy universal dashboard
 
 Universal mode surfaces everything, including things that are not really devices. Two lists trim it.

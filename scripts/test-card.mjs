@@ -669,6 +669,21 @@ try {
     ds.ALL_DESIGN_KEYS.includes('theme') && ds.ALL_DESIGN_KEYS.includes('columns')
     && ds.ALL_DESIGN_KEYS.includes('style'));
 
+  // confirm_off is device-only: it must count towards the device badge, the
+  // Changes panel and Reset all, and must NOT be offered at any other scope.
+  ok('confirm_off is a device-only key', ds.DEVICE_ONLY_KEYS.includes('confirm_off'));
+  ok('a device scope can hold confirm_off',
+    ds.keysForScope({ kind: 'device', id: 'a' }).includes('confirm_off'));
+  ok('a room scope cannot',
+    !ds.keysForScope({ kind: 'room', name: 'Bedroom' }).includes('confirm_off'));
+  eq('confirm_off shows up in the Changes panel',
+    ds.collectOverrides({ device_styles: { a: { confirm_off: true } } }, pal)
+      .map(o => ds.scopeKey(o.scope) + '/' + o.key),
+    ['device:a/confirm_off']);
+  eq('and in the "n set here" badge',
+    ds.overrideCount({ device_styles: { a: { confirm_off: true } } },
+      { kind: 'device', id: 'a' }, ds.keysForScope({ kind: 'device', id: 'a' })), 1);
+
   console.log('\ncascade — elements');
   eq('unset elements are shown', cas.elementVisible(cin({}), 'toggle'), true);
   eq('a preset can hide one', cas.elementVisible(cin({
@@ -688,6 +703,17 @@ try {
     cas.elementVisible(cin({ tile_style: 'power-monitor' }), 'header_chips'), false);
   eq('elementDefault reads the table', cas.elementDefault('power-monitor', 'header_chips'), false);
   eq('elementDefault falls back to shown', cas.elementDefault('power-monitor', 'toggle'), true);
+  // Every style that draws a primary on/off button must offer the element that
+  // hides it, or the button is the one control the editor cannot reach.
+  for (const style of ['default', 'power-monitor', 'light-control']) {
+    ok(`${style} can hide its on/off button`,
+      (h.STYLE_ELEMENTS[style] ?? []).some(e => e.id === 'toggle'));
+    eq(`${style}'s on/off button is shown by default`,
+      cas.elementDefault(style, 'toggle'), true);
+  }
+  eq('and it can be hidden per device', cas.elementVisible(cin({
+    tile_style: 'light-control', device_styles: { dimmer: { elements: { toggle: false } } },
+  }), 'toggle'), false);
   eq('a layer can still opt in', cas.elementVisible(cin({
     tile_style: 'power-monitor',
     device_styles: { dimmer: { elements: { header_chips: true } } },

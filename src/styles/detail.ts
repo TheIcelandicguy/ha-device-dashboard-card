@@ -30,6 +30,51 @@ export const detailCss = css`
       to   { opacity: 1; transform: translateY(0) }
     }
 
+    /* ── confirm_off prompt (.cf-*) ──────────────────────────────────────
+         Sits above the detail sheet: a turn-off can be started from inside it,
+         and the question must not open behind the thing that asked. */
+    .cf-backdrop {
+      position: fixed; inset: 0; background: rgba(0, 0, 0, .6);
+      backdrop-filter: blur(6px);
+      z-index: 10000;
+      display: flex; align-items: center; justify-content: center;
+      animation: ds-fade-in .12s ease-out;
+    }
+    .cf-box {
+      width: min(340px, 88vw);
+      background: var(--sc-card-bg, #1c1c1e);
+      border: 1px solid var(--sc-tile-border);
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, .55);
+      padding: 20px 18px 16px;
+      text-align: center;
+      animation: ds-slide-up .18s ease-out;
+    }
+    .cf-title {
+      font-size: 1.05em; font-weight: 700; color: var(--sc-text-primary);
+      margin-bottom: 6px; overflow-wrap: anywhere;
+    }
+    .cf-sub { font-size: .78em; color: var(--sc-text-muted); margin-bottom: 16px; }
+    .cf-actions { display: flex; gap: 8px; }
+    .cf-actions button {
+      padding: 10px 14px; border-radius: 10px; cursor: pointer;
+      font-size: .86em; font-weight: 700; transition: all .15s;
+    }
+    /* Cancel is the wide one and the destructive button the narrow one, so the
+       reflex press on a prompt you did not expect is the harmless one. */
+    .cf-cancel {
+      flex: 2;
+      background: rgba(255, 255, 255, .08); border: 1px solid var(--sc-tile-border);
+      color: var(--sc-text-primary);
+    }
+    .cf-cancel:hover { background: rgba(255, 255, 255, .16); }
+    .cf-go {
+      flex: 1;
+      background: rgba(239, 68, 68, .18); border: 1px solid rgba(239, 68, 68, .4);
+      color: #fca5a5;
+    }
+    .cf-go:hover { background: rgba(239, 68, 68, .3); color: #fff; }
+
     .ds-header {
       position: relative;
       padding: 18px 18px 12px;

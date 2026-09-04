@@ -152,6 +152,31 @@ export const HELP_RECIPES: HelpTopic[] = [
     ],
   },
   {
+    id: 'confirm-off',
+    title: 'Guard a device you must not switch off by accident',
+    body: [
+      'A freezer, a server, the router, the heating — a mis-tap costs you something real. Turning the device ON is never confirmed, so the guard only slows you down in the direction that hurts.',
+      'It is set per device on purpose. Two identical plugs in the same room can disagree, which is what you want: arming a whole type or room would put the prompt in front of you constantly and train you to tap straight through it.',
+    ],
+    steps: [
+      'Design → pick the device in the scope picker.',
+      'Under "Safety — this device only", turn on "Ask before turning off".',
+      'Tapping OFF now opens a prompt. Cancel is the wide button; the red "Turn off" is the narrow one.',
+      'It covers every on/off the card draws for that device, including the per-channel relay rows and the detail sheet. It cannot cover a control drawn by Home Assistant itself under Native controls.',
+    ],
+  },
+  {
+    id: 'hide-onoff',
+    title: 'Hide the on/off button on a tile',
+    body: ['For a device you only want to watch, or one whose switching belongs somewhere else.'],
+    steps: [
+      'Design → pick the scope (device, type, room, view or Global).',
+      'Open the tile style block and untick "On/off button".',
+      'Available on the default, Power and Light tile styles — the three that draw a primary on/off button.',
+      'The device can still be switched from its detail sheet; this hides the button on the tile.',
+    ],
+  },
+  {
     id: 'quiet',
     title: 'Quieten a noisy universal dashboard',
     body: ['Universal mode surfaces everything, including things that are not really devices. Two lists trim it.'],

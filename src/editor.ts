@@ -2081,6 +2081,7 @@ export class HADeviceDashboardEditor extends LitElement {
     energy_period: EnergyPeriod | undefined;
     energy_entity: string | undefined;
     input_actions: Record<string, InputActionConfig> | undefined;
+    confirm_off: boolean | undefined;
   }>) {
     const current = this._config.device_styles?.[deviceId] ?? {};
     const next: Record<string, unknown> = { ...current, ...patch };
@@ -2103,6 +2104,7 @@ export class HADeviceDashboardEditor extends LitElement {
     if (next['sensors'] === undefined) delete next['sensors'];
     if (next['show_graphs'] === undefined) delete next['show_graphs'];
     if (next['elements'] === undefined) delete next['elements'];
+    if (next['confirm_off'] === undefined) delete next['confirm_off'];
     const allStyles = { ...(this._config.device_styles ?? {}), [deviceId]: next };
     if (!Object.keys(next).length) delete allStyles[deviceId];
     this._set('device_styles', Object.keys(allStyles).length ? allStyles : undefined);
@@ -3244,6 +3246,7 @@ export class HADeviceDashboardEditor extends LitElement {
         ${this._designFamily('tile', 'Tile — device → type → room → view → card', tileBody)}
         ${this._designFamily('container', 'Container — room → view → card', containerBody)}
         ${this._designFamily('chrome', 'Card chrome — view → card', chromeBody)}
+        ${sc.kind === 'device' ? this._renderSafetyBlock(sc.id) : nothing}
         ${sc.kind === 'device' ? this._renderTilePhotoBlock(sc.id) : nothing}
         ${sc.kind === 'device' ? this._renderAnimIconsBlock(sc.id) : nothing}
         ${sc.kind === 'device' ? this._renderExtraSensorsBlock(sc.id) : nothing}
@@ -3468,6 +3471,33 @@ export class HADeviceDashboardEditor extends LitElement {
   /** The device's own backdrop photo (`device_styles[id].bg_image`). A key with
    *  no ladder above it, orphaned when the Device styling panel was retired:
    *  Shelly Cloud import could still write it, the editor could not. */
+  /** Ask before switching this device off (`device_styles[id].confirm_off`).
+   *  Device-only on purpose — see the doc comment on the type. */
+  private _renderSafetyBlock(deviceId: string): TemplateResult {
+    const st = this._config.device_styles?.[deviceId] ?? {};
+    const dev = this._allDevices().find(d => d.device_id === deviceId);
+    const delegated = this._config.delegate_controls
+      && dev && !['relay', 'plug', 'dimmer', 'rgb'].includes(this._deviceProfile(dev));
+    return html`
+      <div class="dsn-family">
+        <div class="dsn-family-hdr">Safety — this device only</div>
+        <div class="tog-row" style="border:none;padding:0 0 6px">
+          <div class="tog-lbl">Ask before turning off
+            <span class="field-note">a mis-tap on a freezer, a server or the router is expensive; turning on is never confirmed</span></div>
+          <label class="sw"><input type="checkbox" .checked=${st.confirm_off === true}
+            @change=${(e: Event) => this._setDeviceStyle(deviceId, {
+              confirm_off: (e.target as HTMLInputElement).checked ? true : undefined,
+            })}>
+            <span class="sw-t"></span><span class="sw-b"></span></label>
+        </div>
+        ${st.confirm_off && delegated ? html`
+          <div class="dp-hint-inline">
+            Native controls are on for this device, and a control drawn by Home Assistant
+            switches it directly — the prompt only covers the card's own on/off buttons.
+          </div>` : nothing}
+      </div>`;
+  }
+
   private _renderTilePhotoBlock(deviceId: string): TemplateResult {
     const st = this._config.device_styles?.[deviceId] ?? {};
     return html`

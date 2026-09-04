@@ -361,6 +361,19 @@ export interface DeviceStyle {
   /** This device's own station list for the media block; unset = the card-wide
    *  `radio_stations`. */
   radio_stations?: RadioStation[];
+  /** Ask before switching this device OFF — for a load where a mis-tap is
+   *  expensive: a freezer, a server, the router, the heating. Turning ON is
+   *  never confirmed, so the guard costs nothing in the safe direction.
+   *
+   *  Device-only, with no ladder above it: it describes one piece of hardware,
+   *  not a look. Two plugs of the same profile in the same room can disagree
+   *  about it, which is the whole point — a type or room layer would arm every
+   *  sibling and train people to tap through the prompt.
+   *
+   *  Applies wherever the card switches this device off — every tile style, the
+   *  per-channel relay rows, and the detail sheet — because they all go through
+   *  one call. It cannot cover a native HA control drawn by `delegate_controls`. */
+  confirm_off?: boolean;
   tile_layout?: TileLayout; // per-device block order/visibility
   /** Override the auto-detected device profile (categorisation). undefined = auto. */
   profile?: DeviceProfile;

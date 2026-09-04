@@ -201,6 +201,7 @@ export const DEVICE_ONLY_KEYS: string[] = [
   'bg_image', 'bg_image_size',
   'tile_icon', 'tile_icon_off', 'tile_icon_speed', 'tile_icon_size', 'entity_animations',
   'extra_sensors', 'radio_stations', 'input_actions',
+  'confirm_off',
 ];
 
 export const ALL_DESIGN_KEYS: string[] = [

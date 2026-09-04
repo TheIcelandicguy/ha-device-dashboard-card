@@ -390,6 +390,13 @@ export function profileDefaultTileStyle(
  * row) where "shown by default" would change every existing tile.
  */
 export const STYLE_ELEMENTS: Partial<Record<TileStyle, Array<{ id: string; label: string; def?: boolean }>>> = {
+  // The adaptive tile is composed of blocks (tile_layout), so its parts are
+  // edited there — except the on/off button, which leads the name row and is
+  // not a block. Without this entry it was the one control on the tile that
+  // could not be hidden.
+  default: [
+    { id: 'toggle',       label: 'On/off button' },
+  ],
   'power-monitor': [
     { id: 'toggle',       label: 'On/off button' },
     // 'graph' is every graph on the tile: the variant's own power spark AND the
@@ -405,6 +412,7 @@ export const STYLE_ELEMENTS: Partial<Record<TileStyle, Array<{ id: string; label
   // them the way it does to the block tile — a dimmer on Light control gets the
   // same power/temperature rows it would get on the default tile.
   'light-control': [
+    { id: 'toggle',      label: 'On/off button' },
     { id: 'color_wheel', label: 'Colour wheel' },
     { id: 'brightness',  label: 'Brightness slider' },
     { id: 'color_temp',  label: 'Colour temperature' },

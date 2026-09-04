@@ -5,6 +5,31 @@ installs from them.
 
 ## Unreleased
 
+### Ask before turning a device off
+
+Some loads are expensive to switch off by accident — a freezer, a server, the
+router, the heating. `confirm_off` on a device opens a prompt before the card
+switches it off. Turning it **on** is never confirmed, so the guard costs
+nothing in the safe direction.
+
+Design → the device → **Safety — this device only** → *Ask before turning off*.
+
+It is device-only, with no type/room/view ladder. That is deliberate: two
+identical plugs in one room can disagree about it, and arming a whole type or
+room would put the prompt in front of you constantly and train you to tap
+through it. The check sits in the single call every on/off button already went
+through, so it covers every tile style, the per-channel relay rows and the
+detail sheet at once — a control drawn by Home Assistant under Native controls
+switches the device directly and is outside the card's reach, which the editor
+says when both are on.
+
+### The on/off button can be hidden on every style that draws one
+
+It was hideable on the Power style only. The default adaptive tile and the
+Light style drew it unconditionally, so on those it was the one control the
+editor could not reach. Both now carry the same `toggle` element, at every rung
+of the tile ladder.
+
 ### Graphs over a range longer than a day read the wrong day
 
 `graph_hours: 115` drew nothing while the same sensor's detail sheet — which
