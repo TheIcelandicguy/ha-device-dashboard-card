@@ -702,6 +702,15 @@ try {
     cas.chromeCards({ footer_cards: A }, undefined, 'footer_cards'), A);
   ok('both are chrome-family design keys',
     ds.DESIGN_KEYS.chrome.includes('header_cards') && ds.DESIGN_KEYS.chrome.includes('footer_cards'));
+
+  eq('embedded cards use HA\'s theme by default', cas.extraCardStyle({}, undefined), 'ha');
+  eq('the card can ask them to match it',
+    cas.extraCardStyle({ extra_card_style: 'match' }, undefined), 'match');
+  eq('a view overrides the card',
+    cas.extraCardStyle({ extra_card_style: 'match' }, view({ extra_card_style: 'ha' })), 'ha');
+  eq('and can opt in on its own',
+    cas.extraCardStyle({}, view({ extra_card_style: 'match' })), 'match');
+  ok('it is a chrome-family design key', ds.DESIGN_KEYS.chrome.includes('extra_card_style'));
   eq('a view override shows up in the Changes panel',
     ds.collectOverrides({ views: [view({ header_cards: B })] }, pal)
       .map(o => ds.scopeKey(o.scope) + '/' + o.key),

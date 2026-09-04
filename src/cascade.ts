@@ -32,7 +32,7 @@
 import type {
   HADeviceDashboardConfig, HADevice, DeviceProfile, TileStyle, TileLayout,
   ViewConfig, EnergyPeriod, CustomStyleDef, PowerMonitorVariant, ThemePreset, TileSize,
-  RadioStation, SortBy,
+  RadioStation, SortBy, ExtraCardStyle,
 } from './types';
 import type { LovelaceCardConfig } from 'custom-card-helpers';
 import { PROFILE_DEFAULT_BLOCKS, PROFILE_DEFAULT_SENSORS, profileDefaultTileStyle, STYLE_ELEMENTS } from './helpers';
@@ -237,6 +237,14 @@ export function chromeCards(
   where: 'header_cards' | 'footer_cards',
 ): LovelaceCardConfig[] | undefined {
   return view?.[where] ?? config[where];
+}
+
+/** How embedded cards are painted: view → card → Home Assistant's own theme. */
+export function extraCardStyle(
+  config: HADeviceDashboardConfig,
+  view: ViewConfig | undefined,
+): ExtraCardStyle {
+  return view?.extra_card_style ?? config.extra_card_style ?? 'ha';
 }
 
 /**

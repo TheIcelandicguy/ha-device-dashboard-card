@@ -5,6 +5,21 @@ installs from them.
 
 ## Unreleased
 
+### Embedded cards can be painted in the card's own look
+
+An embedded card always looked like a Home Assistant card dropped onto the
+dashboard — its own near-black background and square corners against your tiles.
+`extra_card_style: match` (Extra cards → **Look** → *Match this card*) gives it
+the card's tile background, border, radius, text colours, accent and font, so it
+sits in the dashboard instead of on top of it.
+
+Nothing is restyled card by card and no card-mod is involved: the palette is
+mapped onto the Home Assistant theme variables that every Lovelace card already
+reads, and custom properties inherit through shadow roots — so it reaches HACS
+cards too. A card that hard-codes its own colours keeps them, as it should.
+
+Default is `ha`, unchanged, and it is card chrome so a view can differ.
+
 ### Header and footer cards can differ per view
 
 They were card-wide only: with three views, the same header cards showed on all

@@ -3834,8 +3834,9 @@ export class HADeviceDashboard extends LitElement {
   private _renderExtraCards(cards?: LovelaceCardConfig[]): TemplateResult {
     if (!cards?.length) return html``;
     const preview = this.preview || this.hasAttribute('data-edit-preview');
+    const match = cascade.extraCardStyle(this._config, this._getActiveView() ?? undefined) === 'match';
     return html`
-      <div class="extra-cards">
+      <div class="extra-cards ${match ? 'xc-match' : ''}">
         ${cards.map(c => html`
           <hdd-card style=${styleMap(this._extraCardGrid(c))}
             .hass=${this.hass} .config=${c} .preview=${preview}></hdd-card>`)}

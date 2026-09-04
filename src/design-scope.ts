@@ -184,7 +184,7 @@ export const DESIGN_KEYS = {
     'sensors', 'show_graphs', 'elements', 'energy_period'],
   /** `tileGap` is AreaStyle's spelling of the same idea as `tile_gap`. */
   container: ['columns', 'tile_size', 'tileGap', 'tile_gap'],
-  chrome: ['style', 'header_cards', 'footer_cards'],
+  chrome: ['style', 'header_cards', 'footer_cards', 'extra_card_style'],
 } as const;
 
 /**

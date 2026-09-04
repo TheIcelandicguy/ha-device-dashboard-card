@@ -150,6 +150,7 @@ the machine-readable model that drives the editor defaults and the offline tools
 | `header_cards` | card[] | — | Lovelace cards rendered above the device grid |
 | `footer_cards` | card[] | — | Lovelace cards rendered below the device grid |
 | `area_cards` | map | — | Lovelace cards inside one room, keyed by area name |
+| `extra_card_style` | `ha` \| `match` | `ha` | Paint embedded cards in Home Assistant's theme, or in this card's palette. A view can override both the lists and this. |
 
 ### Layout
 

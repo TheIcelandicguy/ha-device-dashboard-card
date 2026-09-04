@@ -413,6 +413,10 @@ export interface DeviceStyle {
 /** A stream the media block can start with `media_player.play_media`. The
  *  Shelly integration exposes no station list for a Wall Display (its browse
  *  tree's "Radio stations" folder is empty), so the card keeps its own. */
+/** How an embedded Lovelace card is painted: Home Assistant's theme, or this
+ *  card's palette. See `extra_card_style`. */
+export type ExtraCardStyle = 'ha' | 'match';
+
 export interface RadioStation {
   name: string;
   /** Stream URL, e.g. https://…/fm957.mp3 — anything the player accepts. */
@@ -598,6 +602,8 @@ export interface ViewConfig {
    *  views could carry these behaves exactly as it did. */
   header_cards?: LovelaceCardConfig[];
   footer_cards?: LovelaceCardConfig[];
+  /** How this view's embedded cards are painted. Card chrome, view → card. */
+  extra_card_style?: ExtraCardStyle;
   /** Tile block order/visibility while this view is showing. */
   tile_layout?: TileLayout;
   /** Sensor chips for this view. An explicit (possibly empty) list is
@@ -668,6 +674,20 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   /** Lovelace cards to render inside a specific room's section, above its device
    *  tiles. Keyed by area name — the "mixed in among the tiles" placement. */
   area_cards?: Record<string, LovelaceCardConfig[]>;
+  /**
+   * How embedded cards (`header_cards` / `footer_cards` / `area_cards`) are
+   * painted.
+   *
+   * - `'ha'` (default) — Home Assistant's own theme, exactly as the same card
+   *   would look on a normal dashboard. Unchanged behaviour.
+   * - `'match'` — this card's palette: tile background, border, radius, text and
+   *   accent, so an embedded card sits *in* the dashboard rather than on top of
+   *   it. Nothing is restyled by hand; the card's palette is mapped onto the
+   *   Home Assistant theme variables every Lovelace card already reads, and
+   *   custom properties inherit through shadow roots, so it reaches HACS cards
+   *   too. A card that hard-codes its own colours still wins — as it should.
+   */
+  extra_card_style?: ExtraCardStyle;
   /** Area filter. undefined = all; [] = none; ['Kitchen'] = specific */
   areas?: string[];
   /** Device IDs to hide */

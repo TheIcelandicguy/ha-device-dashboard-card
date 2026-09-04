@@ -4,7 +4,7 @@ import { ref } from 'lit/directives/ref.js';
 import { keyed } from 'lit/directives/keyed.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent, LovelaceCardConfig } from 'custom-card-helpers';
-import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout, EnergyPeriod, InputActionConfig, SortBy } from './types';
+import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout, EnergyPeriod, InputActionConfig, SortBy, ExtraCardStyle } from './types';
 import { getAllDevices, GRAPH_SENSOR_DEFS, GAUGE_RING_DEFS, gaugeStops, colorAt, hexToHsv, hsvToHex, parseCssColor, withAlpha, deviceHasControllable, getDeviceProfile,HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels,
   CONFIG_KEYS, LOVELACE_KEYS } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, detectTheme, paletteFor, type ThemePalette } from './themes';
@@ -1938,6 +1938,21 @@ export class HADeviceDashboardEditor extends LitElement {
               ${p === 'header' ? 'Header (top)' : p === 'footer' ? 'Footer (bottom)' : 'Room'}</span>`)}
         </div>
         <div class="dp-hint-inline">Header/footer cards frame the whole dashboard; room cards sit inside one room, above its tiles.</div>
+      </div>
+      <div class="field">
+        <div class="field-lbl">Look</div>
+        ${this._pills<ExtraCardStyle>(
+          this._config.extra_card_style ?? 'ha',
+          [['Home Assistant theme', 'ha'], ['Match this card', 'match']],
+          v => this._set('extra_card_style', v === 'ha' ? undefined : v),
+        )}
+        <div class="dp-hint-inline">
+          ${(this._config.extra_card_style ?? 'ha') === 'ha'
+            ? 'Embedded cards look the way they would on a normal dashboard.'
+            : 'Embedded cards take this card\'s background, border, radius, text and accent, so they sit '
+              + 'in the dashboard rather than on top of it. A card that hard-codes its own colours keeps them.'}
+          Applies to header, footer and room cards alike.
+        </div>
       </div>
       ${this._xcPlacement === 'room' ? html`
         <div class="field">

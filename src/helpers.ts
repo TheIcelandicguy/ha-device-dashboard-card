@@ -1611,6 +1611,7 @@ export const CONFIG_KEYS: readonly string[] = [
   'show_attention', 'attention_battery', 'show_firmware_summary', 'include_beta_updates',
   'style', 'area_styles', 'device_styles', 'profile_styles', 'style_presets', 'custom_styles',
   'energy_period', 'graph_sensors', 'graph_hours', 'graph_style', 'graph_line_color', 'radio_stations',
+  'extra_card_style',
   'graph_sensor_colors', 'sensors'
 ];
 

@@ -1262,6 +1262,34 @@ export const mainCss = css`
     .extra-cards > * { grid-column:span 12; min-width:0; }
     .extra-cards:empty { display:none; }
 
+    /* extra_card_style: 'match' — paint embedded cards in this card's palette.
+       Nothing is restyled by hand: the palette is mapped onto the Home Assistant
+       theme variables every Lovelace card already reads, and custom properties
+       inherit through shadow roots, so it reaches HACS cards too without
+       card-mod. A card that hard-codes its own colours still wins, as it should.
+       Tile background is usually a translucent white over the card, which is
+       right here too — an embedded card should sit in the dashboard, not on it. */
+    .extra-cards.xc-match {
+      --ha-card-background:      var(--sc-tile-bg);
+      --card-background-color:   var(--sc-tile-bg);
+      --ha-card-border-radius:   var(--tile-radius);
+      --ha-card-border-color:    var(--sc-tile-border);
+      --ha-card-border-width:    var(--sc-tile-border-width);
+      --ha-card-box-shadow:      var(--sc-tile-shadow);
+      --primary-text-color:      var(--sc-text-primary);
+      --secondary-text-color:    var(--sc-text-secondary);
+      --disabled-text-color:     var(--sc-text-muted);
+      --divider-color:           var(--sc-tile-border);
+      --primary-color:           var(--sc-accent);
+      --accent-color:            var(--sc-accent);
+      --state-icon-color:        var(--sc-accent);
+      --state-active-color:      var(--sc-accent);
+      --paper-item-icon-color:   var(--sc-text-secondary);
+      --ha-card-header-color:    var(--sc-text-primary);
+      --mdc-theme-primary:       var(--sc-accent);
+      font-family: var(--sc-font-family, inherit);
+    }
+
     /* One-time notice: native controls available but off by default */
     /* Needs attention — fleet summary above the rooms. */
     .attention { margin:0 0 10px; border:1px solid color-mix(in srgb,var(--sc-offline-color) 30%,transparent);
