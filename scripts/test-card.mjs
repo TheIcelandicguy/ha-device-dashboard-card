@@ -700,8 +700,10 @@ try {
     cas.chromeCards({ header_cards: A, footer_cards: B }, view({ header_cards: B }), 'footer_cards'), B);
   eq('with no active view the card-wide list stands',
     cas.chromeCards({ footer_cards: A }, undefined, 'footer_cards'), A);
-  ok('both are chrome-family design keys',
-    ds.DESIGN_KEYS.chrome.includes('header_cards') && ds.DESIGN_KEYS.chrome.includes('footer_cards'));
+  // They cascade like chrome but they are not a *look*: they hold cards the user
+  // authored. As design keys, the Changes panel's "Reset all" deleted them.
+  ok('the card lists are not design keys',
+    !ds.DESIGN_KEYS.chrome.includes('header_cards') && !ds.DESIGN_KEYS.chrome.includes('footer_cards'));
 
   eq('embedded cards use HA\'s theme by default', cas.extraCardStyle({}, undefined), 'ha');
   eq('the card can ask them to match it',
@@ -719,10 +721,15 @@ try {
     cas.areaCardPlacement({ area_card_placement: 'grid' }, view({ area_card_placement: 'above' })), 'above');
   ok('placement is a chrome-family design key',
     ds.DESIGN_KEYS.chrome.includes('area_card_placement'));
-  eq('a view override shows up in the Changes panel',
-    ds.collectOverrides({ views: [view({ header_cards: B })] }, pal)
+  eq('how they are painted shows up in the Changes panel',
+    ds.collectOverrides({ views: [view({ extra_card_style: 'match' })] }, pal)
       .map(o => ds.scopeKey(o.scope) + '/' + o.key),
-    ['view:v/header_cards']);
+    ['view:v/extra_card_style']);
+  // "Reset all" walks collectOverrides and clears every key it returns, so a
+  // list appearing here is a list about to be deleted.
+  eq('the cards themselves never do', ds.collectOverrides({
+    header_cards: A, views: [view({ header_cards: B, footer_cards: A })],
+  }, pal).length, 0);
 
   console.log('\ncascade — elements');
   eq('unset elements are shown', cas.elementVisible(cin({}), 'toggle'), true);

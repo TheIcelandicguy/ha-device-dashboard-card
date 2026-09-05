@@ -1717,15 +1717,29 @@ export class HADeviceDashboardEditor extends LitElement {
     return this._xcPlacement === 'header' ? 'header_cards' : 'footer_cards';
   }
 
+  /**
+   * The selected view, dropped when it no longer exists. A view can be deleted
+   * while `_xcView` still names it: the `<select>` then falls back to "Every
+   * view" while every read and write went on targeting the dead id, so Add,
+   * Save, Delete and reorder in this panel all silently did nothing. Same rule
+   * as `parseScopeKey` — a persisted selection outlives what it names, so it is
+   * validated at every use rather than trusted.
+   */
+  private _xcViewId(): string {
+    if (!this._xcView) return '';
+    return (this._config.views ?? []).some(v => v.id === this._xcView) ? this._xcView : '';
+  }
+
   private _xcArray(): LovelaceCardConfig[] {
     const c = this._config;
     if (this._xcPlacement === 'room') return (c.area_cards?.[this._xcRoom]) ?? [];
     const key = this._xcKey();
-    if (this._xcView) {
+    const viewId = this._xcViewId();
+    if (viewId) {
       // A view with no override of its own shows the card-wide list, because
       // that is what actually renders there. Returning an empty list instead
       // said "no cards here" under a hint saying the opposite.
-      const v = (this._config.views ?? []).find(x => x.id === this._xcView);
+      const v = (this._config.views ?? []).find(x => x.id === viewId);
       return v?.[key] ?? c[key] ?? [];
     }
     return c[key] ?? [];
@@ -1739,11 +1753,12 @@ export class HADeviceDashboardEditor extends LitElement {
       return;
     }
     const key = this._xcKey();
-    if (this._xcView) {
+    const viewId = this._xcViewId();
+    if (viewId) {
       // An empty list on a view is a real value — "none on this view" — so it is
       // kept rather than deleted, which is what would make it inherit again.
       // "Use the card-wide list" is the separate Clear override button.
-      this._updateView(this._xcView, { [key]: arr } as Partial<ViewConfig>);
+      this._updateView(viewId, { [key]: arr } as Partial<ViewConfig>);
       return;
     }
     this._set(key, arr.length ? arr : undefined);
@@ -1752,8 +1767,9 @@ export class HADeviceDashboardEditor extends LitElement {
   /** Whether this view overrides the card-wide list at all (as opposed to
    *  holding an empty override, which is a different thing). */
   private _xcViewOverrides(): boolean {
-    if (!this._xcView || this._xcPlacement === 'room') return false;
-    const v = (this._config.views ?? []).find(x => x.id === this._xcView);
+    const viewId = this._xcViewId();
+    if (!viewId || this._xcPlacement === 'room') return false;
+    const v = (this._config.views ?? []).find(x => x.id === viewId);
     return v ? v[this._xcKey()] !== undefined : false;
   }
 
@@ -1875,6 +1891,10 @@ export class HADeviceDashboardEditor extends LitElement {
     if (!C._cardTypeProbe) {
       C._cardTypeProbe = (async () => {
         const seen = (t: string) => !!customElements.get(`hui-${t}-card`);
+        const found = () => CANDIDATE_CARD_TYPES.filter(seen);
+        // Whether the imports were given long enough to finish. Only a settled
+        // probe is worth caching for the page's lifetime.
+        let settled = false;
         try {
           const loader = (window as unknown as { loadCardHelpers?: () => Promise<{ createCardElement: (c: unknown) => unknown }> }).loadCardHelpers;
           const helpers = loader ? await loader() : null;
@@ -1884,16 +1904,35 @@ export class HADeviceDashboardEditor extends LitElement {
               if (seen(t)) continue;
               try { helpers.createCardElement({ type: t }); } catch { /* not a type here */ }
             }
-            await new Promise(r => setTimeout(r, 700));   // let the imports land
+            // Wait for the imports to land. A fixed 700ms pause had to guess,
+            // and on a slow connection it guessed wrong: the partial result was
+            // then cached for the page's lifetime, so real card types went
+            // missing from the dropdown with no way to retry. Poll instead and
+            // stop as soon as the count holds still, which on a warm load is
+            // sooner than the old fixed wait.
+            let stable = 0, prev = -1;
+            for (let i = 0; i < 20 && stable < 2; i++) {
+              await new Promise(r => setTimeout(r, 150));
+              const n = found().length;
+              stable = n === prev ? stable + 1 : 0;
+              prev = n;
+            }
+            settled = stable >= 2;
           }
-        } catch { /* fall through and keep whatever registered */ }
-        const found = CANDIDATE_CARD_TYPES.filter(seen);
-        // A probe that found nothing means the mechanism failed, not that HA has
-        // no cards — keep the unverified list rather than emptying the dropdown.
-        C._realCardTypes = found.length ? found : null;
+        } catch { /* fall through: an unsettled probe is not cached */ }
+        const list = found();
+        // A probe that found nothing, or that ran out of patience while types
+        // were still arriving, means the mechanism failed — not that HA has no
+        // cards. Keep the unverified candidate list (a superset, so nothing is
+        // hidden) and let the next open try again.
+        C._realCardTypes = settled && list.length ? list : null;
+        if (!C._realCardTypes) C._cardTypeProbe = null;
       })();
     }
-    await C._cardTypeProbe;
+    // Held in a local: an unsettled probe clears the static as it finishes, and
+    // awaiting the field would then await null and return before it was done.
+    const probe = C._cardTypeProbe;
+    await probe;
     this.requestUpdate();
   }
 
@@ -2047,8 +2086,9 @@ export class HADeviceDashboardEditor extends LitElement {
   private _renderXcPreview(): TemplateResult {
     const cfg = this._xcPreview;
     const type = cfg && typeof cfg.type === 'string' ? cfg.type : '';
-    const view = this._xcView
-      ? (this._config.views ?? []).find(v => v.id === this._xcView)
+    const viewId = this._xcViewId();
+    const view = viewId
+      ? (this._config.views ?? []).find(v => v.id === viewId)
       : undefined;
     const match = extraCardStyle(this._config, view) === 'match';
     return html`
@@ -2139,7 +2179,12 @@ export class HADeviceDashboardEditor extends LitElement {
    *  loses an edit. ha-yaml-editor only reads defaultValue on mount, hence the
    *  key bump. */
   private _setXcMode(mode: 'form' | 'yaml'): void {
-    if (this._xcMode === mode) return;
+    // The pills read 'yaml' whenever there is no form element, whatever _xcMode
+    // holds — so "Form" is clickable while _xcMode is already 'form'. Bailing on
+    // an equal mode made that click do nothing, and a card whose type had been
+    // rewritten in YAML to one that *does* ship an editor stayed stuck on "no
+    // visual editor" with no way back.
+    if (this._xcMode === mode && !(mode === 'form' && !this._xcFormEl)) return;
     const cur = (this._xcLatest ?? this._xcDraft) as Record<string, unknown> | null;
     this._xcMode = mode;
     if (mode === 'yaml') {
@@ -2171,6 +2216,10 @@ export class HADeviceDashboardEditor extends LitElement {
     // HA's dialog, which reads it as an edit to OUR card and replaces this
     // editor with its own.
     const yamlAvail = !!customElements.get('ha-yaml-editor');
+    // No type yet (a fresh "+ Add card") is not the same as a type whose card
+    // ships no editor: there is nothing to load, so the panel must not sit
+    // there claiming to be loading one.
+    const xcDraftType = ((this._xcLatest ?? this._xcDraft) as Record<string, unknown> | null)?.type;
     const body = html`
       <div class="field">
         <div class="field-lbl">Placement</div>
@@ -2222,20 +2271,20 @@ export class HADeviceDashboardEditor extends LitElement {
         <div class="field">
           <div class="field-lbl">Applies to</div>
           <select @change=${(e: Event) => { this._xcView = (e.target as HTMLSelectElement).value; this._xcCancel(); }}>
-            <option value="" ?selected=${!this._xcView}>Every view</option>
+            <option value="" ?selected=${!this._xcViewId()}>Every view</option>
             ${views.map(v => html`
-              <option value=${v.id} ?selected=${v.id === this._xcView}>
+              <option value=${v.id} ?selected=${v.id === this._xcViewId()}>
                 ${v.name || v.id}${v[this._xcKey()] !== undefined ? ' ✓' : ''}
               </option>`)}
           </select>
           <div class="dp-hint-inline">
-            ${!this._xcView
+            ${!this._xcViewId()
               ? 'The list every view falls back to.'
               : this._xcViewOverrides()
                 ? html`This view has its own list, replacing the card-wide one. An empty list here means no
                     ${this._xcPlacement} cards on this view.
                     <button class="xc-btn" style="margin-left:6px" @click=${() => {
-                      this._updateView(this._xcView, { [this._xcKey()]: undefined } as Partial<ViewConfig>);
+                      this._updateView(this._xcViewId(), { [this._xcKey()]: undefined } as Partial<ViewConfig>);
                       this._xcCancel();
                     }}>Use the card-wide list</button>`
                 : 'Showing the card-wide list, which is what renders here. Adding, editing or reordering '
@@ -2313,9 +2362,11 @@ export class HADeviceDashboardEditor extends LitElement {
           : nothing}
           ${this._xcMode === 'form' && !this._xcFormEl ? html`
             <div class="dp-hint-inline">
-              ${this._xcFormUnavailable
-                ? 'This card ships no visual editor, so YAML it is.'
-                : 'Loading the card\'s editor…'}
+              ${!xcDraftType
+                ? 'Pick a card type above, and its own editor appears here.'
+                : this._xcFormUnavailable
+                  ? 'This card ships no visual editor, so YAML it is.'
+                  : 'Loading the card\'s editor…'}
             </div>` : nothing}
           ${this._xcMode === 'yaml' || !this._xcFormEl ? html`
           ${keyed(this._xcDraftKey, yamlAvail ? html`
@@ -6038,10 +6089,17 @@ export class HADeviceDashboardEditor extends LitElement {
     this._set('theme', 'custom');
   }
 
-  /** Config keys that describe *content* (what's shown), preserved by "Reset look". */
+  /**
+   * Config keys that describe *content* (what's shown), preserved by "Reset look".
+   *
+   * The rule: anything that decides *which* devices appear belongs here, whatever
+   * else it does. `devices` was added late and missed it, so "Reset look" — which
+   * promises in as many words to keep rooms and devices — deleted the whitelist
+   * and a one-device card sprang back to the whole fleet.
+   */
   private static readonly _CONTENT_KEYS = [
     'type', 'title', 'mode', 'universal_scope', 'include_integrations', 'exclude_integrations',
-    'include_domains', 'exclude_domains', 'areas', 'hidden_devices', 'favorites',
+    'include_domains', 'exclude_domains', 'areas', 'devices', 'hidden_devices', 'favorites',
     'hidden_entities', 'show_offline', 'views', 'default_view', 'delegate_controls',
     // "What to show" content (the Chips & metrics section + Header/Graphs picks):
     // these describe content, not the visual look, so "Reset look" keeps them.

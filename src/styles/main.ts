@@ -1297,12 +1297,21 @@ export const mainCss = css`
        a config written before this stays full-width. */
     .extra-cards { display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:12px; padding:12px; }
     .extra-cards > * { grid-column:span 12; min-width:0; }
-    .extra-cards:empty { display:none; }
+    /* A strip whose cards have all hidden themselves is not :empty — the
+       children are still there, merely display:none — so it kept its 12px of
+       padding as a blank band. The hidden attribute is what hdd-card mirrors
+       off the wrapper when a visibility condition fails; :has covers the empty
+       case too, since "no unhidden child" is true of no children at all. */
+    .extra-cards:not(:has(> *:not([hidden]))) { display:none; }
 
     /* area_card_placement: 'grid' — a room's cards inside the device grid,
        each taking a tile's place. min-width:0 so a wide card cannot push the
-       grid past its column count. */
-    .device-grid > .grid-card { min-width:0; display:block; }
+       grid past its column count.
+       No display declaration here on purpose: a rule in the outer tree beats
+       the shadow tree's :host rules, so display:block here overrode hdd-card's own
+       :host([hidden]) { display:none } and a hidden room card went on holding
+       its tile slot. hdd-card's :host already makes it a block. */
+    .device-grid > .grid-card { min-width:0; }
 
 
     /* One-time notice: native controls available but off by default */

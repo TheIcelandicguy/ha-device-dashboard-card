@@ -184,7 +184,15 @@ export const DESIGN_KEYS = {
     'sensors', 'show_graphs', 'elements', 'energy_period'],
   /** `tileGap` is AreaStyle's spelling of the same idea as `tile_gap`. */
   container: ['columns', 'tile_size', 'tileGap', 'tile_gap'],
-  chrome: ['style', 'header_cards', 'footer_cards', 'extra_card_style', 'area_card_placement'],
+  /**
+   * `header_cards` / `footer_cards` are deliberately absent. They are chrome for
+   * the *cascade* — a view replaces the card-wide list — but they hold content
+   * the user authored, not a look. Listing them here fed them to
+   * `collectOverrides`, so the Changes panel's "Reset all" deleted a view's
+   * embedded cards outright. `extra_card_style` and `area_card_placement` — how
+   * those cards are painted and where they sit — are the look, and do belong.
+   */
+  chrome: ['style', 'extra_card_style', 'area_card_placement'],
 } as const;
 
 /**
