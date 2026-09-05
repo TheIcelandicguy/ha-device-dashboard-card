@@ -708,6 +708,18 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   area_card_placement?: AreaCardPlacement;
   /** Area filter. undefined = all; [] = none; ['Kitchen'] = specific */
   areas?: string[];
+  /**
+   * Card-wide device whitelist — the include that `hidden_devices` is the
+   * exclude of. undefined = every discovered device; a list = only those.
+   *
+   * This is what makes a one-device card possible without inventing a view for
+   * it: a `devices` whitelist existed only on a view filter, so showing a single
+   * device meant creating a view whose only job was to name it.
+   *
+   * Applied before `hidden_devices`, so a device named in both stays hidden — an
+   * exclusion is not something an inclusion should be able to override.
+   */
+  devices?: string[];
   /** Device IDs to hide */
   hidden_devices?: string[];
   /** Device IDs pinned to the Favourites section at the top of the card */
@@ -751,6 +763,10 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   tile_opacity?: number;               // 0-100, default 100 — tile background only
   card_opacity?: number;               // 0-100, default 100 — card background only
   header_opacity?: number;             // 0-100, default 100 — header background only
+  /** The card header as a whole. false removes the element; turning off the
+   *  title and the stats individually left an empty 32px bar with nowhere to go,
+   *  which is the wrong answer for a card showing one device. Default true. */
+  show_header?: boolean;
   header_show_title?: boolean;         // default true
   header_show_stats?: boolean;         // default true
   header_show_cloud?: boolean;         // default false (card tests === true)

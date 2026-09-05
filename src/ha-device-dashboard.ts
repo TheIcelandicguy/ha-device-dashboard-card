@@ -410,6 +410,14 @@ export class HADeviceDashboard extends LitElement {
       devices = devices.filter(d => this._isOnline(d));
     }
 
+    // devices — a card-wide whitelist, the include to hidden_devices' exclude.
+    // Applied BEFORE it, so naming a device here and hiding it there still hides
+    // it: an exclusion should never be overridden by an inclusion.
+    if (this._config.devices?.length) {
+      const only = new Set(this._config.devices);
+      devices = devices.filter(d => only.has(d.device_id));
+    }
+
     // hidden_devices
     if (this._config.hidden_devices?.length) {
       const hidden = new Set(this._config.hidden_devices);
@@ -3720,11 +3728,12 @@ export class HADeviceDashboard extends LitElement {
       <ha-card class=${(this._config.effects ?? false) ? '' : 'no-fx'} style=${styleMap(cardInlineStyles)} @click=${() => { if (this._cloudDetailOpen) this._cloudDetailOpen = null; }}>
         ${detailSheet}
         ${this._renderConfirmOff()}
+        ${this._config.show_header === false ? nothing : html`
         <div class="dash-header">
           <div class="dash-header-bg"></div>
           ${this._config.header_show_title !== false ? html`
             <span class="dash-title">${this._config.title ?? 'Shelly'}</span>` : nothing}
-          ${this._config.header_show_stats !== false ? this._renderHeaderChips(devices) : nothing}
+          ${this._config.header_show_stats !== false ? this._renderHeaderChips(viewDevices) : nothing}
           ${this._config.header_show_cloud === true ? html`
             <div class="cloud-chips">
               <span class="cloud-chip cloud-on ${this._cloudDetailOpen === 'on' ? 'active' : ''}"
@@ -3738,7 +3747,7 @@ export class HADeviceDashboard extends LitElement {
                   @click=${(e: Event) => { e.stopPropagation(); this._cloudDetailOpen = this._cloudDetailOpen === 'unavailable' ? null : 'unavailable'; }}>
                   ● ${cloudUnavail.length} unavailable</span>` : nothing}
             </div>` : nothing}
-        </div>
+        </div>`}
         ${this._cloudDetailOpen === 'on' ? html`
           <div class="cloud-detail" @click=${(e: Event) => e.stopPropagation()}>
             <div class="cloud-detail-hdr cloud-on">● Online — ${cloudOnline.length} devices</div>
@@ -3760,7 +3769,7 @@ export class HADeviceDashboard extends LitElement {
               ${cloudUnavail.map(s => html`<div class="cloud-item">${cloudName(s)}</div>`)}
             </div>
           </div>` : nothing}
-        ${this._renderHeaderDetail(devices)}
+        ${this._renderHeaderDetail(viewDevices)}
         ${this._renderViewTabs()}
         ${this._renderDelegateNotice(devices)}
         ${this._renderExtraCards(cascade.chromeCards(this._config, activeView ?? undefined, 'header_cards'))}

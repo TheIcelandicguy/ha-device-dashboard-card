@@ -142,6 +142,7 @@ the machine-readable model that drives the editor defaults and the offline tools
 |---|---|---|---|
 | `title` | string | `Shelly` | Header title text |
 | `areas` | string[] | all | Room allow-list. `[]` means none |
+| `devices` | string[] | — | Whitelist: show only these device IDs. Empty/unset = all. Applied before `hidden_devices`, which still wins. |
 | `hidden_devices` | string[] | — | Device IDs to hide |
 | `hidden_entities` | string[] | — | Entity IDs to drop from the detail sheet |
 | `favorites` | string[] | — | Device IDs pinned to the Favourites section |
@@ -176,6 +177,7 @@ the machine-readable model that drives the editor defaults and the offline tools
 
 | Option | Type | Default | Description |
 |---|---|---|---|
+| `show_header` | boolean | `true` | The header bar as a whole. `false` removes it; turning off title and stats alone leaves an empty strip. |
 | `header_show_title` | boolean | `true` | Show the title |
 | `header_show_stats` | boolean | `true` | Show the stats chip row |
 | `header_show_cloud` | boolean | `false` | Extra cloud-status row |

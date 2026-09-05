@@ -152,6 +152,19 @@ export const HELP_RECIPES: HelpTopic[] = [
     ],
   },
   {
+    id: 'one-device',
+    title: 'Use the card for a single device',
+    body: [
+      'The card is built for a fleet, but nothing stops it being one tile on an ordinary dashboard — a plug beside your other cards, with the same tile styles, graphs and confirmation you use everywhere else.',
+    ],
+    steps: [
+      'Rooms & devices → turn on Advanced → "Show only these devices" → tick the one you want.',
+      'Design → Global → Header → turn off "Show the header", unless you want its one-device summary.',
+      'Views → turn off "Group by room" so there is no room heading over a single tile, and set Columns to 1.',
+      'Everything else still applies: pick a tile style, turn on graphs, set "Ask before turning off" if it is a load you do not want to lose.',
+    ],
+  },
+  {
     id: 'confirm-off',
     title: 'Guard a device you must not switch off by accident',
     body: [

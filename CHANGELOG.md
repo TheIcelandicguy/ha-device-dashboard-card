@@ -5,6 +5,35 @@ installs from them.
 
 ## Unreleased
 
+### The header describes what you are looking at
+
+**Fix.** The header's stats were computed from every discovered device while
+Needs attention and the room grouping used the active view's. On a filtered
+view that meant the header reported the fleet — a Displays tab showing nine wall
+displays was headed "58/61 online, 3 offline, 608.1 W". It now reads 9/9.
+
+If you have filtered views, their header numbers will change. They were
+describing devices that view does not show.
+
+### Putting the card on a dashboard for one device
+
+Three things were in the way, all fixed:
+
+- **`devices`** — a card-wide whitelist, the include that `hidden_devices` was
+  always the exclude of. It existed only on a *view* filter, so showing one
+  device meant inventing a view whose only job was to name it. Editor: Rooms &
+  devices → *Show only these devices* (Advanced). Applied before
+  `hidden_devices`, so a device in both stays hidden — an exclusion should not
+  be overridable by an inclusion.
+- **`show_header`** — turning off the title and the stats left an empty 32px
+  bar with nowhere to go. `false` removes the element.
+- And with the header fix above, a one-device card reads "1/1 online" rather
+  than announcing the whole house over a single tile.
+
+The checklist widget grew a wording parameter on the way: it began life as three
+hide-lists, so "3 hidden" was baked in, and a whitelist reusing it would have
+said that about the three devices it was *showing*.
+
 ### Embedded cards have a real visual editor
 
 Adding a card meant writing YAML. It now opens Home Assistant's own form for

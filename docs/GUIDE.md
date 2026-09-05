@@ -137,6 +137,15 @@ A new card discovers your Shelly and BTHome devices and groups them by room. Eve
 3. Set the look once under ◆ Defaults (theme, columns, tile size).
 4. Use ◆ Defaults → Reset look if you want the factory appearance back without losing rooms, devices or actions.
 
+### Use the card for a single device
+
+The card is built for a fleet, but nothing stops it being one tile on an ordinary dashboard — a plug beside your other cards, with the same tile styles, graphs and confirmation you use everywhere else.
+
+1. Rooms & devices → turn on Advanced → "Show only these devices" → tick the one you want.
+2. Design → Global → Header → turn off "Show the header", unless you want its one-device summary.
+3. Views → turn off "Group by room" so there is no room heading over a single tile, and set Columns to 1.
+4. Everything else still applies: pick a tile style, turn on graphs, set "Ask before turning off" if it is a load you do not want to lose.
+
 ### Guard a device you must not switch off by accident
 
 A freezer, a server, the router, the heating — a mis-tap costs you something real. Turning the device ON is never confirmed, so the guard only slows you down in the direction that hurts.

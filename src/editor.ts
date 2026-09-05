@@ -1538,6 +1538,16 @@ export class HADeviceDashboardEditor extends LitElement {
           <span class="toolbar-lbl">Rooms</span>
           ${this._selAllNone(() => this._set('areas', undefined), () => this._set('areas', []))}
         </div>
+        ${this._adv(this._renderCheckDropdown(
+          'only-devices', 'Show only these devices',
+          allDiscovered.map(d => ({ value: d.device_id, label: d.name })),
+          c.devices ?? [],
+          (next) => this._set('devices', next),
+          'Empty = every discovered device, which is the normal case. Naming devices here narrows the '
+            + 'card to just those — the way to put this card on a dashboard for one device without '
+            + 'hiding the other sixty. Hidden devices below still win.',
+          { picked: 'shown', none: 'All devices', all: 'Select all', clear: 'Show all' },
+        ))}
         <div class="tog-row" style="border:none;padding:4px 0 0">
           <div class="tog-lbl">Show offline devices</div>
           <label class="sw"><input type="checkbox" .checked=${c.show_offline !== false}
@@ -2344,6 +2354,12 @@ export class HADeviceDashboardEditor extends LitElement {
     hidden: string[],
     onChange: (next: string[] | undefined) => void,
     hint: string,
+    /** What ticking a box means. The widget started life as three hide-lists,
+     *  so the wording was baked in; a whitelist reuses the same control and
+     *  would otherwise read "3 hidden" for the three things it is SHOWING. */
+    verb: { picked: string; none: string; all: string; clear: string } = {
+      picked: 'hidden', none: 'None hidden', all: 'Hide all', clear: 'Clear',
+    },
   ): TemplateResult {
     const open = this._openDiscDropdown === id;
     const hidSet = new Set(hidden);
@@ -2357,18 +2373,18 @@ export class HADeviceDashboardEditor extends LitElement {
         <div class="field-lbl">${label}</div>
         <button class="check-dd-btn ${open ? 'open' : ''}"
           @click=${() => { this._openDiscDropdown = open ? null : id; }}>
-          <span>${n ? `${n} hidden` : 'None hidden'}</span><span class="check-dd-caret">▾</span>
+          <span>${n ? `${n} ${verb.picked}` : verb.none}</span><span class="check-dd-caret">▾</span>
         </button>
         ${open ? html`
           <div class="check-dd-panel">
             ${options.length ? html`
               <div class="check-dd-head">
-                <span class="check-dd-count">${n} of ${options.length} hidden</span>
+                <span class="check-dd-count">${n} of ${options.length} ${verb.picked}</span>
                 <span class="sel-allnone">
-                  <button type="button" class="sel-mini" title="Hide every one of these"
-                    @click=${() => onChange(options.map(o => o.value))}>Hide all</button>
-                  <button type="button" class="sel-mini" title="Hide none of these"
-                    @click=${() => onChange(undefined)}>Clear</button>
+                  <button type="button" class="sel-mini"
+                    @click=${() => onChange(options.map(o => o.value))}>${verb.all}</button>
+                  <button type="button" class="sel-mini"
+                    @click=${() => onChange(undefined)}>${verb.clear}</button>
                 </span>
               </div>` : nothing}
             ${options.length ? options.map(o => html`
@@ -4844,6 +4860,13 @@ export class HADeviceDashboardEditor extends LitElement {
       ${(sty.header_border_width ?? 0) > 0 ? hColorRow('Border color', 'header_border_color', '#4ade80') : nothing}
       `)}
       <!-- Visibility toggles -->
+      <div class="tog-row" style="border:none;padding:4px 0 0">
+        <div class="tog-lbl">Show the header
+          <span class="field-note">off removes the bar entirely — turning off title and stats alone leaves an empty strip</span></div>
+        <label class="sw"><input type="checkbox" .checked=${c.show_header !== false}
+          @change=${(e:Event) => this._set('show_header', (e.target as HTMLInputElement).checked ? undefined : false)}>
+          <span class="sw-t"></span><span class="sw-b"></span></label>
+      </div>
       <div class="tog-row" style="border:none;padding:4px 0 0">
         <div class="tog-lbl">Show title</div>
         <label class="sw"><input type="checkbox" .checked=${c.header_show_title !== false}
