@@ -30,6 +30,27 @@ import { randomPalette, randomTheme } from './palette';
 /** The global `style` sub-object — typed so key access catches typos. */
 type StyleCfg = NonNullable<HADeviceDashboardConfig['style']>;
 
+/**
+ * Card types the editor asks Home Assistant about. NOT a claim that these all
+ * exist — it is a superset, verified at runtime by `_probeCardTypes`, so a name
+ * this Home Assistant does not have is simply never offered.
+ *
+ * That is what makes the list safe to keep: adding a speculative or
+ * since-removed name costs nothing, so it only has to keep up, not be right.
+ * The old hardcoded list of 22 had no such check and had already drifted — it
+ * was missing heading, todo-list, clock, statistic, humidifier, alarm-panel and
+ * six more that HA 2026.8 ships.
+ */
+const CANDIDATE_CARD_TYPES: readonly string[] = [
+  'alarm-panel', 'area', 'button', 'calendar', 'clock', 'conditional', 'energy',
+  'entities', 'entity', 'entity-filter', 'gauge', 'glance', 'grid', 'heading',
+  'history-graph', 'horizontal-stack', 'humidifier', 'iframe', 'light', 'logbook',
+  'map', 'markdown', 'media-control', 'picture', 'picture-elements',
+  'picture-entity', 'picture-glance', 'plant-status', 'sensor', 'shopping-list',
+  'statistic', 'statistics-graph', 'thermostat', 'tile', 'todo-list', 'trend',
+  'vertical-stack', 'weather-forecast',
+];
+
 /** How devices can be ordered, offered card-wide and per view. One list: two
  *  copies is how one of them ends up missing an option the other has. */
 const SORT_OPTIONS = [
@@ -1780,16 +1801,70 @@ export class HADeviceDashboardEditor extends LitElement {
     this._xcCancel();
   }
 
-  /** Built-in card types + any custom cards the user has installed. */
+  /**
+   * Built-in card types this Home Assistant actually has, plus any custom cards
+   * installed.
+   *
+   * The built-in half is verified rather than trusted — see `_probeCardTypes`.
+   * Until the probe finishes the unverified candidate list stands, so the
+   * dropdown is never empty.
+   */
   private _cardTypeOptions(): Array<{ value: string; label: string }> {
-    const builtin = ['markdown','entities','tile','button','glance','weather-forecast','history-graph',
-      'statistics-graph','gauge','sensor','thermostat','light','media-control','picture-entity',
-      'picture-glance','area','map','calendar','iframe','vertical-stack','horizontal-stack','grid','conditional'];
+    const builtin = HADeviceDashboardEditor._realCardTypes ?? CANDIDATE_CARD_TYPES;
     const title = (t: string) => t.replace(/(?:^|-)(\w)/g, (_m, ch, i) => (i ? ' ' : '') + ch.toUpperCase());
-    const opts = builtin.map(t => ({ value: t, label: title(t) }));
+    const opts = [...builtin].sort().map(t => ({ value: t, label: title(t) }));
     const custom = ((window as unknown as { customCards?: Array<{ type: string; name?: string }> }).customCards) ?? [];
     for (const c of custom) opts.push({ value: `custom:${c.type}`, label: `${c.name || c.type} (custom)` });
     return opts;
+  }
+
+  /** Verified built-in types; null until the probe has run. Static, so one probe
+   *  per page load rather than one per time the editor opens. */
+  private static _realCardTypes: string[] | null = null;
+  private static _cardTypeProbe: Promise<void> | null = null;
+
+  /**
+   * Work out which of `CANDIDATE_CARD_TYPES` this Home Assistant really has.
+   *
+   * Home Assistant offers no way to enumerate its cards: they are lazily
+   * imported, and `hui-card-picker` — which holds the real list — is not loaded
+   * outside its own dialog. But asking `createCardElement` for a type triggers
+   * that lazy import, and a type that exists ends up registered as
+   * `hui-<type>-card` while one that does not never appears. So: ask about every
+   * candidate, wait a beat, and keep what registered.
+   *
+   * Whether the element it hands back is an error card tells us nothing, note —
+   * a real card given a bare `{type}` with no entities errors just as loudly as
+   * a type that does not exist. Registration is the signal.
+   *
+   * Runs once, on demand, when the Add-card panel opens.
+   */
+  private async _probeCardTypes(): Promise<void> {
+    const C = HADeviceDashboardEditor;
+    if (C._realCardTypes) return;
+    if (!C._cardTypeProbe) {
+      C._cardTypeProbe = (async () => {
+        const seen = (t: string) => !!customElements.get(`hui-${t}-card`);
+        try {
+          const loader = (window as unknown as { loadCardHelpers?: () => Promise<{ createCardElement: (c: unknown) => unknown }> }).loadCardHelpers;
+          const helpers = loader ? await loader() : null;
+          if (helpers) {
+            // Skip what the running dashboard has already pulled in.
+            for (const t of CANDIDATE_CARD_TYPES) {
+              if (seen(t)) continue;
+              try { helpers.createCardElement({ type: t }); } catch { /* not a type here */ }
+            }
+            await new Promise(r => setTimeout(r, 700));   // let the imports land
+          }
+        } catch { /* fall through and keep whatever registered */ }
+        const found = CANDIDATE_CARD_TYPES.filter(seen);
+        // A probe that found nothing means the mechanism failed, not that HA has
+        // no cards — keep the unverified list rather than emptying the dropdown.
+        C._realCardTypes = found.length ? found : null;
+      })();
+    }
+    await C._cardTypeProbe;
+    this.requestUpdate();
   }
 
   // ── Import from Shelly Cloud ─────────────────────────────────────
@@ -2085,7 +2160,12 @@ export class HADeviceDashboardEditor extends LitElement {
           </div>`) : html`<div class="dp-hint-inline">No cards here yet.</div>`}
       </div>
       ${!this._xcAdding && this._xcEditIndex === null ? html`
-        <button class="sec-toolbar-btn" @click=${() => { this._xcAdding = true; this._xcLoadDashboards(); this._setXcDraft({}); }}>+ Add card</button>` : nothing}
+        <button class="sec-toolbar-btn" @click=${() => {
+          this._xcAdding = true;
+          this._xcLoadDashboards();
+          void this._probeCardTypes();
+          this._setXcDraft({});
+        }}>+ Add card</button>` : nothing}
       ${this._xcAdding ? html`
         <div class="field">
           <div class="field-lbl">Copy from a dashboard</div>

@@ -5,6 +5,24 @@ installs from them.
 
 ## Unreleased
 
+### The card-type list is checked against your Home Assistant
+
+"Start from a card type" offered 22 hardcoded names, which had already drifted:
+it was missing `heading`, `todo-list`, `clock`, `statistic`, `humidifier`,
+`alarm-panel` and seven more that Home Assistant 2026.8 ships.
+
+Home Assistant exposes no way to enumerate its cards — they are lazily imported,
+and the picker that holds the real list is not loaded outside its own dialog.
+But asking for a card type triggers that import, and a type that exists ends up
+registered while one that does not never appears. So the editor now asks about
+every candidate once, when you open Add card, and offers what actually
+registered. On this instance that is 36 built-in types instead of 22, with two
+speculative names dropped as not real.
+
+The list is therefore a superset to be checked rather than a claim to be
+trusted: a name your Home Assistant does not have is simply never offered, so it
+only has to keep up, not be right.
+
 ### Room cards can sit among the tiles instead of above them
 
 `area_cards` always rendered as a full-width strip over a room's tiles, which
