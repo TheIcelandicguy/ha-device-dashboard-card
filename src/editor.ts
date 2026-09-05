@@ -245,7 +245,19 @@ export class HADeviceDashboardEditor extends LitElement {
     // worth waiting on.
     if (this._xcPreviewTimer) { clearTimeout(this._xcPreviewTimer); this._xcPreviewTimer = undefined; }
     this._xcPreview = cfg;
+    void this._ensureXcForm(cfg, true);
   }
+  /** Form or YAML for the card being edited. Form when the card offers one. */
+  @state() private _xcMode: 'form' | 'yaml' = 'form';
+  /** The card-specific editor element for the draft's type, and the type it was
+   *  built for. Rebuilt only when the type changes: a form editor owns its own
+   *  input state, so recreating it mid-edit would fight the user's cursor. */
+  @state() private _xcFormEl: HTMLElement | null = null;
+  private _xcFormType: string | null = null;
+  /** Set when the draft's card type ships no form editor, so the panel can say
+   *  why it is showing YAML instead of looking broken. */
+  @state() private _xcFormUnavailable = false;
+
   /** Reactive mirror of `_xcLatest` for the live preview. `_xcLatest` is
    *  deliberately NOT reactive so a keystroke cannot remount the YAML editor
    *  under the cursor; this one is, and lags a beat behind so the preview is
@@ -1740,6 +1752,14 @@ export class HADeviceDashboardEditor extends LitElement {
     this._xcImportCards = null; this._xcImportLoading = false;
     if (this._xcPreviewTimer) { clearTimeout(this._xcPreviewTimer); this._xcPreviewTimer = undefined; }
     this._xcPreview = null;
+    this._xcFormEl = null; this._xcFormType = null; this._xcFormUnavailable = false;
+  }
+
+  /** Keep the embedded form editor's `hass` current, so its entity pickers and
+   *  state-dependent fields stay live while the editor is open. */
+  protected updated(): void {
+    const form = this._xcFormEl as unknown as { hass?: unknown } | null;
+    if (form && this.hass) form.hass = this.hass;
   }
 
   /** Load the list of storage dashboards the user can copy cards from. */
@@ -2057,6 +2077,68 @@ export class HADeviceDashboardEditor extends LitElement {
     return v;
   }
 
+  /**
+   * Build the card type's own form editor for the current draft.
+   *
+   * Every Lovelace card class — built-in and HACS alike — carries a static
+   * `getConfigElement()` returning its editor. Home Assistant's
+   * `hui-card-element-editor` is only the edit-card dialog's wrapper around
+   * exactly that, and is not even defined outside that dialog; going to the card
+   * class directly skips the wrapper, which is what used to hijack this editor.
+   * The editor's own `config-changed` still bubbles, and is stopped at the
+   * boundary in `_renderXcBody`.
+   *
+   * The class is only registered once the card has been imported, so ask the
+   * helpers for the card first and then wait for the definition.
+   */
+  private async _ensureXcForm(cfg: Record<string, unknown> | null, reset = false): Promise<void> {
+    const type = typeof cfg?.type === 'string' ? cfg.type : '';
+    if (!reset && this._xcFormType === type && this._xcFormEl) return;
+    this._xcFormType = type;
+    this._xcFormEl = null;
+    this._xcFormUnavailable = false;
+    if (!type) return;
+    const tag = type.startsWith('custom:') ? type.slice('custom:'.length) : `hui-${type}-card`;
+    try {
+      if (!customElements.get(tag)) {
+        const loader = (window as unknown as { loadCardHelpers?: () => Promise<{ createCardElement: (c: unknown) => unknown }> }).loadCardHelpers;
+        const helpers = loader ? await loader() : null;
+        try { helpers?.createCardElement({ type }); } catch { /* the import is the point */ }
+        await Promise.race([
+          customElements.whenDefined(tag),
+          new Promise(r => setTimeout(r, 1500)),
+        ]);
+      }
+      const cls = customElements.get(tag) as unknown as
+        { getConfigElement?: () => Promise<HTMLElement> } | undefined;
+      if (!cls?.getConfigElement) { this._xcFormUnavailable = true; return; }
+      const el = await cls.getConfigElement();
+      if (this._xcFormType !== type) return;      // the draft moved on while we waited
+      (el as unknown as { hass: unknown }).hass = this.hass;
+      (el as unknown as { setConfig: (c: unknown) => void }).setConfig(cfg);
+      this._xcFormEl = el;
+    } catch {
+      // A card whose editor throws on this config is not a reason to lose the
+      // card: YAML still edits it.
+      this._xcFormUnavailable = true;
+      this._xcFormEl = null;
+    }
+  }
+
+  /** Carry the working value across a Form/YAML switch, so changing tab never
+   *  loses an edit. ha-yaml-editor only reads defaultValue on mount, hence the
+   *  key bump. */
+  private _setXcMode(mode: 'form' | 'yaml'): void {
+    if (this._xcMode === mode) return;
+    const cur = (this._xcLatest ?? this._xcDraft) as Record<string, unknown> | null;
+    this._xcMode = mode;
+    if (mode === 'yaml') {
+      if (cur) { this._xcDraft = cur; this._xcDraftKey++; }
+    } else {
+      void this._ensureXcForm(cur, true);
+    }
+  }
+
   /** Swap a card with its neighbour. Reordering used to mean deleting the card
    *  and adding it back in the right place. */
   private _xcMove(i: number, delta: number): void {
@@ -2071,10 +2153,13 @@ export class HADeviceDashboardEditor extends LitElement {
     const arr = this._xcArray();
     const rooms = this._getAreas().map(a => a.name);
     const views = this._config.views ?? [];
-    // NB: we deliberately do NOT embed hui-card-element-editor (the visual/form
-    // editor). Nested inside our own card editor its events bubble to HA's
-    // edit-card dialog, which hijacks and replaces our editor. HA's native YAML
-    // editor has no such conflict.
+    // The form editor comes from the card class's own getConfigElement(), NOT
+    // from hui-card-element-editor — that one is the edit-card dialog's wrapper
+    // around exactly this, is not defined outside that dialog, and dragged the
+    // dialog's behaviour in with it. Whatever the editor still emits is stopped
+    // at the .xc-form boundary below; without that, its config-changed reaches
+    // HA's dialog, which reads it as an edit to OUR card and replaces this
+    // editor with its own.
     const yamlAvail = !!customElements.get('ha-yaml-editor');
     const body = html`
       <div class="field">
@@ -2190,7 +2275,39 @@ export class HADeviceDashboardEditor extends LitElement {
         </div>` : nothing}
       ${this._xcDraft ? html`
         <div class="field">
-          <div class="field-lbl">Card configuration (YAML)</div>
+          <div class="xc-mode-row">
+            <div class="field-lbl" style="margin:0">Card configuration</div>
+            ${this._pills<'form' | 'yaml'>(
+              this._xcFormEl ? this._xcMode : 'yaml',
+              [['Form', 'form'], ['YAML', 'yaml']],
+              m => this._setXcMode(m),
+            )}
+          </div>
+          ${this._xcMode === 'form' && this._xcFormEl ? html`
+            <!-- The boundary. A card editor's config-changed bubbles all the way
+                 to Home Assistant's edit-card dialog, which reads it as an edit
+                 to OUR card and replaces this editor with its own. Catching it
+                 here is what makes embedding a form editor possible at all. -->
+            <div class="xc-form"
+              @config-changed=${(e: CustomEvent) => {
+                e.stopPropagation();
+                const next = e.detail?.config as Record<string, unknown> | undefined;
+                if (!next) return;
+                this._xcLatest = next;
+                this._queueXcPreview(next);
+              }}
+              @GUImode-changed=${(e: Event) => e.stopPropagation()}
+              @edit-detail-element=${(e: Event) => e.stopPropagation()}>
+              ${this._xcFormEl}
+            </div>`
+          : nothing}
+          ${this._xcMode === 'form' && !this._xcFormEl ? html`
+            <div class="dp-hint-inline">
+              ${this._xcFormUnavailable
+                ? 'This card ships no visual editor, so YAML it is.'
+                : 'Loading the card\'s editor…'}
+            </div>` : nothing}
+          ${this._xcMode === 'yaml' || !this._xcFormEl ? html`
           ${keyed(this._xcDraftKey, yamlAvail ? html`
             <ha-yaml-editor .hass=${this.hass} .defaultValue=${this._xcDraft}
               @value-changed=${(e: CustomEvent) => {
@@ -2207,7 +2324,7 @@ export class HADeviceDashboardEditor extends LitElement {
                   this._xcLatest = v;
                   this._queueXcPreview(v);
                 } catch { /* keep last valid */ }
-              }}></textarea>`)}
+              }}></textarea>`)}` : nothing}
           ${this._renderXcPreview()}
           <div class="xc-actions">
             <button class="sec-toolbar-btn" @click=${() => this._xcCommit()}>${this._xcEditIndex !== null ? 'Save' : 'Add'}</button>
@@ -6417,6 +6534,12 @@ export class HADeviceDashboardEditor extends LitElement {
     .xc-import-row { flex:0 0 auto; min-height:26px; text-align:left; font-size:11px; font-family:monospace; padding:5px 8px; border-radius:5px; border:1px solid var(--border); background:var(--s2); color:var(--t2); cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .xc-import-row:hover { background:var(--s3); color:var(--text); border-color:var(--accent); }
     .xc-yaml { width:100%; min-height:120px; font-family:monospace; font-size:12px; background:var(--s2); color:var(--t2); border:1px solid var(--border); border-radius:6px; padding:8px; resize:vertical; }
+    .xc-mode-row { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; }
+    /* The card's own editor. It is Home Assistant's markup, so it is left to
+       HA's theme variables (which inherit from :root) rather than restyled to
+       match this panel — a form that looks like HA's is the point. */
+    .xc-form { margin-top:2px; }
+    .xc-form > * { display:block; }
     /* Live preview of the card being edited. The checker plate is deliberate:
        many cards are translucent, and on a flat panel you cannot tell a
        transparent background from one that matches the panel by accident. */

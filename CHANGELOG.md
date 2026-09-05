@@ -5,6 +5,25 @@ installs from them.
 
 ## Unreleased
 
+### Embedded cards have a real visual editor
+
+Adding a card meant writing YAML. It now opens Home Assistant's own form for
+that card type — the same one its Add-card dialog shows — with a **Form / YAML**
+switch, and the value carries across when you flip between them.
+
+This was deliberately not done before, for a documented reason: a card editor's
+`config-changed` bubbles all the way up to Home Assistant's edit-card dialog,
+which reads it as an edit to *our* card and replaces this editor with its own.
+Two things fixed that. The editor now comes from the card class's own
+`getConfigElement()` rather than `hui-card-element-editor` — the latter is only
+the dialog's wrapper around exactly that, and is not even defined outside it —
+and the events it does emit are stopped at the panel boundary. Verified: editing
+in the form emits nothing past the panel, and the only `config-changed` that
+still reaches Home Assistant is this editor saving its own config, as it should.
+
+It works for HACS cards too, which carry the same `getConfigElement`. A card
+that ships no editor falls back to YAML and says so rather than looking broken.
+
 ### The card-type list is checked against your Home Assistant
 
 "Start from a card type" offered 22 hardcoded names, which had already drifted:

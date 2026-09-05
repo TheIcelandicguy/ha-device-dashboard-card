@@ -173,7 +173,8 @@ export const HELP_RECIPES: HelpTopic[] = [
     ],
     steps: [
       'Extra cards → pick the placement (header, footer or a room) → Add card.',
-      'The Preview under the YAML draws the card as you type, exactly as the dashboard will — including an error card if the config is wrong.',
+      'Edit it with Home Assistant\'s own form for that card type, or switch to YAML — the value carries across either way. A card that ships no visual editor falls back to YAML and says so.',
+      'The Preview underneath draws the card as you go, exactly as the dashboard will — including an error card if the config is wrong.',
       'Header and footer cards can differ per view: set "Applies to" to a view and that view gets its own list, replacing the card-wide one. An empty list on a view means no cards there at all. "Use the card-wide list" clears the override.',
       'Use ▲ ▼ on a row to reorder.',
       'For a room, "Where in the room" puts the cards above the tiles (a strip) or among them (each card takes a tile\'s place). In the grid, grid_options.columns counts tiles rather than twelfths.',
