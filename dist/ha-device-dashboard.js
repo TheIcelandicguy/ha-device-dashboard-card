@@ -1203,7 +1203,12 @@ function e(e,t,i,s){var o,a=arguments.length,n=a<3?t:null===s?s=Object.getOwnPro
        line when the tile is narrow — on a phone they were squeezed into the
        corner with the chip clipped off the tile. */
     .input-row { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; padding:5px 8px; border-radius:8px; border:1px solid rgba(255,255,255,.06); background:rgba(255,255,255,.04); transition:all .15s; }
-    .input-row-act { display:flex; align-items:center; gap:6px; margin-left:auto; max-width:100%; min-width:0; }
+    /* flex-shrink:0, not min-width:0. With min-width:0 this box shrank instead
+       of wrapping, so the button's max-width was a percentage of a collapsing
+       container and a label ellipsised down to one or two characters — "S…"
+       for Stokkur. Refusing to shrink is what makes it wrap to its own line,
+       which is what the comment above always claimed happened. */
+    .input-row-act { display:flex; align-items:center; gap:6px; margin-left:auto; max-width:100%; flex-shrink:0; }
     .input-row-act:empty { display:none; }
 
     .input-row.active { background:color-mix(in srgb,var(--sc-accent) 15%,transparent); border-color:color-mix(in srgb,var(--sc-accent) 35%,transparent); }
@@ -1234,7 +1239,7 @@ function e(e,t,i,s){var o,a=arguments.length,n=a<3?t:null===s?s=Object.getOwnPro
     .dn-link:hover { filter:brightness(1.15); }
     /* Action button on an input row — i3/i4 inputs have no output of their own,
        so this runs the action assigned to the channel. */
-    .input-act { max-width:60%; min-width:0; padding:3px 9px; border-radius:999px; cursor:pointer;
+    .input-act { max-width:100%; min-width:0; padding:3px 9px; border-radius:999px; cursor:pointer;
       font:inherit; font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden;
       text-overflow:ellipsis; flex-shrink:0;
       color:var(--sc-accent); background:color-mix(in srgb,var(--sc-accent) 14%,transparent);
@@ -6553,4 +6558,4 @@ function e(e,t,i,s){var o,a=arguments.length,n=a<3?t:null===s?s=Object.getOwnPro
        it hides itself with an INLINE display:none, and an inline style beats a
        stylesheet rule, so setting block here cannot defeat the hiding. */
     hui-card { display: block; }
-  `,e([fe({attribute:!1})],bo.prototype,"hass",void 0),e([fe({attribute:!1})],bo.prototype,"config",void 0),e([fe({type:Boolean})],bo.prototype,"preview",void 0),e([ve()],bo.prototype,"_el",void 0),e([ve()],bo.prototype,"_hui",void 0),bo=e([he("hdd-card")],bo);console.info("%c ha-device-dashboard %c show-rooms-2026-09-06 ","background:#c98a63;color:#1e1a17;font-weight:700;border-radius:3px 0 0 3px","background:#241f1b;color:#f3ece3;border-radius:0 3px 3px 0"),window.customCards=window.customCards||[],window.customCards.push({type:"ha-device-dashboard",name:"HA Device Dashboard",description:"Universal device fleet overview — Shelly, ZHA, Hue, ESPHome, Matter and more.",preview:!0,documentationURL:"https://github.com/TheIcelandicguy/ha-device-dashboard-card"});
+  `,e([fe({attribute:!1})],bo.prototype,"hass",void 0),e([fe({attribute:!1})],bo.prototype,"config",void 0),e([fe({type:Boolean})],bo.prototype,"preview",void 0),e([ve()],bo.prototype,"_el",void 0),e([ve()],bo.prototype,"_hui",void 0),bo=e([he("hdd-card")],bo);console.info("%c ha-device-dashboard %c input-act-wrap-2026-09-06 ","background:#c98a63;color:#1e1a17;font-weight:700;border-radius:3px 0 0 3px","background:#241f1b;color:#f3ece3;border-radius:0 3px 3px 0"),window.customCards=window.customCards||[],window.customCards.push({type:"ha-device-dashboard",name:"HA Device Dashboard",description:"Universal device fleet overview — Shelly, ZHA, Hue, ESPHome, Matter and more.",preview:!0,documentationURL:"https://github.com/TheIcelandicguy/ha-device-dashboard-card"});

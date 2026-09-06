@@ -5,6 +5,22 @@ installs from them.
 
 ## Unreleased
 
+### An input row's action button showed two characters of its label
+
+On the adaptive `default` tile, a channel's action button ellipsised down to
+almost nothing — `Stokkur` rendered as "S…", `Borðstofu ljós` as "Borð…".
+
+`.input-row-act` carried `min-width: 0`, which let it *shrink* rather than wrap.
+The button's `max-width: 60%` was then 60% of a collapsing container, so the
+narrower the tile the shorter the label, down to one or two letters. The comment
+above that rule has always said the button "drops to its own right-aligned line
+when the tile is narrow" — it could not, because shrinking always won.
+
+`flex-shrink: 0` is what actually produces that wrap, and with the button on its
+own line the 60% cap is unnecessary. Verified at 560px (button inline, label in
+full) and at 340px (button wrapped to its own line, still in full).
+
+
 ### A one-device card can drop the room heading
 
 `show_rooms` now exists card-wide, not only per view.
