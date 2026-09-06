@@ -35,8 +35,9 @@ visual (GUI) config editor.
 - **Card type string:** `custom:ha-device-dashboard`
 - **Custom elements:** `ha-device-dashboard` (the card) and
   `ha-device-dashboard-editor` (its visual editor), registered from `src/index.ts`.
-- **Package:** `ha-device-dashboard`, version **1.0.0** (`package.json` — release
-  tags on GitHub run ahead of it), MIT, author `TheIcelandicguy`.
+- **Package:** `ha-device-dashboard`, version **1.3.0** (`package.json`, kept in
+  step with the newest `CHANGELOG.md` heading and the git tag — `npm run
+  check:docs` fails if they drift), MIT, author `TheIcelandicguy`.
 - **Stack:** Lit 3, TypeScript 5, bundled with Rollup to a single ES-module file
   `dist/ha-device-dashboard.js` (minified with terser for production).
 - **Focus:** Strongly Shelly-oriented, but no longer Shelly-limited. Discovery runs

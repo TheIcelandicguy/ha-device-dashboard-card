@@ -208,6 +208,21 @@ if (tag && !read('dist/ha-device-dashboard.js').includes(tag)) {
   note('dist', `bundle does not contain BUILD_TAG "${tag}" — dist is stale, run npm run build`);
 }
 
+// ── the version is stated in four places and drifted in one ──
+// package.json, the newest CHANGELOG heading, the git tag and OVERVIEW.md all
+// name the release. OVERVIEW.md sat at 1.0.0 through three of them, because
+// nothing compared them. The tag is not checked here — it is cut after this
+// runs — but the two files that ship in the repo are.
+const pkgVersion = JSON.parse(read('package.json')).version;
+const newestChangelog = read('CHANGELOG.md').match(/^## v?(\d+\.\d+\.\d+)/m)?.[1];
+if (newestChangelog && newestChangelog !== pkgVersion) {
+  note('CHANGELOG.md', `newest heading is ${newestChangelog}, package.json is ${pkgVersion}`);
+}
+const overviewVersion = read('OVERVIEW.md').match(/version \*\*(\d+\.\d+\.\d+)\*\*/)?.[1];
+if (overviewVersion && overviewVersion !== pkgVersion) {
+  note('OVERVIEW.md', `states version ${overviewVersion}, package.json is ${pkgVersion}`);
+}
+
 if (problems.length) {
   console.log(`${problems.length} doc mismatch(es):\n`);
   for (const p of problems) console.log('  • ' + p);
