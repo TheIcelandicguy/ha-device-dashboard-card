@@ -1087,12 +1087,14 @@ export function detectShellyGen(
   if (/^S[NA]/.test(code)) return 2;   // SN = Plus/Pro, SA = Wall Display
   if (/^SH/.test(code)) return 1;
 
-  // Only now the name, and only now "BLU". This check must stay BELOW the two
-  // authoritative sources: the BLU *Gateway* is a mains-powered Gen3 WiFi device
-  // that bridges BLU sensors — its name contains "BLU" but it is not a BLU
-  // device. Testing the name first returned 'ble' for it and threw away a
-  // perfectly good `hw_version: gen3`.
-  if (m.includes('blu') || m.includes('bluetooth')) return 'ble';
+  // Only now the name, and only now "BLU" — and never for a gateway. A gateway
+  // *bridges* Bluetooth; it is not itself a battery BLE device. Shelly ships two
+  // whose names say otherwise: the BLU Gateway Gen3 (`S3GW-1DBT001`) and the
+  // Bluetooth Gateway (`SNGW-BT01`), both mains-powered WiFi units. This test
+  // also stays BELOW the two authoritative sources — checking the name first is
+  // what made the BLU Gateway report 'ble' while a perfectly good
+  // `hw_version: gen3` sat unread.
+  if ((m.includes('blu') || m.includes('bluetooth')) && !m.includes('gateway')) return 'ble';
 
   if (m.includes('g4') || m.includes('gen4') || m.includes('gen 4')) return 4;
   if (m.includes('g3') || m.includes('gen3') || m.includes('gen 3')) return 3;

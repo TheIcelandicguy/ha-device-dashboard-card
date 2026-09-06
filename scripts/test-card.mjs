@@ -1004,6 +1004,17 @@ try {
       gen('Shelly BLU Gateway Gen3', 'gen3', 'S3GW-1DBT001'), 3);
     eq('and still gen3 on model_id alone',
       gen('Shelly BLU Gateway Gen3', undefined, 'S3GW-1DBT001'), 3);
+    // Both Shelly gateways are mains WiFi units whose names say Bluetooth. The
+    // Bluetooth Gateway is SN — Gen2 hardware — despite being the first of its
+    // product line. On name alone a gateway must never resolve to 'ble': with
+    // nothing else to go on, 'gen3' in the name still wins, and a name carrying
+    // no generation at all is honestly unknown rather than wrongly Bluetooth.
+    eq('the Bluetooth Gateway is gen2 by its SN prefix',
+      gen('Shelly Bluetooth Gateway', undefined, 'SNGW-BT01'), 2);
+    eq('a gateway is never ble on the name alone',
+      gen('Shelly Bluetooth Gateway'), 'other');
+    eq('BLU Gateway falls back to the gen in its name',
+      gen('Shelly BLU Gateway Gen3'), 3);
     // SB and SH are a transposition apart and mean opposite things. Both codes
     // below are real, read off the devices in the Shelly app: SBHT-003C is the
     // BLU H&T, SHBTN-2 the Shelly Button 2 (Gen1, firmware v1.14). Pinned as a
