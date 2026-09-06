@@ -3724,7 +3724,11 @@ export class HADeviceDashboard extends LitElement {
     const viewDevices = activeView ? this._applyViewFilter(devices, activeView) : devices;
     const grouped = this._groupByArea(viewDevices);
     const showFavourites = !activeView || activeView.show_favourites === true;
-    const showRooms = !activeView || activeView.show_rooms !== false;
+    // A view's own choice wins; otherwise the card's. Both default to on, so a
+    // config that sets neither groups by room exactly as it always did.
+    const showRooms = activeView
+      ? activeView.show_rooms !== false
+      : this._config.show_rooms !== false;
 
     // Cloud connectivity stats from binary_sensor.*_cloud entities — only
     // scanned when the cloud chips are enabled (opt-in). The Object.values

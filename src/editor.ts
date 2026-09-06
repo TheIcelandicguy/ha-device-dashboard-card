@@ -4919,6 +4919,13 @@ export class HADeviceDashboardEditor extends LitElement {
           <span class="sw-t"></span><span class="sw-b"></span></label>
       </div>
       <div class="tog-row" style="border:none;padding:4px 0 0">
+        <div class="tog-lbl">Group by room
+          <span class="field-note">off drops the room headings — a single-device card has nothing to group</span></div>
+        <label class="sw"><input type="checkbox" .checked=${c.show_rooms !== false}
+          @change=${(e:Event) => this._set('show_rooms', (e.target as HTMLInputElement).checked ? undefined : false)}>
+          <span class="sw-t"></span><span class="sw-b"></span></label>
+      </div>
+      <div class="tog-row" style="border:none;padding:4px 0 0">
         <div class="tog-lbl">Show title</div>
         <label class="sw"><input type="checkbox" .checked=${c.header_show_title !== false}
           @change=${(e:Event) => this._set('header_show_title', (e.target as HTMLInputElement).checked ? undefined : false)}>

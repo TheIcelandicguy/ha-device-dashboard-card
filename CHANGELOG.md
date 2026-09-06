@@ -5,6 +5,24 @@ installs from them.
 
 ## Unreleased
 
+### A one-device card can drop the room heading
+
+`show_rooms` now exists card-wide, not only per view.
+
+The Help's "Use the card for a single device" told you to turn off *Group by
+room* in Views — and you could not, because with no view configured the renderer
+read `!activeView || activeView.show_rooms !== false`, which is unconditionally
+true. Following the topic meant inventing a view whose only purpose was to hold
+that one switch: exactly the ceremony `devices` was added to remove. So the
+feature that made a single-device card possible still left a room heading over
+the single tile.
+
+A view's own `show_rooms` still wins, and both default to on, so a config that
+sets neither groups by room exactly as before. The switch sits next to *Show the
+header* at Design → Global → Header, where the other card-level chrome toggles
+already are, and the Help topic now points there.
+
+
 ### The hardware generation comes from the integration, not from the name
 
 `detectShellyGen` read the *display model name* and, when nothing matched,

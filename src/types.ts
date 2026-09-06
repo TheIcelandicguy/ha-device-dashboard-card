@@ -726,6 +726,16 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   favorites?: string[];
   /** Entity IDs to hide from the All Entities list in expanded view */
   hidden_entities?: string[];
+  /**
+   * Group devices under room headings. Default: true.
+   *
+   * The card-level twin of `views[i].show_rooms`, which is what the Views tab
+   * edits. Without this the only way to drop the headings was to invent a view
+   * whose single purpose was to hold the setting — the same ceremony `devices`
+   * was added to remove, so a one-device card still ended up needing a view.
+   * An active view still wins, so an existing per-view choice is untouched.
+   */
+  show_rooms?: boolean;
   /** Show devices whose all entities are unavailable/unknown. Default: true */
   show_offline?: boolean;
   /** Card title shown in header. Default: 'Shelly' */

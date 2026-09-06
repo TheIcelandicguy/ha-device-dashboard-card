@@ -199,6 +199,7 @@ the machine-readable model that drives the editor defaults and the offline tools
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `show_header` | boolean | `true` | The header bar as a whole. `false` removes it; turning off title and stats alone leaves an empty strip. |
+| `show_rooms` | boolean | `true` | Group devices under room headings. `false` drops them — a one-device card has nothing to group. A view's own `show_rooms` overrides this. |
 | `header_show_title` | boolean | `true` | Show the title |
 | `header_show_stats` | boolean | `true` | Show the stats chip row |
 | `header_show_cloud` | boolean | `false` | Extra cloud-status row |

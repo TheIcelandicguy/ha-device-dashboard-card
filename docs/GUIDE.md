@@ -143,7 +143,7 @@ The card is built for a fleet, but nothing stops it being one tile on an ordinar
 
 1. Rooms & devices → turn on Advanced → "Show only these devices" → tick the one you want.
 2. Design → Global → Header → turn off "Show the header", unless you want its one-device summary.
-3. Views → turn off "Group by room" so there is no room heading over a single tile, and set Columns to 1.
+3. Design → Global → Header → turn off "Group by room" so there is no room heading over a single tile, and set Columns to 1. (Per-view, the same switch lives in Views.)
 4. Everything else still applies: pick a tile style, turn on graphs, set "Ask before turning off" if it is a load you do not want to lose.
 
 ### Guard a device you must not switch off by accident

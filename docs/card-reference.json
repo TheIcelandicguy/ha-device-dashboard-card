@@ -355,6 +355,7 @@
           { "control": "Icon (mdi:*)", "fn": "View tab icon", "key": "views[i].icon", "scope": "view", "default": "none", "advanced": false },
           { "control": "Show Favourites section", "fn": "Enable the Favourites section on this view", "key": "views[i].show_favourites", "scope": "view", "default": "off", "advanced": false },
           { "control": "Group by room", "fn": "Group devices by room (off → false)", "key": "views[i].show_rooms", "scope": "view", "default": "on", "advanced": false },
+          { "control": "Group by room", "fn": "Group devices by room, card-wide (off → false); a view overrides it", "key": "show_rooms", "scope": "global", "default": "on", "advanced": false },
           { "control": "Colour theme", "fn": "Palette while this view is showing — re-bases the whole card including the header, and outranks card-level `style` colours. Presets only; inherit = use the card theme", "key": "views[i].theme", "scope": "view", "default": "inherit", "advanced": false }
         ]},
         { "name": "Per-view filters", "controls": [

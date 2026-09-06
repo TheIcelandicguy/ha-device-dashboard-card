@@ -160,7 +160,7 @@ export const HELP_RECIPES: HelpTopic[] = [
     steps: [
       'Rooms & devices → turn on Advanced → "Show only these devices" → tick the one you want.',
       'Design → Global → Header → turn off "Show the header", unless you want its one-device summary.',
-      'Views → turn off "Group by room" so there is no room heading over a single tile, and set Columns to 1.',
+      'Design → Global → Header → turn off "Group by room" so there is no room heading over a single tile, and set Columns to 1. (Per-view, the same switch lives in Views.)',
       'Everything else still applies: pick a tile style, turn on graphs, set "Ask before turning off" if it is a load you do not want to lose.',
     ],
   },
