@@ -82,6 +82,34 @@ Three things worth knowing before you start:
   as well as a label. Translating any of those breaks behaviour rather than
   improving it.
 
+## Cutting a release
+
+1. `CHANGELOG.md`: turn **Unreleased** into `## vX.Y.Z — YYYY-MM-DD`.
+2. `package.json`: bump `version` to match. `npm run check:docs` fails if the two
+   disagree, or if `OVERVIEW.md` still names the old one.
+3. `src/index.ts`: set a fresh `BUILD_TAG`, then `npm run build`.
+4. Commit, tag `vX.Y.Z`, push both.
+5. `gh release create vX.Y.Z --notes-file ...`
+6. **Attach the built bundle to the release**, named exactly the `filename` from
+   `hacs.json`:
+
+   ```sh
+   git show vX.Y.Z:dist/ha-device-dashboard.js > /tmp/ha-device-dashboard.js
+   gh release upload vX.Y.Z /tmp/ha-device-dashboard.js
+   ```
+
+Step 6 is the one that gets forgotten, and it fails silently. HACS looks for a
+release asset whose name equals `hacs.json`'s `filename` and downloads that;
+with no asset it falls back to the file in the repo tree, which works fine —
+but GitHub only counts *asset* downloads, so the install is invisible and the
+download badge stops moving. (This is why several very popular cards report 0
+downloads in HACS: they ship from the repo root. It also means download counts
+are not comparable between cards.)
+
+Extract from the **tag**, not the working tree: after a release the working copy
+usually carries a newer `BUILD_TAG`, and uploading that would ship a different
+build under the released version's name.
+
 ## Testing without a Home Assistant
 
 `scripts/test-card.mjs` runs the card's logic against fixture `hass` objects —
