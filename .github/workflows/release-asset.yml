@@ -1,0 +1,73 @@
+name: Attach release asset
+
+# HACS downloads a release asset whose name equals `filename` in hacs.json, and
+# GitHub counts only asset downloads. With no asset HACS silently falls back to
+# the file in the repo tree: the card installs fine, so nothing looks wrong —
+# the install is simply never counted and the download badge stops moving.
+#
+# That failure is invisible, which makes it a bad fit for a checklist. This does
+# it instead.
+on:
+  release:
+    types: [published]
+  # Lets a release published before this workflow existed be backfilled.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to attach the asset to (e.g. v1.3.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  attach:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve the tag
+        id: tag
+        run: echo "tag=${{ github.event.release.tag_name || inputs.tag }}" >> "$GITHUB_OUTPUT"
+
+      # Check out the TAG, not the default branch. dist/ is committed, so the
+      # bundle at the tag is exactly what that version shipped — after a release
+      # master usually carries a newer BUILD_TAG, and uploading that would put a
+      # different build behind the released version's name.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+
+      - name: The asset name must match hacs.json's filename
+        run: |
+          want=$(node -p "require('./hacs.json').filename")
+          if [ "$want" != "ha-device-dashboard.js" ]; then
+            echo "::error::hacs.json filename is '$want' — this workflow uploads 'ha-device-dashboard.js'."
+            echo "::error::HACS matches the asset name against that field exactly, so they must agree."
+            exit 1
+          fi
+          test -f "dist/$want" || { echo "::error::dist/$want missing at ${{ steps.tag.outputs.tag }}"; exit 1; }
+
+      # A release is the one moment a stale bundle actually reaches users, so
+      # rebuild from the tag's source and prove the committed dist matches it.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: The committed dist really is this tag's source
+        run: |
+          npm run build
+          if ! git diff --quiet -- dist/; then
+            echo "::error::dist/ at ${{ steps.tag.outputs.tag }} does not match a build of its own src/."
+            echo "::error::Refusing to publish a bundle that is not what this tag's source produces."
+            git diff --stat -- dist/
+            exit 1
+          fi
+
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ steps.tag.outputs.tag }}" \
+            dist/ha-device-dashboard.js --clobber
+          gh release view "${{ steps.tag.outputs.tag }}" \
+            --json assets --jq '.assets[] | "attached: \(.name) (\(.size) bytes)"'

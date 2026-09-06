@@ -90,25 +90,25 @@ Three things worth knowing before you start:
 3. `src/index.ts`: set a fresh `BUILD_TAG`, then `npm run build`.
 4. Commit, tag `vX.Y.Z`, push both.
 5. `gh release create vX.Y.Z --notes-file ...`
-6. **Attach the built bundle to the release**, named exactly the `filename` from
-   `hacs.json`:
+6. Nothing — `.github/workflows/release-asset.yml` attaches the bundle for you
+   when the release is published.
 
-   ```sh
-   git show vX.Y.Z:dist/ha-device-dashboard.js > /tmp/ha-device-dashboard.js
-   gh release upload vX.Y.Z /tmp/ha-device-dashboard.js
-   ```
+**Why step 6 is automated rather than a checklist item.** HACS downloads a
+release asset whose name equals `hacs.json`'s `filename`; with no asset it falls
+back to the file in the repo tree. The card installs fine either way, so a
+missing asset looks like nothing at all — but GitHub counts only *asset*
+downloads, so the install is never counted and the download badge quietly stops
+moving. A failure with no symptom is a bad fit for a list you read once a
+release. (This is also why several very popular cards report 0 downloads in
+HACS: they ship from the repo root. Download counts are not comparable between
+cards.)
 
-Step 6 is the one that gets forgotten, and it fails silently. HACS looks for a
-release asset whose name equals `hacs.json`'s `filename` and downloads that;
-with no asset it falls back to the file in the repo tree, which works fine —
-but GitHub only counts *asset* downloads, so the install is invisible and the
-download badge stops moving. (This is why several very popular cards report 0
-downloads in HACS: they ship from the repo root. It also means download counts
-are not comparable between cards.)
-
-Extract from the **tag**, not the working tree: after a release the working copy
-usually carries a newer `BUILD_TAG`, and uploading that would ship a different
-build under the released version's name.
+The workflow checks out **the tag**, not the branch, and rebuilds to prove the
+committed `dist/` really is what that tag's `src/` produces before uploading. If
+you ever do it by hand — backfilling an old release, say — extract from the tag
+for the same reason: after a release the working copy usually carries a newer
+`BUILD_TAG`, and uploading that would put a different build behind the released
+version's name. `workflow_dispatch` on that workflow does the backfill for you.
 
 ## Testing without a Home Assistant
 
