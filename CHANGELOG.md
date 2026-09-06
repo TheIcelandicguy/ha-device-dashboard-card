@@ -35,8 +35,15 @@ more than it sounds: a Shelly **BLU Gateway** (`S3GW-1DBT001`, `hw_version:
 gen3`) is a mains-powered Gen3 WiFi device that bridges BLU sensors. Its name
 contains "BLU" but it is not a BLU device, and checking the name first reported
 it as Bluetooth while discarding a perfectly good `gen3`. Real BLU hardware —
-the BLU TRV (`SBTR-…`), BLU H&T — carries no `hw_version`, so it falls through
-to the `SB` prefix or the name and still reports `'ble'`.
+the BLU TRV (`SBTR-001AEU`), BLU H&T (`SBHT-003C`) — carries no `hw_version`, so
+it falls through to the `SB` prefix or the name and still reports `'ble'`.
+
+The name test also refuses to fire for anything called a **gateway**, because a
+gateway bridges Bluetooth rather than being a Bluetooth device. Shelly ships two
+whose names say otherwise and which are both mains-powered WiFi units: the BLU
+Gateway Gen3 (`S3GW-1DBT001`) and the Bluetooth Gateway (`SNGW-BT01` — `SN`, so
+Gen2 hardware, despite being the first of its product line). This function
+reports Shelly's hardware generation, not product iteration.
 
 `HADevice` gained `model_id` and `hw_version` to carry this.
 
