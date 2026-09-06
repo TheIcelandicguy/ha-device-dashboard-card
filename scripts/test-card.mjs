@@ -970,6 +970,44 @@ try {
   eq('channel-suffixed cloud id still matches', dm.get('aabbcc000002'), ['ha2']);
   eq('unknown MACs are absent', dm.has('ffffff000000'), false);
 
+
+  console.log('\nshelly generation - integration first, then guesswork');
+  {
+    // Fixtures are real registry values from a live instance, not invented.
+    const gen = h.detectShellyGen;
+    eq('hw_version wins outright', gen('Shelly Plus 1PM', 'gen2', 'SNSW-001P16EU'), 2);
+    eq('gen1 from the integration', gen('Shelly Plug S', 'gen1', 'SHPLG-S'), 1);
+    eq('gen3 from the integration', gen('Shelly 1PM Gen3', 'gen3', 'S3SW-001P16EU'), 3);
+    eq('the Wall Display is gen2', gen('Shelly Wall Display', 'gen2', 'SAWD-0A1XX10EU1'), 2);
+
+    // The integration's answer beats a model name that disagrees: a device
+    // renamed in HA must not change its hardware generation.
+    eq('hw_version beats a misleading name', gen('Renamed by the user', 'gen3'), 3);
+
+    // model_id prefixes, for a Shelly whose hw_version is missing.
+    eq('SN prefix is gen2', gen('', undefined, 'SNSW-001P16EU'), 2);
+    eq('S3 prefix is gen3', gen('', undefined, 'S3DM-0A101WWL'), 3);
+    eq('SH prefix is gen1', gen('', undefined, 'SHDM-2'), 1);
+    eq('S4 prefix is gen4', gen('', undefined, 'S4SW-001X16EU'), 4);
+
+    // BLU carries neither hw_version nor model_id, so the name is all there is.
+    eq('BLU is ble', gen('BLU H&T', undefined, undefined), 'ble');
+    eq('BLU wins over everything', gen('Shelly BLU Button', 'gen3'), 'ble');
+
+    // Name heuristics still stand when nothing better is available.
+    eq('plus in the name is gen2', gen('Shelly Plus I4'), 2);
+    eq('gen3 in the name', gen('Shelly Dimmer Gen3'), 3);
+
+    // The point of the change: an unrecognised device says so rather than
+    // asserting Gen 1 - which was both wrong and, through the click-replay
+    // path, the wrong button numbering.
+    eq('an unknown device is not silently gen1', gen('Shelly Something 2029'), 'other');
+    eq('nothing at all is other', gen(''), 'other');
+    // A non-Shelly hw_version string must not be mistaken for a generation.
+    eq('arbitrary hw_version is ignored', gen('Some Router', 'RAX50'), 'other');
+    eq('esp32 is not a generation', gen('Node', 'esp32'), 'other');
+  }
+
   console.log('\nlocalize - catalogues and lookup');
   {
     const keys = loc.knownKeys();

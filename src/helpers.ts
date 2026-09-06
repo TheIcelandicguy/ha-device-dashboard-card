@@ -120,6 +120,8 @@ export function getAllDevices(
         // a numeric model or sw_version (e.g. a Yamaha receiver's sw_version 2.87),
         // and every downstream consumer does `.toLowerCase()` / `.match()` on these.
         model:       devInfo.model == null ? undefined : String(devInfo.model),
+        model_id:    devInfo.model_id == null ? undefined : String(devInfo.model_id),
+        hw_version:  devInfo.hw_version == null ? undefined : String(devInfo.hw_version),
         sw_version:  devInfo.sw_version == null ? undefined : String(devInfo.sw_version),
         ip:          ipMatch ? ipMatch[1] : undefined,
         isShelly,
@@ -994,7 +996,7 @@ export const ShellyProvider: ProfileProvider = {
     }
     return {
       type,
-      gen: detectShellyGen(device.model ?? ''),
+      gen: detectShellyGen(device.model ?? '', device.hw_version, device.model_id),
       label: PROFILE_LABELS[type],
       integration: device.integration,
     };
@@ -1036,17 +1038,54 @@ export function getDeviceProfile(device: HADevice): DeviceProfileResult {
 }
 
 /**
- * Detects Shelly hardware generation from the HA device model string.
+ * The device's Shelly hardware generation.
+ *
+ * Asks the integration before guessing. Home Assistant's Shelly integration
+ * writes the generation straight into the registry's `hw_version` as `gen1` /
+ * `gen2` / `gen3` / …, so the model-name heuristics below are a fallback, not
+ * the primary source — they used to be the only source, which meant a Shelly
+ * whose name did not match one of the patterns was silently reported as Gen 1.
+ *
+ * Order: BLU first (BLU devices carry no `hw_version` at all), then the
+ * integration's own answer, then the `model_id` prefix — `SH`=1, `SN`=2,
+ * `S3`=3, `S4`=4 are stable manufacturer codes — then the display name, and
+ * finally `'other'`, which honestly means "no idea" instead of asserting Gen 1.
+ *
+ * `hw_version` is only trusted here because the caller has already established
+ * this is a Shelly: other integrations put arbitrary text in that field
+ * (`esp32`, `RAX50`), hence the strict `gen<n>` shape check.
  */
-export function detectShellyGen(model: string): DeviceGen {
+export function detectShellyGen(
+  model: string,
+  hwVersion?: string,
+  modelId?: string,
+): DeviceGen {
   const m = model.toLowerCase();
   if (m.includes('blu') || m.includes('bluetooth')) return 'ble';
+
+  const fromHw = /^gen\s*([1-9])$/i.exec((hwVersion ?? '').trim());
+  if (fromHw) {
+    const n = Number(fromHw[1]);
+    if (n >= 1 && n <= 4) return n as DeviceGen;
+  }
+
+  const code = (modelId ?? '').toUpperCase();
+  if (/^SB/.test(code)) return 'ble';
+  if (/^S4/.test(code)) return 4;
+  if (/^S3/.test(code)) return 3;
+  if (/^S[NA]/.test(code)) return 2;   // SN = Plus/Pro, SA = Wall Display
+  if (/^SH/.test(code)) return 1;
+
   if (m.includes('g4') || m.includes('gen4') || m.includes('gen 4')) return 4;
   if (m.includes('g3') || m.includes('gen3') || m.includes('gen 3')) return 3;
   if (/^s3/i.test(model)) return 3;
   if (m.includes('plus') || m.includes('pro')) return 2;
   if (/^sn/i.test(model)) return 2;
-  return 1;
+  // No `^sh` test here on purpose, though SH is the Gen1 model_id prefix: every
+  // Shelly's display name begins "Shelly ...", so on this string it matches
+  // everything and would report the whole unrecognised long tail as Gen 1 —
+  // the exact bug this function was changed to stop. It stays on model_id only.
+  return 'other';
 }
 
 // ─── Integration badge helpers ─────────────────────────────────────────────────

@@ -910,6 +910,17 @@ export interface HADevice {
   name: string;
   area?: string;
   model?: string;
+  /** Registry `model_id` — the manufacturer's machine-readable model key
+   *  (`SNSW-001P16EU`), where `model` is the display name ("Shelly Plus 1PM").
+   *  Stable across firmware and locale, so it beats the display string for
+   *  identification. Absent on BLU/BTHome devices. */
+  model_id?: string;
+  /** Registry `hw_version`. The Shelly integration sets this to `gen1`/`gen2`/
+   *  `gen3`/… — the integration's own answer to a question the card used to
+   *  guess at from the model name. Other integrations put arbitrary text here
+   *  (`esp32`, `RAX50`), so only ever read it in a Shelly context and only when
+   *  it matches the expected shape. */
+  hw_version?: string;
   sw_version?: string;
   ip?: string;
   isShelly: boolean;

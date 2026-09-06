@@ -1358,13 +1358,18 @@ export class HADeviceDashboard extends LitElement {
         { message: `${ch.label}: this input reports no ${gesture} press to replay` } as any);
       return;
     }
-    const gen = detectShellyGen(device.model ?? '');
+    const gen = detectShellyGen(device.model ?? '', device.hw_version, device.model_id);
     const channel = this._inputAction(device, ch)?.channel
       ?? shellyInputChannel(ch.entityId, gen, await this._uniqueId(ch.entityId));
     const data: Record<string, unknown> = {
       device_id: device.device_id,
       channel,
       click_type: clickType,
+      // Button numbering, not decoration: Gen1 ids are 1-based, Gen2+ 0-based.
+      // `gen` can now be 'other' — a Shelly whose generation nothing could
+      // establish — and that is treated as Gen2+, which is what anything made
+      // in the last several years is. It used to be reported as Gen 1 by the
+      // fallback, which is the wrong guess for an unrecognised (i.e. new) device.
       generation: gen === 1 ? 1 : 2,
     };
     const host = shellyHostname(device);

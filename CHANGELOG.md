@@ -3,6 +3,35 @@
 All notable changes to HA Device Dashboard. Versions are git tags; HACS
 installs from them.
 
+## Unreleased
+
+### The hardware generation comes from the integration, not from the name
+
+`detectShellyGen` read the *display model name* and, when nothing matched,
+returned **Gen 1**. So any Shelly whose name did not fit one of the patterns —
+including every model released after this code was written — was confidently
+reported as first generation.
+
+Home Assistant's Shelly integration writes the answer straight into the device
+registry as `hw_version: gen1` / `gen2` / `gen3`. The card now asks that first,
+then the `model_id` prefix (`SH`=1, `SN`/`SA`=2, `S3`=3, `S4`=4 — stable
+manufacturer codes), then the name, and finally `'other'`, which honestly means
+"unknown" rather than asserting Gen 1. On a 283-row Shelly fleet that moves 97%
+of devices onto an authoritative source; only BLU/BTHome, which carry neither
+field, still rely on the name.
+
+This is not only the badge. `gen` picks the button numbering for `shelly.click`
+press replay — Gen1 ids are 1-based, Gen2+ 0-based — so a new device guessed as
+Gen 1 replayed presses on the wrong channel. `'other'` is treated as Gen2+
+there, which is what anything made in the last several years is.
+
+`hw_version` is only read for devices already established as Shelly, and only
+when it matches `gen<n>`: other integrations put arbitrary text in that field
+(`esp32`, `RAX50` on this instance), and it must not be mistaken for a
+generation.
+
+`HADevice` gained `model_id` and `hw_version` to carry this.
+
 ## v1.3.0 — 2026-09-06
 
 ### The dashboard speaks your language
