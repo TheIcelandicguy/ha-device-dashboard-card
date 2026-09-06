@@ -1,6 +1,6 @@
 # HA Device Dashboard
 
-![HA Device Dashboard — header chips, needs-attention summary, and device tiles including an i3/i4 keypad](docs/images/banner.svg)
+![HA Device Dashboard — the fleet header, needs-attention summary, and device tiles grouped by room](docs/images/screenshots/01-hero.png)
 
 
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange)](https://github.com/hacs/integration)
@@ -49,6 +49,24 @@ Frontend only: no custom integration, no Python, no helper entities.
 - **Translated dashboard** — the card follows Home Assistant's language. English and
   Icelandic ship today; [adding a locale](CONTRIBUTING.md#adding-a-language) is one
   file. The GUI editor is English only
+
+---
+
+## Screenshots
+
+Real captures from a 61-device Shelly fleet, not mockups.
+
+| | |
+|---|---|
+| ![One room](docs/images/screenshots/02-room.png) **One room.** The tile style follows the hardware — dimmers get sliders, the i4 gets a keypad, sensors get a sparkline. | ![Detail sheet](docs/images/screenshots/10-detail-sheet.jpeg) **Detail sheet.** Every entity, grouped by tier, plus firmware, IP, signal and uptime. |
+| ![Gauge variant](docs/images/screenshots/03-gauge.png) **Power monitor, gauge variant.** One arc per sensor class the device reports. | ![Sensor style](docs/images/screenshots/04-sensor-card.png) **Sensor style.** Big value, trend badge, and a graph per selected sensor. |
+| ![i3/i4 keypad](docs/images/screenshots/05-keypad.png) **The i3/i4 keypad.** An input wired to an output on its own device toggles it with no configuration. | ![Single device](docs/images/screenshots/06-single-device.png) **One device.** `devices:` plus `show_header: false` scales the card down to a single tile. |
+| ![Warm Dusk theme](docs/images/screenshots/08-theme-warm-dusk.png) **Warm Dusk** — the default theme. | ![Midnight Purple theme](docs/images/screenshots/09-theme-midnight.png) **Midnight Purple.** Eight themes ship, plus Follow HA. |
+
+**Universal mode** — the same card, discovering every device in Home Assistant
+rather than Shelly and BTHome alone:
+
+![Universal mode](docs/images/screenshots/07-universal.png)
 
 ---
 
