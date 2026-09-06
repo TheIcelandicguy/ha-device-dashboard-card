@@ -60,7 +60,7 @@ Real captures from a 61-device Shelly fleet, not mockups.
 |---|---|
 | ![One room](docs/images/screenshots/02-room.png) **One room.** The tile style follows the hardware — dimmers get sliders, the i4 gets a keypad, sensors get a sparkline. | ![Detail sheet](docs/images/screenshots/10-detail-sheet.jpeg) **Detail sheet.** Every entity, grouped by tier, plus firmware, IP, signal and uptime. |
 | ![Gauge variant](docs/images/screenshots/03-gauge.png) **Power monitor, gauge variant.** One arc per sensor class the device reports. | ![Sensor style](docs/images/screenshots/04-sensor-card.png) **Sensor style.** Big value, trend badge, and a graph per selected sensor. |
-| ![i3/i4 keypad](docs/images/screenshots/05-keypad.png) **The i3/i4 keypad.** An input wired to an output on its own device toggles it with no configuration. | ![Single device](docs/images/screenshots/06-single-device.png) **One device.** `devices:` plus `show_header: false` scales the card down to a single tile. |
+| ![i3/i4 keypad](docs/images/screenshots/05-keypad.png) **The i3/i4 keypad.** Every input is read for what it is — a button reports presses, a switch its position. Bind an action and a channel becomes a key. | ![Single device](docs/images/screenshots/06-single-device.png) **One device.** `devices:`, `show_header: false` and `show_rooms: false` scale the card down to a single tile. |
 | ![Warm Dusk theme](docs/images/screenshots/08-theme-warm-dusk.png) **Warm Dusk** — the default theme. | ![Midnight Purple theme](docs/images/screenshots/09-theme-midnight.png) **Midnight Purple.** Eight themes ship, plus Follow HA. |
 
 **Universal mode** — the same card, discovering every device in Home Assistant
