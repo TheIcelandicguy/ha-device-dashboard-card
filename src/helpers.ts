@@ -1046,10 +1046,17 @@ export function getDeviceProfile(device: HADevice): DeviceProfileResult {
  * the primary source — they used to be the only source, which meant a Shelly
  * whose name did not match one of the patterns was silently reported as Gen 1.
  *
- * Order: BLU first (BLU devices carry no `hw_version` at all), then the
- * integration's own answer, then the `model_id` prefix — `SH`=1, `SN`=2,
- * `S3`=3, `S4`=4 are stable manufacturer codes — then the display name, and
- * finally `'other'`, which honestly means "no idea" instead of asserting Gen 1.
+ * Order: the integration's `hw_version`, then the `model_id` prefix — `SH`=1,
+ * `SN`/`SA`=2, `S3`=3, `S4`=4, `SB`=BLU are stable manufacturer codes — then the
+ * display name, and finally `'other'`, which honestly means "no idea" instead of
+ * asserting Gen 1.
+ *
+ * The name-based "BLU" test sits *below* both authoritative sources on purpose.
+ * A Shelly BLU **Gateway** (`S3GW-…`, `hw_version: gen3`) is a mains-powered
+ * Gen3 WiFi device that bridges BLU sensors; its name contains "BLU" but it is
+ * not a BLU device. Real BLU hardware — the BLU TRV (`SBTR-…`), BLU H&T — has no
+ * `hw_version` at all, so it falls through to the prefix or the name and still
+ * reports `'ble'`.
  *
  * `hw_version` is only trusted here because the caller has already established
  * this is a Shelly: other integrations put arbitrary text in that field
@@ -1061,7 +1068,6 @@ export function detectShellyGen(
   modelId?: string,
 ): DeviceGen {
   const m = model.toLowerCase();
-  if (m.includes('blu') || m.includes('bluetooth')) return 'ble';
 
   const fromHw = /^gen\s*([1-9])$/i.exec((hwVersion ?? '').trim());
   if (fromHw) {
@@ -1070,11 +1076,19 @@ export function detectShellyGen(
   }
 
   const code = (modelId ?? '').toUpperCase();
+  // SB = BLU (battery Bluetooth), e.g. SBTR-001AEU, the BLU TRV.
   if (/^SB/.test(code)) return 'ble';
   if (/^S4/.test(code)) return 4;
   if (/^S3/.test(code)) return 3;
   if (/^S[NA]/.test(code)) return 2;   // SN = Plus/Pro, SA = Wall Display
   if (/^SH/.test(code)) return 1;
+
+  // Only now the name, and only now "BLU". This check must stay BELOW the two
+  // authoritative sources: the BLU *Gateway* is a mains-powered Gen3 WiFi device
+  // that bridges BLU sensors — its name contains "BLU" but it is not a BLU
+  // device. Testing the name first returned 'ble' for it and threw away a
+  // perfectly good `hw_version: gen3`.
+  if (m.includes('blu') || m.includes('bluetooth')) return 'ble';
 
   if (m.includes('g4') || m.includes('gen4') || m.includes('gen 4')) return 4;
   if (m.includes('g3') || m.includes('gen3') || m.includes('gen 3')) return 3;

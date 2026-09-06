@@ -30,6 +30,14 @@ when it matches `gen<n>`: other integrations put arbitrary text in that field
 (`esp32`, `RAX50` on this instance), and it must not be mistaken for a
 generation.
 
+The name-based "BLU" test sits *below* both authoritative sources, which matters
+more than it sounds: a Shelly **BLU Gateway** (`S3GW-1DBT001`, `hw_version:
+gen3`) is a mains-powered Gen3 WiFi device that bridges BLU sensors. Its name
+contains "BLU" but it is not a BLU device, and checking the name first reported
+it as Bluetooth while discarding a perfectly good `gen3`. Real BLU hardware —
+the BLU TRV (`SBTR-…`), BLU H&T — carries no `hw_version`, so it falls through
+to the `SB` prefix or the name and still reports `'ble'`.
+
 `HADevice` gained `model_id` and `hw_version` to carry this.
 
 ## v1.3.0 — 2026-09-06

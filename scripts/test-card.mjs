@@ -990,9 +990,18 @@ try {
     eq('SH prefix is gen1', gen('', undefined, 'SHDM-2'), 1);
     eq('S4 prefix is gen4', gen('', undefined, 'S4SW-001X16EU'), 4);
 
-    // BLU carries neither hw_version nor model_id, so the name is all there is.
-    eq('BLU is ble', gen('BLU H&T', undefined, undefined), 'ble');
-    eq('BLU wins over everything', gen('Shelly BLU Button', 'gen3'), 'ble');
+    // BLU, and the trap in it. Real BLU hardware carries no hw_version, so it
+    // reaches the SB prefix or the name and reports 'ble'. The BLU *Gateway* is
+    // a mains-powered Gen3 WiFi bridge whose name merely contains "BLU" —
+    // testing the name first reported it as 'ble' and discarded a good gen3.
+    eq('BLU H&T falls to the name', gen('BLU H&T', undefined, undefined), 'ble');
+    eq('the BLU TRV is ble by its SB prefix', gen('Shelly BLU TRV', undefined, 'SBTR-001AEU'), 'ble');
+    eq('the BLU Gateway is gen3, not ble',
+      gen('Shelly BLU Gateway Gen3', 'gen3', 'S3GW-1DBT001'), 3);
+    eq('and still gen3 on model_id alone',
+      gen('Shelly BLU Gateway Gen3', undefined, 'S3GW-1DBT001'), 3);
+    // SHBT is Gen1 (Shelly Button 1) — SH, not SB. The two must not collide.
+    eq('SHBT is gen1, not ble', gen('Shelly Button 1', undefined, 'SHBT-1'), 1);
 
     // Name heuristics still stand when nothing better is available.
     eq('plus in the name is gen2', gen('Shelly Plus I4'), 2);
