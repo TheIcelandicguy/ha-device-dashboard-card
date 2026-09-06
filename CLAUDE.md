@@ -187,7 +187,16 @@ depth; this file is the fast orientation. Contributor workflow is in
   type) so existing Shelly *device-trigger* automations run unchanged. The button
   number comes from the registry unique_id via `config/entity_registry/get`
   (`shellyInputChannel`) because a renamed input's entity id no longer says which
-  button it is; Gen2+ ids are 0-based, Gen1 are 1-based. Automations on the
+  button it is; Gen2+ ids are 0-based, Gen1 are 1-based. That generation comes
+  from `detectShellyGen`, which asks the integration before guessing: the
+  registry's `hw_version` (`gen1`/`gen2`/`gen3`), then the `model_id` prefix
+  (`SH`=1, `SN`/`SA`=2, `S3`=3, `S4`=4, `SB`=BLU), then the display name, then
+  `'other'` — never a confident Gen 1, which is what it used to return for every
+  model it did not recognise, i.e. every new one. Two traps live in that
+  function: `SB`/`SH` are a transposition apart and mean opposite things
+  (`SBHT-003C` is a BLU sensor, `SHBTN-2` a Gen1 button), and the name-based BLU
+  test must never fire for a *gateway* — the BLU Gateway and the Bluetooth
+  Gateway are mains WiFi units whose names say Bluetooth. Automations on the
   `event.*` entity itself never see a replay (that entity is fed by the device),
   and `fire_event` needs an admin login. None of this makes the wall button do
   anything — that stays with Shelly's own actions or an HA automation.
