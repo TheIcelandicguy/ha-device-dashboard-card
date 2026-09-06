@@ -3,7 +3,7 @@
 All notable changes to HA Device Dashboard. Versions are git tags; HACS
 installs from them.
 
-## Unreleased
+## v1.3.0 — 2026-09-06
 
 ### The dashboard speaks your language
 
@@ -202,7 +202,7 @@ normally do were quietly dropped on the way in. All three now work:
 `createCardElement` remains the fallback for a Home Assistant old enough not to
 define `hui-card`.
 
-## 1.2.0 — 2026-09-04
+## v1.2.0 — 2026-09-04
 
 ### Ask before turning a device off
 
