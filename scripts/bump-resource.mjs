@@ -11,7 +11,10 @@
  * Lovelace resources are NOT in the REST API — they are a WebSocket command — so
  * this needs a long-lived access token:
  *
- *   HA_TOKEN   required. Profile → Security → Long-lived access tokens.
+ *   HA_TOKEN   the token. Profile → Security → Long-lived access tokens.
+ *              If unset, a `.ha-token` file in the repo root is read instead —
+ *              gitignored, and it keeps the secret off the command line and out
+ *              of shell history, which `setx HA_TOKEN <value>` does not.
  *   HA_URL     optional, default http://homeassistant.local:8123
  *
  * Never fails the build: no token, no HA, no matching resource — it says why and
@@ -21,7 +24,17 @@
 import fs from 'fs';
 
 const HA_URL = process.env.HA_URL || 'http://homeassistant.local:8123';
-const TOKEN = process.env.HA_TOKEN;
+
+/** Env first, then the gitignored `.ha-token` beside the repo root. */
+function readToken() {
+  if (process.env.HA_TOKEN) return process.env.HA_TOKEN.trim();
+  try {
+    return fs.readFileSync(new URL('../.ha-token', import.meta.url), 'utf8').trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+const TOKEN = readToken();
 /** Matched against the start of the resource URL, before the `?v=`. */
 const RESOURCE_PATH = '/local/community/ha-device-dashboard/ha-device-dashboard.js';
 

@@ -233,10 +233,12 @@ and HA's service worker keep serving the response they cached under that same UR
 On 2026-08-31 a full day of builds reached `Z:` without one of them reaching the
 dashboard, and it read as "the feature didn't work". `npm run build` now runs
 `scripts/bump-resource.mjs`, which rewrites `?v=` to the current `BUILD_TAG` over
-HA's WebSocket API (Lovelace resources are not in the REST API). It needs
-`HA_TOKEN` (long-lived token; `HA_URL` defaults to `http://homeassistant.local:8123`)
-and is deliberately silent-and-successful without one — it prints the URL to set by
-hand instead. It is skipped in `npm run watch`. `npm run deploy:bump` runs it alone.
+HA's WebSocket API (Lovelace resources are not in the REST API). For the token it
+reads `HA_TOKEN`, or failing that a **`.ha-token`** file in the repo root —
+gitignored, and it keeps the secret off the command line and out of shell history
+the way `setx HA_TOKEN <value>` does not. (`HA_URL` defaults to
+`http://homeassistant.local:8123`.) It is deliberately silent-and-successful
+without a token — it prints the URL to set by hand instead. It is skipped in `npm run watch`. `npm run deploy:bump` runs it alone.
 
 So: if a change is definitely in `dist` but not on screen, check the console
 `BUILD_TAG` against the `?v=` on the resource before debugging the code.

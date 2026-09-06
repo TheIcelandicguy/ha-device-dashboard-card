@@ -12,6 +12,9 @@ backups/
 # scratch patch scripts
 .tmp-*
 
+# long-lived HA token for scripts/bump-resource.mjs — never commit
+.ha-token
+
 # internal roadmap / planning notes — local only, not for the public repo
 docs/universal-engine-plan.md
 video-script.md
