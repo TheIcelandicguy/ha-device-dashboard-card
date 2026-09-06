@@ -1000,7 +1000,11 @@ try {
       gen('Shelly BLU Gateway Gen3', 'gen3', 'S3GW-1DBT001'), 3);
     eq('and still gen3 on model_id alone',
       gen('Shelly BLU Gateway Gen3', undefined, 'S3GW-1DBT001'), 3);
-    // SHBT is Gen1 (Shelly Button 1) — SH, not SB. The two must not collide.
+    // SB and SH are a transposition apart and mean opposite things. Both codes
+    // are real: SBHT-003C is the BLU H&T (per the Shelly app), SHBT-1 the Gen1
+    // Shelly Button 1. Pinned as a pair so neither rule can be loosened without
+    // this failing.
+    eq('SBHT is a BLU sensor', gen('Shelly BLU HT', undefined, 'SBHT-003C'), 'ble');
     eq('SHBT is gen1, not ble', gen('Shelly Button 1', undefined, 'SHBT-1'), 1);
 
     // Name heuristics still stand when nothing better is available.
