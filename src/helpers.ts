@@ -1078,8 +1078,9 @@ export function detectShellyGen(
   const code = (modelId ?? '').toUpperCase();
   // SB = BLU (battery Bluetooth): SBTR-001AEU is the BLU TRV, SBHT-003C the
   // BLU H&T. Note SB and SH are a transposition apart and mean opposite things
-  // — SBHT is a BLU sensor, SHBT-1 is the Gen1 Shelly Button 1 — so this test
-  // must stay above the SH one and neither may be loosened to a fuzzy match.
+  // — SBHT-003C is a BLU sensor, SHBTN-2 is the Gen1 Shelly Button 2 — so this
+  // test must stay above the SH one and neither may be loosened to a fuzzy
+  // match. `S4` below is extrapolated from the scheme, not observed hardware.
   if (/^SB/.test(code)) return 'ble';
   if (/^S4/.test(code)) return 4;
   if (/^S3/.test(code)) return 3;

@@ -988,7 +988,11 @@ try {
     eq('SN prefix is gen2', gen('', undefined, 'SNSW-001P16EU'), 2);
     eq('S3 prefix is gen3', gen('', undefined, 'S3DM-0A101WWL'), 3);
     eq('SH prefix is gen1', gen('', undefined, 'SHDM-2'), 1);
-    eq('S4 prefix is gen4', gen('', undefined, 'S4SW-001X16EU'), 4);
+    // Constructed, not observed: there is no Gen4 hardware on the instance these
+    // fixtures came from. The S4 rule is extrapolated from Shelly's own scheme
+    // (SH/SN/S3 by generation), so treat this one as a guard on the rule rather
+    // than evidence about a real device.
+    eq('S4 prefix is gen4 (synthetic fixture)', gen('', undefined, 'S4SW-001X16EU'), 4);
 
     // BLU, and the trap in it. Real BLU hardware carries no hw_version, so it
     // reaches the SB prefix or the name and reports 'ble'. The BLU *Gateway* is
@@ -1001,11 +1005,11 @@ try {
     eq('and still gen3 on model_id alone',
       gen('Shelly BLU Gateway Gen3', undefined, 'S3GW-1DBT001'), 3);
     // SB and SH are a transposition apart and mean opposite things. Both codes
-    // are real: SBHT-003C is the BLU H&T (per the Shelly app), SHBT-1 the Gen1
-    // Shelly Button 1. Pinned as a pair so neither rule can be loosened without
-    // this failing.
+    // below are real, read off the devices in the Shelly app: SBHT-003C is the
+    // BLU H&T, SHBTN-2 the Shelly Button 2 (Gen1, firmware v1.14). Pinned as a
+    // pair so neither rule can be loosened without this failing.
     eq('SBHT is a BLU sensor', gen('Shelly BLU HT', undefined, 'SBHT-003C'), 'ble');
-    eq('SHBT is gen1, not ble', gen('Shelly Button 1', undefined, 'SHBT-1'), 1);
+    eq('SHBTN is gen1, not ble', gen('Shelly Button 2', undefined, 'SHBTN-2'), 1);
 
     // Name heuristics still stand when nothing better is available.
     eq('plus in the name is gen2', gen('Shelly Plus I4'), 2);
