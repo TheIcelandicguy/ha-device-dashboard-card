@@ -3,6 +3,7 @@ import { formatPower, formatEnergy, formatUptime, gaugeRings } from '../helpers'
 import type { PowerMonitorVariant } from '../types';
 import type { TileCtx } from './tile-context';
 import { renderNameDot, chipsInHeader } from './tile-parts';
+import { t } from '../localize';
 
 export function renderPowerMonitorTile(ctx: TileCtx, variant: PowerMonitorVariant): TemplateResult {
   switch (variant) {
@@ -34,7 +35,7 @@ function pmChips(s: PMSensors, cls = 'ts-chips'): TemplateResult {
   return html`<div class="${cls}">
     ${s.voltage != null ? html`<span class="ts-chip">${s.voltage.toFixed(1)} V</span>` : nothing}
     ${s.current != null ? html`<span class="ts-chip">${s.current.toFixed(2)} A</span>` : nothing}
-    ${s.energy  != null ? html`<span class="ts-chip" title="${s.energyLabel ?? 'Energy'}">${s.energy.toFixed(2)} kWh</span>` : nothing}
+    ${s.energy  != null ? html`<span class="ts-chip" title="${s.energyLabel ?? t('pm.energy')}">${s.energy.toFixed(2)} kWh</span>` : nothing}
     ${s.temp    != null ? html`<span class="ts-chip">${s.temp.toFixed(1)} °C</span>` : nothing}
     ${s.rssi    != null ? html`<span class="ts-chip">${s.rssi} dBm</span>` : nothing}
   </div>`;
@@ -70,12 +71,12 @@ function renderPMBigNumber(ctx: TileCtx): TemplateResult {
     <div class="ts-hero" style="--ts-accent:${accent}">
       <div class="ts-hero-bar" style="background:${isOn ? accent : 'var(--sc-tile-border)'}"></div>
       <div class="ts-hero-top">
-        ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
+        ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? t('state.on_short') : t('state.off_short')}</button>` : nothing}
         ${renderNameDot(device, online, 'ts-hero-name')}
         ${hdrChips ? pmChips(s, 'ts-chips ts-chips-hdr') : nothing}
       </div>
       <div class="ts-hero-num" style="color:${isOn ? accent : 'var(--sc-text-muted)'}">${s.power != null ? s.power.toFixed(s.power < 10 ? 1 : 0) : '—'}</div>
-      <div class="ts-hero-unit">watts · ${isOn ? 'active' : 'idle'}</div>
+      <div class="ts-hero-unit">${t('pm.watts')} · ${isOn ? t('state.active') : t('state.idle_low')}</div>
       ${ctx.showEl('graph') ? html`<div class="ts-hero-spark"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:${H}px;display:block">${sparkSvg}</svg></div>` : nothing}
       <div class="ts-hero-foot">
         ${!hdrChips && ctx.showEl('secondary') ? pmChips(s) : nothing}
@@ -129,7 +130,7 @@ function renderPMGauge(ctx: TileCtx): TemplateResult {
   return html`
     <div class="ts-ring" style="--ts-accent:${accent};align-items:center">
       <div class="ts-ring-top" style="width:100%">
-        ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
+        ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? t('state.on_short') : t('state.off_short')}</button>` : nothing}
         ${renderNameDot(device, online, 'ts-ring-name')}
         ${chipsInHeader(ctx) ? pmChips(s, 'ts-chips ts-chips-hdr') : nothing /* gauge has no body chips to stand down */}
       </div>
@@ -170,7 +171,7 @@ function renderPMGauge(ctx: TileCtx): TemplateResult {
             <path d="${arcPath(r, ring.pct)}" fill="none" stroke="${stroke}" stroke-width="${STROKE}" stroke-linecap="round" opacity="${lit ? '0.9' : '0.3'}"/>
             <text x="${CX}" y="${vy}" font-size="8" fill="${ring.color}" text-anchor="middle" dominant-baseline="hanging" font-family="monospace" font-weight="700" opacity="${lit ? 0.95 : 0.5}">${fmtVal(ring.val, ring.key, ring.digits)} ${ring.label}</text>`;
         })}
-      </svg>` : html`<span style="color:var(--sc-text-muted);font-size:.8em">No readings to gauge</span>`}
+      </svg>` : html`<span style="color:var(--sc-text-muted);font-size:.8em">${t('empty.no_gauge_readings')}</span>`}
       ${lowerBody(ctx)}
     </div>`;
 }
@@ -210,7 +211,7 @@ function renderPMGraph(ctx: TileCtx): TemplateResult {
   return html`
     <div class="ts-spark" style="--ts-accent:${accent}">
       <div class="ts-spark-top">
-        ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
+        ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? t('state.on_short') : t('state.off_short')}</button>` : nothing}
         ${renderNameDot(device, online, 'ts-spark-name')}
         ${hdrChips ? pmChips(s, 'ts-chips ts-chips-hdr') : nothing}
       </div>
@@ -266,7 +267,7 @@ function renderPMCompact(ctx: TileCtx): TemplateResult {
           ${s.energy != null ? html`<span class="ts-hbar-badge">${s.energy.toFixed(2)} kWh</span>` : nothing}
           ${s.uptime != null && ctx.showEl('uptime') ? html`<span class="ts-hbar-badge">${formatUptime(s.uptime)}</span>` : nothing}
         </div>
-        ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
+        ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? t('state.on_short') : t('state.off_short')}</button>` : nothing}
       </div>
       ${lowerBody(ctx)}
     </div>`;
@@ -304,18 +305,18 @@ function renderPMTable(ctx: TileCtx): TemplateResult {
   return html`
     <div class="ts-list" style="--ts-accent:${accent}">
       <div class="ts-list-header">
-        ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
+        ${sw && ctx.showEl('toggle') ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? t('state.on_short') : t('state.off_short')}</button>` : nothing}
         ${renderNameDot(device, online, 'ts-list-name')}
         ${hdrChips ? pmChips(s, 'ts-chips ts-chips-hdr') : nothing}
       </div>
-      ${s.power   != null ? row('Power',   formatPower(s.power),         true) : nothing}
+      ${s.power   != null ? row(t('pm.power'),   formatPower(s.power),         true) : nothing}
       ${!hdrChips && ctx.showEl('secondary') ? html`
-        ${s.voltage != null ? row('Voltage', `${s.voltage.toFixed(1)} V`)       : nothing}
-        ${s.current != null ? row('Current', `${s.current.toFixed(3)} A`)       : nothing}
+        ${s.voltage != null ? row(t('pm.voltage'), `${s.voltage.toFixed(1)} V`)       : nothing}
+        ${s.current != null ? row(t('pm.current'), `${s.current.toFixed(3)} A`)       : nothing}
         ${s.energy  != null ? row(s.energyLabel, formatEnergy(s.energy))        : nothing}
-        ${s.temp    != null ? row('Temp',    `${s.temp.toFixed(1)} °C`)         : nothing}
-        ${s.rssi    != null ? row('WiFi',    `${s.rssi} dBm`)                   : nothing}` : nothing}
-      ${s.uptime  != null && ctx.showEl('uptime') ? row('Uptime',  formatUptime(s.uptime)) : nothing}
+        ${s.temp    != null ? row(t('pm.temperature'),    `${s.temp.toFixed(1)} °C`)         : nothing}
+        ${s.rssi    != null ? row(t('pm.rssi'),    `${s.rssi} dBm`)                   : nothing}` : nothing}
+      ${s.uptime  != null && ctx.showEl('uptime') ? row(t('pm.uptime'),  formatUptime(s.uptime)) : nothing}
       ${ctx.showEl('graph') ? html`<div class="ts-list-spark">
         <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:${H}px;display:block">${sparkBody}</svg>
       </div>` : nothing}

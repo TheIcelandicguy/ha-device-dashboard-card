@@ -42,6 +42,46 @@ CI runs all of these plus a build and a stale-`dist` check.
   summaries and the cascades. The summaries were once "the first thing I'd
   memoise" and turned out to cost 0.18 ms for 56 devices.
 
+## Adding a language
+
+The card renders in whatever language Home Assistant reports (`hass.language`),
+falling back to English. Only the **dashboard** is translated — tiles, chips,
+the header, Needs attention, the detail sheet. The GUI editor is deliberately
+English: it is ~600 strings, most of them explanatory paragraphs, and the person
+configuring a card chose English in a way the family reading it did not.
+
+To add one:
+
+1. Copy `src/translations/en.ts` to `src/translations/<code>.ts`, where `<code>`
+   is the language code HA uses (`de`, `pt-BR` → use `pt` unless you mean the
+   region specifically; a region falls back to its base language automatically).
+2. Translate the **values**. Never the keys.
+3. Register it in `LOCALES` in `src/localize.ts`.
+4. `npm run test:card`.
+
+What the tests enforce, so you find out now rather than from a screenshot:
+
+- **Key parity, both ways.** A key English has and yours lacks fails; so does a
+  key yours has and English lacks. This is what stops a locale rotting quietly
+  as strings are added.
+- **Placeholders survive.** `{n}`, `{name}` and friends must appear in your
+  string too — drop one and the value it carried vanishes with it.
+
+Three things worth knowing before you start:
+
+- **`chip.*` values are abbreviations on purpose.** They render inside a tile
+  chip a few characters wide. Translate the *abbreviation*, not the term, or it
+  will clip. `pm.*`, `graph.*` and `detail.*` are full words — there is room.
+- **One key per use site, not per word.** `detail.sensor_current` is electrical
+  current; `detail.climate_current` is the current *temperature*. They collide
+  in English and almost nowhere else.
+- **Some English strings are not labels and have no key** — product names, units
+  and protocol names (Shelly, Wi-Fi, MQTT, dBm, SSID), HA state strings the card
+  matches on (`unavailable`), light effect names HA reports (`Solid`), and
+  `'No Area'`, which is the `area_styles` config key for the unassigned bucket
+  as well as a label. Translating any of those breaks behaviour rather than
+  improving it.
+
 ## Testing without a Home Assistant
 
 `scripts/test-card.mjs` runs the card's logic against fixture `hass` objects —

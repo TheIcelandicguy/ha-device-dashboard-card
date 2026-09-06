@@ -3,6 +3,7 @@ import type { HassAttrs } from '../types';
 import { formatPower } from '../helpers';
 import type { TileCtx } from './tile-context';
 import { renderEffectPicker } from './tile-parts';
+import { t } from '../localize';
 
 const WHEEL_SIZE = 140;
 const WHEEL_R = WHEEL_SIZE / 2;
@@ -13,7 +14,7 @@ export function renderLightControlTile(ctx: TileCtx): TemplateResult {
   const { device, isOn, accent, online, hass, profile } = ctx;
   const sw = ctx.getPrimarySwitch(device);
   const s = ctx.tileSensors(device);
-  if (!sw) return html`<div class="ts-light"><span style="color:var(--sc-text-muted);font-size:.8em">No light entity</span></div>`;
+  if (!sw) return html`<div class="ts-light"><span style="color:var(--sc-text-muted);font-size:.8em">${t('empty.no_light')}</span></div>`;
 
   // Non-light devices (plug/relay/switch) assigned light-control style:
   // just show a large on/off button — no sliders or colour wheel
@@ -27,7 +28,7 @@ export function renderLightControlTile(ctx: TileCtx): TemplateResult {
           ${ctx.showEl('toggle') ? html`
             <button class="tog ${isOn ? 'on' : 'off'}" style="font-size:1.1em;padding:10px 28px;border-radius:24px"
               @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>
-              ${isOn ? 'ON' : 'OFF'}
+              ${isOn ? t('state.on_short') : t('state.off_short')}
             </button>` : nothing}
         </div>
         ${s.power != null ? html`<div style="font-size:.72em;color:var(--sc-text-muted);text-align:center">${formatPower(s.power)}</div>` : nothing}
@@ -98,7 +99,7 @@ export function renderLightControlTile(ctx: TileCtx): TemplateResult {
       <div class="ts-light-top">
         <div class="ts-light-name"><span class="dot ${online ? 'online' : 'offline'}"></span>${device.name}</div>
         ${ctx.showEl('toggle')
-          ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>`
+          ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? t('state.on_short') : t('state.off_short')}</button>`
           : nothing}
       </div>
       ${hasColor && ctx.showEl('color_wheel') ? html`
@@ -119,7 +120,7 @@ export function renderLightControlTile(ctx: TileCtx): TemplateResult {
           </svg>
         </div>` : nothing}
       ${ctx.showEl('brightness') ? html`<div class="ts-light-row">
-        <span class="ts-light-lbl">Brightness</span>
+        <span class="ts-light-lbl">${t('tile.brightness')}</span>
         <div style="display:flex;align-items:center;gap:6px;flex:1">
           <input type="range" class="dim-slider ts-light-slider" min="1" max="100"
             .value=${String(isOn ? bPct : 1)} ?disabled=${!isOn}
@@ -131,7 +132,7 @@ export function renderLightControlTile(ctx: TileCtx): TemplateResult {
       </div>` : nothing}
       ${supportsColorTemp && ctx.showEl('color_temp') ? html`
         <div class="ts-light-row">
-          <span class="ts-light-lbl">Temp</span>
+          <span class="ts-light-lbl">${t('tile.color_temp')}</span>
           <div style="display:flex;align-items:center;gap:6px;flex:1">
             <input type="range" class="dim-slider ts-light-slider ts-light-ct" min="${colorTempMin}" max="${colorTempMax}"
               .value=${String(colorTempCur)} ?disabled=${!isOn}
@@ -141,7 +142,7 @@ export function renderLightControlTile(ctx: TileCtx): TemplateResult {
         </div>` : nothing}
       ${isRgbw && ctx.showEl('white') ? html`
         <div class="ts-light-row">
-          <span class="ts-light-lbl">White</span>
+          <span class="ts-light-lbl">${t('tile.white')}</span>
           <div style="display:flex;align-items:center;gap:6px;flex:1">
             <input type="range" class="dim-slider white-slider ts-light-slider" min="0" max="255"
               .value=${String(whiteVal)} ?disabled=${!isOn}

@@ -40,6 +40,7 @@ import {
   deviceSensorValues, attachExtraSensors, stripDevicePrefix, colorAt,
 } from './helpers';
 import { renderAnimSvg } from './anim-icons';
+import { t, tOr, setLanguage } from './localize';
 
 /** Floor for hold-to-dim: 0 would turn the light off mid-ramp. */
 const MIN_DIM = 3;
@@ -303,6 +304,12 @@ export class HADeviceDashboard extends LitElement {
   }
 
   protected willUpdate(): void {
+    // Point t() at the viewer's language before anything renders. Set here
+    // rather than in a hass setter because every render path goes through
+    // willUpdate, including the first — and it must run before the early
+    // return below, which only guards the edit-preview probe.
+    setLanguage(this.hass?.language);
+
     // Detect HA's edit-dialog live PREVIEW PANE once (ancestors are stable) and
     // flag the host with data-edit-preview. HA's mobile edit dialog stacks the
     // config form over this pane, and the pane sizes to our content (height:
@@ -904,13 +911,13 @@ export class HADeviceDashboard extends LitElement {
   }
 
   private _timeAgo(isoString: string | null | undefined): string {
-    if (!isoString) return 'Never';
+    if (!isoString) return t('time.never');
     const ms = Date.now() - new Date(isoString).getTime();
-    if (isNaN(ms) || ms < 0) return 'Never';
-    if (ms < 60_000)     return 'Just now';
-    if (ms < 3_600_000)  return `${Math.floor(ms / 60_000)}m ago`;
-    if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)}h ago`;
-    return `${Math.floor(ms / 86_400_000)}d ago`;
+    if (isNaN(ms) || ms < 0) return t('time.never');
+    if (ms < 60_000)     return t('time.just_now');
+    if (ms < 3_600_000)  return t('time.minutes_ago', { n: Math.floor(ms / 60_000) });
+    if (ms < 86_400_000) return t('time.hours_ago', { n: Math.floor(ms / 3_600_000) });
+    return t('time.days_ago', { n: Math.floor(ms / 86_400_000) });
   }
 
   /** Chip visibility cascade: device override → area override → global filter. */
@@ -977,47 +984,47 @@ export class HADeviceDashboard extends LitElement {
         if (!dc && (id.endsWith('_firmware') || id.endsWith('_fw'))     && show('fw_version')) { push('fw_version', 'FW',       s.state); continue; }
         if (!dc && id.endsWith('_mac')                                  && show('mac'))        { push('mac',        'MAC',      s.state); continue; }
         const v = parseFloat(s.state); if (isNaN(v)) continue;
-        if      (dc === 'power'           && show('power'))          push('power',          'Power',  formatPower(v),         false, id);
-        else if (dc === 'apparent_power'  && show('apparent_power')) push('apparent_power', 'App.P',  formatApparentPower(v), false, id);
-        else if (dc === 'reactive_power'  && show('reactive_power')) push('reactive_power', 'Re.P',   formatReactivePower(v), false, id);
-        else if (dc === 'power_factor'    && show('power_factor'))   push('power_factor',   'PF',     formatPercent(v),       false, id);
-        else if (dc === 'frequency'       && show('frequency'))      push('frequency',      'Freq',   formatFrequency(v),     false, id);
+        if      (dc === 'power'           && show('power'))          push('power',          t('chip.power'),  formatPower(v),         false, id);
+        else if (dc === 'apparent_power'  && show('apparent_power')) push('apparent_power', t('chip.apparent_power'),  formatApparentPower(v), false, id);
+        else if (dc === 'reactive_power'  && show('reactive_power')) push('reactive_power', t('chip.reactive_power'),   formatReactivePower(v), false, id);
+        else if (dc === 'power_factor'    && show('power_factor'))   push('power_factor',   t('chip.power_factor'),     formatPercent(v),       false, id);
+        else if (dc === 'frequency'       && show('frequency'))      push('frequency',      t('chip.frequency'),   formatFrequency(v),     false, id);
         else if (dc === 'energy'          && show('energy') && !energyOverride) {
           const c = this._energyChip(device, id, v);
           if (c) push('energy', c.label, c.value, false, id);
         }
-        else if (dc === 'voltage'         && show('voltage'))        push('voltage',        'Volt',   formatVoltage(v),       false, id);
-        else if (dc === 'current'         && show('current'))        push('current',        'Curr',   formatCurrent(v),       false, id);
-        else if (dc === 'temperature'     && show('temperature'))    push('temperature',    'Temp',   formatTemp(v));
-        else if (dc === 'humidity'        && show('humidity'))       push('humidity',       'Hum',    formatHumidity(v));
-        else if (dc === 'illuminance'     && show('illuminance'))    push('illuminance',    'Light',  formatIlluminance(v));
+        else if (dc === 'voltage'         && show('voltage'))        push('voltage',        t('chip.voltage'),   formatVoltage(v),       false, id);
+        else if (dc === 'current'         && show('current'))        push('current',        t('chip.current'),   formatCurrent(v),       false, id);
+        else if (dc === 'temperature'     && show('temperature'))    push('temperature',    t('chip.temperature'),   formatTemp(v));
+        else if (dc === 'humidity'        && show('humidity'))       push('humidity',       t('chip.humidity'),    formatHumidity(v));
+        else if (dc === 'illuminance'     && show('illuminance'))    push('illuminance',    t('chip.illuminance'),  formatIlluminance(v));
         else if (dc === 'carbon_dioxide'  && show('co2'))            push('co2',            'CO₂',    formatPpm(v));
-        else if (dc === 'gas'             && show('gas'))            push('gas',            'Gas',    `${v.toFixed(1)} %`);
-        else if (dc === 'battery'         && show('battery'))        push('battery',        'Batt',   formatPercent(v));
+        else if (dc === 'gas'             && show('gas'))            push('gas',            t('chip.gas'),    `${v.toFixed(1)} %`);
+        else if (dc === 'battery'         && show('battery'))        push('battery',        t('chip.battery'),   formatPercent(v));
         else if ((dc === 'signal_strength' || id.includes('rssi'))   && show('rssi'))
-          push('rssi', 'Wi-Fi', `${v} dBm`);
-        else if (id.includes('uptime')    && show('uptime'))         push('uptime',         'Up',     formatUptime(v));
+          push('rssi', t('chip.rssi'), `${v} dBm`);
+        else if (id.includes('uptime')    && show('uptime'))         push('uptime',         t('chip.uptime'),     formatUptime(v));
       } else if (e.domain === 'binary_sensor') {
         // Alerts surface as primary chips while triggered, sink to the diag footer when clear.
         const on = s.state === 'on';
         const alertTier = (w: boolean): SensorChipTier => (w ? 'primary' : 'diag');
-        if      (dc === 'motion'   && show('motion'))    push('motion',    'Motion',    on ? 'Motion'    : 'Clear',  on, undefined, alertTier(on));
+        if      (dc === 'motion'   && show('motion'))    push('motion',    t('chip.motion'),    on ? t('state.motion')    : t('state.clear'),  on, undefined, alertTier(on));
         else if ((dc === 'door' || dc === 'window' || dc === 'opening') && show('door'))
-          push('door', 'Door', on ? 'Open' : 'Closed', false, undefined, alertTier(on));
-        else if (dc === 'moisture' && show('flood'))     push('flood',     'Flood',     on ? 'Flooded'   : 'Dry',    on, undefined, alertTier(on));
-        else if (dc === 'smoke'    && show('smoke'))     push('smoke',     'Smoke',     on ? 'Smoke!'    : 'Clear',  on, undefined, alertTier(on));
-        else if (dc === 'gas'      && show('gas'))       push('gas',       'Gas',       on ? 'Gas!'      : 'Clear',  on, undefined, alertTier(on));
-        else if (dc === 'vibration' && show('vibration')) push('vibration', 'Vibr',     on ? 'Vibrating' : 'Clear',  on, undefined, alertTier(on));
+          push('door', t('chip.door'), on ? t('state.open') : t('state.closed'), false, undefined, alertTier(on));
+        else if (dc === 'moisture' && show('flood'))     push('flood',     t('chip.flood'),     on ? t('state.flooded')   : t('state.dry'),    on, undefined, alertTier(on));
+        else if (dc === 'smoke'    && show('smoke'))     push('smoke',     t('chip.smoke'),     on ? t('state.smoke')    : t('state.clear'),  on, undefined, alertTier(on));
+        else if (dc === 'gas'      && show('gas'))       push('gas',       t('chip.gas'),       on ? t('state.gas')      : t('state.clear'),  on, undefined, alertTier(on));
+        else if (dc === 'vibration' && show('vibration')) push('vibration', t('chip.vibration'),     on ? t('state.vibrating') : t('state.clear'),  on, undefined, alertTier(on));
         else if ((dc === 'heat' || id.includes('overtemp')) && show('overtemp'))
-          push('overtemp', 'Overtemp', on ? 'Overtemp!' : 'OK', on, undefined, alertTier(on));
+          push('overtemp', t('chip.overtemp'), on ? t('state.overtemp') : t('state.ok'), on, undefined, alertTier(on));
         else if ((dc === 'safety' || id.includes('overpower')) && show('overpower'))
-          push('overpower', 'Overpower', on ? 'Overpower!' : 'OK', on, undefined, alertTier(on));
+          push('overpower', t('chip.overpower'), on ? t('state.overpower') : t('state.ok'), on, undefined, alertTier(on));
         else if (dc === 'connectivity' && id.includes('cloud') && show('cloud'))
-          push('cloud', 'Cloud', on ? 'Connected' : 'Offline', !on, undefined, alertTier(!on));
+          push('cloud', t('chip.cloud'), on ? t('state.connected') : t('state.offline'), !on, undefined, alertTier(!on));
         else if (dc === 'connectivity' && id.includes('mqtt') && show('mqtt'))
-          push('mqtt', 'MQTT', on ? 'Connected' : 'Offline', !on, undefined, alertTier(!on));
+          push('mqtt', 'MQTT', on ? t('state.connected') : t('state.offline'), !on, undefined, alertTier(!on));
         else if (dc === 'connectivity' && id.includes('eth') && show('eth'))
-          push('eth', 'Ethernet', on ? 'Connected' : 'Offline', !on, undefined, alertTier(!on));
+          push('eth', t('chip.ethernet'), on ? t('state.connected') : t('state.offline'), !on, undefined, alertTier(!on));
       }
     }
 
@@ -1061,7 +1068,7 @@ export class HADeviceDashboard extends LitElement {
   private _inputActionLabel(cfg: InputActionConfig, device?: HADevice, ch?: InputChannel): string {
     if (cfg.label) return cfg.label;
     // A replayed press IS the channel — the key wears the button's own name.
-    if (cfg.action === 'press') return ch?.label ?? 'Press';
+    if (cfg.action === 'press') return ch?.label ?? t('tile.press');
     const entities = entityList(cfg.entity);
     const target = cfg.action === 'perform-action' && cfg.perform_action?.split('.').length === 2
       && !cfg.perform_action.endsWith('.turn_on') && !cfg.perform_action.endsWith('.turn_off')
@@ -1300,7 +1307,7 @@ export class HADeviceDashboard extends LitElement {
       try {
         const root = await ws();
         const top = playable(root.children);
-        if (top.length) groups.push({ label: root.title || 'Media', items: top });
+        if (top.length) groups.push({ label: root.title || t('media.default_group'), items: top });
         // One level down: each folder becomes a group. Capped so a huge
         // library integration cannot turn a tile into a request storm.
         for (const dir of (root.children ?? []).filter(n => n.can_expand && !n.can_play).slice(0, 4)) {
@@ -1367,7 +1374,7 @@ export class HADeviceDashboard extends LitElement {
     } catch (err) {
       console.warn('[ha-device-dashboard] could not replay press', err);
       fireEvent(this as any, 'hass-notification' as any,
-        { message: 'Replaying a press needs an admin login — Home Assistant refused the event' } as any);
+        { message: t('error.replay_needs_admin') } as any);
     }
   }
 
@@ -1410,17 +1417,17 @@ export class HADeviceDashboard extends LitElement {
     const close = () => { this._confirmOff = null; };
     return html`
       <div class="cf-backdrop" @click=${close}>
-        <div class="cf-box" role="alertdialog" aria-modal="true" aria-label="Confirm turn off"
+        <div class="cf-box" role="alertdialog" aria-modal="true" aria-label=${t('confirm.aria')}
           @click=${(e: Event) => e.stopPropagation()}>
-          <div class="cf-title">Turn off ${pending.name}?</div>
-          <div class="cf-sub">This device is set to ask before switching off.</div>
+          <div class="cf-title">${t('confirm.title', { name: pending.name })}</div>
+          <div class="cf-sub">${t('confirm.body')}</div>
           <div class="cf-actions">
-            <button class="cf-cancel" @click=${close}>Cancel</button>
+            <button class="cf-cancel" @click=${close}>${t('action.cancel')}</button>
             <button class="cf-go" @click=${async () => {
               const p = pending;
               this._confirmOff = null;
               await this._applyToggle(p.entityId, true);
-            }}>Turn off</button>
+            }}>${t('action.turn_off')}</button>
           </div>
         </div>
       </div>`;
@@ -1533,7 +1540,7 @@ export class HADeviceDashboard extends LitElement {
         const unit = (this.hass.states[ent.entity_id]?.attributes as HassAttrs)?.unit_of_measurement ?? '';
         // Use compact channel number (e.g. " 1"/" 2") in graph labels to keep them short
         const chNum = ents.length > 1 ? this._chLabel(ent.entity_id).replace('Ch ', '') : '';
-        const label = (GRAPH_DC_LABELS[dc] ?? dc) + (chNum ? ` ${chNum}` : '');
+        const label = tOr(`graph.${dc}`, GRAPH_DC_LABELS[dc] ?? dc) + (chNum ? ` ${chNum}` : '');
         if (seenLabels.has(label)) continue; // skip duplicate channel slots
         seenLabels.add(label);
         results.push({ entityId: ent.entity_id, label, dc, unit });
@@ -1768,7 +1775,8 @@ export class HADeviceDashboard extends LitElement {
 
   /** Display label for an energy window. */
   private _energyPeriodLabel(period: EnergyPeriod): string {
-    return period === 'today' ? 'Today' : period === 'week' ? 'Week' : period === 'month' ? 'Month' : 'Energy';
+    return period === 'today' ? t('energy.today') : period === 'week' ? t('energy.week')
+      : period === 'month' ? t('energy.month') : t('energy.total');
   }
 
   /** Label + value for one energy chip, resolved through the device's energy
@@ -1779,7 +1787,7 @@ export class HADeviceDashboard extends LitElement {
    *  `liveKwh` is the entity's lifetime total (null if it has no usable state). */
   private _energyChip(device: HADevice, entityId: string, liveKwh: number | null): { label: string; value: string } | null {
     const period = this._energyPeriod(device);
-    const total = liveKwh == null ? null : { label: 'Energy', value: formatEnergy(liveKwh) };
+    const total = liveKwh == null ? null : { label: t('energy.total'), value: formatEnergy(liveKwh) };
     if (period === 'total') return total;
     const pe = this._periodEnergyValue(entityId, period);
     if (pe.failed) return total;
@@ -2330,8 +2338,8 @@ export class HADeviceDashboard extends LitElement {
     const [hx, hy] = toXY(posAngle, r);
     const handleColor = `hsl(${200 + displayPos * 0.2}, ${40 + displayPos * 0.55}%, ${38 + displayPos * 0.18}%)`;
     const stateLabel = this._valveDragPos != null ? `${Math.round(this._valveDragPos)}%`
-      : vc.state === 'opening' ? 'Opening…' : vc.state === 'closing' ? 'Closing…'
-      : pos === 100 ? 'Open' : pos === 0 ? 'Closed' : 'Partial';
+      : vc.state === 'opening' ? t('state.opening') : vc.state === 'closing' ? t('state.closing')
+      : pos === 100 ? t('state.open') : pos === 0 ? t('state.closed') : t('state.partial');
 
     const onPointerDown = !canSetPos ? undefined : (e: PointerEvent) => {
       e.stopPropagation();
@@ -2373,8 +2381,8 @@ export class HADeviceDashboard extends LitElement {
         <circle cx="${hx}" cy="${hy}" r="9" fill="${handleColor}" stroke="white" stroke-width="2" style="${canSetPos ? 'cursor:grab' : ''}"/>
         <text x="${cx}" y="${cy - 8}" text-anchor="middle" class="dial-target-text">${Math.round(displayPos)}%</text>
         <text x="${cx}" y="${cy + 7}" text-anchor="middle" class="dial-sub-text">${stateLabel}</text>
-        <text x="16" y="124" text-anchor="middle" class="dial-range-text">Closed</text>
-        <text x="144" y="124" text-anchor="middle" class="dial-range-text">Open</text>
+        <text x="16" y="124" text-anchor="middle" class="dial-range-text">${t('state.closed')}</text>
+        <text x="144" y="124" text-anchor="middle" class="dial-range-text">${t('state.open')}</text>
       </svg>
     `;
   }
@@ -2467,7 +2475,7 @@ export class HADeviceDashboard extends LitElement {
 
     // Energy honours the device's window and entity override, same as the chips —
     // otherwise a power-monitor tile shows a lifetime total next to a "Today" chip.
-    let energyLabel = 'Energy';
+    let energyLabel = t('energy.total');
     const eOverride = this._config.device_styles?.[device.device_id]?.energy_entity;
     if (eOverride) {
       const os = this.hass.states[eOverride];
@@ -2573,7 +2581,7 @@ export class HADeviceDashboard extends LitElement {
       const lt = this._deviceEnergyLifetime(d);
       if (lt != null) { sum += lt; got = true; }
     }
-    return got ? { value: sum, label: 'Energy' } : null;
+    return got ? { value: sum, label: t('energy.total') } : null;
   }
 
   private _formatHeaderMetric(key: string, v: number): string {
@@ -3224,7 +3232,7 @@ export class HADeviceDashboard extends LitElement {
       <div class="fav-section">
         <div class="fav-header">
           <span class="fav-star">★</span>
-          <span class="fav-label">Favourites</span>
+          <span class="fav-label">${t('header.favourites')}</span>
           <div class="fav-chips">
             <span class="fav-chip fav-chip-count">${onlineCount}/${favDevices.length}</span>
             ${totalPower > 0 ? html`<span class="fav-chip fav-chip-power">${formatPower(totalPower)}</span>` : nothing}
@@ -3299,7 +3307,8 @@ export class HADeviceDashboard extends LitElement {
           continue;
         }
         if (got || acc['energy']) {
-          const lbl = areaPeriod === 'today' ? 'Today' : areaPeriod === 'week' ? 'Week' : 'Month';
+          const lbl = areaPeriod === 'today' ? t('energy.today')
+            : areaPeriod === 'week' ? t('energy.week') : t('energy.month');
           chips.push({ key: 'energy', label: lbl, value: got ? formatEnergy(sum) : '…' });
         }
         continue;
@@ -3390,8 +3399,9 @@ export class HADeviceDashboard extends LitElement {
   private _renderCollapseAll(areas: string[]): TemplateResult {
     const allClosed = areas.every(a => this._closedAreas.has(a));
     return html`
-      <button class="collapse-all" title=${allClosed ? 'Expand every room' : 'Collapse every room'}
-        aria-label=${allClosed ? 'Expand every room' : 'Collapse every room'}
+      <button class="collapse-all"
+        title=${allClosed ? t('header.expand_every_room') : t('header.collapse_every_room')}
+        aria-label=${allClosed ? t('header.expand_every_room') : t('header.collapse_every_room')}
         @click=${(e: Event) => {
           e.stopPropagation();
           if (allClosed) {
@@ -3405,7 +3415,7 @@ export class HADeviceDashboard extends LitElement {
           }
         }}>
         <span class="ca-chev ${allClosed ? '' : 'open'}">▼</span>
-        <span class="ca-lbl">${allClosed ? 'Expand all' : 'Collapse all'}</span>
+        <span class="ca-lbl">${allClosed ? t('header.expand_all') : t('header.collapse_all')}</span>
       </button>`;
   }
 
@@ -3492,10 +3502,18 @@ export class HADeviceDashboard extends LitElement {
 
   private _renderAreaSection(area: string, devices: HADevice[]): TemplateResult {
     if (!devices.length) return html``;
-    const label = area || 'No Area';
+    // Two different things that used to be one variable. 'No Area' is the
+    // *config key* the unassigned bucket is stored under — area_styles and
+    // per-room header_chips are both keyed by it — so it must stay English
+    // whatever the viewer's language is, or a translated card would look up a
+    // room block that does not exist and silently lose its styling. Only the
+    // text on screen is localized. Real area names are user data and are never
+    // touched either way.
+    const styleKey = area || 'No Area';
+    const label = area || t('header.no_area');
     const isClosed = this._closedAreas.has(area);
     const onlineCount = devices.filter(d => this._isOnline(d)).length;
-    const areaStyle = this._config.area_styles?.[label];
+    const areaStyle = this._config.area_styles?.[styleKey];
     const cols = cascade.columnsFor(this._config, this._getActiveView() ?? undefined, areaStyle);
 
     const styleObj: Record<string, string> = {};
@@ -3593,7 +3611,7 @@ export class HADeviceDashboard extends LitElement {
 
     // Flat grid — no expanded panel
     const areaTileStyle: TileStyle | undefined = areaStyle?.tile_style;
-    const areaChips = this._getAreaChips(devices, label);
+    const areaChips = this._getAreaChips(devices, styleKey);
 
     return html`
       <div class="area-section ${isClosed ? 'closed' : ''} ${areaStyle?.bg_image && areaStyle.bg_image_mode === 'ambient' ? 'area-bg-ambient' : ''}" style=${styleMap(styleObj)}>
@@ -3679,8 +3697,8 @@ export class HADeviceDashboard extends LitElement {
         <ha-card>
           <div style="padding:20px;text-align:center;color:var(--secondary-text-color,#9ca3af);">
             <div style="font-size:2em;margin-bottom:8px">📡</div>
-            <div style="font-weight:600;margin-bottom:4px">HA Device Dashboard</div>
-            <div style="font-size:.85em">Add the card to configure rooms and devices</div>
+            <div style="font-weight:600;margin-bottom:4px">${t('picker.title')}</div>
+            <div style="font-size:.85em">${t('picker.subtitle')}</div>
           </div>
         </ha-card>`;
     }
@@ -3815,9 +3833,9 @@ export class HADeviceDashboard extends LitElement {
       <div class="attention">
         <div class="att-hdr" @click=${() => { this._attentionOpen = !this._attentionOpen; }}>
           <span class="att-caret">${this._attentionOpen ? '▾' : '▸'}</span>
-          <span class="att-title">Needs attention</span>
+          <span class="att-title">${t('header.needs_attention')}</span>
           ${items.length ? html`<span class="att-count">${items.length}</span>` : nothing}
-          ${drifting ? html`<span class="att-fw-chip">${fw.length} firmware versions</span>` : nothing}
+          ${drifting ? html`<span class="att-fw-chip">${t('header.firmware_versions', { n: fw.length })}</span>` : nothing}
         </div>
         ${this._attentionOpen ? html`
           <div class="att-body">
@@ -3830,13 +3848,13 @@ export class HADeviceDashboard extends LitElement {
               </button>`)}
             ${drifting ? html`
               <div class="att-fw">
-                <div class="att-fw-title">Firmware</div>
+                <div class="att-fw-title">${t('header.firmware')}</div>
                 ${fw.map(g => html`
                   <div class="att-fw-row ${g.current ? 'current' : ''}">
                     <span class="att-fw-ver">${g.version}</span>
                     <span class="att-fw-bar"><i style="width:${Math.round((g.devices.length / devices.length) * 100)}%"></i></span>
                     <span class="att-fw-n">${g.devices.length}</span>
-                    ${g.current ? html`<span class="att-fw-tag">newest</span>` : nothing}
+                    ${g.current ? html`<span class="att-fw-tag">${t('header.newest')}</span>` : nothing}
                   </div>`)}
               </div>` : nothing}
           </div>` : nothing}
@@ -3932,14 +3950,14 @@ export class HADeviceDashboard extends LitElement {
           window.dispatchEvent(new CustomEvent('hdd-editor-goto', {
             detail: { tab: 'design', section: 'design-tiles', flash: 'delegate_controls' },
           }));
-        }}>Native controls</button>`
-      : html`<b>Native controls</b>`;
+        }}>${t('notice.native_controls')}</button>`
+      : html`<b>${t('notice.native_controls')}</b>`;
     return html`
       <div class="delegate-notice">
         <span class="dn-icon">◈</span>
-        <span class="dn-text">${n} ${n === 1 ? 'device has' : 'devices have'} extra controls
-          (fan, vacuum, lock…). Turn on ${setting} ${inEditor ? 'to show them.' : 'in the editor to show them.'}</span>
-        <button class="dn-dismiss" title="Dismiss"
+        <span class="dn-text">${t(n === 1 ? 'notice.delegate_one' : 'notice.delegate_many', { n })}
+          ${setting} ${inEditor ? t('notice.delegate_here') : t('notice.delegate_editor')}</span>
+        <button class="dn-dismiss" title=${t('action.dismiss')}
           @click=${(e: Event) => { e.stopPropagation(); this._dismissDelegateNotice(); }}>×</button>
       </div>`;
   }

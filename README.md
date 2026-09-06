@@ -46,6 +46,9 @@ Frontend only: no custom integration, no Python, no helper entities.
   device onto the matching tiles
 - **Embed your own cards** — any Lovelace card above, below, or inside a room
 - **Visual editor** — full GUI editor with an Advanced toggle and a read-only YAML tab
+- **Translated dashboard** — the card follows Home Assistant's language. English and
+  Icelandic ship today; [adding a locale](CONTRIBUTING.md#adding-a-language) is one
+  file. The GUI editor is English only
 
 ---
 

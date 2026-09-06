@@ -2,6 +2,7 @@ import { html, nothing, TemplateResult } from 'lit';
 import type { HAEntity, HassAttrs } from '../types';
 import type { TileCtx } from './tile-context';
 import { renderNameDot, renderNoEntity, chipsInHeader } from './tile-parts';
+import { t } from '../localize';
 
 const PRIORITY_CLASSES = ['temperature', 'humidity', 'carbon_dioxide', 'illuminance', 'battery'];
 const BINARY_CLASSES = ['motion', 'door', 'window', 'moisture', 'smoke', 'gas'];
@@ -25,7 +26,7 @@ export function renderSensorCardTile(ctx: TileCtx): TemplateResult {
     return s && BINARY_CLASSES.includes((s.attributes as HassAttrs)?.device_class ?? '');
   }) : undefined;
 
-  if (!primaryEnt && !binaryEnt) return renderNoEntity(device, online, 'ts-sensor', 'No sensor');
+  if (!primaryEnt && !binaryEnt) return renderNoEntity(device, online, 'ts-sensor', t('empty.no_sensor'));
 
   if (primaryEnt) {
     const st = hass.states[primaryEnt.entity_id];
@@ -103,8 +104,10 @@ export function renderSensorCardTile(ctx: TileCtx): TemplateResult {
   const isOn = st?.state === 'on';
   const dc = (st?.attributes as HassAttrs)?.device_class ?? '';
   const label = isOn
-    ? (dc === 'motion' ? 'Motion' : dc === 'moisture' ? 'Flooded' : dc === 'smoke' ? 'Smoke!' : 'Open')
-    : (dc === 'motion' ? 'Clear' : dc === 'moisture' ? 'Dry' : dc === 'smoke' ? 'Clear' : 'Closed');
+    ? (dc === 'motion' ? t('state.motion') : dc === 'moisture' ? t('state.flooded')
+      : dc === 'smoke' ? t('state.smoke') : t('state.open'))
+    : (dc === 'motion' ? t('state.clear') : dc === 'moisture' ? t('state.dry')
+      : dc === 'smoke' ? t('state.clear') : t('state.closed'));
   const stateColor = isOn ? '#f87171' : 'var(--sc-online-color)';
   const lastChanged = st?.last_changed ? ctx.timeAgo(st.last_changed) : '';
   return html`

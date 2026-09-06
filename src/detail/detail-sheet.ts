@@ -5,6 +5,7 @@ import {
 } from '../helpers';
 import type { HassAttrs, HAEntity } from '../types';
 import type { TileCtx } from '../tiles/tile-context';
+import { t } from '../localize';
 
 const BRIGHTNESS_MAX = 255;
 
@@ -63,11 +64,11 @@ function renderSheetHeader(ctx: TileCtx): TemplateResult {
         ${device.ip ? html`<span class="ds-chip">${device.ip}</span>` : nothing}
       </div>
       ${fw ? html`<div class="ds-fw-update">
-        <span>FW update: ${fw.current} → ${fw.newVersion}</span>
-        <button class="ds-fw-install" title="Install ${fw.newVersion} now"
-          @click=${(e: Event) => ctx.installUpdate(fw.entityId, e)}>Install</button>
+        <span>${t('detail.fw_update', { from: fw.current ?? '', to: fw.newVersion ?? '' })}</span>
+        <button class="ds-fw-install" title=${t('detail.install_now', { version: fw.newVersion ?? '' })}
+          @click=${(e: Event) => ctx.installUpdate(fw.entityId, e)}>${t('action.install')}</button>
       </div>` : nothing}
-      ${s.rssi != null ? html`<div class="ds-signal">Wi-Fi: ${rssiToQuality(s.rssi)} (${s.rssi} dBm)${s.uptime != null ? html` · Up ${formatUptime(s.uptime)}` : nothing}</div>` : nothing}
+      ${s.rssi != null ? html`<div class="ds-signal">${t('detail.signal', { quality: rssiToQuality(s.rssi), dbm: s.rssi })}${s.uptime != null ? html` · ${t('detail.uptime_inline', { value: formatUptime(s.uptime) })}` : nothing}</div>` : nothing}
       <div class="ds-accent-bar" style="background:${accent}"></div>
     </div>`;
 }
@@ -116,7 +117,7 @@ function renderSheetEntityList(ctx: TileCtx): TemplateResult {
         <span class="ds-ent-state">${state}${unit ? ` ${unit}` : ''}</span>
         ${e.borrowed_from ? html`<span class="ds-ent-age" title="Shown here via extra_sensors">from ${e.borrowed_from}</span>` : nothing}
         ${lc ? html`<span class="ds-ent-age">${lc}</span>` : nothing}
-        ${isToggle ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(ev: Event) => { ev.stopPropagation(); ctx.toggle(e.entity_id, isOn, ev); }}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
+        ${isToggle ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(ev: Event) => { ev.stopPropagation(); ctx.toggle(e.entity_id, isOn, ev); }}>${isOn ? t('state.on_short') : t('state.off_short')}</button>` : nothing}
       </div>`;
   };
 
@@ -128,10 +129,10 @@ function renderSheetEntityList(ctx: TileCtx): TemplateResult {
 
   return html`
     <div class="ds-section">
-      <div class="ds-section-title">All Entities</div>
+      <div class="ds-section-title">${t('detail.all_entities')}</div>
       ${primary.map(e => row(e, false))}
-      ${config.length ? html`<div class="ds-ent-subgroup">Configuration</div>${config.map(e => row(e, true))}` : nothing}
-      ${diag.length ? html`<div class="ds-ent-subgroup">Diagnostic</div>${diag.map(e => row(e, true))}` : nothing}
+      ${config.length ? html`<div class="ds-ent-subgroup">${t('detail.configuration')}</div>${config.map(e => row(e, true))}` : nothing}
+      ${diag.length ? html`<div class="ds-ent-subgroup">${t('detail.diagnostic')}</div>${diag.map(e => row(e, true))}` : nothing}
     </div>`;
 }
 
@@ -143,13 +144,13 @@ function renderSheetDiagnostics(ctx: TileCtx): TemplateResult {
   if (!alerts.length && !fw && s.rssi == null && s.uptime == null && !device.ip) return html``;
   return html`
     <div class="ds-section">
-      <div class="ds-section-title">Diagnostics</div>
+      <div class="ds-section-title">${t('detail.diagnostics')}</div>
       <div class="ds-diag-grid">
         ${device.ip ? html`<div class="ds-diag-item"><span class="ds-diag-label">IP</span><span class="ds-diag-val">${device.ip}</span></div>` : nothing}
-        ${s.rssi != null ? html`<div class="ds-diag-item"><span class="ds-diag-label">RSSI</span><span class="ds-diag-val">${rssiToQuality(s.rssi)} (${s.rssi} dBm)</span></div>` : nothing}
-        ${s.uptime != null ? html`<div class="ds-diag-item"><span class="ds-diag-label">Uptime</span><span class="ds-diag-val">${formatUptime(s.uptime)}</span></div>` : nothing}
-        ${fw ? html`<div class="ds-diag-item"><span class="ds-diag-label">Firmware</span><span class="ds-diag-val">${fw.current} → ${fw.newVersion}</span></div>` : nothing}
-        ${alerts.length ? html`<div class="ds-diag-item ds-diag-alert"><span class="ds-diag-label">Alerts</span><span class="ds-diag-val">${alerts.join(', ')}</span></div>` : nothing}
+        ${s.rssi != null ? html`<div class="ds-diag-item"><span class="ds-diag-label">${t('detail.rssi')}</span><span class="ds-diag-val">${rssiToQuality(s.rssi)} (${s.rssi} dBm)</span></div>` : nothing}
+        ${s.uptime != null ? html`<div class="ds-diag-item"><span class="ds-diag-label">${t('detail.uptime')}</span><span class="ds-diag-val">${formatUptime(s.uptime)}</span></div>` : nothing}
+        ${fw ? html`<div class="ds-diag-item"><span class="ds-diag-label">${t('detail.firmware')}</span><span class="ds-diag-val">${fw.current} → ${fw.newVersion}</span></div>` : nothing}
+        ${alerts.length ? html`<div class="ds-diag-item ds-diag-alert"><span class="ds-diag-label">${t('detail.alerts')}</span><span class="ds-diag-val">${alerts.join(', ')}</span></div>` : nothing}
       </div>
     </div>`;
 }
@@ -160,13 +161,13 @@ function renderSheetSensors(ctx: TileCtx): TemplateResult {
   if (!hasAny) return html``;
   return html`
     <div class="ds-section">
-      <div class="ds-section-title">Sensors</div>
+      <div class="ds-section-title">${t('detail.sensors')}</div>
       <div class="ds-sensor-grid">
-        ${s.power   != null ? html`<div class="ds-sensor-item"><span class="ds-sensor-val">${formatPower(s.power)}</span><span class="ds-sensor-label">Power</span></div>` : nothing}
-        ${s.voltage != null ? html`<div class="ds-sensor-item"><span class="ds-sensor-val">${formatVoltage(s.voltage)}</span><span class="ds-sensor-label">Voltage</span></div>` : nothing}
-        ${s.current != null ? html`<div class="ds-sensor-item"><span class="ds-sensor-val">${formatCurrent(s.current)}</span><span class="ds-sensor-label">Current</span></div>` : nothing}
+        ${s.power   != null ? html`<div class="ds-sensor-item"><span class="ds-sensor-val">${formatPower(s.power)}</span><span class="ds-sensor-label">${t('detail.sensor_power')}</span></div>` : nothing}
+        ${s.voltage != null ? html`<div class="ds-sensor-item"><span class="ds-sensor-val">${formatVoltage(s.voltage)}</span><span class="ds-sensor-label">${t('detail.sensor_voltage')}</span></div>` : nothing}
+        ${s.current != null ? html`<div class="ds-sensor-item"><span class="ds-sensor-val">${formatCurrent(s.current)}</span><span class="ds-sensor-label">${t('detail.sensor_current')}</span></div>` : nothing}
         ${s.energy  != null ? html`<div class="ds-sensor-item"><span class="ds-sensor-val">${formatEnergy(s.energy)}</span><span class="ds-sensor-label">${s.energyLabel}</span></div>` : nothing}
-        ${s.temp    != null ? html`<div class="ds-sensor-item"><span class="ds-sensor-val">${formatTemp(s.temp)}</span><span class="ds-sensor-label">Temp</span></div>` : nothing}
+        ${s.temp    != null ? html`<div class="ds-sensor-item"><span class="ds-sensor-val">${formatTemp(s.temp)}</span><span class="ds-sensor-label">${t('detail.sensor_temp')}</span></div>` : nothing}
       </div>
     </div>`;
 }
@@ -197,7 +198,7 @@ function renderSheetRelay(ctx: TileCtx): TemplateResult {
   return html`
     ${channels.length > 1 ? html`
       <div class="ds-section">
-        <div class="ds-section-title">Relay Channels</div>
+        <div class="ds-section-title">${t('detail.relay_channels')}</div>
         <div class="ds-channel-list">
           ${channels.map(ch => {
             const s = hass.states[ch.entity_id];
@@ -215,14 +216,14 @@ function renderSheetRelay(ctx: TileCtx): TemplateResult {
               <div class="ds-channel-row">
                 <span class="ds-channel-name">${name}</span>
                 ${!isNaN(pw) ? html`<span class="ds-channel-power">${formatPower(pw)}</span>` : nothing}
-                <button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(ch.entity_id, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>
+                <button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(ch.entity_id, isOn, e)}>${isOn ? t('state.on_short') : t('state.off_short')}</button>
               </div>`;
           })}
         </div>
       </div>` : channels.length === 1 ? html`
       <div class="ds-section ds-single-toggle">
         ${(() => { const s = hass.states[channels[0].entity_id]; const isOn = s?.state === 'on'; return html`
-          <button class="tog ds-big-toggle ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(channels[0].entity_id, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>`;
+          <button class="tog ds-big-toggle ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(channels[0].entity_id, isOn, e)}>${isOn ? t('state.on_short') : t('state.off_short')}</button>`;
         })()}
       </div>` : nothing}
     ${renderSheetFooter(ctx)}`;
@@ -234,7 +235,7 @@ function renderSheetPlug(ctx: TileCtx): TemplateResult {
   const s = ctx.tileSensors(ctx.device);
   return html`
     <div class="ds-section ds-plug-hero">
-      ${sw ? html`<button class="tog ds-big-toggle ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
+      ${sw ? html`<button class="tog ds-big-toggle ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? t('state.on_short') : t('state.off_short')}</button>` : nothing}
       ${s.power != null ? html`<span class="ds-big-power">${formatPower(s.power)}</span>` : nothing}
     </div>
     ${renderSheetFooter(ctx)}`;
@@ -247,13 +248,13 @@ function renderSheetDimmer(ctx: TileCtx): TemplateResult {
   const pct = Math.round((brightness / BRIGHTNESS_MAX) * 100);
   return html`
     <div class="ds-section">
-      <div class="ds-section-title">Brightness</div>
+      <div class="ds-section-title">${t('detail.brightness')}</div>
       <div class="ds-dimmer-control">
         <span class="ds-dimmer-pct">${pct}%</span>
         <input type="range" min="0" max="255" .value=${String(brightness)}
           @change=${(e: Event) => ctx.setBrightness(sw!.entityId, parseInt((e.target as HTMLInputElement).value))}
           class="ds-slider">
-        ${sw ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(ev: Event) => ctx.toggle(sw.entityId, isOn, ev)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
+        ${sw ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(ev: Event) => ctx.toggle(sw.entityId, isOn, ev)}>${isOn ? t('state.on_short') : t('state.off_short')}</button>` : nothing}
       </div>
     </div>
     ${renderSheetFooter(ctx)}`;
@@ -267,13 +268,13 @@ function renderSheetRgb(ctx: TileCtx): TemplateResult {
   const pct = Math.round((brightness / BRIGHTNESS_MAX) * 100);
   return html`
     <div class="ds-section">
-      <div class="ds-section-title">Light Controls</div>
+      <div class="ds-section-title">${t('detail.light_controls')}</div>
       <div class="ds-dimmer-control">
         <span class="ds-dimmer-pct">${pct}%</span>
         <input type="range" min="0" max="255" .value=${String(brightness)}
           @change=${(e: Event) => ctx.setBrightness(sw!.entityId, parseInt((e.target as HTMLInputElement).value))}
           class="ds-slider" style="--ds-accent:${accent}">
-        ${sw ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(ev: Event) => ctx.toggle(sw.entityId, isOn, ev)}>${isOn ? 'ON' : 'OFF'}</button>` : nothing}
+        ${sw ? html`<button class="tog ${isOn ? 'on' : 'off'}" @click=${(ev: Event) => ctx.toggle(sw.entityId, isOn, ev)}>${isOn ? t('state.on_short') : t('state.off_short')}</button>` : nothing}
       </div>
       ${sw?.rgbColor ? html`<div class="ds-color-swatch" style="background:rgb(${sw.rgbColor.join(',')})"></div>` : nothing}
     </div>
@@ -284,11 +285,11 @@ function renderSheetClimate(ctx: TileCtx): TemplateResult {
   const trv = ctx.getTrv(ctx.device);
   return html`
     <div class="ds-section">
-      <div class="ds-section-title">Climate</div>
+      <div class="ds-section-title">${t('detail.climate')}</div>
       ${trv ? html`
         <div class="ds-climate-info">
           <div class="ds-climate-current">
-            <span class="ds-climate-label">Current</span>
+            <span class="ds-climate-label">${t('detail.climate_current')}</span>
             <span class="ds-climate-val">${trv.currentTemp?.toFixed(1) ?? '—'}°C</span>
           </div>
           <div class="ds-climate-target">
@@ -302,8 +303,8 @@ function renderSheetClimate(ctx: TileCtx): TemplateResult {
           ${trv.hvacAction ? html`<span class="ds-chip">${trv.hvacAction}</span>` : nothing}
           ${trv.presetMode ? html`<span class="ds-chip">${trv.presetMode}</span>` : nothing}
         </div>
-        ${trv.valvePosition != null ? html`<div class="ds-valve-pos">Valve: ${trv.valvePosition}%</div>` : nothing}
-      ` : html`<span class="ds-muted">No climate entity</span>`}
+        ${trv.valvePosition != null ? html`<div class="ds-valve-pos">${t('detail.valve_pos', { n: trv.valvePosition })}</div>` : nothing}
+      ` : html`<span class="ds-muted">${t('empty.no_climate')}</span>`}
     </div>
     ${renderSheetFooter(ctx)}`;
 }
@@ -312,7 +313,7 @@ function renderSheetCover(ctx: TileCtx): TemplateResult {
   const cov = ctx.getCover(ctx.device);
   return html`
     <div class="ds-section">
-      <div class="ds-section-title">Cover</div>
+      <div class="ds-section-title">${t('detail.cover')}</div>
       ${cov ? html`
         <div class="ds-cover-controls">
           <button class="ds-cover-btn" @click=${(e: Event) => ctx.coverAction(cov.entityId, 'open', e)}>▲ Open</button>
@@ -321,7 +322,7 @@ function renderSheetCover(ctx: TileCtx): TemplateResult {
         </div>
         ${cov.position != null ? html`<div class="ds-cover-pos">Position: ${cov.position}%</div>` : nothing}
         <span class="ds-chip">${cov.state}</span>
-      ` : html`<span class="ds-muted">No cover entity</span>`}
+      ` : html`<span class="ds-muted">${t('empty.no_cover')}</span>`}
     </div>
     ${renderSheetFooter(ctx, { history: false })}`;
 }
@@ -330,7 +331,7 @@ function renderSheetValve(ctx: TileCtx): TemplateResult {
   const vlv = ctx.getValve(ctx.device);
   return html`
     <div class="ds-section">
-      <div class="ds-section-title">Valve</div>
+      <div class="ds-section-title">${t('detail.valve')}</div>
       ${vlv ? html`
         <div class="ds-cover-controls">
           <button class="ds-cover-btn" @click=${(e: Event) => ctx.valveAction(vlv.entityId, 'open', e)}>▲ Open</button>
@@ -340,7 +341,7 @@ function renderSheetValve(ctx: TileCtx): TemplateResult {
         ${vlv.position != null ? html`<div class="ds-cover-pos">Position: ${vlv.position}%</div>` : nothing}
         ${vlv.temperature != null ? html`<div class="ds-cover-pos">Temp: ${vlv.temperature.toFixed(1)}°C</div>` : nothing}
         <span class="ds-chip">${vlv.state}</span>
-      ` : html`<span class="ds-muted">No valve entity</span>`}
+      ` : html`<span class="ds-muted">${t('empty.no_valve')}</span>`}
     </div>
     ${renderSheetFooter(ctx, { sensors: false, history: false })}`;
 }
@@ -380,7 +381,7 @@ function renderSheetInput(ctx: TileCtx): TemplateResult {
   const inputs = ctx.getInputChannels(device);
   return html`
     <div class="ds-section">
-      <div class="ds-section-title">Input Channels</div>
+      <div class="ds-section-title">${t('detail.input_channels')}</div>
       ${inputs.length ? html`
         <div class="ds-channel-list">
           ${inputs.map(ch => {
@@ -393,12 +394,12 @@ function renderSheetInput(ctx: TileCtx): TemplateResult {
                 ${action
                   ? html`<span class="ds-chip ${state === 'on' ? 'ds-chip--on' : ''}">${action}</span>`
                   : html`<span class="ds-chip ${ch.isOn ? 'ds-chip--on' : ''}">
-                      ${ch.kind === 'button' ? (ch.lastEvent ? ch.lastEvent.replace(/_/g, ' ') : '—') : (ch.isOn ? 'ON' : 'OFF')}
+                      ${ch.kind === 'button' ? (ch.lastEvent ? ch.lastEvent.replace(/_/g, ' ') : '—') : (ch.isOn ? t('state.on_short') : t('state.off_short'))}
                     </span>`}
                 ${lc ? html`<span class="ds-ent-age">${lc}</span>` : nothing}
               </div>`;
           })}
-        </div>` : html`<span class="ds-muted">No input channels</span>`}
+        </div>` : html`<span class="ds-muted">${t('empty.no_inputs')}</span>`}
     </div>
     ${renderSheetFooter(ctx, { sensors: false, history: false })}`;
 }
@@ -410,7 +411,7 @@ function renderSheetUni(ctx: TileCtx): TemplateResult {
   return html`
     ${adcEnts.length ? html`
       <div class="ds-section">
-        <div class="ds-section-title">ADC Inputs</div>
+        <div class="ds-section-title">${t('detail.adc_inputs')}</div>
         ${adcEnts.map(e => {
           const s = hass.states[e.entity_id];
           const val = s?.state ?? '—';
@@ -421,7 +422,7 @@ function renderSheetUni(ctx: TileCtx): TemplateResult {
       </div>` : nothing}
     ${outputs.length ? html`
       <div class="ds-section">
-        <div class="ds-section-title">Outputs</div>
+        <div class="ds-section-title">${t('detail.outputs')}</div>
         <div class="ds-channel-list">
           ${outputs.map(ch => {
             const s = hass.states[ch.entity_id];
@@ -430,7 +431,7 @@ function renderSheetUni(ctx: TileCtx): TemplateResult {
             return html`
               <div class="ds-channel-row">
                 <span class="ds-channel-name">${name}</span>
-                <button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(ch.entity_id, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>
+                <button class="tog ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(ch.entity_id, isOn, e)}>${isOn ? t('state.on_short') : t('state.off_short')}</button>
               </div>`;
           })}
         </div>
@@ -445,10 +446,10 @@ function renderSheetWallDisplay(ctx: TileCtx): TemplateResult {
   return html`
     ${trv ? html`
       <div class="ds-section">
-        <div class="ds-section-title">Climate</div>
+        <div class="ds-section-title">${t('detail.climate')}</div>
         <div class="ds-climate-info">
           <div class="ds-climate-current">
-            <span class="ds-climate-label">Current</span>
+            <span class="ds-climate-label">${t('detail.climate_current')}</span>
             <span class="ds-climate-val">${trv.currentTemp?.toFixed(1) ?? '—'}°C</span>
           </div>
           <div class="ds-climate-target">
@@ -460,7 +461,7 @@ function renderSheetWallDisplay(ctx: TileCtx): TemplateResult {
       </div>` : nothing}
     ${sw ? html`
       <div class="ds-section ds-single-toggle">
-        <button class="tog ds-big-toggle ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? 'ON' : 'OFF'}</button>
+        <button class="tog ds-big-toggle ${isOn ? 'on' : 'off'}" @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>${isOn ? t('state.on_short') : t('state.off_short')}</button>
       </div>` : nothing}
     ${renderSheetFooter(ctx)}`;
 }
@@ -472,7 +473,7 @@ function renderSheetGeneric(ctx: TileCtx): TemplateResult {
   return html`
     ${virtuals.length ? html`
       <div class="ds-section">
-        <div class="ds-section-title">Controls</div>
+        <div class="ds-section-title">${t('detail.controls')}</div>
         ${virtuals.map(e => {
           const s = hass.states[e.entity_id];
           const name = (s?.attributes as HassAttrs)?.friendly_name ?? e.entity_id;

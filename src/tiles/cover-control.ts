@@ -1,13 +1,14 @@
 import { html, svg, nothing, TemplateResult } from 'lit';
 import type { TileCtx } from './tile-context';
 import { renderNameDot } from './tile-parts';
+import { t } from '../localize';
 
 const SLATS = [3, 7, 11, 15, 19, 23, 27]; // y positions of slat centres
 
 export function renderCoverControlTile(ctx: TileCtx): TemplateResult {
   const { device, accent, online } = ctx;
   const cover = ctx.getCover(device);
-  if (!cover) return html`<div class="ts-cover"><span style="color:var(--sc-text-muted);font-size:.8em">No cover entity</span></div>`;
+  if (!cover) return html`<div class="ts-cover"><span style="color:var(--sc-text-muted);font-size:.8em">${t('empty.no_cover')}</span></div>`;
 
   const pos = cover.position ?? (cover.state === 'open' ? 100 : 0);
   const moving = cover.state === 'opening' || cover.state === 'closing';

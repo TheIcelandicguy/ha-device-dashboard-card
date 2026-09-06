@@ -1,6 +1,7 @@
 import { html, nothing, TemplateResult } from 'lit';
 import type { HADevice } from '../types';
 import type { TileCtx, InputChannel } from './tile-context';
+import { t } from '../localize';
 
 /** header_chips (an opt-in element) moves a style's secondary chips into the
  *  name row; the style's own chip placement then stands down — the chips move,
@@ -54,7 +55,7 @@ export function renderInputRow(
   const open = hasAction ? undefined : (e: Event) => { e.stopPropagation(); ctx.fireMoreInfo(ch.entityId); };
   return html`
     <div class="input-row ${ch.kind === 'button' ? 'btn-mode' : 'sw-mode'} ${ch.isOn ? 'active' : ''} ${open ? 'tappable' : ''}"
-      title=${open ? 'Show history' : ''} @click=${open}>
+      title=${open ? t('action.show_history') : ''} @click=${open}>
       <span class="${ch.kind === 'button' ? 'input-btn-dot' : 'input-row-dot'}"></span>
       <span class="input-row-name">${ch.label}</span>
       <span class="input-row-event ${ch.kind === 'switch' ? (ch.isOn ? 'is-on' : 'is-off') : ''}">${status}</span>

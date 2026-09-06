@@ -5,6 +5,44 @@ installs from them.
 
 ## Unreleased
 
+### The dashboard speaks your language
+
+The card now renders in whatever language Home Assistant reports, falling back
+to English. **English and Icelandic** ship; adding a locale is one file, and
+`CONTRIBUTING.md` documents it.
+
+Scope is deliberate: the **dashboard** is translated — tiles, chips, the header,
+Needs attention, the detail sheet, ~180 strings. The **GUI editor is not**. That
+is ~600 strings, most of them explanatory paragraphs rather than labels, and it
+would be a manual to maintain in every language. The person configuring a card
+chose English in a way the family reading it did not. Nothing about the design
+blocks the editor later: its keys go in the same catalogues under an `editor.`
+prefix.
+
+`translate()` is pure — language in, string out — so `npm run test:card` gates
+catalogue parity in both directions: a key English has and a locale lacks fails,
+and so does a key a locale has that English dropped. Placeholders are checked
+too, since a translation that loses `{n}` loses the number with it. That gate is
+the point — a locale that rots silently is worse than no locale.
+
+Two things this turned up that are worth naming, because both would have shipped
+as bugs in every non-English install:
+
+- **`'No Area'` is a config key, not just a label.** The unassigned-devices
+  bucket is what `area_styles` and per-room header chips are stored under, and
+  the same variable was being used for the heading and the lookup. Translated,
+  the card would have looked up a room block that does not exist and silently
+  dropped that room's styling. Split into `styleKey` (always English) and
+  `label` (localized).
+- **A chip's value was being compared against the literal `'Connected'`** to pick
+  its ✓/✗ mark. Once the value was localized that comparison could never match
+  again. It now compares against the same catalogue string it renders.
+
+Not translated, on purpose: product, unit and protocol names (Shelly, Wi-Fi,
+MQTT, dBm, SSID), Home Assistant state strings the card matches on
+(`unavailable`), and light effect names HA reports (`Solid`). Translating any of
+those changes behaviour rather than language.
+
 ### The header describes what you are looking at
 
 **Fix.** The header's stats were computed from every discovered device while

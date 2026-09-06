@@ -6,6 +6,7 @@ import type { EntityAnimationType, TileBlockId, HassAttrs } from '../types';
 import type { TileCtx, SensorChip } from './tile-context';
 import { renderInputRow, renderEffectPicker } from './tile-parts';
 import * as cascade from '../cascade';
+import { t, tOr } from '../localize';
 
 /** Default block-based tile renderer — dispatches to per-block sub-renderers. */
 export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateResult {
@@ -72,12 +73,12 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
       const primaryToggle = sw && ctx.showEl('toggle') ? html`
         <button class="tog ${isOn ? 'on' : 'off'}"
           @click=${(e: Event) => ctx.toggle(sw.entityId, isOn, e)}>
-          ${isOn ? 'ON' : 'OFF'}
+          ${isOn ? t('state.on_short') : t('state.off_short')}
         </button>
       ` : trv ? html`
         <button class="tog ${isHeating ? 'on' : 'off'}"
           @click=${(e: Event) => ctx.setHvacMode(trv.entityId, isHeating ? 'off' : 'heat', e)}>
-          ${isHeating ? 'HEAT' : 'OFF'}
+          ${isHeating ? t('action.heat') : t('action.off')}
         </button>
       ` : nothing;
       return html`
@@ -119,7 +120,7 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
       }
       const connVal = (s: SensorChip) =>
         (s.key === 'cloud' || s.key === 'mqtt' || s.key === 'eth')
-          ? `${s.label} ${s.value === 'Connected' ? '✓' : '✗'}`
+          ? `${s.label} ${s.value === t('state.connected') ? '✓' : '✗'}`
           : `${s.label} ${s.value}`;
       return html`
         ${primary.length ? html`
@@ -217,10 +218,10 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
             <button class="trv-step" @click=${() => ctx.adjustTrvTemp(trv, 1)}>+</button>
           </div>
           <div class="trv-stat-row">
-            <div class="trv-stat"><span class="trv-stat-lbl">Now</span><span class="trv-stat-val">${trv.currentTemp != null ? `${trv.currentTemp}°` : '—'}</span></div>
-            <div class="trv-stat"><span class="trv-stat-lbl">Set</span><span class="trv-stat-val">${trv.targetTemp != null ? `${trv.targetTemp.toFixed(1)}°` : '—'}</span></div>
-            ${trv.valvePosition != null ? html`<div class="trv-stat"><span class="trv-stat-lbl">Valve</span><span class="trv-stat-val">${Math.round(trv.valvePosition)}%</span></div>` : nothing}
-            ${batteryPct != null ? html`<div class="trv-stat"><span class="trv-stat-lbl">Batt</span><span class="trv-stat-val">${batteryPct}%</span></div>` : nothing}
+            <div class="trv-stat"><span class="trv-stat-lbl">${t('tile.now')}</span><span class="trv-stat-val">${trv.currentTemp != null ? `${trv.currentTemp}°` : '—'}</span></div>
+            <div class="trv-stat"><span class="trv-stat-lbl">${t('tile.set')}</span><span class="trv-stat-val">${trv.targetTemp != null ? `${trv.targetTemp.toFixed(1)}°` : '—'}</span></div>
+            ${trv.valvePosition != null ? html`<div class="trv-stat"><span class="trv-stat-lbl">${t('tile.valve')}</span><span class="trv-stat-val">${Math.round(trv.valvePosition)}%</span></div>` : nothing}
+            ${batteryPct != null ? html`<div class="trv-stat"><span class="trv-stat-lbl">${t('chip.battery_short')}</span><span class="trv-stat-val">${batteryPct}%</span></div>` : nothing}
           </div>
           ${trv.presetModes.length ? html`
             <div class="trv-presets">
@@ -302,7 +303,7 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
                   <span class="virt-lbl">${v.label}</span>
                   <button class="tog sm ${v.isOn ? 'on' : 'off'}"
                     @click=${(e: Event) => ctx.toggle(v.entityId, v.isOn, e)}>
-                    ${v.isOn ? 'ON' : 'OFF'}
+                    ${v.isOn ? t('state.on_short') : t('state.off_short')}
                   </button>
                 </div>`;
             }
@@ -329,7 +330,7 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
                 <span class="relay-ch-name">${name}</span>
                 <button class="tog sm ${on ? 'on' : 'off'}"
                   @click=${(ev: Event) => ctx.toggle(e.entity_id, on, ev)}>
-                  ${on ? 'ON' : 'OFF'}
+                  ${on ? t('state.on_short') : t('state.off_short')}
                 </button>
               </div>`;
           })}
@@ -342,9 +343,9 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
         <div class="tile-trv-dial" @click=${(e: Event) => e.stopPropagation()}>
           ${ctx.renderValveDial(vc)}
           <div class="valve-dial-btns">
-            <button class="valve-btn close" @click=${(e: Event) => ctx.valveAction(vc.entityId, 'close', e)}>Close</button>
+            <button class="valve-btn close" @click=${(e: Event) => ctx.valveAction(vc.entityId, 'close', e)}>${t('action.close')}</button>
             <button class="valve-btn stop" @click=${(e: Event) => ctx.valveAction(vc.entityId, 'stop', e)}>■</button>
-            <button class="valve-btn open" @click=${(e: Event) => ctx.valveAction(vc.entityId, 'open', e)}>Open</button>
+            <button class="valve-btn open" @click=${(e: Event) => ctx.valveAction(vc.entityId, 'open', e)}>${t('action.open')}</button>
           </div>
         </div>
       ` : html``;
@@ -371,8 +372,9 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
       const muted = a.is_volume_muted === true;
       const call = (svc: string, data: Record<string, unknown> = {}) =>
         hass.callService('media_player', svc, { entity_id: mp.entity_id, ...data });
-      const stateLabel = playing ? 'Playing' : state === 'paused' ? 'Paused' : state === 'idle' ? 'Idle'
-        : state === 'unavailable' ? 'Unavailable' : isOff ? 'Off' : state;
+      const stateLabel = playing ? t('media.playing') : state === 'paused' ? t('media.paused')
+        : state === 'idle' ? t('media.idle')
+        : state === 'unavailable' ? t('media.unavailable') : isOff ? t('media.off') : state;
       // Stations: the card's own list (HA has none for a Wall Display). The
       // device's list wins over the card-wide one. The current one is matched
       // by stream URL first, then by the title the player reports.
@@ -413,9 +415,9 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
                   if (!id) return;
                   call('play_media', { media_content_id: id, media_content_type: typeOf.get(id) ?? 'music' });
                 }}>
-                <option value="" ?selected=${!current}>Station…</option>
-                ${browse === 'pending' ? html`<option value="" disabled>Loading…</option>` : nothing}
-                ${nothingYet ? html`<option value="" disabled>No favourites — star stations on the display</option>` : nothing}
+                <option value="" ?selected=${!current}>${t('media.station')}</option>
+                ${browse === 'pending' ? html`<option value="" disabled>${t('media.loading')}</option>` : nothing}
+                ${nothingYet ? html`<option value="" disabled>${t('media.no_favourites')}</option>` : nothing}
                 ${groups.filter(g => g.items.length).map(g => html`
                   <optgroup label=${g.label}>
                     ${g.items.map(it => html`<option value=${it.id} ?selected=${it.id === current}>${it.title}</option>`)}
@@ -430,19 +432,19 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
           </div>
           <div class="tile-media-row">
             ${can(F.TURN_ON) || can(F.TURN_OFF) ? html`
-              <button class="tile-media-btn ${isOff ? '' : 'on'}" title=${isOff ? 'Turn on' : 'Turn off'}
+              <button class="tile-media-btn ${isOff ? '' : 'on'}" title=${isOff ? t('action.turn_on') : t('action.turn_off')}
                 @click=${() => call(isOff ? 'turn_on' : 'turn_off')}>⏻</button>` : nothing}
-            ${can(F.PREV) ? html`<button class="tile-media-btn" title="Previous" @click=${() => call('media_previous_track')}>⏮</button>` : nothing}
+            ${can(F.PREV) ? html`<button class="tile-media-btn" title=${t('action.previous')} @click=${() => call('media_previous_track')}>⏮</button>` : nothing}
             ${can(F.PLAY) || can(F.PAUSE) ? html`
-              <button class="tile-media-btn tile-media-play ${playing ? 'on' : ''}" title=${playing ? 'Pause' : 'Play'}
+              <button class="tile-media-btn tile-media-play ${playing ? 'on' : ''}" title=${playing ? t('action.pause') : t('action.play')}
                 @click=${() => call(playing ? (can(F.PAUSE) ? 'media_pause' : 'media_stop') : 'media_play')}>${playing ? '⏸' : '▶'}</button>` : nothing}
-            ${can(F.STOP) ? html`<button class="tile-media-btn" title="Stop" @click=${() => call('media_stop')}>⏹</button>` : nothing}
-            ${can(F.NEXT) ? html`<button class="tile-media-btn" title="Next" @click=${() => call('media_next_track')}>⏭</button>` : nothing}
+            ${can(F.STOP) ? html`<button class="tile-media-btn" title=${t('action.stop')} @click=${() => call('media_stop')}>⏹</button>` : nothing}
+            ${can(F.NEXT) ? html`<button class="tile-media-btn" title=${t('action.next')} @click=${() => call('media_next_track')}>⏭</button>` : nothing}
             ${vol != null && can(F.VOLUME_SET) ? html`
               ${can(F.VOLUME_MUTE) ? html`
-                <button class="tile-media-btn" title=${muted ? 'Unmute' : 'Mute'}
+                <button class="tile-media-btn" title=${muted ? t('action.unmute') : t('action.mute')}
                   @click=${() => call('volume_mute', { is_volume_muted: !muted })}>${muted ? '🔇' : '🔊'}</button>` : nothing}
-              <input type="range" class="tile-media-vol" min="0" max="100" .value=${String(vol)} title="Volume ${vol}%"
+              <input type="range" class="tile-media-vol" min="0" max="100" .value=${String(vol)} title=${t('media.volume', { n: vol })}
                 @pointerdown=${(e: Event) => e.stopPropagation()}
                 @change=${(e: Event) => call('volume_set', { volume_level: parseInt((e.target as HTMLInputElement).value, 10) / 100 })}/>
               <span class="tile-media-pct">${vol}%</span>` : nothing}
@@ -474,7 +476,7 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
           ${power != null ? html`<span class="tile-power">${formatPower(power)}</span>` : nothing}
           <div class="tile-badges">
             ${alerts.map(a => html`<span class="alert-badge alert-${a}">${a === 'overtemp' ? '🌡' : '⚡'}!</span>`)}
-            ${profile.label ? html`<span class="type-badge type-${profile.type}">${profile.label}</span>` : nothing}
+            ${profile.label ? html`<span class="type-badge type-${profile.type}">${tOr(`profile.${profile.type}`, profile.label)}</span>` : nothing}
             ${genLabel ? html`<span class="gen-badge gen-${profile.gen}">${genLabel}</span>` : nothing}
             ${intLabel ? html`<span class="int-badge-tile">${intLabel}</span>` : nothing}
             ${device.isShelly && device.ip && isPrivateIp(device.ip) ? html`

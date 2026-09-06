@@ -2,6 +2,7 @@ import { html, nothing, TemplateResult } from 'lit';
 import type { TileCtx, InputChannel } from './tile-context';
 import type { HADevice } from '../types';
 import { renderNameDot, renderInputRow, renderInputSelectChip } from './tile-parts';
+import { t } from '../localize';
 
 /**
  * Input devices (Shelly i3, Plus/Gen3 i4, UNI) rendered as what they physically
@@ -55,7 +56,7 @@ export function renderInputControlTile(ctx: TileCtx): TemplateResult {
         </div>` : nothing}
 
       ${!channels.length ? html`
-        <span class="ts-inputs-empty">No input channels</span>` : nothing}
+        <span class="ts-inputs-empty">${t('empty.no_inputs')}</span>` : nothing}
     </div>`;
 }
 

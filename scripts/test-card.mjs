@@ -166,7 +166,7 @@ try {
   execFileSync(process.execPath, [
     join('node_modules', 'typescript', 'bin', 'tsc'),
     'src/helpers.ts', 'src/cascade.ts', 'src/attention.ts', 'src/shelly-cloud-import.ts',
-    'src/design-scope.ts', '--outDir', OUT,
+    'src/design-scope.ts', 'src/localize.ts', '--outDir', OUT,
     '--module', 'commonjs', '--target', 'es2020', '--skipLibCheck', '--moduleResolution', 'node',
   ], { stdio: 'inherit' });
   // The project is "type": "module", which would make these .js files ESM.
@@ -177,6 +177,7 @@ try {
   const cas = req(join(process.cwd(), OUT, 'cascade.js'));
   const ds  = req(join(process.cwd(), OUT, 'design-scope.js'));
   const att = req(join(process.cwd(), OUT, 'attention.js'));
+  const loc = req(join(process.cwd(), OUT, 'localize.js'));
   const hass = fleet();
   const byName = (list, name) => list.find(d => d.name === name);
 
@@ -968,6 +969,62 @@ try {
     dm.get('aabbcc000001').sort(), ['ha1', 'ha1shadow']);
   eq('channel-suffixed cloud id still matches', dm.get('aabbcc000002'), ['ha2']);
   eq('unknown MACs are absent', dm.has('ffffff000000'), false);
+
+  console.log('\nlocalize - catalogues and lookup');
+  {
+    const keys = loc.knownKeys();
+    ok('English defines the key set', keys.length > 100);
+
+    // The gate that stops a locale rotting: adding a string to English without
+    // translating it, or leaving a key behind after English drops it, fails
+    // here rather than rendering blank on someone's dashboard.
+    for (const [code, cat] of Object.entries(loc.LOCALES)) {
+      if (code === 'en') continue;
+      eq(code + ' translates every English key', keys.filter(k => !(k in cat)), []);
+      eq(code + ' carries no key English lacks',
+        Object.keys(cat).filter(k => !keys.includes(k)), []);
+      // A placeholder dropped in translation silently loses the value it
+      // carried, and nothing else would catch it. Reported as one line naming
+      // the offending keys: one assertion per key drowned the whole run.
+      const ph = (v) => (v.match(/\{\w+\}/g) ?? []).sort().join(',');
+      eq(code + ' keeps every placeholder',
+        keys.filter(k => ph(cat[k] ?? '') !== ph(loc.LOCALES.en[k])), []);
+    }
+
+    eq('an exact language matches', loc.resolveLanguage('is'), 'is');
+    eq('a region falls back to its base language', loc.resolveLanguage('is-IS'), 'is');
+    eq('case is ignored', loc.resolveLanguage('IS'), 'is');
+    eq('an unknown language falls back to English', loc.resolveLanguage('sv-SE'), 'en');
+    eq('no language at all is English', loc.resolveLanguage(undefined), 'en');
+
+    ok('a translated key really differs from English',
+      loc.translate('is', 'action.cancel') !== loc.translate('en', 'action.cancel'));
+    eq('an unknown key returns the key itself',
+      loc.translate('is', 'nope.missing'), 'nope.missing');
+    eq('placeholders are substituted',
+      loc.translate('en', 'confirm.title', { name: 'Lamp' }), 'Turn off Lamp?');
+    eq('a placeholder with no var is left as written',
+      loc.translate('en', 'confirm.title', {}), 'Turn off {name}?');
+
+    // 'No Area' is the area_styles config key for the unassigned bucket as well
+    // as a label. The English value is what the card looks that block up by, so
+    // it is not free to drift.
+    eq('the No Area label still matches its config key',
+      loc.translate('en', 'header.no_area'), 'No Area');
+
+    // The ambient wrapper the render path uses: this checks the plumbing, that
+    // t() routes through the language setLanguage was given.
+    loc.setLanguage('is-IS');
+    eq('t() answers in the set language', loc.t('state.open'), loc.LOCALES.is['state.open']);
+    eq('and resolves the region to its base', loc.getLanguage(), 'is');
+    loc.setLanguage('en');
+    eq('t() switches back', loc.t('state.open'), 'Open');
+
+    // tOr backs the open-ended tables (device profiles, graph device_classes),
+    // where HA can hand us a class the catalogue has no key for.
+    eq('tOr prefers the catalogue', loc.tOr('graph.power', 'Watts'), 'Power');
+    eq('tOr falls back on an unknown key', loc.tOr('graph.nonsense', 'Nonsense'), 'Nonsense');
+  }
 
 } finally {
   rmSync(OUT, { recursive: true, force: true });
