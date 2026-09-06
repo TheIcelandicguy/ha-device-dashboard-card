@@ -60,8 +60,15 @@ Real captures from a 61-device Shelly fleet, not mockups.
 |---|---|
 | ![One room](docs/images/screenshots/02-room.png) **One room.** The tile style follows the hardware — dimmers get sliders, the i4 gets a keypad, sensors get a sparkline. | ![Detail sheet](docs/images/screenshots/10-detail-sheet.jpeg) **Detail sheet.** Every entity, grouped by tier, plus firmware, IP, signal and uptime. |
 | ![Gauge variant](docs/images/screenshots/03-gauge.png) **Power monitor, gauge variant.** One arc per sensor class the device reports. | ![Sensor style](docs/images/screenshots/04-sensor-card.png) **Sensor style.** Big value, trend badge, and a graph per selected sensor. |
-| ![i3/i4 keypad](docs/images/screenshots/05-keypad.png) **The i3/i4 keypad.** Bind an action and a channel becomes a key that lights with its target's state. One key here drives two WLED segments at once; the dashed pair are keys whose targets are currently unavailable. | ![Single device](docs/images/screenshots/06-single-device.png) **One device.** `devices:`, `show_header: false` and `show_rooms: false` scale the card down to a single tile. |
+| ![i3/i4 keypad](docs/images/screenshots/05-keypad.png) **The i3/i4 keypad.** Bind an action and a channel becomes a key that lights with its target's state. One key here drives two WLED segments at once; the dashed pair are keys whose targets are unavailable. | ![The same i4 on the default tile](docs/images/screenshots/05b-keypad-default-style.png) **The same device, adaptive tile.** `tile_style: default` renders those channels as rows with an action button and the device's badges instead — one device, two ways to read it. |
 | ![Warm Dusk theme](docs/images/screenshots/08-theme-warm-dusk.png) **Warm Dusk** — the default theme. | ![Midnight Purple theme](docs/images/screenshots/09-theme-midnight.png) **Midnight Purple.** Eight themes ship, plus Follow HA. |
+
+**One device.** The card is built for a fleet, but `devices:` plus
+`show_header: false` and `show_rooms: false` scale it down to a single tile you
+can drop beside your other cards — with the same tile styles, graphs and
+confirmations you use everywhere else:
+
+![Single device](docs/images/screenshots/06-single-device.png)
 
 **Universal mode** — the same card, discovering every device in Home Assistant
 rather than Shelly and BTHome alone:
