@@ -4110,6 +4110,16 @@ export class HADeviceDashboardEditor extends LitElement {
       placeholder: string, multi = true, note?: string) =>
       this._entityField(value, apply, { deviceEntities: devEnts, scopeAll, placeholder, multi, note });
     const one = (v: string | string[] | undefined) => Array.isArray(v) ? v[0] : v;
+    /** True when a picker has nothing in it — `[]` counts as empty, not as a value. */
+    const isEmpty = (v?: string | string[]) => (Array.isArray(v) ? v.length === 0 : !v);
+    /**
+     * "Empty = the tap target (…)" belongs under a picker only while that picker
+     * IS empty. It used to be shown whenever the *tap* target existed, without
+     * looking at the field it sat under — so it stayed put after you chose an
+     * entity, and read as if the choice had not taken.
+     */
+    const fallsBackToTap = (own?: string | string[], tap?: string | string[]) =>
+      isEmpty(own) && entText(tap) ? `Optional — leave empty to use the tap target (${entText(tap)})` : undefined;
 
     return html`
       <div class="dsn-family">
@@ -4217,8 +4227,8 @@ export class HADeviceDashboardEditor extends LitElement {
                     <span class="ia-lbl">Dims</span>
                     <div>${field(cur.hold_action.entity,
                       v => setAct(keyFor(ch), { hold_action: { ...(cur.hold_action ?? { action: 'dim' }), entity: v } }),
-                      'Light to dim', false,
-                      entText(cur.entity) ? `Empty = the tap target (${entText(cur.entity)})` : undefined)}</div>
+                      'Light to dim — optional', false,
+                      fallsBackToTap(cur.hold_action.entity, cur.entity))}</div>
                     <div class="ia-hint">Hold brightens; release and hold again darkens — it alternates each hold.</div>` : nothing}
 
                   <span class="ia-lbl">Double tap</span>
@@ -4242,8 +4252,8 @@ export class HADeviceDashboardEditor extends LitElement {
                     <span class="ia-lbl">Toggles</span>
                     <div>${field(dbl.entity,
                       v => setAct(keyFor(ch), { double_tap_action: { ...dbl, entity: v } }),
-                      'Entity to toggle', true,
-                      entText(cur?.entity) ? `Empty = the tap target (${entText(cur?.entity)})` : undefined)}</div>`
+                      'Entity to toggle — optional', true,
+                      fallsBackToTap(dbl.entity, cur?.entity))}</div>`
                   : nothing}
                   ${dbl && dbl.action !== 'none' ? html`
                     <div class="ia-hint">A double tap delays the single tap by ~250ms on this channel so the two can be told apart.</div>` : nothing}

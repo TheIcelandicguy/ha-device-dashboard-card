@@ -5,6 +5,21 @@ installs from them.
 
 ## Unreleased
 
+### The "empty = the tap target" hint would not go away
+
+Under **Input actions**, the entity pickers for *On hold → Dim* and *Double tap →
+Toggle* carried a note reading `Empty = the tap target (light.x)`. It was shown
+whenever the channel's *tap* target existed, without ever looking at the field it
+sat beneath — so it stayed there after you picked an entity, reading as though
+the choice had not registered.
+
+It now appears only while that picker is actually empty, which is the one moment
+it is telling the truth. The wording says what it means as well: *Optional —
+leave empty to use the tap target (…)*, and both fields are labelled optional,
+since the previous phrasing left it unclear whether a light had to be chosen for
+dimming at all.
+
+
 ### An input row's action button showed two characters of its label
 
 On the adaptive `default` tile, a channel's action button ellipsised down to

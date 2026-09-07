@@ -4824,7 +4824,7 @@ function e(e,t,i,s){var o,a=arguments.length,n=a<3?t:null===s?s=Object.getOwnPro
           device's own sensors; the other device keeps showing them too.
         </div>
         ${this._entityField(i.length?i:void 0,t=>{const i=Array.isArray(t)?t:t?[t]:[];this._setDeviceStyle(e,{extra_sensors:i.length?i:void 0})},{deviceEntities:t?t.entities.map(e=>e.entity_id):[],scopeAll:!0,multi:!0,placeholder:"Sensor entity on another device",note:s.length?`Borrowing: ${s.join(", ")}`:"Pick sensor.* entities — temperature, humidity, lux, CO₂, battery."})}
-      </div>`}_renderInputActionsBlock(e){const t=this._allDevices().find(t=>t.device_id===e),i=t?Ri(t,this.hass.states):[];if(!i.length)return q``;const s=(this._config.device_styles?.[e]??{}).input_actions??{},o=e=>Array.isArray(e)?e.join(", "):e??"",a=e=>void 0!==s[e.entityId]?e.entityId:void 0!==s[String(e.channel)]?String(e.channel):e.entityId,n=(t,i)=>{const o={...s};i?o[t]={...o[t]??{action:"none"},...i}:delete o[t],this._setDeviceStyle(e,{input_actions:Object.keys(o).length?o:void 0})},r=t?t.entities.map(e=>e.entity_id):[],l=!!t&&Ct(t),c=this._iaAllEntities??!l,d=(e,t,i,s=!0,o)=>this._entityField(e,t,{deviceEntities:r,scopeAll:c,placeholder:i,multi:s,note:o});return q`
+      </div>`}_renderInputActionsBlock(e){const t=this._allDevices().find(t=>t.device_id===e),i=t?Ri(t,this.hass.states):[];if(!i.length)return q``;const s=(this._config.device_styles?.[e]??{}).input_actions??{},o=e=>Array.isArray(e)?e.join(", "):e??"",a=e=>void 0!==s[e.entityId]?e.entityId:void 0!==s[String(e.channel)]?String(e.channel):e.entityId,n=(t,i)=>{const o={...s};i?o[t]={...o[t]??{action:"none"},...i}:delete o[t],this._setDeviceStyle(e,{input_actions:Object.keys(o).length?o:void 0})},r=t?t.entities.map(e=>e.entity_id):[],l=!!t&&Ct(t),c=this._iaAllEntities??!l,d=(e,t,i,s=!0,o)=>this._entityField(e,t,{deviceEntities:r,scopeAll:c,placeholder:i,multi:s,note:o}),p=(e,t)=>(e=>Array.isArray(e)?0===e.length:!e)(e)&&o(t)?`Optional — leave empty to use the tap target (${o(t)})`:void 0;return q`
       <div class="dsn-family">
         <div class="dsn-family-hdr">Input actions — this device only</div>
         <div class="hint" style="margin-bottom:6px">
@@ -4842,37 +4842,37 @@ function e(e,t,i,s){var o,a=arguments.length,n=a<3?t:null===s?s=Object.getOwnPro
           </div>
           <div class="dp-hint-inline">${this._haPickersReady?"Type to search — names, rooms and entity ids all match.":"Home Assistant's picker has not loaded; type entity ids, comma-separated for several."}</div>
         </div>
-        ${i.map(e=>{const i=s[e.entityId]??s[String(e.channel)],r=i?.action??"default",l="default"!==r&&"none"!==r,c=i?.double_tap_action,p="button"===e.kind&&!!t?.isShelly,h=(()=>{if(!e.output)return"";const i=this._entityName(e.output),s=t?.name?.trim()??"";return s&&i.toLowerCase().startsWith(s.toLowerCase())&&i.slice(s.length).trim()||i})(),u=e.output?`— default: toggles ${h} —`:"— none: row shows the press history —";return q`
-            <div class="ia-ch ${l?"set":""}">
+        ${i.map(e=>{const i=s[e.entityId]??s[String(e.channel)],o=i?.action??"default",r="default"!==o&&"none"!==o,l=i?.double_tap_action,c="button"===e.kind&&!!t?.isShelly,h=(()=>{if(!e.output)return"";const i=this._entityName(e.output),s=t?.name?.trim()??"";return s&&i.toLowerCase().startsWith(s.toLowerCase())&&i.slice(s.length).trim()||i})(),u=e.output?`— default: toggles ${h} —`:"— none: row shows the press history —";return q`
+            <div class="ia-ch ${r?"set":""}">
               <div class="ia-ch-hdr">
                 <span class="ia-ch-name" title="${e.entityId} · ${e.kind}">${e.label}
                   <span class="dev-style-hint">${e.kind}</span></span>
                 <select class="inline-text" style="flex:1"
                   @change=${t=>{const i=t.target.value;n(a(e),"default"===i?null:{action:i})}}>
-                  <option value="default" ?selected=${"default"===r}>${u}</option>
-                  ${e.output?q`<option value="none" ?selected=${"none"===r}>— status only, no tap action —</option>`:K}
-                  ${p?q`<option value="press" ?selected=${"press"===r}>Replay the press — runs your automations</option>`:K}
-                  <option value="perform-action" ?selected=${"perform-action"===r}>Run script / service</option>
-                  <option value="toggle" ?selected=${"toggle"===r}>Toggle entity</option>
-                  <option value="more-info" ?selected=${"more-info"===r}>Show more-info</option>
+                  <option value="default" ?selected=${"default"===o}>${u}</option>
+                  ${e.output?q`<option value="none" ?selected=${"none"===o}>— status only, no tap action —</option>`:K}
+                  ${c?q`<option value="press" ?selected=${"press"===o}>Replay the press — runs your automations</option>`:K}
+                  <option value="perform-action" ?selected=${"perform-action"===o}>Run script / service</option>
+                  <option value="toggle" ?selected=${"toggle"===o}>Toggle entity</option>
+                  <option value="more-info" ?selected=${"more-info"===o}>Show more-info</option>
                 </select>
               </div>
-              ${l?q`
+              ${r?q`
                 <div class="ia-grid">
-                  ${"perform-action"===r?q`
+                  ${"perform-action"===o?q`
                     <span class="ia-lbl">Service</span>
                     <input type="text" class="inline-text" placeholder="script.hall_lights — or light.turn_on"
                       .value=${i?.perform_action??""}
                       @change=${t=>n(a(e),{perform_action:t.target.value.trim()||void 0})}/>
                     <span class="ia-lbl">Target</span>
                     <div>${d(i?.entity,t=>n(a(e),{entity:t}),"Target entity — optional")}</div>`:K}
-                  ${"toggle"===r?q`
+                  ${"toggle"===o?q`
                     <span class="ia-lbl">Toggles</span>
                     <div>${d(i?.entity,t=>n(a(e),{entity:t}),"Entity to toggle")}</div>`:K}
-                  ${"more-info"===r?q`
+                  ${"more-info"===o?q`
                     <span class="ia-lbl">Shows</span>
                     <div>${d(i?.entity,t=>n(a(e),{entity:t}),"Entity to show",!1,`Empty = this channel (${e.entityId})`)}</div>`:K}
-                  ${"press"===r?q`
+                  ${"press"===o?q`
                     <div class="ia-hint">Fires the same <code>shelly.click</code> event as the wall button — device_id,
                       button number, click type — so every automation with a Shelly device trigger on this button runs
                       as-is, nothing configured twice. Automations that trigger on the event entity itself do not see
@@ -4888,30 +4888,30 @@ function e(e,t,i,s){var o,a=arguments.length,n=a<3?t:null===s?s=Object.getOwnPro
                   <select class="inline-text"
                     @change=${t=>{const i=t.target.value;n(a(e),{hold_action:"none"===i?void 0:{action:i}})}}>
                     <option value="none" ?selected=${"none"===(i?.hold_action?.action??"none")}>— nothing —</option>
-                    ${p?q`<option value="press" ?selected=${"press"===i?.hold_action?.action}>Replay a long push</option>`:K}
+                    ${c?q`<option value="press" ?selected=${"press"===i?.hold_action?.action}>Replay a long push</option>`:K}
                     <option value="dim" ?selected=${"dim"===i?.hold_action?.action}>Dim the light while held</option>
                   </select>
                   ${"dim"===i?.hold_action?.action?q`
                     <span class="ia-lbl">Dims</span>
-                    <div>${d(i.hold_action.entity,t=>n(a(e),{hold_action:{...i.hold_action??{action:"dim"},entity:t}}),"Light to dim",!1,o(i.entity)?`Empty = the tap target (${o(i.entity)})`:void 0)}</div>
+                    <div>${d(i.hold_action.entity,t=>n(a(e),{hold_action:{...i.hold_action??{action:"dim"},entity:t}}),"Light to dim — optional",!1,p(i.hold_action.entity,i.entity))}</div>
                     <div class="ia-hint">Hold brightens; release and hold again darkens — it alternates each hold.</div>`:K}
 
                   <span class="ia-lbl">Double tap</span>
                   <select class="inline-text"
                     @change=${t=>{const i=t.target.value;n(a(e),{double_tap_action:"none"===i?void 0:{action:i}})}}>
-                    <option value="none" ?selected=${"none"===(c?.action??"none")}>— nothing —</option>
-                    ${p?q`<option value="press" ?selected=${"press"===c?.action}>Replay a double push</option>`:K}
-                    <option value="perform-action" ?selected=${"perform-action"===c?.action}>Run script / service</option>
-                    <option value="toggle" ?selected=${"toggle"===c?.action}>Toggle entity</option>
+                    <option value="none" ?selected=${"none"===(l?.action??"none")}>— nothing —</option>
+                    ${c?q`<option value="press" ?selected=${"press"===l?.action}>Replay a double push</option>`:K}
+                    <option value="perform-action" ?selected=${"perform-action"===l?.action}>Run script / service</option>
+                    <option value="toggle" ?selected=${"toggle"===l?.action}>Toggle entity</option>
                   </select>
-                  ${"perform-action"===c?.action?q`
+                  ${"perform-action"===l?.action?q`
                     <span class="ia-lbl">Service</span>
                     <input type="text" class="inline-text" placeholder="light.turn_on"
-                      .value=${c.perform_action??""}
-                      @change=${t=>n(a(e),{double_tap_action:{...c,perform_action:t.target.value.trim()||void 0}})}/>`:"toggle"===c?.action?q`
+                      .value=${l.perform_action??""}
+                      @change=${t=>n(a(e),{double_tap_action:{...l,perform_action:t.target.value.trim()||void 0}})}/>`:"toggle"===l?.action?q`
                     <span class="ia-lbl">Toggles</span>
-                    <div>${d(c.entity,t=>n(a(e),{double_tap_action:{...c,entity:t}}),"Entity to toggle",!0,o(i?.entity)?`Empty = the tap target (${o(i?.entity)})`:void 0)}</div>`:K}
-                  ${c&&"none"!==c.action?q`
+                    <div>${d(l.entity,t=>n(a(e),{double_tap_action:{...l,entity:t}}),"Entity to toggle — optional",!0,p(l.entity,i?.entity))}</div>`:K}
+                  ${l&&"none"!==l.action?q`
                     <div class="ia-hint">A double tap delays the single tap by ~250ms on this channel so the two can be told apart.</div>`:K}
 
                   ${this._advanced?q`
@@ -6558,4 +6558,4 @@ function e(e,t,i,s){var o,a=arguments.length,n=a<3?t:null===s?s=Object.getOwnPro
        it hides itself with an INLINE display:none, and an inline style beats a
        stylesheet rule, so setting block here cannot defeat the hiding. */
     hui-card { display: block; }
-  `,e([fe({attribute:!1})],bo.prototype,"hass",void 0),e([fe({attribute:!1})],bo.prototype,"config",void 0),e([fe({type:Boolean})],bo.prototype,"preview",void 0),e([ve()],bo.prototype,"_el",void 0),e([ve()],bo.prototype,"_hui",void 0),bo=e([he("hdd-card")],bo);console.info("%c ha-device-dashboard %c input-act-wrap-2026-09-06 ","background:#c98a63;color:#1e1a17;font-weight:700;border-radius:3px 0 0 3px","background:#241f1b;color:#f3ece3;border-radius:0 3px 3px 0"),window.customCards=window.customCards||[],window.customCards.push({type:"ha-device-dashboard",name:"HA Device Dashboard",description:"Universal device fleet overview — Shelly, ZHA, Hue, ESPHome, Matter and more.",preview:!0,documentationURL:"https://github.com/TheIcelandicguy/ha-device-dashboard-card"});
+  `,e([fe({attribute:!1})],bo.prototype,"hass",void 0),e([fe({attribute:!1})],bo.prototype,"config",void 0),e([fe({type:Boolean})],bo.prototype,"preview",void 0),e([ve()],bo.prototype,"_el",void 0),e([ve()],bo.prototype,"_hui",void 0),bo=e([he("hdd-card")],bo);console.info("%c ha-device-dashboard %c hold-hint-2026-09-07 ","background:#c98a63;color:#1e1a17;font-weight:700;border-radius:3px 0 0 3px","background:#241f1b;color:#f3ece3;border-radius:0 3px 3px 0"),window.customCards=window.customCards||[],window.customCards.push({type:"ha-device-dashboard",name:"HA Device Dashboard",description:"Universal device fleet overview — Shelly, ZHA, Hue, ESPHome, Matter and more.",preview:!0,documentationURL:"https://github.com/TheIcelandicguy/ha-device-dashboard-card"});
