@@ -7,6 +7,10 @@
 [![Release](https://img.shields.io/github/v/release/TheIcelandicguy/ha-device-dashboard-card)](https://github.com/TheIcelandicguy/ha-device-dashboard-card/releases)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+**▶ [Watch the walkthrough](https://www.youtube.com/watch?v=NpqrKhSGCB8)** — the
+card on a real 61-device fleet, then the editor: discovery, embedded cards,
+graphs and gauges, and the Design tab.
+
 A Home Assistant Lovelace custom card that auto-discovers your devices and renders
 them as a live, device-centric fleet dashboard — grouped by room, with real
 controls, sensor chips, sparkline graphs and an expandable detail panel per device.
