@@ -65,7 +65,10 @@ Real captures from a 61-device Shelly fleet, not mockups.
 
 **Themes are a cascade layer, not a card-wide setting.** One card, eight themes
 — each room takes its own, and a view, a device type or a single device can
-override again:
+override again. Smart tile styles are on here too, so each device picks its own
+tile at the same time: a big-number power monitor for the plug and the breaker
+channels, a brightness slider for the light, a media block for the wall
+displays:
 
 ![Eight themes at once, one per room](docs/images/screenshots/00-tablet-themes.png)
 
