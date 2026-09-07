@@ -63,6 +63,12 @@ Real captures from a 61-device Shelly fleet, not mockups.
 | ![i3/i4 keypad](docs/images/screenshots/05-keypad.png) **The i3/i4 keypad.** Bind an action and a channel becomes a key that lights with its target's state. One key here drives two WLED segments at once; the dashed pair are keys whose targets are unavailable. | ![The same i4 on the default tile](docs/images/screenshots/05b-keypad-default-style.png) **The same device, adaptive tile.** `tile_style: default` renders those channels as rows with an action button and the device's badges instead — one device, two ways to read it. |
 | ![Warm Dusk theme](docs/images/screenshots/08-theme-warm-dusk.png) **Warm Dusk** — the default theme. | ![Midnight Purple theme](docs/images/screenshots/09-theme-midnight.png) **Midnight Purple.** Eight themes ship, plus Follow HA. |
 
+**Themes are a cascade layer, not a card-wide setting.** One card, eight themes
+— each room takes its own, and a view, a device type or a single device can
+override again:
+
+![Eight themes at once, one per room](docs/images/screenshots/00-tablet-themes.png)
+
 **One device.** The card is built for a fleet, but `devices:` plus
 `show_header: false` and `show_rooms: false` scale it down to a single tile you
 can drop beside your other cards — with the same tile styles, graphs and
