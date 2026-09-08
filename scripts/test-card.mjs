@@ -1203,6 +1203,36 @@ try {
       sp.pickSecondarySensors(pc, pcStates, 'sensor.pc_mem', 4, ['sensor.pc_mem', 'sensor.pc_cpu'])
         .map(e => e.entity_id), ['sensor.pc_cpu']);
 
+    // Naming adds to the automatic selection rather than replacing it - the
+    // chip list is a general "what shows here" setting, and naming one reading
+    // must not silently switch the rest off.
+    const box = { device_id: 'b', entities: [
+      ent('sensor.a', 'sensor'), ent('sensor.b', 'sensor'),
+      ent('sensor.c', 'sensor'), ent('sensor.d', 'sensor'),
+    ]};
+    const boxStates = {
+      'sensor.a': st('1', 'W', 'power'),   'sensor.b': st('2', 'W', 'power'),
+      'sensor.c': st('3', 'W', 'power'),   'sensor.d': st('4', 'W', 'power'),
+    };
+    eq('a named chip leads and the others still follow',
+      sp.pickSecondarySensors(box, boxStates, undefined, 4, ['sensor.c'])
+        .map(e => e.entity_id), ['sensor.c', 'sensor.a', 'sensor.b', 'sensor.d']);
+    eq('a named entity is never chipped twice',
+      sp.pickSecondarySensors(box, boxStates, undefined, 4, ['sensor.c', 'sensor.a'])
+        .map(e => e.entity_id), ['sensor.c', 'sensor.a', 'sensor.b', 'sensor.d']);
+    eq('the cap still holds, and names win the slots',
+      sp.pickSecondarySensors(box, boxStates, undefined, 2, ['sensor.d'])
+        .map(e => e.entity_id), ['sensor.d', 'sensor.a']);
+    // Naming as many as the cap allows is how you get exactly your own list.
+    eq('name enough and the list is exactly yours',
+      sp.pickSecondarySensors(box, boxStates, undefined, 2, ['sensor.d', 'sensor.c'])
+        .map(e => e.entity_id), ['sensor.d', 'sensor.c']);
+    // A dead named entity drops out and does not hold a slot open.
+    eq('an unavailable named chip is skipped',
+      sp.pickSecondarySensors(box, { ...boxStates, 'sensor.c': st('unavailable', 'W', 'power') },
+        undefined, 4, ['sensor.c']).map(e => e.entity_id),
+      ['sensor.a', 'sensor.b', 'sensor.d']);
+
     // An explicit choice outranks the class preference - that is the point.
     const room = { device_id: 'r', entities: [ent('sensor.temp', 'sensor'), ent('sensor.co', 'sensor')] };
     const roomStates = {

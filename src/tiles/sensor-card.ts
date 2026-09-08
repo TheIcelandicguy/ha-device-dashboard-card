@@ -52,12 +52,17 @@ export function renderSensorCardTile(ctx: TileCtx): TemplateResult {
     // chip carries its name, and uses the general formatter rather than a fixed
     // one decimal ("2904 MHz", not "2904.0 MHz").
     const namedIds = new Set(namedEntitiesOn(device, named).map(e => e.entity_id));
+    // Naming even one reading turns labelling on for the whole row. Named chips
+    // fill the first slots and the automatic pick fills the rest, so a labelled
+    // "memoryusage 50.6 %" next to a bare "34.0 %" is the worst of both — you
+    // cannot tell what the second one is, and the mismatch reads as a fault.
+    const labelled = secEnts.some(e => namedIds.has(e.entity_id));
     const chipSpans = (hdrChips || bodyChips) && secEnts.length ? secEnts.map(e => {
       const ss = hass.states[e.entity_id];
       const a = ss?.attributes as HassAttrs;
       const v = parseFloat(ss?.state ?? '');
       const u = (a?.unit_of_measurement as string) ?? '';
-      if (!namedIds.has(e.entity_id)) {
+      if (!labelled) {
         return html`<span class="ts-chip">${isNaN(v) ? ss?.state : v.toFixed(1)} ${u}</span>`;
       }
       const lbl = stripDevicePrefix((a?.friendly_name as string) ?? '', device.name)
