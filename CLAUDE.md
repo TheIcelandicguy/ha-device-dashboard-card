@@ -49,6 +49,17 @@ The repo went public on 2026-09-07 and HACS installs from its releases, so
   utilities, migrateConfig. Compiles `helpers.ts` to CJS in a temp dir (the
   project is `type: module`, so the emitted files need a `{"type":"commonjs"}`
   shim next to them).
+- `npm run test:detection` — `getDeviceProfile` + `detectShellyGen` over
+  `scripts/fixtures/detection-devices.json`: 200+ scrubbed registry rows harvested
+  from a live instance across 30-odd integrations. Compares against
+  `detection-expected.json`, which records what the code does *today* — a diff
+  means detection changed, not that it broke. Re-bless with
+  `npm run test:detection -- --bless`. Rows carrying a `why` were checked against
+  real hardware; changing one is a regression until argued otherwise.
+- `npm run fixtures:harvest` — regenerate the fixtures from a running HA. Scrubs
+  MACs, IPs and long hex ids, drops config URLs / identifiers / serial numbers,
+  and keeps device names only for `shelly` / `bthome` (the integrations whose
+  detection reads them). Read the output before committing it — it goes public.
 - `npm test` — check:docs + the test scripts.
 - `npm run bench` — time the hot paths against a synthetic fleet. Measure before
   claiming something needs optimising: the fleet summaries were suspected of
@@ -94,6 +105,9 @@ The repo went public on 2026-09-07 and HACS installs from its releases, so
   input channel row, input action button, effect picker, and `chipsInHeader()` —
   the one predicate for the opt-in header_chips placement, so power-monitor and
   sensor-card can never disagree about when chips move into the name row).
+- `scripts/fixtures/` — real device rows for detection tests, plus the expected
+  results. Data, not code; regenerate rather than hand-edit, except for the `why`
+  notes, which are the part a machine cannot recreate.
 - `src/palette.ts` — the theme picker's 🎲 / ✨ rolls: a random preset, or a
   palette generated from a random hue with WCAG floors enforced per colour. Pure
   (no DOM/hass), tested by `npm run test:palette`.
@@ -245,6 +259,10 @@ The repo went public on 2026-09-07 and HACS installs from its releases, so
 - Reads the HA **entity registry** (`hass.entities`, indexed) not the `states`
   array; merges per-channel sub-devices into their parent via `via_device_id` +
   config-URL host.
+- **`detectShellyGen` is only ever handed a model, never a display name.** Both
+  call sites pass `device.model ?? ''`. Its own comments say "the name", which is
+  the model string in practice — a test that passes a device name exercises a
+  path production cannot reach.
 - `src/index.ts` prints a `BUILD_TAG` to the browser console — use it to confirm
   which bundle HA actually loaded after a deploy + hard-refresh.
 - `dist/ha-device-dashboard.js` is committed. `.gitattributes` keeps it from showing
