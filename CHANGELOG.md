@@ -5,6 +5,27 @@ installs from them.
 
 ## Unreleased
 
+### Pick sensors by entity in the editor, not just in YAML
+
+v1.4.0 let `sensors` and `graph_sensors` name individual entities, which is the
+only way to reach a reading with no `device_class` — CPU, memory, free disk. The
+editor still offered a pill per device class and nothing else, so the feature was
+YAML-only and effectively invisible.
+
+Both pickers now carry a **Specific entities** field beneath the class pills,
+using Home Assistant's own entity picker with a plain text field as the fallback.
+Under Design at device scope it offers that device's own entities; card-wide it
+offers anything, since a named entity only ever draws on the device that owns it.
+
+The two halves cannot clobber each other: the pills read and write the class keys,
+the field reads and writes the entity ids, and the same is true of **All** — which
+already kept named entities, and now has a visible control that put them there.
+
+**"Which sensors to graph" was hidden behind advanced mode.** It sat in the
+*Per-sensor Colors* section, which is advanced-only, while the Graph Type
+section's own hint told you it was "below" — pointing at a control most users
+could not see. It has moved to Graph Type, where the hint already said it was.
+
 ### The card says when discovery hid something
 
 Discovery filters twice, and both defaults are right: a built-in integration
