@@ -10,6 +10,27 @@ Full architecture tour lives in `OVERVIEW.md` (tracked). Read it when you need
 depth; this file is the fast orientation. Contributor workflow is in
 `CONTRIBUTING.md`.
 
+## Working on it now it is public
+
+The repo went public on 2026-09-07 and HACS installs from its releases, so
+`master` is what other people's dashboards load. That changes the workflow:
+
+- **Branch and open a PR. Do not push to `master`.** Even for a one-line fix —
+  CI is the only thing standing between a mistake and everyone's dashboard, and
+  on a direct push it reports the breakage *after* it has landed.
+- **`dist/` is committed and CI fails on a stale one.** Run `npm run build` and
+  include the rebuilt bundle in the PR, or the "dist is current with src" step
+  fails. This catches shipping yesterday's code, so do not work around it.
+- **Every PR must pass** `npm run typecheck`, `npm run lint`, `npm test` and the
+  build. Run them locally first; they are the same four CI runs.
+- **Releases:** see the "Cutting a release" section in `CONTRIBUTING.md`. The
+  bundle is attached to the GitHub release automatically by
+  `.github/workflows/release-asset.yml` — that asset is what makes installs
+  countable, and a release published without it silently stops the download
+  counter.
+- **Structural work is in `docs/ROADMAP.md`.** Anything a user would recognise —
+  a bug, a feature — belongs in GitHub Issues instead.
+
 ## Commands
 
 - `npm run build` — production bundle (also auto-deploys to `Z:\www\community\ha-device-dashboard\` if `Z:` is mapped).
