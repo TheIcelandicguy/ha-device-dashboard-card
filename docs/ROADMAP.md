@@ -7,22 +7,6 @@ not here. This file is for structural work that no user will ever file.
 
 ## Next
 
-**A fixture library for device detection.** Detection is the most fragile part of
-the card and the part most likely to be wrong on hardware the author has never
-seen. It is currently exercised by a handful of hand-written fixtures.
-
-The shape wanted is `input device → expected profile` over hundreds of real
-registry rows, harvested from live instances across several integrations rather
-than invented. The case for it is empirical: two detection bugs were found in
-one evening, both by real device data and neither by reading the code —
-
-- a `/^sh/i` rule that matched *every* device named "Shelly…", so the whole
-  unrecognised long tail would have reported as Gen 1;
-- the BLU Gateway, a mains WiFi Gen3 device whose name contains "BLU",
-  resolving to `'ble'`.
-
-Reasoning alone found neither. This is the highest-value item on the list.
-
 **Measure render cost at 200+ tiles.** `npm run bench` covers discovery (3.7 ms
 for 224 devices, cached against registry+config identity) and the cascades. What
 is *not* measured is DOM render time for a large fleet, which is the more likely
@@ -49,6 +33,20 @@ come from the browser's `hass.entities`, which omits disabled entities — the
 websocket registry includes them, and counting those inflated the figure roughly
 2.5×, reporting devices as "hidden by your settings" that are simply disabled in
 Home Assistant.
+
+**A fixture library for device detection** — `npm run test:detection` runs
+`getDeviceProfile` and `detectShellyGen` over 215 scrubbed registry rows
+harvested from a live instance across 30-odd integrations, against recorded
+expectations. Proven by reintroducing the original ordering bug — the name test
+above `hw_version` — which the suite reports as a hand-checked regression with
+the reasoning attached.
+
+Two things it taught immediately. `detectShellyGen` is never handed a display
+name: both call sites pass `device.model`, so the "name" its comments describe is
+the model string, and a test that passes a name tests nothing real. And the first
+mutation I tried did not fail, because `hw_version` short-circuits above it —
+which is the fix working, but it means a mutation has to be placed where the bug
+actually was to prove anything.
 
 ## Later
 

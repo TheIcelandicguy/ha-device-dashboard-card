@@ -21,7 +21,9 @@
     "bench": "node scripts/bench.mjs",
     "test:palette": "node scripts/test-palette.mjs",
     "test:card": "node scripts/test-card.mjs",
-    "test": "npm run check:docs && npm run test:builder && npm run test:palette && npm run test:card",
+    "test:detection": "node scripts/test-detection.mjs",
+    "fixtures:harvest": "node scripts/harvest-fixtures.mjs",
+    "test": "npm run check:docs && npm run test:builder && npm run test:palette && npm run test:card && npm run test:detection",
     "deploy:bump": "node scripts/bump-resource.mjs"
   },
   "devDependencies": {

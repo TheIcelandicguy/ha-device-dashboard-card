@@ -1,0 +1,1116 @@
+{
+ "note": "What detection produces today. Not a claim that it is correct — except for rows with a \"why\", which were checked against real hardware and must not change silently. Re-bless with: npm run test:detection -- --bless",
+ "devices": {
+  "androidtv_remote/2021/22 Philips UHD Android TV 20": {
+   "profile": "media",
+   "label": "Media",
+   "gen": "other"
+  },
+  "androidtv_remote/Chromecast 82": {
+   "profile": "media",
+   "label": "Media",
+   "gen": "other"
+  },
+  "backup/Home Assistant Backup 102": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "bermuda/bermuda 78": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "browser_mod/Browser Mod 158": {
+   "profile": "media",
+   "label": "Media",
+   "gen": "other"
+  },
+  "browser_mod/Browser Mod 179": {
+   "profile": "media",
+   "label": "Media",
+   "gen": "other"
+  },
+  "bthome/BTHome sensor AD09": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other",
+   "shellyGen": "other"
+  },
+  "bthome/BTHome sensor B7A2": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other",
+   "shellyGen": "other"
+  },
+  "bthome/Hiti úti": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other",
+   "shellyGen": "other"
+  },
+  "bthome/Shelly BLU H&T CFB7": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other",
+   "shellyGen": "ble",
+   "why": "A BLU sensor reaching HA through BTHome, not the Shelly integration. ble by name because BTHome supplies no Shelly model_id."
+  },
+  "cast/2021/22 Philips UHD Android TV 21": {
+   "profile": "media",
+   "label": "Media",
+   "gen": "other"
+  },
+  "cast/Chromecast 81": {
+   "profile": "media",
+   "label": "Media",
+   "gen": "other"
+  },
+  "cast/EZCast 83": {
+   "profile": "media",
+   "label": "Media",
+   "gen": "other"
+  },
+  "cast/MiTV-AFMU0 157": {
+   "profile": "media",
+   "label": "Media",
+   "gen": "other"
+  },
+  "device_pulse/device_pulse 137": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "device_pulse/device_pulse 138": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "device_pulse/device_pulse 146": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "device_pulse/Shelly 1PM Gen3 115": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "device_pulse/Shelly BLU Gateway Gen3 123": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "device_pulse/Shelly Button1 54": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "device_pulse/Shelly Dimmer 2 13": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "device_pulse/Shelly Dimmer Gen3 112": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "device_pulse/Shelly Door/Window 2 42": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "device_pulse/Shelly i3 109": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "device_pulse/Shelly I4 Gen3 167": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "device_pulse/Shelly Plug S 67": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "device_pulse/Shelly Plus 1PM 183": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "device_pulse/Shelly Plus 1PM 39": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "device_pulse/Shelly Plus 2PM 64": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "device_pulse/Shelly Plus I4 61": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "device_pulse/Shelly Plus Smoke 92": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "device_pulse/Shelly RGBW2 26": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "device_pulse/Shelly Wall Display 16": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "device_pulse/Shelly Wall Display 182": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "device_pulse/Shelly Wall Display XL 127": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "device_pulse/Smart water valve 106": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "gecko/inYT 61 v46.0 150": {
+   "profile": "climate",
+   "label": "Climate",
+   "gen": "other"
+  },
+  "google_translate/Google Translate TTS 155": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/ 34": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/integration 103": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/integration 126": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/integration 134": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/integration 136": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/integration 139": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/integration 142": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/integration 145": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/integration 149": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/integration 153": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/integration 169": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/integration 51": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/integration 77": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/integration 79": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/integration 97": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/integration 98": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/plugin 135": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/plugin 140": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/plugin 141": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/plugin 180": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/plugin 35": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/plugin 36": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/plugin 37": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/plugin 53": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/plugin 71": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/plugin 72": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/plugin 73": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/plugin 74": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/plugin 75": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/plugin 76": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/plugin 80": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/plugin 88": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/plugin 89": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/plugin 91": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/plugin 94": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/plugin 96": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/theme 100": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/theme 86": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hacs/theme 90": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hassio/Home Assistant App 122": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hassio/Home Assistant App 152": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hassio/Home Assistant App 154": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hassio/Home Assistant App 156": {
+   "profile": "plug",
+   "label": "Plug",
+   "gen": "other"
+  },
+  "hassio/Home Assistant App 178": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hassio/Home Assistant App 23": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hassio/Home Assistant App 33": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hassio/Home Assistant App 57": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hassio/Home Assistant Core 2": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hassio/Home Assistant Operating System 4": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hassio/Home Assistant Supervisor 3": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "huawei_ont/V261a-20 171": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hue/Hue Bridge 44": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "hue/Hue color lamp 47": {
+   "profile": "dimmer",
+   "label": "Dimmer",
+   "gen": "other"
+  },
+  "hue/Hue color lamp 48": {
+   "profile": "dimmer",
+   "label": "Dimmer",
+   "gen": "other"
+  },
+  "hue/Hue dimmer switch 49": {
+   "profile": "input",
+   "label": "Input",
+   "gen": "other"
+  },
+  "hue/Room 50": {
+   "profile": "dimmer",
+   "label": "Dimmer",
+   "gen": "other"
+  },
+  "ipp/TS3100 series 22": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "met/Forecast 5": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "mobile_app/Blake 168": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "mobile_app/iPhone14,7 85": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "mobile_app/LM-V405 84": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "mobile_app/px30_evb 24": {
+   "profile": "energy",
+   "label": "Energy",
+   "gen": "other"
+  },
+  "mobile_app/SM-A356B 87": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "mobile_app/SM-L315F 174": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "mobile_app/SM-S938U1 105": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "mobile_app/SM-T505 52": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "mobile_app/SM-T530NU 32": {
+   "profile": "energy",
+   "label": "Energy",
+   "gen": "other"
+  },
+  "mqtt/Microsoft Windows NT 10.0.26200.0 177": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "mqtt/PC monitor (direct MQTT) 175": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "music_assistant/2021/22 Philips UHD Android TV 160": {
+   "profile": "media",
+   "label": "Media",
+   "gen": "other"
+  },
+  "music_assistant/MediaRenderer 164": {
+   "profile": "media",
+   "label": "Media",
+   "gen": "other"
+  },
+  "music_assistant/MiTV-AFMU0 162": {
+   "profile": "media",
+   "label": "Media",
+   "gen": "other"
+  },
+  "music_assistant/Philips TV DMR 163": {
+   "profile": "media",
+   "label": "Media",
+   "gen": "other"
+  },
+  "music_assistant/RX-A2A 161": {
+   "profile": "media",
+   "label": "Media",
+   "gen": "other"
+  },
+  "music_assistant/Web Browser 173": {
+   "profile": "media",
+   "label": "Media",
+   "gen": "other"
+  },
+  "music_assistant/Xbox One 172": {
+   "profile": "media",
+   "label": "Media",
+   "gen": "other"
+  },
+  "netgear/netgear 148": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "netgear/RAX40v2 159": {
+   "profile": "plug",
+   "label": "Plug",
+   "gen": "other"
+  },
+  "netgear/Reolink 132": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "netgear/Shelly 108": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "netgear/Shelly 111": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "netgear/Shelly 114": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "netgear/Shelly 117": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "netgear/Shelly 118": {
+   "profile": "plug",
+   "label": "Plug",
+   "gen": "other"
+  },
+  "netgear/Shelly 125": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "netgear/Shelly 129": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "netgear/Shelly 15": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "netgear/Shelly 165": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "netgear/Shelly 18": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "netgear/Shelly 19": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "netgear/Shelly 28": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "netgear/Shelly 41": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "netgear/Shelly 43": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "netgear/Shelly 55": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "netgear/Shelly 60": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "netgear/Shelly 63": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "netgear/Shelly 66": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "netgear/Shelly 69": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "netgear/Shelly 93": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "netgear/Signify Netherlands B.V. 46": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "netgear/TPLink 8": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "netgear/WLED 31": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "netgear/Yamaha Corporation 11": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "ollama/llama3.1 176": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "philips_js/75PUS8556/12 104": {
+   "profile": "media",
+   "label": "Media",
+   "gen": "other"
+  },
+  "price_watch/Tracked product 170": {
+   "profile": "input",
+   "label": "Input",
+   "gen": "other"
+  },
+  "reolink/Reolink Chime 133": {
+   "profile": "plug",
+   "label": "Plug",
+   "gen": "other"
+  },
+  "reolink/Reolink Video Doorbell WiFi 130": {
+   "profile": "plug",
+   "label": "Plug",
+   "gen": "other"
+  },
+  "roborock/roborock.vacuum.a156 120": {
+   "profile": "plug",
+   "label": "Plug",
+   "gen": "other"
+  },
+  "roborock/roborock.vacuum.a156 Dock 119": {
+   "profile": "plug",
+   "label": "Plug",
+   "gen": "other"
+  },
+  "shelly/Bílskúr Forstofa": {
+   "profile": "relay",
+   "label": "Switch",
+   "gen": "other",
+   "shellyGen": 3
+  },
+  "shelly/Bílskúr Ljós stofa": {
+   "profile": "dimmer",
+   "label": "Dimmer",
+   "gen": "other",
+   "shellyGen": 3
+  },
+  "shelly/Bílskúr Svefnherbergi": {
+   "profile": "relay",
+   "label": "Switch",
+   "gen": "other",
+   "shellyGen": 3
+  },
+  "shelly/BLU Gateway Ofnastillir Bílskúr": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other",
+   "shellyGen": 3,
+   "why": "A mains WiFi Gen3 unit whose NAME contains \"BLU\". Resolved to ble until the name test was moved below the authoritative fields and gateways excluded from it."
+  },
+  "shelly/Display Eldhús": {
+   "profile": "media",
+   "label": "Media",
+   "gen": "other",
+   "shellyGen": 2
+  },
+  "shelly/Display Forstofa": {
+   "profile": "media",
+   "label": "Media",
+   "gen": "other",
+   "shellyGen": 2
+  },
+  "shelly/Display stofa": {
+   "profile": "media",
+   "label": "Media",
+   "gen": "other",
+   "shellyGen": 2
+  },
+  "shelly/Gólfhiti stofa/Hjón": {
+   "profile": "relay",
+   "label": "Switch",
+   "gen": "other",
+   "shellyGen": 2
+  },
+  "shelly/Gólfhiti WC": {
+   "profile": "relay",
+   "label": "Switch",
+   "gen": "other",
+   "shellyGen": 2
+  },
+  "shelly/Gr. Bílskúr Helluborð": {
+   "profile": "relay",
+   "label": "Switch",
+   "gen": "other",
+   "shellyGen": 2
+  },
+  "shelly/Gr.2 Bakaraofn 1": {
+   "profile": "relay",
+   "label": "Switch",
+   "gen": "other",
+   "shellyGen": 2
+  },
+  "shelly/Hurðanemi Svalahurð": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other",
+   "shellyGen": 1
+  },
+  "shelly/Ljós hjónaherbergi ": {
+   "profile": "dimmer",
+   "label": "Dimmer",
+   "gen": "other",
+   "shellyGen": 1
+  },
+  "shelly/Ljós þvottur/geymsla": {
+   "profile": "relay",
+   "label": "Switch",
+   "gen": "other",
+   "shellyGen": 3
+  },
+  "shelly/Ofnastillir Bílskúr": {
+   "profile": "climate",
+   "label": "Climate",
+   "gen": "other",
+   "shellyGen": "ble",
+   "why": "A real BLU TRV: ble is correct here, and it is the case the gateway above must not be confused with."
+  },
+  "shelly/Outdoor led string": {
+   "profile": "relay",
+   "label": "Switch",
+   "gen": "other",
+   "shellyGen": 2
+  },
+  "shelly/Pottadæla": {
+   "profile": "valve",
+   "label": "Valve",
+   "gen": "other",
+   "shellyGen": 3
+  },
+  "shelly/Reyks Búr": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other",
+   "shellyGen": 2
+  },
+  "shelly/Rofi bílskúr Stofa": {
+   "profile": "input",
+   "label": "Input",
+   "gen": "other",
+   "shellyGen": 1
+  },
+  "shelly/Rofi fyrir pottadælu": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other",
+   "shellyGen": 1
+  },
+  "shelly/Rofi Hjóna": {
+   "profile": "input",
+   "label": "Input",
+   "gen": "other",
+   "shellyGen": 3
+  },
+  "shelly/Rofi í Stofu": {
+   "profile": "input",
+   "label": "Input",
+   "gen": "other",
+   "shellyGen": 2
+  },
+  "shelly/shellyplug-s-20AFA7": {
+   "profile": "plug",
+   "label": "Plug",
+   "gen": "other",
+   "shellyGen": 1,
+   "why": "Gen1 by its SH model_id. A /^sh/i rule on the display name once made every device named \"Shelly...\" report Gen1, i.e. the whole unrecognised long tail."
+  },
+  "shelly/shellyplussmoke-aabbcc000005": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other",
+   "shellyGen": 2
+  },
+  "shelly/Undirskápaljós": {
+   "profile": "dimmer",
+   "label": "Dimmer",
+   "gen": "other",
+   "shellyGen": 1
+  },
+  "shelly/Undirskápaljós Channel 2": {
+   "profile": "dimmer",
+   "label": "Dimmer",
+   "gen": "other",
+   "shellyGen": 1
+  },
+  "shelly/Útiljós vestur": {
+   "profile": "relay",
+   "label": "Switch",
+   "gen": "other",
+   "shellyGen": 2
+  },
+  "shelly/Veggljós ": {
+   "profile": "dimmer",
+   "label": "Dimmer",
+   "gen": "other",
+   "shellyGen": 1
+  },
+  "spotifyplus/Spotify Premium Account 99": {
+   "profile": "media",
+   "label": "Media",
+   "gen": "other"
+  },
+  "spotify/Spotify premium 25": {
+   "profile": "media",
+   "label": "Media",
+   "gen": "other"
+  },
+  "sun/sun 1": {
+   "profile": "input",
+   "label": "Input",
+   "gen": "other"
+  },
+  "systemmonitor/System Monitor 70": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "tplink_router/Archer AX55 Pro 6": {
+   "profile": "plug",
+   "label": "Plug",
+   "gen": "other"
+  },
+  "tplink_router/Archer AX55 Pro 7": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "tplink_router/FOSS 30": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "tplink_router/Hue Bridge 45": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "tplink_router/Reolink Video Doorbell WiFi 131": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "tplink_router/RX-A2A 10": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "tplink_router/Shelly 1PM Gen3 116": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "tplink_router/Shelly BLU Gateway Gen3 124": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "tplink_router/Shelly Button1 56": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "tplink_router/Shelly Dimmer 2 14": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "tplink_router/Shelly Dimmer Gen3 113": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "tplink_router/Shelly i3 110": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "tplink_router/Shelly I4 Gen3 166": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "tplink_router/Shelly Plug S 68": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "tplink_router/Shelly Plus 1PM 40": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "tplink_router/Shelly Plus 2PM 65": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "tplink_router/Shelly Plus I4 62": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "tplink_router/Shelly Plus Smoke 95": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "tplink_router/Shelly RGBW2 27": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "tplink_router/Shelly Wall Display 17": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "tplink_router/Shelly Wall Display XL 128": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "tplink_router/Smart water valve 107": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "tplink_router/tplink_router 147": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "tuya/HD mini Camera 121": {
+   "profile": "dimmer",
+   "label": "Dimmer",
+   "gen": "other"
+  },
+  "tuya/Multi-Mode Gateway 143": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "tuya/Security Camera 101": {
+   "profile": "dimmer",
+   "label": "Dimmer",
+   "gen": "other"
+  },
+  "tuya/Temperature Humidity Sensor 151": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "tuya/无线开关-3 144": {
+   "profile": "input",
+   "label": "Input",
+   "gen": "other"
+  },
+  "upnp/Huawei EchoLife Series 181": {
+   "profile": "sensor",
+   "label": "Sensor",
+   "gen": "other"
+  },
+  "wled/FOSS 29": {
+   "profile": "dimmer",
+   "label": "Dimmer",
+   "gen": "other"
+  },
+  "wled/FOSS 38": {
+   "profile": "dimmer",
+   "label": "Dimmer",
+   "gen": "other"
+  },
+  "yamaha_musiccast/RX-A2A 12": {
+   "profile": "media",
+   "label": "Media",
+   "gen": "other"
+  },
+  "yamaha_musiccast/RX-A2A 9": {
+   "profile": "media",
+   "label": "Media",
+   "gen": "other"
+  },
+  "yamaha_musiccast/RX-V483 58": {
+   "profile": "media",
+   "label": "Media",
+   "gen": "other"
+  },
+  "yamaha_musiccast/RX-V483 59": {
+   "profile": "media",
+   "label": "Media",
+   "gen": "other"
+  }
+ }
+}

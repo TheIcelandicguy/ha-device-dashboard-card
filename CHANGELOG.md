@@ -5,6 +5,39 @@ installs from them.
 
 ## Unreleased
 
+### A fixture library for device detection
+
+Detection is the most fragile part of the card and the part most likely to be
+wrong on hardware the author has never seen. Both bugs found in it so far came
+from looking at real device data, neither from reading the code: a `/^sh/i` rule
+that matched every device named "Shelly…", and the BLU Gateway — a mains WiFi
+Gen3 unit whose name says Bluetooth — resolving to `ble`. It was exercised by a
+handful of hand-written fixtures, which is precisely the set that does not
+contain the bugs.
+
+`npm run test:detection` now runs `getDeviceProfile` and `detectShellyGen` over
+**215 real registry rows**, harvested from a live instance across 30-odd
+integrations and deduplicated to one exemplar per hardware shape — 148 sensors,
+25 media, 12 dimmers, 9 plugs, 9 relays, and Shelly generations spread across
+Gen1, 2, 3, BLU and unknown.
+
+`npm run fixtures:harvest` regenerates them. The output is committed to a public
+repo, so it carries only what detection reads: MACs, IPs and long hex instance
+ids are replaced with stable fakes, configuration URLs, identifiers and serial
+numbers are dropped, every attribute except `device_class` is dropped, and device
+names survive only for `shelly` / `bthome` — the integrations whose detection
+reads them. Everything else is named after its model, because a phone is usually
+named after a person.
+
+Expected results are a record of what the code does **today**, not a claim that
+today's answer is right; a diff means detection changed, and `--bless` re-records
+it. Rows carrying a `why` were checked against real hardware, and the suite calls
+a change to one a regression rather than a drift.
+
+Proven rather than asserted: reintroducing the original ordering bug — the name
+test above `hw_version` — makes the suite fail on the BLU Gateway and print the
+reasoning next to it.
+
 ### Pick sensors by entity in the editor, not just in YAML
 
 v1.4.0 let `sensors` and `graph_sensors` name individual entities, which is the
