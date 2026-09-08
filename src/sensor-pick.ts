@@ -109,7 +109,15 @@ export function pickPrimaryBinary(device: HADevice, states: StatesMap): HAEntity
     && BINARY_CLASSES.includes((attrs(states, e.entity_id).device_class as string) ?? ''));
 }
 
-/** Everything else worth chipping beneath the headline, capped for space. */
+/**
+ * Everything else worth chipping beneath the headline, capped for space.
+ *
+ * Named entities lead, in the order named. They *add to* the automatic
+ * selection rather than replacing it: "which sensors show on the tile" is a
+ * general setting people use on its own, and naming one reading should not
+ * silently switch the rest off. Name as many as the cap allows if you want the
+ * list to be exactly yours.
+ */
 export function pickSecondarySensors(
   device: HADevice,
   states: StatesMap,
@@ -117,13 +125,10 @@ export function pickSecondarySensors(
   limit = 4,
   named?: readonly string[],
 ): HAEntity[] {
-  // Named entities, in the order named, are the whole answer when given: the
-  // point of listing them is to say what the tile shows and in what order.
   const explicit = namedEntitiesOn(device, named)
     .filter(e => e.entity_id !== primaryId && isReading(e, states));
-  if (explicit.length) return explicit.slice(0, limit);
-
-  return device.entities
-    .filter(e => e.entity_id !== primaryId && isMeasurement(e, states))
-    .slice(0, limit);
+  const taken = new Set(explicit.map(e => e.entity_id));
+  const rest = device.entities.filter(e =>
+    e.entity_id !== primaryId && !taken.has(e.entity_id) && isMeasurement(e, states));
+  return [...explicit, ...rest].slice(0, limit);
 }

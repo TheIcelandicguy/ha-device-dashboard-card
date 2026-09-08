@@ -3,6 +3,41 @@
 All notable changes to HA Device Dashboard. Versions are git tags; HACS
 installs from them.
 
+## Unreleased
+
+### Naming a sensor adds to the tile's chips instead of replacing them
+
+v1.4.0 let you name entities in `sensors`, and treated a named list as the whole
+answer: name one reading and the tile showed that and nothing else. That was the
+wrong default. "Which sensors show on the tile" is a general setting people use
+on its own, and naming one reading should not silently switch the rest off.
+
+Named entities now lead — in the order named — and the automatic selection fills
+whatever slots are left, up to the four-chip cap. Name four and the list is
+exactly yours; name one and you get it first, plus three the tile chose.
+
+**Chips label the whole row once any of them is named.** Named chips carried
+their name and automatic ones did not, which was fine while a tile had only one
+kind. Mixing them put a labelled `memoryusage 50.6 %` beside a bare `34.0 %` —
+the worst of both, since the second is unreadable and the mismatch looks like a
+fault. Tiles that name nothing are unchanged.
+
+### Show or hide a whole room's devices at once
+
+Expanding a room lists its devices with a switch each, and hiding a dozen of
+them meant a dozen clicks. Rooms already had **All · None** for switching the
+rooms themselves; their contents now have the same control, and so does the
+Favourites row.
+
+It only appears when a room holds more than one device — a two-button control
+over a single row is noise.
+
+`hidden_devices` is a card-wide list, so the one thing this must not do is
+disturb another room while rewriting one. That bookkeeping is
+`setDevicesHidden()` in `src/room-filter.ts` rather than an inline filter at the
+call site, with 7 assertions over it — including that showing everything again
+removes the key rather than leaving an empty array behind.
+
 ## v1.4.1 — 2026-09-08
 
 ### Switching one room off no longer hides every device that has no room
