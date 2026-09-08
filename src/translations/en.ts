@@ -248,6 +248,14 @@ export const EN: Translations = {
   'notice.delegate_many': '{n} devices have extra controls (fan, vacuum, lock…). Turn on',
   'notice.delegate_here': 'to show them.',
   'notice.delegate_editor': 'in the editor to show them.',
+  'notice.discovery_shelly': '{n} more devices are in Home Assistant but not on this card — it is in Shelly mode.',
+  'notice.discovery_hidden': '{n} devices are not shown:',
+  'notice.hidden_integration': '{n} by integration',
+  'notice.hidden_scope': '{n} by scope',
+  'notice.hidden_domain': '{n} by domain',
+  'notice.discovery_link': 'Discovery',
+  'notice.discovery_here': 'has the settings.',
+  'notice.discovery_editor': 'in the editor has the settings.',
 
   // ── Errors ──
   'error.replay_needs_admin':

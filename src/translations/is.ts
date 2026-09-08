@@ -240,6 +240,14 @@ export const IS: Translations = {
   'notice.delegate_many': '{n} tæki eru með auka stýringar (vifta, ryksuga, lás…). Kveiktu á',
   'notice.delegate_here': 'til að sýna þær.',
   'notice.delegate_editor': 'í ritlinum til að sýna þær.',
+  'notice.discovery_shelly': '{n} tæki til viðbótar eru í Home Assistant en ekki á þessu korti — það er í Shelly-ham.',
+  'notice.discovery_hidden': '{n} tæki eru ekki sýnd:',
+  'notice.hidden_integration': '{n} vegna samþættingar',
+  'notice.hidden_scope': '{n} vegna umfangs',
+  'notice.hidden_domain': '{n} vegna léns',
+  'notice.discovery_link': 'Uppgötvun',
+  'notice.discovery_here': 'geymir stillingarnar.',
+  'notice.discovery_editor': 'í ritlinum geymir stillingarnar.',
 
   // ── Villur ──
   'error.replay_needs_admin':

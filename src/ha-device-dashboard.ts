@@ -41,6 +41,7 @@ import {
   detectInputChannels, detectShellyGen, shellyClickTypes, shellyInputChannel, shellyHostname,
   deviceSensorValues, attachExtraSensors, stripDevicePrefix, colorAt, formatReading,
 } from './helpers';
+import type { DiscoveryStats } from './helpers';
 import { namedEntitiesOn, classKeys } from './sensor-keys';
 import { renderAnimSvg } from './anim-icons';
 import { t, tOr, setLanguage } from './localize';
@@ -109,6 +110,12 @@ export class HADeviceDashboard extends LitElement {
   @state() private _activeViewId: string | null = null;
   /** One-time notice: delegatable devices exist but native controls are off. */
   @state() private _delegateNoticeDismissed = false;
+  @state() private _discoveryNoticeDismissed = false;
+  /** What the last discovery threw away. Filled by getAllDevices as it filters,
+   *  so the notice costs no second pass over the registry. */
+  private _discoveryStats: DiscoveryStats = {
+    notShelly: 0, byIntegration: 0, byDomain: 0, byScope: 0, integrations: [],
+  };
   /** Needs-attention summary expanded. Collapsed by default: the count is the
    *  signal, the list is the follow-up. */
   @state() private _attentionOpen = false;
@@ -359,7 +366,7 @@ export class HADeviceDashboard extends LitElement {
       excludeIntegrations: this._config.exclude_integrations,
       includeDomains:      this._config.include_domains,
       excludeDomains:      this._config.exclude_domains,
-    });
+    }, this._discoveryStats);
     // Readings lent by other devices (extra_sensors) join the entity list here,
     // so everything downstream treats them as the device's own.
     devices = attachExtraSensors(devices, this._config.device_styles, this.hass);
@@ -479,11 +486,66 @@ export class HADeviceDashboard extends LitElement {
   /** Hydrate per-viewer UI state from localStorage on mount. */
   private _loadCustomizations(): void {
     try { this._delegateNoticeDismissed = localStorage.getItem('hdd:delegateNoticeDismissed') === '1'; } catch { /* ignore */ }
+    try { this._discoveryNoticeDismissed = localStorage.getItem('hdd:discoveryNoticeDismissed') === '1'; } catch { /* ignore */ }
   }
 
   private _dismissDelegateNotice(): void {
     this._delegateNoticeDismissed = true;
     try { localStorage.setItem('hdd:delegateNoticeDismissed', '1'); } catch { /* ignore */ }
+  }
+
+  private _dismissDiscoveryNotice(): void {
+    this._discoveryNoticeDismissed = true;
+    try { localStorage.setItem('hdd:discoveryNoticeDismissed', '1'); } catch { /* ignore */ }
+  }
+
+  /**
+   * Say when discovery hid something.
+   *
+   * Both filters are right by default, and both are silent — so a user whose
+   * devices were dropped sees an incomplete card and concludes it is broken,
+   * with nothing on screen pointing at the setting responsible. This is the
+   * first question the project got after launch. The notice is deliberately a
+   * count and a link, not a fix: the defaults stay as they are.
+   */
+  private _renderDiscoveryNotice(): TemplateResult {
+    if (this._discoveryNoticeDismissed) return html``;
+    const st = this._discoveryStats;
+    const shelly = st.notShelly;
+    const hidden = st.byIntegration + st.byScope + st.byDomain;
+    if (!shelly && !hidden) return html``;
+
+    const inEditor = this.preview || this.hasAttribute('data-edit-preview');
+    const setting = inEditor
+      ? html`<button class="dn-link" @click=${(e: Event) => {
+          e.stopPropagation();
+          window.dispatchEvent(new CustomEvent('hdd-editor-goto', {
+            detail: { tab: 'devices', section: 'discovery', flash: 'mode' },
+          }));
+        }}>${t('notice.discovery_link')}</button>`
+      : html`<b>${t('notice.discovery_link')}</b>`;
+
+    // Shelly mode is its own sentence: "hidden by a filter" understates it —
+    // everything that is not a Shelly is out, which is the whole mode.
+    const body = shelly
+      ? html`${t('notice.discovery_shelly', { n: shelly })}`
+      : html`${t('notice.discovery_hidden', { n: hidden })}
+          ${[
+            st.byIntegration ? t('notice.hidden_integration', { n: st.byIntegration }) : '',
+            st.byScope ? t('notice.hidden_scope', { n: st.byScope }) : '',
+            st.byDomain ? t('notice.hidden_domain', { n: st.byDomain }) : '',
+          ].filter(Boolean).join(', ')}${st.integrations.length
+            ? html` <span class="dn-dim">(${st.integrations.slice(0, 3).join(', ')}${
+                st.integrations.length > 3 ? '…' : ''})</span>` : nothing}.`;
+
+    return html`
+      <div class="delegate-notice">
+        <span class="dn-icon">⌕</span>
+        <span class="dn-text">${body}
+          ${setting} ${inEditor ? t('notice.discovery_here') : t('notice.discovery_editor')}</span>
+        <button class="dn-dismiss" title=${t('action.dismiss')}
+          @click=${(e: Event) => { e.stopPropagation(); this._dismissDiscoveryNotice(); }}>×</button>
+      </div>`;
   }
 
 
@@ -3805,6 +3867,7 @@ export class HADeviceDashboard extends LitElement {
           </div>` : nothing}
         ${this._renderHeaderDetail(viewDevices)}
         ${this._renderViewTabs()}
+        ${this._renderDiscoveryNotice()}
         ${this._renderDelegateNotice(devices)}
         ${this._renderExtraCards(cascade.chromeCards(this._config, activeView ?? undefined, 'header_cards'))}
         <div class="dash-body">

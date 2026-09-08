@@ -5,6 +5,46 @@ installs from them.
 
 ## Unreleased
 
+### The card says when discovery hid something
+
+Discovery filters twice, and both defaults are right: a built-in integration
+deny-list (`netgear`, `mobile_app`, `hassio`, `tplink_router`, `systemmonitor` …)
+and `universal_scope`, which keeps devices with a controllable entity or a sensor
+carrying a recognised `device_class`. Without them a smart-home dashboard fills
+with routers, phones and diagnostics. Shelly mode is narrower still — everything
+that is not a Shelly is out.
+
+What was wrong is that all of it was **silent**. A user whose devices were
+dropped saw an incomplete card and concluded it was broken, with nothing on
+screen pointing at the setting responsible. That was the first question the
+project got after launch, and it caught the author out too: a screenshot taken
+while building the previous release rendered one tile instead of three, because
+`tplink_router` and `hassio` are on the deny list and nothing said so.
+
+A dismissible line at the top of the card now says what was dropped and why:
+
+> ⌕ 165 devices are not shown: 93 by integration, 72 by scope (browser_mod,
+> hassio, mobile_app…). **Discovery** in the editor has the settings.
+
+and in Shelly mode:
+
+> ⌕ 270 more devices are in Home Assistant but not on this card — it is in
+> Shelly mode. **Discovery** in the editor has the settings.
+
+It is a count and a link, not a fix — the defaults do not change. In the edit
+dialog the link jumps to the setting; on a dashboard, where a card cannot open
+its own editor, it stays plain text rather than a link that goes nowhere.
+
+Two things the counting had to get right. Attribution is per **device** and only
+when nothing of it survived, so a device with entities from two integrations —
+one denied, one kept — is not reported as hidden. And the numbers come from the
+browser's `hass.entities`, which omits disabled entities; the websocket registry
+includes them, and counting those inflated the figure roughly 2.5×, reporting
+devices as "hidden by your settings" that are simply disabled in Home Assistant.
+
+`getAllDevices` fills the counts as it filters, through an optional out-param, so
+the notice costs no second pass over the registry.
+
 ### Naming a sensor adds to the tile's chips instead of replacing them
 
 v1.4.0 let you name entities in `sensors`, and treated a named list as the whole
