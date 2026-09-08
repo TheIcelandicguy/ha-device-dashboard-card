@@ -3,7 +3,7 @@
 All notable changes to HA Device Dashboard. Versions are git tags; HACS
 installs from them.
 
-## v1.4.1 — 2026-09-08
+## Unreleased
 
 ### Naming a sensor adds to the tile's chips instead of replacing them
 
@@ -37,6 +37,8 @@ disturb another room while rewriting one. That bookkeeping is
 `setDevicesHidden()` in `src/room-filter.ts` rather than an inline filter at the
 call site, with 7 assertions over it — including that showing everything again
 removes the key rather than leaving an empty array behind.
+
+## v1.4.1 — 2026-09-08
 
 ### Switching one room off no longer hides every device that has no room
 
