@@ -5,6 +5,88 @@ installs from them.
 
 ## Unreleased
 
+### Name the sensors you want, by entity id
+
+`sensors` and `graph_sensors` have only ever held **device_class** keys —
+`temperature`, `power`, `battery`. That covers hardware that reports a class and
+misses everything else. A Proxmox host, a NAS, a router or a PC reports CPU load,
+memory use and free disk with no `device_class` at all, so no key existed that
+could name them: they were unreachable from config rather than merely unselected.
+
+Both lists now take an **entity id** anywhere a class key goes, in the same list,
+told apart by the dot that every entity id has and no device class does:
+
+```yaml
+tile_style: sensor-card
+sensors:
+  - sensor.davidpc_cpuload
+  - sensor.davidpc_memoryusage
+  - sensor.tp_link_router_cpu_used
+graph_sensors:
+  - sensor.davidpc_cpuload
+  - sensor.davidpc_memoryusage
+```
+
+A named entity applies only to the device that owns it, so one card-wide list
+configures a whole fleet without drawing a CPU chip on all fifty tiles — the
+example above gives the PC its readings and the router its own, from one list.
+On `sensor-card` the first entity named is also the headline value, and the
+order you name them is the order they appear.
+
+A separate `sensor_entities` key was the alternative and was rejected: it would
+need its own rung on the Tile ladder, and two lists that can disagree about one
+tile is the shape of bug this codebase keeps deleting.
+
+**"Select all" no longer eats your entity ids.** The editor's chip and graph
+pickers show one pill per device class, so ticking *All* rewrote the list as
+"every class" and silently dropped anything named by id — a choice with no pill
+on screen to show it had gone. *All* now keeps them; *None* still clears
+everything, because that is what it says.
+
+The editor's pickers still offer classes only — choosing entities there is the
+next step. `npm run test:card` gained 26 assertions covering the split, the
+ownership rule, the ordering and the select-all merge.
+
+### Sensor tiles show what the device actually reports
+
+A sensor tile chose its headline reading from five hardcoded device classes —
+`temperature`, `humidity`, `carbon_dioxide`, `illuminance`, `battery` — and did
+not check the value was usable. The chips *below* it, in the same file, already
+asked the right question: is this a live number with a unit? Two rules for one
+decision, and they disagreed.
+
+So a machine reporting a dozen live figures led with **"unavailable %"**: its
+dead battery sensor was the only entity whose class was on the list, so it won.
+And CPU, memory and disk — which carry no `device_class` at all — could never be
+chosen, so computers, NAS boxes, routers and VM hosts rendered as **"No sensor"**
+however many sensors they had. This is what the Proxmox report on Reddit was
+about.
+
+Both selections now come from `src/sensor-pick.ts`, so they cannot drift again.
+The five classes are a *preference* rather than a filter: a recognised class
+wins if the device has one, otherwise the tile leads with whatever the device
+does report, and a dead entity never outranks a live one.
+
+Checked against a live 200-device instance rather than asserted: 14 devices that
+rendered "No sensor" now lead with a real reading (CPU load, printer ink, power,
+drive life), and the only tiles that lost their headline are four whose value
+was `unavailable`. Relays that used to lead with their own chip temperature — a
+diagnostic value — now lead with power, with the temperature still graphed
+beneath.
+
+That fleet check also caught a regression on the way in. Home Assistant files
+battery level under `diagnostic`, and for a door sensor, a remote or a phone the
+battery is the *only* thing it reports; excluding diagnostics outright blanked
+nine working devices. A diagnostic reading is now a documented last resort for
+the headline — and only for a priority class, so nothing leads with its signal
+strength — while chips still refuse them.
+
+Thirteen new assertions in `npm run test:card`, including the exact
+"unavailable battery beats live CPU" case.
+
+**Still to come:** naming the entities you want per tile, rather than relying on
+this order. That is the part that lets you build an arbitrary system tile.
+
 ### Three duplications removed, and a render decision made testable
 
 An outside review of the source pointed at these; all three were real.

@@ -190,7 +190,8 @@ export interface AreaStyle {
   tile_layout?: TileLayout;
   /** Tile size for this room (Container family: room → view → card). */
   tile_size?: TileSize;
-  /** Sensor chip keys for tiles in this area. undefined = inherit global `sensors`. */
+  /** Sensor chip keys (or entity ids) for tiles in this area. undefined =
+   *  inherit global `sensors`. */
   sensors?: string[];
   /** Summary chip keys shown in this area's HEADER row (power/energy/temperature/
    *  humidity/co2/illuminance). Independent of `sensors` (which drives the tiles).
@@ -393,7 +394,8 @@ export interface DeviceStyle {
   /** Per-entity state animations, keyed by entity_id. `speed` and `size` are
    *  multipliers on the defaults (1). */
   entity_animations?: Record<string, { on?: EntityAnimationType; off?: EntityAnimationType; speed?: number; size?: number }>;
-  /** Sensor chip keys for this device. undefined = inherit area/global `sensors`. */
+  /** Sensor chip keys (or entity ids) for this device. undefined = inherit
+   *  area/global `sensors`. */
   sensors?: string[];
   /** Per-device override for tile sparkline graphs. undefined = inherit area/global. */
   show_graphs?: boolean;
@@ -537,7 +539,8 @@ export interface CustomStyleDef {
 export interface StylePreset {
   /** Default power-monitor variant for power-monitor style. */
   variant?: PowerMonitorVariant;
-  /** Default sensor chips for tiles of this style. undefined = inherit global. */
+  /** Default sensor chips (keys or entity ids) for tiles of this style.
+   *  undefined = inherit global. */
   sensors?: string[];
   /** Default block order/visibility for the 'default' (block) style. */
   tile_layout?: TileLayout;
@@ -899,7 +902,14 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   energy_period?: EnergyPeriod;
 
   // ── Graphs ────────────────────────────────────────────────────
-  /** device_class keys to graph. Empty = no graphs. */
+  /**
+   * Which sensors to graph. Empty = no graphs.
+   *
+   * device_class keys or entity ids, same mixed list as `sensors` — an entity
+   * id is the only way to plot a reading with no device_class. A named entity
+   * only graphs on the device that owns it, and named lines are drawn first,
+   * in the order given.
+   */
   graph_sensors?: string[];
   graph_hours?: number;                // history window in hours, default 24
   graph_style?: GraphStyle;
@@ -909,7 +919,22 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   graph_sensor_colors?: Record<string, string>;
 
   // ── Sensor chips ──────────────────────────────────────────────
-  /** Sensor keys to show as chips. Empty/missing = show all. */
+  /**
+   * Sensor keys to show as chips. Empty/missing = show all.
+   *
+   * Two kinds of key, one list, told apart by the dot: a **device_class**
+   * (`temperature`, `power`) or a specific **entity id**
+   * (`sensor.davidpc_cpuload`). Naming an entity is the only way to reach a
+   * reading that carries no device_class at all — CPU load, memory use, free
+   * disk — which is why a PC, NAS or VM host used to render as "No sensor".
+   *
+   * Named entities apply only to the device that owns them, so one list can
+   * configure a whole fleet without drawing a CPU chip on every tile. On the
+   * `sensor-card` style the first one named is also what the tile leads with,
+   * and the order you name them is the order they appear.
+   *
+   * See `src/sensor-keys.ts`.
+   */
   sensors?: string[];
 }
 

@@ -166,7 +166,8 @@ try {
   execFileSync(process.execPath, [
     join('node_modules', 'typescript', 'bin', 'tsc'),
     'src/helpers.ts', 'src/cascade.ts', 'src/attention.ts', 'src/shelly-cloud-import.ts',
-    'src/design-scope.ts', 'src/localize.ts', 'src/update-policy.ts', 'src/font-options.ts', '--outDir', OUT,
+    'src/design-scope.ts', 'src/localize.ts', 'src/update-policy.ts', 'src/font-options.ts',
+    'src/sensor-pick.ts', 'src/sensor-keys.ts', '--outDir', OUT,
     '--module', 'commonjs', '--target', 'es2020', '--skipLibCheck', '--moduleResolution', 'node',
   ], { stdio: 'inherit' });
   // The project is "type": "module", which would make these .js files ESM.
@@ -180,6 +181,8 @@ try {
   const loc = req(join(process.cwd(), OUT, 'localize.js'));
   const up  = req(join(process.cwd(), OUT, 'update-policy.js'));
   const fo  = req(join(process.cwd(), OUT, 'font-options.js'));
+  const sp  = req(join(process.cwd(), OUT, 'sensor-pick.js'));
+  const sk  = req(join(process.cwd(), OUT, 'sensor-keys.js'));
   const hass = fleet();
   const byName = (list, name) => list.find(d => d.name === name);
 
@@ -1058,6 +1061,181 @@ try {
     // Bundled fonts must not also be fetched from the CDN.
     eq('bundled and CDN groups do not overlap',
       fo.FONT_OPTIONS.filter((f) => f.group === 'Bundled' && f.cdn), []);
+  }
+
+  console.log('\nsensor tile - what it leads with');
+  {
+    const ent = (id, domain, category) => ({ entity_id: id, domain, entity_category: category });
+    const st = (state, unit, dc) => ({ state, attributes: { unit_of_measurement: unit, device_class: dc } });
+
+    // A room sensor: a priority class present and live.
+    const room = { device_id: 'r', entities: [
+      ent('sensor.rssi', 'sensor'), ent('sensor.temp', 'sensor'), ent('sensor.hum', 'sensor'),
+    ]};
+    const roomStates = {
+      'sensor.rssi': st('-60', 'dBm', 'signal_strength'),
+      'sensor.temp': st('21.5', '°C', 'temperature'),
+      'sensor.hum':  st('44', '%', 'humidity'),
+    };
+    eq('a priority class wins over other readings',
+      sp.pickPrimarySensor(room, roomStates).entity_id, 'sensor.temp');
+
+    // The regression that prompted this: a machine whose only recognised class
+    // is a dead battery, and whose real readings carry no device_class at all.
+    const pc = { device_id: 'pc', entities: [
+      ent('sensor.batt', 'sensor'), ent('sensor.cpu', 'sensor'), ent('sensor.mem', 'sensor'),
+      ent('sensor.disk', 'sensor'), ent('sensor.fw', 'sensor'),
+    ]};
+    const pcStates = {
+      'sensor.batt': st('unavailable', '%', 'battery'),
+      'sensor.cpu':  st('24', '%', undefined),
+      'sensor.mem':  st('49.2', '%', undefined),
+      'sensor.disk': st('476.4', 'GB', 'data_size'),
+      'sensor.fw':   { state: '20260311-095847/1.7.5', attributes: {} },
+    };
+    eq('an unavailable priority class is skipped, not preferred',
+      sp.pickPrimarySensor(pc, pcStates).entity_id, 'sensor.cpu');
+    ok('a classless reading is usable', sp.isMeasurement(ent('sensor.cpu', 'sensor'), pcStates));
+    ok('an unavailable one is not', !sp.isMeasurement(ent('sensor.batt', 'sensor'), pcStates));
+    // The unit test is load-bearing: without it this parses to a "2026.0" chip.
+    ok('a firmware string is not a measurement',
+      !sp.isMeasurement(ent('sensor.fw', 'sensor'), pcStates));
+
+    eq('the rest become chips, primary excluded',
+      sp.pickSecondarySensors(pc, pcStates, 'sensor.cpu').map(e => e.entity_id),
+      ['sensor.mem', 'sensor.disk']);
+
+    // Diagnostic readings are a last resort, not a chip. A door sensor or a
+    // phone reports nothing BUT its battery, and HA files battery as
+    // diagnostic - excluding it outright blanked nine real devices.
+    const doorSensor = { device_id: 'ds', entities: [
+      ent('sensor.rssi', 'sensor', 'diagnostic'), ent('sensor.batt', 'sensor', 'diagnostic'),
+    ]};
+    const doorStates = {
+      'sensor.rssi': st('-71', 'dBm', 'signal_strength'),
+      'sensor.batt': st('50', '%', 'battery'),
+    };
+    eq('a battery-only device leads with its battery',
+      sp.pickPrimarySensor(doorSensor, doorStates).entity_id, 'sensor.batt');
+    eq('but a diagnostic reading never becomes a chip',
+      sp.pickSecondarySensors(doorSensor, doorStates, 'sensor.batt'), []);
+    // Only a priority class earns the last resort, or every device would lead
+    // with its signal strength.
+    const rssiOnly = { device_id: 'ro', entities: [ent('sensor.rssi', 'sensor', 'diagnostic')] };
+    eq('an off-list diagnostic is still not a headline',
+      sp.pickPrimarySensor(rssiOnly, { 'sensor.rssi': st('-71', 'dBm', 'signal_strength') }), undefined);
+    // A real reading always outranks the diagnostic fallback.
+    const relay = { device_id: 'rl', entities: [
+      ent('sensor.devtemp', 'sensor', 'diagnostic'), ent('sensor.power', 'sensor'),
+    ]};
+    eq('a live power reading beats a diagnostic temperature',
+      sp.pickPrimarySensor(relay, {
+        'sensor.devtemp': st('63.5', '°C', 'temperature'),
+        'sensor.power': st('2.8', 'W', 'power'),
+      }).entity_id, 'sensor.power');
+
+    // Nothing numeric at all: fall through to the binary sensor.
+    const motion = { device_id: 'm', entities: [
+      ent('binary_sensor.motion', 'binary_sensor'), ent('sensor.batt', 'sensor'),
+    ]};
+    const motionStates = {
+      'binary_sensor.motion': st('on', undefined, 'motion'),
+      'sensor.batt': st('unavailable', '%', 'battery'),
+    };
+    eq('no usable number means no primary',
+      sp.pickPrimarySensor(motion, motionStates), undefined);
+    eq('and the binary sensor carries the tile',
+      sp.pickPrimaryBinary(motion, motionStates).entity_id, 'binary_sensor.motion');
+
+    // A device reporting nothing usable renders "No sensor" — still correct.
+    const dead = { device_id: 'x', entities: [ent('sensor.a', 'sensor')] };
+    eq('a device with nothing live has no primary',
+      sp.pickPrimarySensor(dead, { 'sensor.a': st('unknown', '%', undefined) }), undefined);
+  }
+
+  console.log('\nsensor keys - one list, classes and entity ids');
+  {
+    const ent = (id, domain, category) => ({ entity_id: id, domain, entity_category: category });
+    const st = (state, unit, dc) => ({ state, attributes: { unit_of_measurement: unit, device_class: dc } });
+
+    ok('an entity id is recognised by its dot', sk.isEntityKey('sensor.davidpc_cpuload'));
+    ok('a device_class is not', !sk.isEntityKey('temperature'));
+    // The keys the card already ships must never be mistaken for entity ids.
+    eq('no existing chip key contains a dot',
+      ['power','energy','temperature','humidity','co2','rssi','fw_version','power_factor']
+        .filter(sk.isEntityKey), []);
+
+    const mixed = ['temperature', 'sensor.pc_cpu', 'power', 'sensor.pc_mem'];
+    eq('classes split out in order', sk.classKeys(mixed), ['temperature', 'power']);
+    eq('entity ids split out in order', sk.entityKeys(mixed), ['sensor.pc_cpu', 'sensor.pc_mem']);
+
+    // The list reaches every tile, so a named entity must apply only to the
+    // device that owns it - otherwise one CPU sensor draws a chip on all of them.
+    const pc = { device_id: 'pc', entities: [ent('sensor.pc_cpu', 'sensor'), ent('sensor.pc_mem', 'sensor')] };
+    const lamp = { device_id: 'l', entities: [ent('sensor.lamp_power', 'sensor')] };
+    eq('a device gets the ids it owns',
+      sk.namedEntitiesOn(pc, mixed).map(e => e.entity_id), ['sensor.pc_cpu', 'sensor.pc_mem']);
+    eq('and another device gets none of them', sk.namedEntitiesOn(lamp, mixed), []);
+    eq('config order wins over registry order',
+      sk.namedEntitiesOn(pc, ['sensor.pc_mem', 'sensor.pc_cpu']).map(e => e.entity_id),
+      ['sensor.pc_mem', 'sensor.pc_cpu']);
+    eq('an id naming nothing on this device is skipped',
+      sk.namedEntitiesOn(pc, ['sensor.nope', 'sensor.pc_cpu']).map(e => e.entity_id), ['sensor.pc_cpu']);
+    eq('no list at all is no named entities', sk.namedEntitiesOn(pc, undefined), []);
+
+    // "Select all" is about the class pills. No pill stands for a named entity,
+    // so wiping them there deletes a choice the user cannot see on screen.
+    eq('select-all keeps the entity ids',
+      sk.selectAllKeys(['sensor.pc_cpu', 'temperature'], ['temperature', 'humidity']),
+      ['sensor.pc_cpu', 'temperature', 'humidity']);
+    eq('select-all from nothing is just the classes',
+      sk.selectAllKeys(undefined, ['temperature']), ['temperature']);
+
+    // Naming entities is how you build a tile the class vocabulary cannot reach.
+    const pcStates = {
+      'sensor.pc_cpu': st('24', '%', undefined),
+      'sensor.pc_mem': st('49.48', '%', undefined),
+    };
+    eq('a named entity leads the tile',
+      sp.pickPrimarySensor(pc, pcStates, ['sensor.pc_mem']).entity_id, 'sensor.pc_mem');
+    eq('and the rest follow in the order named',
+      sp.pickSecondarySensors(pc, pcStates, 'sensor.pc_mem', 4, ['sensor.pc_mem', 'sensor.pc_cpu'])
+        .map(e => e.entity_id), ['sensor.pc_cpu']);
+
+    // An explicit choice outranks the class preference - that is the point.
+    const room = { device_id: 'r', entities: [ent('sensor.temp', 'sensor'), ent('sensor.co', 'sensor')] };
+    const roomStates = {
+      'sensor.temp': st('21.5', '°C', 'temperature'),
+      'sensor.co': st('412', 'ppm', 'carbon_dioxide'),
+    };
+    eq('a named entity beats a priority class',
+      sp.pickPrimarySensor(room, roomStates, ['sensor.co']).entity_id, 'sensor.co');
+    eq('with no name given the class preference still decides',
+      sp.pickPrimarySensor(room, roomStates).entity_id, 'sensor.temp');
+    eq('a class-only list does not count as naming anything',
+      sp.pickPrimarySensor(room, roomStates, ['carbon_dioxide']).entity_id, 'sensor.temp');
+
+    // A named diagnostic is honoured: asking for it by id says you meant it.
+    const dev = { device_id: 'd', entities: [ent('sensor.rssi', 'sensor', 'diagnostic'), ent('sensor.w', 'sensor')] };
+    const devStates = { 'sensor.rssi': st('-71', 'dBm', 'signal_strength'), 'sensor.w': st('4.1', 'W', 'power') };
+    eq('a named diagnostic leads when asked for by id',
+      sp.pickPrimarySensor(dev, devStates, ['sensor.rssi']).entity_id, 'sensor.rssi');
+    eq('but is still not chosen on its own',
+      sp.pickPrimarySensor(dev, devStates).entity_id, 'sensor.w');
+    // A dead named entity must not blank the tile.
+    eq('an unavailable named entity falls through to the heuristic',
+      sp.pickPrimarySensor(dev, { ...devStates, 'sensor.rssi': st('unavailable', 'dBm', 'signal_strength') },
+        ['sensor.rssi']).entity_id, 'sensor.w');
+  }
+
+  console.log('\nformatReading - a value someone chose');
+  {
+    eq('two decimals at most', h.formatReading(49.480000000000004, '%'), '49.48 %');
+    eq('trailing zeros trimmed', h.formatReading(2.10, 'W'), '2.1 W');
+    eq('an integer stays whole', h.formatReading(24, '%'), '24 %');
+    eq('big numbers lose the noise', h.formatReading(1123826285.4, 'B'), '1123826285 B');
+    eq('no unit, no trailing space', h.formatReading(7, ''), '7');
+    eq('nonsense is the placeholder', h.formatReading(NaN, '%'), '—');
   }
 
   console.log('\nshelly generation - integration first, then guesswork');

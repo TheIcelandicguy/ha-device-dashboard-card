@@ -1,30 +1,25 @@
 import { html, nothing, TemplateResult } from 'lit';
-import type { HAEntity, HassAttrs } from '../types';
+import type { HassAttrs } from '../types';
 import type { TileCtx } from './tile-context';
 import { renderNameDot, renderNoEntity, chipsInHeader } from './tile-parts';
 import { t } from '../localize';
+import { pickPrimarySensor, pickPrimaryBinary, pickSecondarySensors } from '../sensor-pick';
+import { namedEntitiesOn } from '../sensor-keys';
+import { stripDevicePrefix, formatReading } from '../helpers';
+import type { StatesMap } from '../sensor-pick';
 
-const PRIORITY_CLASSES = ['temperature', 'humidity', 'carbon_dioxide', 'illuminance', 'battery'];
-const BINARY_CLASSES = ['motion', 'door', 'window', 'moisture', 'smoke', 'gas'];
 
 export function renderSensorCardTile(ctx: TileCtx): TemplateResult {
   const { device, accent, online, hass, config } = ctx;
 
-  // Pick best primary numeric sensor
-  let primaryEnt: HAEntity | undefined;
-  for (const dc of PRIORITY_CLASSES) {
-    primaryEnt = device.entities.find(e => {
-      if (e.domain !== 'sensor') return false;
-      const s = hass.states[e.entity_id];
-      return s && (s.attributes as HassAttrs)?.device_class === dc;
-    });
-    if (primaryEnt) break;
-  }
-  const binaryEnt = !primaryEnt ? device.entities.find(e => {
-    if (e.domain !== 'binary_sensor') return false;
-    const s = hass.states[e.entity_id];
-    return s && BINARY_CLASSES.includes((s.attributes as HassAttrs)?.device_class ?? '');
-  }) : undefined;
+  // Both selections live in sensor-pick.ts so they cannot drift apart again —
+  // the primary used to demand one of five device classes while the chips below
+  // asked only whether a reading was usable.
+  // A named entity in `sensors` says outright what this tile is about; without
+  // one the picker falls back to its class preference.
+  const named = ctx.sensorSelection(device);
+  const primaryEnt = pickPrimarySensor(device, hass.states as StatesMap, named);
+  const binaryEnt = !primaryEnt ? pickPrimaryBinary(device, hass.states as StatesMap) : undefined;
 
   if (!primaryEnt && !binaryEnt) return renderNoEntity(device, online, 'ts-sensor', t('empty.no_sensor'));
 
@@ -43,28 +38,32 @@ export function renderSensorCardTile(ctx: TileCtx): TemplateResult {
       const avgOld = pts.slice(0, half).reduce((a, p) => a + p.v, 0) / half;
       trend = avgNew - avgOld;
     }
-    // Secondary chips are MEASUREMENTS: a numeric state with a unit, from a
-    // primary (non-diagnostic) sensor. Without the unit test a firmware
-    // version like "20260311-…" parsed to a "2026.0" chip.
-    const secEnts = device.entities.filter(e => {
-      if (e.entity_id === primaryEnt!.entity_id || e.domain !== 'sensor') return false;
-      if (e.entity_category) return false;
-      const s = hass.states[e.entity_id];
-      if (!s || s.state === 'unavailable' || s.state === 'unknown') return false;
-      if (!(s.attributes as HassAttrs)?.unit_of_measurement) return false;
-      return !isNaN(parseFloat(s.state));
-    }).slice(0, 4);
+    const secEnts = pickSecondarySensors(
+      device, hass.states as StatesMap, primaryEnt.entity_id, 4, named);
     // header_chips (opt-in) moves the secondary chips into the name row; the
     // bottom placement then stands down — they move, they don't duplicate.
     const hdrChips = chipsInHeader(ctx);
     const bodyChips = !hdrChips && ctx.showEl('secondary');
     // Built only when a placement will render them — a "lean tiles" config
     // with secondary off shouldn't pay for markup that is never inserted.
+    // Chips from a device_class are self-describing: "60.0 lx" can only be the
+    // illuminance. An entity named by id is not — "49.8 %" and "12.1 %" side by
+    // side are memory and GPU and the tile has no way to say which. So a named
+    // chip carries its name, and uses the general formatter rather than a fixed
+    // one decimal ("2904 MHz", not "2904.0 MHz").
+    const namedIds = new Set(namedEntitiesOn(device, named).map(e => e.entity_id));
     const chipSpans = (hdrChips || bodyChips) && secEnts.length ? secEnts.map(e => {
       const ss = hass.states[e.entity_id];
+      const a = ss?.attributes as HassAttrs;
       const v = parseFloat(ss?.state ?? '');
-      const u = (ss?.attributes as HassAttrs)?.unit_of_measurement ?? '';
-      return html`<span class="ts-chip">${isNaN(v) ? ss?.state : v.toFixed(1)} ${u}</span>`;
+      const u = (a?.unit_of_measurement as string) ?? '';
+      if (!namedIds.has(e.entity_id)) {
+        return html`<span class="ts-chip">${isNaN(v) ? ss?.state : v.toFixed(1)} ${u}</span>`;
+      }
+      const lbl = stripDevicePrefix((a?.friendly_name as string) ?? '', device.name)
+        || e.entity_id.split('.')[1]?.replace(/_/g, ' ') || e.entity_id;
+      return html`<span class="ts-chip" title=${lbl}>
+        <span class="ts-chip-lbl">${lbl}</span>${isNaN(v) ? ss?.state : formatReading(v, u)}</span>`;
     }) : null;
     return html`
       <div class="ts-sensor" style="--ts-accent:${accent}">

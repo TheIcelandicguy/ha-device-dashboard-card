@@ -6,6 +6,7 @@ import { styleMap } from 'lit/directives/style-map.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent, LovelaceCardConfig } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout, EnergyPeriod, InputActionConfig, SortBy, ExtraCardStyle, AreaCardPlacement } from './types';
+import { selectAllKeys } from './sensor-keys';
 import { getAllDevices, GRAPH_SENSOR_DEFS, GAUGE_RING_DEFS, gaugeStops, colorAt, hexToHsv, hsvToHex, parseCssColor, withAlpha, deviceHasControllable, getDeviceProfile,HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels,
   CONFIG_KEYS, LOVELACE_KEYS } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, detectTheme, paletteFor, type ThemePalette } from './themes';
@@ -1309,7 +1310,9 @@ export class HADeviceDashboardEditor extends LitElement {
       <div class="chip-picker">
         <div class="chip-picker-hdr">
           <span class="chip-picker-state">${isOverride ? 'Custom selection' : `Inheriting from ${inheritedFrom}`}</span>
-          ${this._selAllNone(() => onChange([...allKeys]), () => onChange([]))}
+          ${this._selAllNone(
+            () => onChange(selectAllKeys(selected ?? inherited, allKeys)),
+            () => onChange([]))}
           ${isOverride
             ? html`<button class="color-reset" @click=${() => onChange(undefined)}>↺ Inherit</button>`
             : html`<button class="color-reset" @click=${() => onChange([...effective])}>Customize</button>`}
@@ -5565,7 +5568,8 @@ export class HADeviceDashboardEditor extends LitElement {
       <div class="field" style="margin-top:10px">
         <div class="field-lbl">Which sensors to graph
           ${this._selAllNone(
-            () => this._set('graph_sensors', GRAPH_SENSOR_DEFS.map(s => s.key)),
+            () => this._set('graph_sensors',
+              selectAllKeys(selectedGraphs, GRAPH_SENSOR_DEFS.map(s => s.key))),
             () => this._set('graph_sensors', []))}</div>
         <div class="pill-grp">
           ${GRAPH_SENSOR_DEFS.map(s => {
