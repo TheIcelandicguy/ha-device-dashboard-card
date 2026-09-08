@@ -5,6 +5,36 @@ installs from them.
 
 ## Unreleased
 
+### Three duplications removed, and a render decision made testable
+
+An outside review of the source pointed at these; all three were real.
+
+**One font catalogue.** `CDN_FONT_FAMILIES` in the card and `FONT_OPTIONS` in the
+editor were two hand-kept lists of the same thirteen families in different
+shapes, with a comment in one asking humans to keep it in step with the other —
+a rule you have to remember is a bug with a delay on it. Add a font to the
+picker, forget the second list, and the option renders while the font never
+loads. Both now derive from `src/font-options.ts`, and `npm run check:docs`
+fails if a second declaration reappears.
+
+**Editor storage no longer keyed by the card's title.** Saved looks, palettes and
+the advanced-mode flag lived under `…:${config.title}` — a display string doing
+duty as a storage key, the same mistake `'No Area'` made as a config key. Two
+cards called "My home" shared one library; renaming a card orphaned everything
+saved under the old name. They are global to the browser now, with the old
+title-keyed entry migrated forward on first read.
+
+**`shouldUpdate` is a pure function again.** Seventy lines resolving one boolean
+from config state, UI state, input targets, the device cache, entity domains and
+a throttle window — untestable where it sat, because it needed a DOM.
+`computeUpdateReason()` in `src/update-policy.ts` makes the decision; the element
+keeps only the parts that need a browser (starting the coalescing timer,
+stamping the clock). Behaviour is unchanged and 17 new assertions pin it,
+including one that every key in `LOCAL_RENDER_KEYS` really does force a render —
+a new piece of UI state forgotten from that list is the exact failure this was
+extracted to make visible.
+
+
 ### The "empty = the tap target" hint would not go away
 
 Under **Input actions**, the entity pickers for *On hold → Dim* and *Double tap →

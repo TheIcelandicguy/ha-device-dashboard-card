@@ -223,6 +223,24 @@ if (overviewVersion && overviewVersion !== pkgVersion) {
   note('OVERVIEW.md', `states version ${overviewVersion}, package.json is ${pkgVersion}`);
 }
 
+// ── the font catalogue must stay single ──
+// CDN_FONT_FAMILIES and the editor's FONT_OPTIONS were once two hand-kept lists
+// of the same families, with a comment asking humans to keep them in step. Both
+// are now derived from src/font-options.ts; this fails if a second declaration
+// of either reappears anywhere else.
+for (const sym of ['CDN_FONT_FAMILIES', 'FONT_OPTIONS']) {
+  // Plain substring checks, not a regex built from a template literal: `\s`
+  // inside one collapses to `s`, which is how the first version of this gate
+  // silently matched nothing. The repo has been bitten by unfailable checks
+  // before — see the house rules in CONTRIBUTING.
+  const declares = (f) => ['const ', 'let ', 'interface ']
+    .some((kw) => read(`src/${f}`).includes(kw + sym));
+  const stray = ['ha-device-dashboard.ts', 'editor.ts', 'fonts.ts'].filter(declares);
+  if (stray.length) {
+    note('src/font-options.ts', `${sym} is declared again in ${stray.join(', ')} — it must have one home`);
+  }
+}
+
 if (problems.length) {
   console.log(`${problems.length} doc mismatch(es):\n`);
   for (const p of problems) console.log('  • ' + p);

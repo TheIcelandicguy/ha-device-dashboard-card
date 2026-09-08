@@ -26,6 +26,7 @@ import { renderAnimSvg, ANIM_OPTIONS, ANIM_COLORS, ANIM_CSS } from './anim-icons
 import { EDITOR_LAYOUT } from './editor-layout';
 import { HELP_CONCEPTS, HELP_RECIPES, HELP_INTRO, type HelpTopic } from './help';
 import { randomPalette, randomTheme } from './palette';
+import { FONT_OPTIONS, cdnFontHref } from './font-options';
 
 /** The global `style` sub-object — typed so key access catches typos. */
 type StyleCfg = NonNullable<HADeviceDashboardConfig['style']>;
@@ -70,47 +71,15 @@ interface SectionDesc {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-interface FontOption { label: string; value: string | undefined; group: string; cdn?: string }
-const FONT_OPTIONS: FontOption[] = [
-  { label: 'Default',              value: undefined,                              group: 'System' },
-  { label: 'Inter',                value: 'Inter, sans-serif',                    group: 'System' },
-  { label: 'Roboto',               value: 'Roboto, sans-serif',                   group: 'System' },
-  { label: 'Mono',                 value: "'IBM Plex Mono', monospace",           group: 'System' },
-  { label: 'System UI',            value: 'system-ui, sans-serif',                group: 'System' },
-  // ── Bundled (offline) ───────────────────────────────────────
-  { label: 'Abril Fatface',        value: "'Abril Fatface', cursive",             group: 'Bundled' },
-  { label: 'Bangers',              value: "'Bangers', cursive",                   group: 'Bundled' },
-  { label: 'Graduate',             value: "'Graduate', cursive",                  group: 'Bundled' },
-  { label: 'Limelight',            value: "'Limelight', cursive",                 group: 'Bundled' },
-  { label: 'Lobster',              value: "'Lobster', cursive",                   group: 'Bundled' },
-  { label: 'Pacifico',             value: "'Pacifico', cursive",                  group: 'Bundled' },
-  { label: 'Righteous',            value: "'Righteous', cursive",                 group: 'Bundled' },
-  { label: 'Special Elite',        value: "'Special Elite', cursive",             group: 'Bundled' },
-  // ── Display fonts (Google Fonts CDN) ────────────────────────
-  { label: 'Alfa Slab One',        value: "'Alfa Slab One', cursive",             group: 'Display', cdn: 'Alfa+Slab+One' },
-  { label: 'Bebas Neue',           value: "'Bebas Neue', sans-serif",             group: 'Display', cdn: 'Bebas+Neue' },
-  { label: 'Black Ops One',        value: "'Black Ops One', cursive",             group: 'Display', cdn: 'Black+Ops+One' },
-  { label: 'Bungee',               value: "'Bungee', cursive",                    group: 'Display', cdn: 'Bungee' },
-  { label: 'Bungee Shade',         value: "'Bungee Shade', cursive",              group: 'Display', cdn: 'Bungee+Shade' },
-  { label: 'Cinzel',               value: "'Cinzel', serif",                      group: 'Display', cdn: 'Cinzel' },
-  { label: 'Dancing Script',       value: "'Dancing Script', cursive",            group: 'Display', cdn: 'Dancing+Script' },
-  { label: 'Fredericka the Great', value: "'Fredericka the Great', cursive",      group: 'Display', cdn: 'Fredericka+the+Great' },
-  { label: 'Great Vibes',          value: "'Great Vibes', cursive",               group: 'Display', cdn: 'Great+Vibes' },
-  { label: 'Monoton',              value: "'Monoton', cursive",                   group: 'Display', cdn: 'Monoton' },
-  { label: 'Permanent Marker',     value: "'Permanent Marker', cursive",          group: 'Display', cdn: 'Permanent+Marker' },
-  { label: 'Shrikhand',            value: "'Shrikhand', cursive",                 group: 'Display', cdn: 'Shrikhand' },
-  { label: 'Ultra',                value: "'Ultra', serif",                       group: 'Display', cdn: 'Ultra' },
-];
-
 /** Inject a single <link> once that loads every Google-Fonts-CDN family. */
 let _cdnFontsInjected = false;
 function ensureCdnFontsLoaded(): void {
   if (_cdnFontsInjected || typeof document === 'undefined') return;
-  const families = FONT_OPTIONS.filter(f => f.cdn).map(f => `family=${f.cdn}`).join('&');
-  if (!families) return;
+  const href = cdnFontHref();
+  if (!href) return;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = `https://fonts.googleapis.com/css2?${families}&display=swap`;
+  link.href = href;
   document.head.appendChild(link);
   _cdnFontsInjected = true;
 }
@@ -436,13 +405,35 @@ export class HADeviceDashboardEditor extends LitElement {
   // experiment or a reset. Browser-local like the saved theme; the file export is
   // what carries one between devices.
 
-  private _snapshotKey(): string {
-    return `shelly-dashboard:cardSnapshots:${this._config?.title ?? 'default'}`;
+  /**
+   * Editor-local storage was keyed by the card's **title** — a display string
+   * doing duty as a storage key, the same mistake `'No Area'` made as a config
+   * key. Two cards called "My home" shared one library, and renaming a card
+   * orphaned everything saved under the old name.
+   *
+   * A Lovelace config carries no stable per-card id to key by instead, and
+   * these are all user-level artefacts anyway — a palette library, a
+   * preference — so they are global to the browser now. `_lsGet` migrates the
+   * old title-keyed entry forward on first read, so nothing saved before this
+   * change is lost.
+   */
+  private static readonly LS_SNAPSHOTS = 'shelly-dashboard:cardSnapshots';
+  private static readonly LS_PALETTES  = 'shelly-dashboard:palettes';
+  private static readonly LS_ADVANCED  = 'shelly-dashboard:editorAdvanced';
+
+  private _lsGet(base: string): string | null {
+    try {
+      const cur = localStorage.getItem(base);
+      if (cur !== null) return cur;
+      const legacy = localStorage.getItem(`${base}:${this._config?.title ?? 'default'}`);
+      if (legacy !== null) localStorage.setItem(base, legacy);
+      return legacy;
+    } catch { return null; }
   }
 
   private _loadSnapshots(): void {
     try {
-      const raw = localStorage.getItem(this._snapshotKey());
+      const raw = this._lsGet(HADeviceDashboardEditor.LS_SNAPSHOTS);
       this._snapshots = raw ? JSON.parse(raw) as typeof this._snapshots : {};
     } catch { this._snapshots = {}; }
   }
@@ -450,7 +441,7 @@ export class HADeviceDashboardEditor extends LitElement {
   private _writeSnapshots(next: typeof this._snapshots): void {
     this._snapshots = next;
     try {
-      localStorage.setItem(this._snapshotKey(), JSON.stringify(next));
+      localStorage.setItem(HADeviceDashboardEditor.LS_SNAPSHOTS, JSON.stringify(next));
     } catch {
       // Quota — a config carrying bg_image data URLs can be megabytes.
       this._snapMsg = 'Too large for browser storage — use Export instead.';
@@ -655,17 +646,13 @@ export class HADeviceDashboardEditor extends LitElement {
     window.setTimeout(() => { this._rolled = null; }, 5000);
   }
 
-  private _palettesKey(): string {
-    return `shelly-dashboard:palettes:${this._config?.title ?? 'default'}`;
-  }
-
   /** Name the roll-stash slot uses, so repeated rolls overwrite one entry
    *  instead of burying the list. */
   private static readonly ROLL_SLOT = 'Before roll';
 
   private _loadPalettes(): void {
     try {
-      const raw = localStorage.getItem(this._palettesKey());
+      const raw = this._lsGet(HADeviceDashboardEditor.LS_PALETTES);
       if (raw) { this._palettes = JSON.parse(raw) as Record<string, ThemePalette>; return; }
       // Migrate the single "★ Saved" slot this replaced, then drop it so a
       // deleted palette cannot come back on the next load.
@@ -673,7 +660,7 @@ export class HADeviceDashboardEditor extends LitElement {
       const legacy = localStorage.getItem(legacyKey);
       if (legacy) {
         this._palettes = { Saved: JSON.parse(legacy) as ThemePalette };
-        localStorage.setItem(this._palettesKey(), JSON.stringify(this._palettes));
+        localStorage.setItem(HADeviceDashboardEditor.LS_PALETTES, JSON.stringify(this._palettes));
         localStorage.removeItem(legacyKey);
       }
     } catch { /* privacy mode / bad JSON */ }
@@ -681,7 +668,7 @@ export class HADeviceDashboardEditor extends LitElement {
 
   private _writePalettes(next: Record<string, ThemePalette>): void {
     this._palettes = next;
-    try { localStorage.setItem(this._palettesKey(), JSON.stringify(next)); } catch { /* ignore */ }
+    try { localStorage.setItem(HADeviceDashboardEditor.LS_PALETTES, JSON.stringify(next)); } catch { /* ignore */ }
   }
 
   /** The colours the card is actually rendering — the preset behind `theme`
@@ -711,15 +698,14 @@ export class HADeviceDashboardEditor extends LitElement {
   }
 
   /** Advanced-mode is an editor UI preference keyed per card, kept out of config. */
-  private _advKey(): string {
-    return `shelly-dashboard:editorAdvanced:${this._config?.title ?? 'default'}`;
-  }
   private _loadAdvanced(): void {
-    try { this._advanced = localStorage.getItem(this._advKey()) === '1'; } catch { /* privacy mode */ }
+    this._advanced = this._lsGet(HADeviceDashboardEditor.LS_ADVANCED) === '1';
   }
   private _setAdvanced(on: boolean): void {
     this._advanced = on;
-    try { localStorage.setItem(this._advKey(), on ? '1' : '0'); } catch { /* privacy mode */ }
+    try {
+      localStorage.setItem(HADeviceDashboardEditor.LS_ADVANCED, on ? '1' : '0');
+    } catch { /* privacy mode */ }
   }
   /** Wrap advanced-only content — renders it only when advanced mode is on.
    *  Works for both individual rows and whole `_sec(...)` accordions. */

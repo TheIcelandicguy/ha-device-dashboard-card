@@ -6,6 +6,8 @@ import { HomeAssistant, fireEvent } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, HADevice, TileBlockId, DeviceProfileResult, EntityAnimationType, TileStyle, PowerMonitorVariant, HassAttrs, ViewConfig, CustomStyleDef, TileLayout, EnergyPeriod, DetailHistoryRange, InputActionConfig, InputHoldConfig, AreaStyle } from './types';
 import type { LovelaceCardConfig } from 'custom-card-helpers';
 import { BUNDLED_FONT_CSS } from './fonts';
+import { cdnFontHref, usesCdnFont } from './font-options';
+import { computeUpdateReason } from './update-policy';
 import { THEME_KEYS, paletteFor } from './themes';
 import { mainCss, extraCardMatchCss } from './styles/main';
 import { tilesCss } from './styles/tiles';
@@ -54,18 +56,16 @@ const entityList = (e: string | string[] | undefined): string[] =>
   e == null ? [] : Array.isArray(e) ? e.filter(Boolean) : [e];
 
 // ─── Google Fonts CDN loader (for display fonts selected in editor) ──────────
-// Keep in sync with FONT_OPTIONS.cdn in editor.ts
-const CDN_FONT_FAMILIES = [
-  'Alfa+Slab+One','Bebas+Neue','Black+Ops+One','Bungee','Bungee+Shade','Cinzel',
-  'Dancing+Script','Fredericka+the+Great','Great+Vibes','Monoton','Permanent+Marker',
-  'Shrikhand','Ultra',
-];
+// The family list lives in font-options.ts and the editor reads the same one,
+// so the picker and the stylesheet cannot name different fonts.
 let _cdnFontsInjected = false;
 function ensureCdnFontsLoaded(): void {
   if (_cdnFontsInjected || typeof document === 'undefined') return;
+  const href = cdnFontHref();
+  if (!href) return;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = `https://fonts.googleapis.com/css2?${CDN_FONT_FAMILIES.map(f => `family=${f}`).join('&')}&display=swap`;
+  link.href = href;
   document.head.appendChild(link);
   _cdnFontsInjected = true;
 }
@@ -191,7 +191,7 @@ export class HADeviceDashboard extends LitElement {
     this._config = migrateConfig(config);
     // Only fetch the CDN stylesheet if the user selected a CDN-only display font
     const ff = config.style?.font_family ?? '';
-    if (CDN_FONT_FAMILIES.some(f => ff.includes(f.replace(/\+/g, ' ')))) ensureCdnFontsLoaded();
+    if (usesCdnFont(ff)) ensureCdnFontsLoaded();
   }
 
   /**
@@ -201,74 +201,32 @@ export class HADeviceDashboard extends LitElement {
    * background images.
    */
   protected shouldUpdate(changed: Map<string, unknown>): boolean {
-    // Always re-render on config or local UI state changes
-    if (
-      changed.has('_config') ||
-      changed.has('_closedAreas') ||
-      changed.has('_graphData') ||
-      changed.has('_periodEnergy') ||
-      changed.has('_periodEnergyErrAt') ||
-      changed.has('_valveDragPos') ||
-      changed.has('_trvDragTemp') ||
-      changed.has('_detailDevice') ||
-      changed.has('_detailHistoryRange') ||
-      changed.has('_activeViewId') ||
-      changed.has('_cloudDetailOpen') ||
-      changed.has('_areaChipOpen') ||
-      changed.has('preview')
-    ) {
-      return true;
-    }
-    if (!changed.has('hass')) return true;
-
+    // The decision itself is pure and lives in update-policy.ts, where it can be
+    // tested without a DOM. What stays here is the part that needs one: starting
+    // the coalescing timer and stamping the clock.
     const oldHass = changed.get('hass') as HomeAssistant | undefined;
-    if (!oldHass || !this.hass) return true;
+    const decision = computeUpdateReason({
+      changedKeys: changed.keys(),
+      oldStates: oldHass?.states,
+      newStates: this.hass?.states,
+      devices: this._cachedDevices,
+      inputTargets: this._inputTargets(),
+      now: Date.now(),
+      lastSensorRender: this._lastSensorRender,
+    });
 
-    // If we don't have a device cache yet, fall back to default behaviour
-    const devices = this._cachedDevices;
-    if (!devices) return true;
+    if (decision.stampSensorRender) this._lastSensorRender = Date.now();
 
-    // Re-render only if a state for one of OUR entities actually changed.
-    // Interactive domains (switch/light/cover/…) render immediately; pure
-    // sensor churn (Shelly power sensors push every second or two) is
-    // coalesced to at most one render per THROTTLE_MS — otherwise a large
-    // fleet re-renders the whole card near-continuously.
-    const THROTTLE_MS = 2000;
-
-    // Input-action targets first: a keypad key's lit state reads an entity that
-    // usually belongs to ANOTHER device — or to none the card discovered — so the
-    // per-device loop below would never see it change and the key would go stale.
-    for (const id of this._inputTargets()) {
-      if (oldHass.states[id] !== this.hass.states[id]) return true;
-    }
-
-    let sensorChanged = false;
-    for (const dev of devices) {
-      const ents = dev.entities;
-      if (!ents) continue;
-      for (const e of ents) {
-        const id = e.entity_id;
-        if (!id) continue;
-        if (oldHass.states[id] !== this.hass.states[id]) {
-          if (e.domain !== 'sensor') return true;
-          sensorChanged = true;
-        }
-      }
-    }
-    if (!sensorChanged) return false;
-    const now = Date.now();
-    if (now - this._lastSensorRender >= THROTTLE_MS) {
-      this._lastSensorRender = now;
-      return true;
-    }
-    if (this._sensorRenderTimer == null) {
+    // A deferred sensor render still has to happen — just later, and only once.
+    if (decision.scheduleIn != null && this._sensorRenderTimer == null) {
       this._sensorRenderTimer = window.setTimeout(() => {
         this._sensorRenderTimer = null;
         this._lastSensorRender = Date.now();
         this.requestUpdate();
-      }, THROTTLE_MS - (now - this._lastSensorRender));
+      }, decision.scheduleIn);
     }
-    return false;
+
+    return decision.render;
   }
 
   private _lastSensorRender = 0;

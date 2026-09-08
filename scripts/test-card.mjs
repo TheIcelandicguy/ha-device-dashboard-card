@@ -166,7 +166,7 @@ try {
   execFileSync(process.execPath, [
     join('node_modules', 'typescript', 'bin', 'tsc'),
     'src/helpers.ts', 'src/cascade.ts', 'src/attention.ts', 'src/shelly-cloud-import.ts',
-    'src/design-scope.ts', 'src/localize.ts', '--outDir', OUT,
+    'src/design-scope.ts', 'src/localize.ts', 'src/update-policy.ts', 'src/font-options.ts', '--outDir', OUT,
     '--module', 'commonjs', '--target', 'es2020', '--skipLibCheck', '--moduleResolution', 'node',
   ], { stdio: 'inherit' });
   // The project is "type": "module", which would make these .js files ESM.
@@ -178,6 +178,8 @@ try {
   const ds  = req(join(process.cwd(), OUT, 'design-scope.js'));
   const att = req(join(process.cwd(), OUT, 'attention.js'));
   const loc = req(join(process.cwd(), OUT, 'localize.js'));
+  const up  = req(join(process.cwd(), OUT, 'update-policy.js'));
+  const fo  = req(join(process.cwd(), OUT, 'font-options.js'));
   const hass = fleet();
   const byName = (list, name) => list.find(d => d.name === name);
 
@@ -970,6 +972,93 @@ try {
   eq('channel-suffixed cloud id still matches', dm.get('aabbcc000002'), ['ha2']);
   eq('unknown MACs are absent', dm.has('ffffff000000'), false);
 
+
+
+  console.log('\nupdate policy - when the card re-renders');
+  {
+    const dev = (id, domain) => ({ device_id: 'd', entities: [{ entity_id: id, domain }] });
+    // Every call needs a baseline; these are the "nothing interesting happened"
+    // defaults that each case then varies one thing from.
+    const base = {
+      changedKeys: ['hass'],
+      oldStates: { 'sensor.a': 1, 'switch.b': 'off' },
+      newStates: { 'sensor.a': 1, 'switch.b': 'off' },
+      devices: [dev('sensor.a', 'sensor'), dev('switch.b', 'switch')],
+      inputTargets: [],
+      now: 10_000,
+      lastSensorRender: 0,
+    };
+    const run = (over) => up.computeUpdateReason({ ...base, ...over });
+
+    eq('nothing of ours changed - skip', run({}).render, false);
+    eq('and says so', run({}).reason, 'none');
+
+    eq('a config change always renders', run({ changedKeys: ['_config'] }).reason, 'local-state');
+    eq('so does UI state', run({ changedKeys: ['_detailDevice'] }).reason, 'local-state');
+    eq('a non-hass property renders rather than guessing',
+      run({ changedKeys: ['somethingNew'] }).reason, 'non-hass');
+
+    // The guard that matters most: every key in LOCAL_RENDER_KEYS must force a
+    // render. A new piece of UI state forgotten from that list is the failure
+    // this whole extraction exists to make visible.
+    eq('every local key forces a render',
+      up.LOCAL_RENDER_KEYS.filter((k) => !run({ changedKeys: [k] }).render), []);
+
+    eq('no old hass yet', run({ oldStates: undefined }).reason, 'no-baseline');
+    eq('no device cache yet', run({ devices: null }).reason, 'no-baseline');
+
+    eq('a switch changing renders at once', run({
+      newStates: { 'sensor.a': 1, 'switch.b': 'on' },
+    }).reason, 'interactive');
+
+    // An input target usually belongs to another device entirely, so the
+    // per-device scan would never see it.
+    eq('an input target on no discovered device still renders', run({
+      inputTargets: ['light.elsewhere'],
+      oldStates: { 'light.elsewhere': 'off' },
+      newStates: { 'light.elsewhere': 'on' },
+    }).reason, 'input-target');
+
+    // Sensor churn: render once, then coalesce until the window elapses.
+    const churn = { newStates: { 'sensor.a': 2, 'switch.b': 'off' } };
+    const due = run({ ...churn, now: 10_000, lastSensorRender: 0 });
+    eq('a sensor change past the window renders', due.reason, 'sensor-due');
+    ok('and asks the caller to stamp the clock', due.stampSensorRender === true);
+
+    const soon = run({ ...churn, now: 10_500, lastSensorRender: 10_000 });
+    eq('a sensor change inside the window defers', soon.reason, 'sensor-throttled');
+    eq('and does not render', soon.render, false);
+    eq('scheduling the remainder of the window', soon.scheduleIn, 1500);
+    ok('a deferred render never stamps the clock', soon.stampSensorRender === false);
+
+    // A switch and a sensor changing together must not be throttled.
+    eq('interactive beats sensor throttling', run({
+      newStates: { 'sensor.a': 2, 'switch.b': 'on' },
+      now: 10_100, lastSensorRender: 10_000,
+    }).reason, 'interactive');
+  }
+
+  console.log('\nfont catalogue - one list');
+  {
+    // The card's <link> and the editor's picker read the same array, so a font
+    // offered in the editor is always one the stylesheet actually loads.
+    const cdn = fo.FONT_OPTIONS.filter((f) => f.cdn).map((f) => f.cdn);
+    eq('CDN list is derived from the catalogue', fo.CDN_FONT_FAMILIES, cdn);
+    ok('there are display fonts to load', fo.CDN_FONT_FAMILIES.length > 0);
+    ok('every CDN family is in Google Fonts + form',
+      fo.CDN_FONT_FAMILIES.every((f) => !f.includes(' ')));
+    ok('the href names every family',
+      fo.CDN_FONT_FAMILIES.every((f) => fo.cdnFontHref().includes(`family=${f}`)));
+    // usesCdnFont drives whether the stylesheet is fetched at all.
+    ok('a CDN font is recognised from a css font-family value',
+      fo.usesCdnFont("'Bebas Neue', sans-serif"));
+    ok('a bundled font does not trigger the CDN fetch',
+      !fo.usesCdnFont("'Pacifico', cursive"));
+    ok('nor does a system font', !fo.usesCdnFont('Inter, sans-serif'));
+    // Bundled fonts must not also be fetched from the CDN.
+    eq('bundled and CDN groups do not overlap',
+      fo.FONT_OPTIONS.filter((f) => f.group === 'Bundled' && f.cdn), []);
+  }
 
   console.log('\nshelly generation - integration first, then guesswork');
   {

@@ -228,7 +228,21 @@ depth; this file is the fast orientation. Contributor workflow is in
   which bundle HA actually loaded after a deploy + hard-refresh.
 - `dist/ha-device-dashboard.js` is committed. `.gitattributes` keeps it from showing
   as perpetually modified. Don't hand-edit it — it's generated.
-- Editor and card must keep `CDN_FONT_FAMILIES` / `FONT_OPTIONS` in sync.
+- **The font catalogue has one home: `src/font-options.ts`.** The editor's picker
+  and the card's Google-Fonts `<link>` both read it, and `CDN_FONT_FAMILIES` is
+  derived rather than declared. It used to be two hand-kept lists with a comment
+  asking humans to keep them in step; `check:docs` now fails if a second
+  declaration reappears. (`fonts.ts` is the generated base64 bundle — different
+  file, don't hand-edit it.)
+- **`shouldUpdate` decides nothing itself.** `src/update-policy.ts` holds
+  `computeUpdateReason()` as a pure function — local-state keys, input targets,
+  interactive-vs-sensor, and the 2s coalescing window — and the element only
+  starts the timer and stamps the clock. Add a new piece of reactive UI state and
+  it must go in `LOCAL_RENDER_KEYS`, which a test asserts over.
+- **Editor localStorage is global, not per-card.** Snapshots, palettes and the
+  advanced-mode flag were keyed by the card's *title*, so two cards with one name
+  shared a library and renaming a card orphaned it. `_lsGet` migrates the old
+  title-keyed entry forward on first read.
 
 ## Deploy
 
