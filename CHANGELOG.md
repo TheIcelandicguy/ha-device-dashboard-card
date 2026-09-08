@@ -3,7 +3,7 @@
 All notable changes to HA Device Dashboard. Versions are git tags; HACS
 installs from them.
 
-## Unreleased
+## v1.4.1 — 2026-09-08
 
 ### Switching one room off no longer hides every device that has no room
 
