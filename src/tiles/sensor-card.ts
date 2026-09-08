@@ -13,7 +13,10 @@ export function renderSensorCardTile(ctx: TileCtx): TemplateResult {
   // Both selections live in sensor-pick.ts so they cannot drift apart again —
   // the primary used to demand one of five device classes while the chips below
   // asked only whether a reading was usable.
-  const primaryEnt = pickPrimarySensor(device, hass.states as StatesMap);
+  // A named entity in `sensors` says outright what this tile is about; without
+  // one the picker falls back to its class preference.
+  const named = ctx.sensorSelection(device);
+  const primaryEnt = pickPrimarySensor(device, hass.states as StatesMap, named);
   const binaryEnt = !primaryEnt ? pickPrimaryBinary(device, hass.states as StatesMap) : undefined;
 
   if (!primaryEnt && !binaryEnt) return renderNoEntity(device, online, 'ts-sensor', t('empty.no_sensor'));
@@ -33,7 +36,8 @@ export function renderSensorCardTile(ctx: TileCtx): TemplateResult {
       const avgOld = pts.slice(0, half).reduce((a, p) => a + p.v, 0) / half;
       trend = avgNew - avgOld;
     }
-    const secEnts = pickSecondarySensors(device, hass.states as StatesMap, primaryEnt.entity_id);
+    const secEnts = pickSecondarySensors(
+      device, hass.states as StatesMap, primaryEnt.entity_id, 4, named);
     // header_chips (opt-in) moves the secondary chips into the name row; the
     // bottom placement then stands down — they move, they don't duplicate.
     const hdrChips = chipsInHeader(ctx);

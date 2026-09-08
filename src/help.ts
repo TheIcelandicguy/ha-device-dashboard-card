@@ -51,6 +51,18 @@ export const HELP_CONCEPTS: HelpTopic[] = [
     ],
   },
   {
+    id: 'named-sensors',
+    title: 'Computers, servers and anything without a device_class',
+    body: [
+      'Most chip and graph settings are keyed by Home Assistant\'s **device class** — `temperature`, `power`, `battery`. That works for hardware that reports one. Plenty does not: CPU load, memory use, free disk and most figures from a PC, NAS, router, Proxmox or VM host arrive with no device class at all, so no class key can name them.',
+      'Wherever the card asks *which sensors*, you can give a specific **entity id** instead of a class, in the same list. `sensors: [temperature, sensor.davidpc_cpuload]` means "the temperature chip, and that exact reading". The card tells the two apart by the dot — every entity id has one, no device class does.',
+      'A named entity only ever appears on the device that owns it. That is what lets one list configure a whole fleet at once: name your PC\'s CPU sensor and your router\'s CPU sensor in the same card-wide list, and each tile picks up only its own.',
+      'On the **Sensor card** tile style the first entity you name is also the big number the tile leads with, and the order you name them is the order the chips appear — so naming entities is how you build a tile that shows exactly what you want, in the order you want it.',
+      '`graph_sensors` takes the same mixed list, so you can plot readings that have no class either. Named lines are drawn first, in the order given.',
+      'This is YAML for now — the editor\'s pickers still offer classes only, and a future release will let you pick entities there too. Ticking **All** in a picker leaves any entity ids you have named alone; **None** clears everything.',
+    ],
+  },
+  {
     id: 'discovery',
     title: 'Discovery: what the card looks at',
     body: [

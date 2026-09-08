@@ -5,6 +5,48 @@ installs from them.
 
 ## Unreleased
 
+### Name the sensors you want, by entity id
+
+`sensors` and `graph_sensors` have only ever held **device_class** keys —
+`temperature`, `power`, `battery`. That covers hardware that reports a class and
+misses everything else. A Proxmox host, a NAS, a router or a PC reports CPU load,
+memory use and free disk with no `device_class` at all, so no key existed that
+could name them: they were unreachable from config rather than merely unselected.
+
+Both lists now take an **entity id** anywhere a class key goes, in the same list,
+told apart by the dot that every entity id has and no device class does:
+
+```yaml
+tile_style: sensor-card
+sensors:
+  - sensor.davidpc_cpuload
+  - sensor.davidpc_memoryusage
+  - sensor.tp_link_router_cpu_used
+graph_sensors:
+  - sensor.davidpc_cpuload
+  - sensor.davidpc_memoryusage
+```
+
+A named entity applies only to the device that owns it, so one card-wide list
+configures a whole fleet without drawing a CPU chip on all fifty tiles — the
+example above gives the PC its readings and the router its own, from one list.
+On `sensor-card` the first entity named is also the headline value, and the
+order you name them is the order they appear.
+
+A separate `sensor_entities` key was the alternative and was rejected: it would
+need its own rung on the Tile ladder, and two lists that can disagree about one
+tile is the shape of bug this codebase keeps deleting.
+
+**"Select all" no longer eats your entity ids.** The editor's chip and graph
+pickers show one pill per device class, so ticking *All* rewrote the list as
+"every class" and silently dropped anything named by id — a choice with no pill
+on screen to show it had gone. *All* now keeps them; *None* still clears
+everything, because that is what it says.
+
+The editor's pickers still offer classes only — choosing entities there is the
+next step. `npm run test:card` gained 26 assertions covering the split, the
+ownership rule, the ordering and the select-all merge.
+
 ### Sensor tiles show what the device actually reports
 
 A sensor tile chose its headline reading from five hardcoded device classes —

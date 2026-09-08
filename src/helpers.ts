@@ -1263,6 +1263,16 @@ export function formatPercent(v: number): string {
   return `${Math.round(v)} %`;
 }
 
+/** A reading the user named by entity id, where none of the class formatters
+ *  above applies. Two decimals at most with trailing zeros trimmed, which turns
+ *  HA's "49.480000000000004" into "49.48" and leaves "0" as "0" — no rounding
+ *  rule invented for a value somebody chose deliberately. */
+export function formatReading(v: number, unit: string): string {
+  if (!Number.isFinite(v)) return NA;
+  const n = Math.abs(v) >= 1000 ? Math.round(v) : parseFloat(v.toFixed(2));
+  return unit ? `${n} ${unit}` : `${n}`;
+}
+
 // ─── Graph data helpers ────────────────────────────────────────────────────────
 
 /**

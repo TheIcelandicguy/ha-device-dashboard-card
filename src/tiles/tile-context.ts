@@ -215,6 +215,10 @@ export interface TileCtx {
   getAlerts: (d: HADevice) => DeviceAlert[];
   getFirmware: (d: HADevice) => FirmwareInfo | null;
   getSensors: (d: HADevice) => SensorChip[];
+  /** The resolved `sensors` list for this device: device_class keys and entity
+   *  ids mixed, or undefined for "no restriction". Tiles that choose what to
+   *  lead with need the raw list, not just the chips it produced. */
+  sensorSelection: (d: HADevice) => string[] | undefined;
   getVirtualControls: (d: HADevice) => VirtualControl[];
   renderSparklines: (d: HADevice) => TemplateResult;
   renderSparklinesExpanded: (d: HADevice, hours: number) => TemplateResult;

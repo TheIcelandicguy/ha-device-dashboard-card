@@ -15,6 +15,7 @@
  */
 
 import type { HADevice, HAEntity, HassAttrs } from './types';
+import { namedEntitiesOn } from './sensor-keys';
 
 /** Classes worth leading with when a device has one — a room's temperature says
  *  more at a glance than its signal strength. A preference, never a filter. */
@@ -64,7 +65,18 @@ export function isReading(e: HAEntity, states: StatesMap): boolean {
  * usable measurement. Returns undefined only when the device reports nothing
  * numeric at all — at which point the caller falls back to a binary sensor.
  */
-export function pickPrimarySensor(device: HADevice, states: StatesMap): HAEntity | undefined {
+export function pickPrimarySensor(
+  device: HADevice,
+  states: StatesMap,
+  named?: readonly string[],
+): HAEntity | undefined {
+  // An explicit choice outranks every heuristic below it — that is what naming
+  // an entity in `sensors` is for. Diagnostics included: if you asked for it by
+  // id, you meant it.
+  for (const e of namedEntitiesOn(device, named)) {
+    if (isReading(e, states)) return e;
+  }
+
   const classed = (usable: (e: HAEntity) => boolean) => {
     for (const dc of PRIORITY_CLASSES) {
       const hit = device.entities.find(
@@ -103,7 +115,14 @@ export function pickSecondarySensors(
   states: StatesMap,
   primaryId: string | undefined,
   limit = 4,
+  named?: readonly string[],
 ): HAEntity[] {
+  // Named entities, in the order named, are the whole answer when given: the
+  // point of listing them is to say what the tile shows and in what order.
+  const explicit = namedEntitiesOn(device, named)
+    .filter(e => e.entity_id !== primaryId && isReading(e, states));
+  if (explicit.length) return explicit.slice(0, limit);
+
   return device.entities
     .filter(e => e.entity_id !== primaryId && isMeasurement(e, states))
     .slice(0, limit);

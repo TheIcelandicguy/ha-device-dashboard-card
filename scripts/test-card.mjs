@@ -167,7 +167,7 @@ try {
     join('node_modules', 'typescript', 'bin', 'tsc'),
     'src/helpers.ts', 'src/cascade.ts', 'src/attention.ts', 'src/shelly-cloud-import.ts',
     'src/design-scope.ts', 'src/localize.ts', 'src/update-policy.ts', 'src/font-options.ts',
-    'src/sensor-pick.ts', '--outDir', OUT,
+    'src/sensor-pick.ts', 'src/sensor-keys.ts', '--outDir', OUT,
     '--module', 'commonjs', '--target', 'es2020', '--skipLibCheck', '--moduleResolution', 'node',
   ], { stdio: 'inherit' });
   // The project is "type": "module", which would make these .js files ESM.
@@ -182,6 +182,7 @@ try {
   const up  = req(join(process.cwd(), OUT, 'update-policy.js'));
   const fo  = req(join(process.cwd(), OUT, 'font-options.js'));
   const sp  = req(join(process.cwd(), OUT, 'sensor-pick.js'));
+  const sk  = req(join(process.cwd(), OUT, 'sensor-keys.js'));
   const hass = fleet();
   const byName = (list, name) => list.find(d => d.name === name);
 
@@ -1150,6 +1151,91 @@ try {
     const dead = { device_id: 'x', entities: [ent('sensor.a', 'sensor')] };
     eq('a device with nothing live has no primary',
       sp.pickPrimarySensor(dead, { 'sensor.a': st('unknown', '%', undefined) }), undefined);
+  }
+
+  console.log('\nsensor keys - one list, classes and entity ids');
+  {
+    const ent = (id, domain, category) => ({ entity_id: id, domain, entity_category: category });
+    const st = (state, unit, dc) => ({ state, attributes: { unit_of_measurement: unit, device_class: dc } });
+
+    ok('an entity id is recognised by its dot', sk.isEntityKey('sensor.davidpc_cpuload'));
+    ok('a device_class is not', !sk.isEntityKey('temperature'));
+    // The keys the card already ships must never be mistaken for entity ids.
+    eq('no existing chip key contains a dot',
+      ['power','energy','temperature','humidity','co2','rssi','fw_version','power_factor']
+        .filter(sk.isEntityKey), []);
+
+    const mixed = ['temperature', 'sensor.pc_cpu', 'power', 'sensor.pc_mem'];
+    eq('classes split out in order', sk.classKeys(mixed), ['temperature', 'power']);
+    eq('entity ids split out in order', sk.entityKeys(mixed), ['sensor.pc_cpu', 'sensor.pc_mem']);
+
+    // The list reaches every tile, so a named entity must apply only to the
+    // device that owns it - otherwise one CPU sensor draws a chip on all of them.
+    const pc = { device_id: 'pc', entities: [ent('sensor.pc_cpu', 'sensor'), ent('sensor.pc_mem', 'sensor')] };
+    const lamp = { device_id: 'l', entities: [ent('sensor.lamp_power', 'sensor')] };
+    eq('a device gets the ids it owns',
+      sk.namedEntitiesOn(pc, mixed).map(e => e.entity_id), ['sensor.pc_cpu', 'sensor.pc_mem']);
+    eq('and another device gets none of them', sk.namedEntitiesOn(lamp, mixed), []);
+    eq('config order wins over registry order',
+      sk.namedEntitiesOn(pc, ['sensor.pc_mem', 'sensor.pc_cpu']).map(e => e.entity_id),
+      ['sensor.pc_mem', 'sensor.pc_cpu']);
+    eq('an id naming nothing on this device is skipped',
+      sk.namedEntitiesOn(pc, ['sensor.nope', 'sensor.pc_cpu']).map(e => e.entity_id), ['sensor.pc_cpu']);
+    eq('no list at all is no named entities', sk.namedEntitiesOn(pc, undefined), []);
+
+    // "Select all" is about the class pills. No pill stands for a named entity,
+    // so wiping them there deletes a choice the user cannot see on screen.
+    eq('select-all keeps the entity ids',
+      sk.selectAllKeys(['sensor.pc_cpu', 'temperature'], ['temperature', 'humidity']),
+      ['sensor.pc_cpu', 'temperature', 'humidity']);
+    eq('select-all from nothing is just the classes',
+      sk.selectAllKeys(undefined, ['temperature']), ['temperature']);
+
+    // Naming entities is how you build a tile the class vocabulary cannot reach.
+    const pcStates = {
+      'sensor.pc_cpu': st('24', '%', undefined),
+      'sensor.pc_mem': st('49.48', '%', undefined),
+    };
+    eq('a named entity leads the tile',
+      sp.pickPrimarySensor(pc, pcStates, ['sensor.pc_mem']).entity_id, 'sensor.pc_mem');
+    eq('and the rest follow in the order named',
+      sp.pickSecondarySensors(pc, pcStates, 'sensor.pc_mem', 4, ['sensor.pc_mem', 'sensor.pc_cpu'])
+        .map(e => e.entity_id), ['sensor.pc_cpu']);
+
+    // An explicit choice outranks the class preference - that is the point.
+    const room = { device_id: 'r', entities: [ent('sensor.temp', 'sensor'), ent('sensor.co', 'sensor')] };
+    const roomStates = {
+      'sensor.temp': st('21.5', '°C', 'temperature'),
+      'sensor.co': st('412', 'ppm', 'carbon_dioxide'),
+    };
+    eq('a named entity beats a priority class',
+      sp.pickPrimarySensor(room, roomStates, ['sensor.co']).entity_id, 'sensor.co');
+    eq('with no name given the class preference still decides',
+      sp.pickPrimarySensor(room, roomStates).entity_id, 'sensor.temp');
+    eq('a class-only list does not count as naming anything',
+      sp.pickPrimarySensor(room, roomStates, ['carbon_dioxide']).entity_id, 'sensor.temp');
+
+    // A named diagnostic is honoured: asking for it by id says you meant it.
+    const dev = { device_id: 'd', entities: [ent('sensor.rssi', 'sensor', 'diagnostic'), ent('sensor.w', 'sensor')] };
+    const devStates = { 'sensor.rssi': st('-71', 'dBm', 'signal_strength'), 'sensor.w': st('4.1', 'W', 'power') };
+    eq('a named diagnostic leads when asked for by id',
+      sp.pickPrimarySensor(dev, devStates, ['sensor.rssi']).entity_id, 'sensor.rssi');
+    eq('but is still not chosen on its own',
+      sp.pickPrimarySensor(dev, devStates).entity_id, 'sensor.w');
+    // A dead named entity must not blank the tile.
+    eq('an unavailable named entity falls through to the heuristic',
+      sp.pickPrimarySensor(dev, { ...devStates, 'sensor.rssi': st('unavailable', 'dBm', 'signal_strength') },
+        ['sensor.rssi']).entity_id, 'sensor.w');
+  }
+
+  console.log('\nformatReading - a value someone chose');
+  {
+    eq('two decimals at most', h.formatReading(49.480000000000004, '%'), '49.48 %');
+    eq('trailing zeros trimmed', h.formatReading(2.10, 'W'), '2.1 W');
+    eq('an integer stays whole', h.formatReading(24, '%'), '24 %');
+    eq('big numbers lose the noise', h.formatReading(1123826285.4, 'B'), '1123826285 B');
+    eq('no unit, no trailing space', h.formatReading(7, ''), '7');
+    eq('nonsense is the placeholder', h.formatReading(NaN, '%'), '—');
   }
 
   console.log('\nshelly generation - integration first, then guesswork');

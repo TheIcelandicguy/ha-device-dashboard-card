@@ -39,8 +39,9 @@ import {
   formatUptime, formatApparentPower, formatReactivePower,
   formatFrequency, formatHumidity, formatIlluminance, formatPpm, formatPercent,
   detectInputChannels, detectShellyGen, shellyClickTypes, shellyInputChannel, shellyHostname,
-  deviceSensorValues, attachExtraSensors, stripDevicePrefix, colorAt,
+  deviceSensorValues, attachExtraSensors, stripDevicePrefix, colorAt, formatReading,
 } from './helpers';
+import { namedEntitiesOn, classKeys } from './sensor-keys';
 import { renderAnimSvg } from './anim-icons';
 import { t, tOr, setLanguage } from './localize';
 
@@ -893,6 +894,11 @@ export class HADeviceDashboard extends LitElement {
     const show = (k: string) => !allowed || allowed.has(k);
     const result: SensorChip[] = [];
     const seen = new Set<string>();
+    // Entities named by id in the selection. They get their own chips below,
+    // built from the entity itself rather than from the device_class vocabulary
+    // — which is the point: CPU load has no class, so no class key can reach it.
+    const namedEnts = ignoreSelection ? [] : namedEntitiesOn(device, sel);
+    const namedIds = new Set(namedEnts.map(e => e.entity_id));
     // Rendering tier per sensor key; alert keys are decided at push time by state.
     const ELEC_TIER = new Set(['voltage', 'current', 'frequency', 'power_factor', 'apparent_power', 'reactive_power']);
     const DIAG_TIER = new Set(['ip', 'ssid', 'fw_version', 'mac', 'rssi', 'uptime', 'cloud', 'mqtt', 'eth']);
@@ -929,9 +935,32 @@ export class HADeviceDashboard extends LitElement {
       if (!seen.has(key)) { seen.add(key); result.push({ label, value, warn, key: k, tier: tier ?? tierOf(k), ch }); }
     };
 
+    // Named first, in the order named: listing them is how you say what the tile
+    // shows and in what order. Keyed by entity id, so `show()` and the dedup
+    // below both work on them without colliding with a device_class key.
+    for (const e of namedEnts) {
+      const st = this.hass.states[e.entity_id];
+      if (!st || st.state === 'unavailable' || st.state === 'unknown') continue;
+      const a = st.attributes as HassAttrs;
+      const unit = (a.unit_of_measurement as string) ?? '';
+      const num = parseFloat(st.state);
+      // A named entity is shown as it reads. No formatter is right for an
+      // arbitrary sensor, and rounding someone's chosen value would be worse
+      // than showing it plainly.
+      const value = isNaN(num) ? st.state : formatReading(num, unit);
+      const label = stripDevicePrefix((a.friendly_name as string) ?? '', device.name)
+        || e.entity_id.split('.')[1]?.replace(/_/g, ' ') || e.entity_id;
+      if (!seen.has(e.entity_id)) {
+        seen.add(e.entity_id);
+        result.push({ label, value, warn: false, key: e.entity_id, tier: 'primary', ch: '' });
+      }
+    }
+
     for (const e of device.entities) {
       const s = this.hass.states[e.entity_id];
       if (!s || s.state === 'unavailable' || s.state === 'unknown') continue;
+      // Already chipped by id above — one entity, one chip.
+      if (namedIds.has(e.entity_id)) continue;
       const attrs = s.attributes as Record<string, unknown>;
       const dc = (attrs.device_class as string) ?? '';
       const id = e.entity_id;
@@ -1487,12 +1516,31 @@ export class HADeviceDashboard extends LitElement {
     // Normalize to device_class keys so legacy 'co2'/'rssi' configs still match.
     // Unset (never configured) falls back to a sensible default set; an explicit
     // empty list ([]) is honoured as "no graphs".
-    const dcList = (this._config.graph_sensors ?? DEFAULT_GRAPH_SENSORS).map(normalizeGraphKey);
-    if (!dcList.length) return [];
+    const rawList = this._config.graph_sensors ?? DEFAULT_GRAPH_SENSORS;
+    if (!rawList.length) return [];
     const results: Array<{ entityId: string; label: string; dc: string; unit: string }> = [];
+
+    // Entities named by id come first and in the order named. This is the only
+    // way to graph a reading with no device_class — CPU load, memory use, free
+    // disk — and the list applies only to the device that owns the entity, so a
+    // global graph_sensors does not try to draw a CPU line on every tile.
+    for (const ent of namedEntitiesOn(device, rawList)) {
+      const st = this.hass.states[ent.entity_id];
+      if (!st || st.state === 'unavailable' || st.state === 'unknown') continue;
+      const a = st.attributes as HassAttrs;
+      const unit = (a.unit_of_measurement as string) ?? '';
+      const label = stripDevicePrefix((a.friendly_name as string) ?? '', device.name)
+        || ent.entity_id.split('.')[1]?.replace(/_/g, ' ') || ent.entity_id;
+      results.push({ entityId: ent.entity_id, label, dc: (a.device_class as string) ?? '', unit });
+    }
+
+    // Normalize to device_class keys so legacy 'co2'/'rssi' configs still match.
+    const dcList = classKeys(rawList).map(normalizeGraphKey);
+    const namedIds = new Set(results.map(r => r.entityId));
     for (const dc of dcList) {
       const ents = device.entities.filter(e => {
         if (e.domain !== 'sensor') return false;
+        if (namedIds.has(e.entity_id)) return false;   // already graphed by id
         const st = this.hass.states[e.entity_id];
         if (!st || st.state === 'unavailable' || st.state === 'unknown') return false;
         const attrDc = (st.attributes as HassAttrs)?.device_class ?? (e.attributes as HassAttrs)?.device_class;
@@ -2969,6 +3017,7 @@ export class HADeviceDashboard extends LitElement {
       getPower: memo((d) => this._getPower(d)),
       tileSensors: memo((d) => this._tileSensors(d)),
       sensorValues: memo((d) => deviceSensorValues(d, this.hass.states as never)),
+      sensorSelection: memo((d) => this._sensorSelection(d)),
       getGraphEntities: memo((d) => this._getGraphEntities(d)),
       getGraphSensors: memo((d) => this._graphSensorEntities(d)),
       requestBrowse: (id) => this._requestBrowse(id),
