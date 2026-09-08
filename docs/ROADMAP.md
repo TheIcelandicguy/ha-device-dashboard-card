@@ -23,6 +23,30 @@ one evening, both by real device data and neither by reading the code —
 
 Reasoning alone found neither. This is the highest-value item on the list.
 
+**Say when discovery hid something.** Universal mode filters twice — a built-in
+integration deny-list (`systemmonitor`, `hassio`, `netgear`, `tplink_router`,
+`mobile_app` …) and `universal_scope`, which keeps only devices with a
+controllable entity or a sensor carrying a recognised `device_class`. Both
+defaults are right: without them a smart-home dashboard fills up with routers,
+phones and diagnostics.
+
+What is wrong is that they are **silent**. A user whose devices were filtered
+sees an incomplete card and concludes it is broken, and nothing on screen points
+at the setting responsible. This is the shape of the first question the project
+got after launch — someone asking whether Proxmox CPU/RAM/disk could be shown.
+
+They can. Verified against a live instance: with `include_integrations` and
+`universal_scope: all`, System Monitor, Home Assistant Core, a Windows PC over
+MQTT, a Netgear router and three TP-Link routers all render with sensor tiles
+and graphs. Every one of those sensors was already attached to a device — none
+of it needed a new tile type, only the two filters turned off.
+
+So the fix is a notice, not a feature: *"N devices hidden — 12 by integration,
+40 by scope"*, with a link to the setting. The pattern already exists — the
+delegated-controls notice counts affected devices and dispatches
+`hdd-editor-goto` to jump to its setting — so this is a second instance of
+something the card already does, not new machinery.
+
 **Measure render cost at 200+ tiles.** `npm run bench` covers discovery (3.7 ms
 for 224 devices, cached against registry+config identity) and the cascades. What
 is *not* measured is DOM render time for a large fleet, which is the more likely
@@ -53,6 +77,26 @@ Compile-time risk only, which is why it is here rather than above.
 only, and deliberately so — ~600 strings, most of them explanatory paragraphs
 rather than labels. Nothing in `src/localize.ts` blocks it: editor keys go in the
 same catalogues under an `editor.` prefix. Worth doing if translators appear.
+
+**Virtual devices — a tile built from entities rather than hardware.** Considered
+and deliberately parked. The idea was to let a tile's subject be a user-chosen
+set of entities, for things Home Assistant does not model as a device
+(helpers, template sensors). Most of the machinery exists: `extra_sensors`
+already merges arbitrary entities into a device's entity list and marks them
+`borrowed_from`, and `tile_layout` / `custom_styles` already let a tile's
+*shape* be composed by hand. Only the subject is fixed to a discovered device.
+
+It was parked because the case that prompted it did not need it: every
+CPU/RAM/storage sensor on the instance that raised the question turned out to
+belong to a device already, so the answer was the notice above, not a new tile.
+The narrower justification — genuinely device-less entities — is real but
+unproven demand. Wait for someone to ask for *that* specifically.
+
+If it is ever built, one rule settles most of the design: a virtual device has
+no hardware, so it can never be offline, must never appear in Needs attention,
+and must not count in the header's online tally. `borrowed_from` already
+establishes the principle that borrowed entities do not speak for the device's
+health.
 
 **Submit to the HACS default store.** The repo meets every requirement (public,
 description, topics, README, `hacs.json`, releases, validation green). Being in
