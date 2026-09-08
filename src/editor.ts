@@ -7,6 +7,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent, LovelaceCardConfig } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout, EnergyPeriod, InputActionConfig, SortBy, ExtraCardStyle, AreaCardPlacement } from './types';
 import { selectAllKeys } from './sensor-keys';
+import { areaKeyUniverse, toggleAreaSelection, isAreaOn as isAreaSelected, NO_AREA_KEY } from './room-filter';
 import { getAllDevices, GRAPH_SENSOR_DEFS, GAUGE_RING_DEFS, gaugeStops, colorAt, hexToHsv, hsvToHex, parseCssColor, withAlpha, deviceHasControllable, getDeviceProfile,HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels,
   CONFIG_KEYS, LOVELACE_KEYS } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, detectTheme, paletteFor, type ThemePalette } from './themes';
@@ -1472,36 +1473,37 @@ export class HADeviceDashboardEditor extends LitElement {
     const c = this._config;
     // undefined = all rooms on; explicit array = include list
     const allAreas = this._getAreas();
-    const allAreaKeys = allAreas.map(a => a.name);
     const selectedAreas = c.areas; // undefined means all
-    const toggleArea = (areaKey: string) => {
-      const currentlyOn = selectedAreas === undefined
-        ? new Set(allAreaKeys)
-        : new Set(selectedAreas);
-      if (currentlyOn.has(areaKey)) {
-        currentlyOn.delete(areaKey);
-      } else {
-        currentlyOn.add(areaKey);
-      }
-      const next = currentlyOn.size === allAreaKeys.length ? undefined : [...currentlyOn];
-      this._set('areas', next);
-    };
-    const isAreaOn = (areaKey: string) => selectedAreas === undefined || selectedAreas.includes(areaKey);
-    const allDiscovered = this._getDiscoveredDevices();
+
+    // Deliberately the UNFILTERED device list. This tab is where rooms are
+    // switched on and off, so building it from the filtered view made a room's
+    // contents disappear the moment you switched the room off — and for the
+    // unassigned bucket, whose row exists only because devices sit in it, the
+    // row disappeared too and No Room could never be switched back on.
+    const allDiscovered = this._allDevices()
+      .map(d => ({ device_id: d.device_id, name: d.name, area: d.area }))
+      .sort((a, b) => a.name.localeCompare(b.name));
     const hiddenDevices = c.hidden_devices ?? [];
 
     // Build device tree by area
     const byArea = new Map<string, Array<{device_id:string;name:string}>>();
     for (const dev of allDiscovered) {
-      const key = dev.area ?? '';
+      const key = dev.area ?? NO_AREA_KEY;
       if (!byArea.has(key)) byArea.set(key, []);
       byArea.get(key)!.push(dev);
     }
-    const areaKeys = [...allAreas.map(a => a.name)];
-    if (byArea.has('')) areaKeys.push('');
+    // '' belongs in the universe whenever anything is unassigned — see
+    // room-filter.ts for why leaving it out silently dropped those devices.
+    const areaKeys = areaKeyUniverse(allAreas.map(a => a.name), byArea.has(NO_AREA_KEY));
+    const allAreaKeys = areaKeys;
 
-    const onCount = selectedAreas === undefined ? allAreas.length : selectedAreas.length;
-    const roomsBadge = this._badge(`${onCount} / ${allAreas.length}`, '#4ade80', 'rgba(74,222,128,0.1)');
+    const toggleArea = (areaKey: string) => {
+      this._set('areas', toggleAreaSelection(allAreaKeys, selectedAreas, areaKey));
+    };
+    const isAreaOn = (areaKey: string) => isAreaSelected(selectedAreas, areaKey);
+
+    const onCount = selectedAreas === undefined ? allAreaKeys.length : selectedAreas.length;
+    const roomsBadge = this._badge(`${onCount} / ${allAreaKeys.length}`, '#4ade80', 'rgba(74,222,128,0.1)');
 
     // Devices with no HA area still render, grouped under a "No Area" section.
     const unassigned = byArea.get('')?.length ?? 0;
