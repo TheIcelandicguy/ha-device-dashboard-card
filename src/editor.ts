@@ -7,7 +7,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent, LovelaceCardConfig } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout, EnergyPeriod, InputActionConfig, SortBy, ExtraCardStyle, AreaCardPlacement } from './types';
 import { selectAllKeys } from './sensor-keys';
-import { areaKeyUniverse, toggleAreaSelection, isAreaOn as isAreaSelected, NO_AREA_KEY } from './room-filter';
+import { areaKeyUniverse, toggleAreaSelection, isAreaOn as isAreaSelected, setDevicesHidden, NO_AREA_KEY } from './room-filter';
 import { getAllDevices, GRAPH_SENSOR_DEFS, GAUGE_RING_DEFS, gaugeStops, colorAt, hexToHsv, hsvToHex, parseCssColor, withAlpha, deviceHasControllable, getDeviceProfile,HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels,
   CONFIG_KEYS, LOVELACE_KEYS } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, detectTheme, paletteFor, type ThemePalette } from './themes';
@@ -1575,6 +1575,15 @@ export class HADeviceDashboardEditor extends LitElement {
           </div>
           ${isFavExpanded ? html`
             <div class="room-expanded">
+              ${favDevices.length > 1 ? html`
+                <div class="room-devices-hdr">
+                  <span class="room-devices-lbl">Devices</span>
+                  ${this._selAllNone(
+                    () => this._set('hidden_devices',
+                      setDevicesHidden(hiddenDevices, favDevices.map(d => d.device_id), false)),
+                    () => this._set('hidden_devices',
+                      setDevicesHidden(hiddenDevices, favDevices.map(d => d.device_id), true)))}
+                </div>` : nothing}
               <div class="room-devices">
                 ${favDevices.map(dev => {
                   const isHidden    = hiddenDevices.includes(dev.device_id);
@@ -1643,6 +1652,15 @@ export class HADeviceDashboardEditor extends LitElement {
           ${isExpanded ? html`
             <div class="room-expanded">
               <!-- Device list. ✎ jumps to Design with that device as the scope. -->
+              ${devicesInArea.length > 1 ? html`
+                <div class="room-devices-hdr">
+                  <span class="room-devices-lbl">Devices</span>
+                  ${this._selAllNone(
+                    () => this._set('hidden_devices',
+                      setDevicesHidden(hiddenDevices, devicesInArea.map(d => d.device_id), false)),
+                    () => this._set('hidden_devices',
+                      setDevicesHidden(hiddenDevices, devicesInArea.map(d => d.device_id), true)))}
+                </div>` : nothing}
               <div class="room-devices">
                 ${devicesInArea.length ? devicesInArea.map(dev => {
                   const isHidden = hiddenDevices.includes(dev.device_id);
@@ -6777,6 +6795,11 @@ export class HADeviceDashboardEditor extends LitElement {
     .room-style-btn:hover { border-color:var(--accent); color:var(--accent); }
     .room-reset-btn { background:none; border:1px solid var(--border); color:var(--t3); border-radius:5px; font-size:11px; line-height:1; padding:3px 7px; cursor:pointer; transition:all .12s; flex-shrink:0; }
     .room-reset-btn:hover { border-color:var(--accent); color:var(--accent); }
+    /* Header above a room's device list, carrying its All / None. Only drawn
+       when the room holds more than one device — a two-button control over a
+       single row is noise. */
+    .room-devices-hdr { display:flex; align-items:center; padding:6px 8px 2px 12px; }
+    .room-devices-lbl { font-size:11px; color:var(--t3); }
     .room-devices { padding:4px 0 4px 12px; border-bottom:1px solid var(--border); }
     .room-device-row { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid rgba(255,255,255,0.04); transition:background .15s; border-radius:4px; }
     .room-device-row.selected { background:rgba(244,96,30,0.08); border-color:var(--accent); padding-left:6px; padding-right:6px; }

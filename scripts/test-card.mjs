@@ -1284,6 +1284,24 @@ try {
       rf.toggleAreaSelection(uni, ['Kitchen', 'Stofa', 'Ghost'], ''),
       ['Kitchen', 'Stofa', 'Ghost', '']);
 
+    // Show/hide a whole room at once. hidden_devices is card-wide, so the one
+    // thing this must never do is disturb another room's hidden devices.
+    const KITCHEN = ['d1', 'd2'];
+    eq('hiding a room hides exactly its devices',
+      rf.setDevicesHidden([], KITCHEN, true), ['d1', 'd2']);
+    eq('and leaves another room alone',
+      rf.setDevicesHidden(['other'], KITCHEN, true), ['other', 'd1', 'd2']);
+    eq('showing a room clears only its own',
+      rf.setDevicesHidden(['other', 'd1', 'd2'], KITCHEN, false), ['other']);
+    eq('an empty result is undefined, not []',
+      rf.setDevicesHidden(['d1'], KITCHEN, false), undefined);
+    eq('hiding twice does not duplicate',
+      rf.setDevicesHidden(['d1'], KITCHEN, true), ['d1', 'd2']);
+    eq('showing an already-shown room is a no-op',
+      rf.setDevicesHidden(['other'], KITCHEN, false), ['other']);
+    eq('a room with nothing in it changes nothing',
+      rf.setDevicesHidden(['other'], [], true), ['other']);
+
     // Round trip: off then on again is where you started.
     eq('off then on is a no-op',
       rf.toggleAreaSelection(uni, rf.toggleAreaSelection(uni, undefined, 'Stofa'), 'Stofa'),
