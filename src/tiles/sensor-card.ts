@@ -4,6 +4,8 @@ import type { TileCtx } from './tile-context';
 import { renderNameDot, renderNoEntity, chipsInHeader } from './tile-parts';
 import { t } from '../localize';
 import { pickPrimarySensor, pickPrimaryBinary, pickSecondarySensors } from '../sensor-pick';
+import { namedEntitiesOn } from '../sensor-keys';
+import { stripDevicePrefix, formatReading } from '../helpers';
 import type { StatesMap } from '../sensor-pick';
 
 
@@ -44,11 +46,24 @@ export function renderSensorCardTile(ctx: TileCtx): TemplateResult {
     const bodyChips = !hdrChips && ctx.showEl('secondary');
     // Built only when a placement will render them — a "lean tiles" config
     // with secondary off shouldn't pay for markup that is never inserted.
+    // Chips from a device_class are self-describing: "60.0 lx" can only be the
+    // illuminance. An entity named by id is not — "49.8 %" and "12.1 %" side by
+    // side are memory and GPU and the tile has no way to say which. So a named
+    // chip carries its name, and uses the general formatter rather than a fixed
+    // one decimal ("2904 MHz", not "2904.0 MHz").
+    const namedIds = new Set(namedEntitiesOn(device, named).map(e => e.entity_id));
     const chipSpans = (hdrChips || bodyChips) && secEnts.length ? secEnts.map(e => {
       const ss = hass.states[e.entity_id];
+      const a = ss?.attributes as HassAttrs;
       const v = parseFloat(ss?.state ?? '');
-      const u = (ss?.attributes as HassAttrs)?.unit_of_measurement ?? '';
-      return html`<span class="ts-chip">${isNaN(v) ? ss?.state : v.toFixed(1)} ${u}</span>`;
+      const u = (a?.unit_of_measurement as string) ?? '';
+      if (!namedIds.has(e.entity_id)) {
+        return html`<span class="ts-chip">${isNaN(v) ? ss?.state : v.toFixed(1)} ${u}</span>`;
+      }
+      const lbl = stripDevicePrefix((a?.friendly_name as string) ?? '', device.name)
+        || e.entity_id.split('.')[1]?.replace(/_/g, ' ') || e.entity_id;
+      return html`<span class="ts-chip" title=${lbl}>
+        <span class="ts-chip-lbl">${lbl}</span>${isNaN(v) ? ss?.state : formatReading(v, u)}</span>`;
     }) : null;
     return html`
       <div class="ts-sensor" style="--ts-accent:${accent}">

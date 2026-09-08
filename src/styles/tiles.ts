@@ -41,6 +41,10 @@ export const tilesCss = css`
     .ts-hbar-namerow .ts-hbar-name { flex:1; min-width:0; margin-bottom:0; }
 
     .ts-chip { font-size:var(--fs-sm); padding:2px 6px; border-radius:4px; background:var(--sc-sensor-bg); border:1px solid var(--sc-tile-border); color:var(--sc-text-muted); }
+    /* A chip's identity is normally its unit — "60 lx" needs no caption. An
+       entity named by id has no such tell, and two percentages side by side say
+       nothing, so those chips carry a short name. Same rule as the block tile. */
+    .ts-chip-lbl { opacity:.72; margin-right:3px; max-width:9em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; vertical-align:bottom; }
 
     .ts-uptime { font-size:var(--fs-sm); color:var(--sc-text-muted); white-space:nowrap; }
 
