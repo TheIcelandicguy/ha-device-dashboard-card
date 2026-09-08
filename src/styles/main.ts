@@ -1255,6 +1255,8 @@ export const mainCss = css`
       border:none; padding:0; cursor:pointer; text-decoration:underline;
       text-underline-offset:2px; }
     .dn-link:hover { filter:brightness(1.15); }
+    /* The integrations responsible, named but subordinate to the count. */
+    .dn-dim { opacity:.7; }
     /* Action button on an input row — i3/i4 inputs have no output of their own,
        so this runs the action assigned to the channel. */
     .input-act { max-width:100%; min-width:0; padding:3px 9px; border-radius:999px; cursor:pointer;

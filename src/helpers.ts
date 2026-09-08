@@ -60,6 +60,9 @@ export function getAllDevices(
     includeDomains?: string[];
     excludeDomains?: string[];
   } = {},
+  /** Filled in with what was dropped, when the caller wants to report it.
+   *  An out-param rather than a second pass: the filters run once, here. */
+  stats?: DiscoveryStats,
 ): HADevice[] {
   const universal = opts.universal === true;
   // Scoping filters apply only in universal mode (shelly mode is already scoped).
@@ -76,6 +79,14 @@ export function getAllDevices(
   const areaRegistry: Record<string, any>   = (hass as any).areas   ?? {};
 
   const devices = new Map<string, HADevice>();
+  // First reason a device's entity was refused, and which devices kept at least
+  // one entity. A device is only "hidden" if nothing of it got through.
+  const refused = new Map<string, 'shelly' | 'integration' | 'domain'>();
+  const refusedBy = new Map<string, string>();   // device_id → integration slug
+  const survived = new Set<string>();
+  const refuse = (id: string, why: 'shelly' | 'integration' | 'domain', platform?: string) => {
+    if (!refused.has(id)) { refused.set(id, why); if (platform) refusedBy.set(id, platform); }
+  };
 
   // Iterate entity registry (indexed, fast) instead of hass.states (array, slow)
   for (const [entityId, regEntry] of Object.entries(entityRegistry)) {
@@ -85,15 +96,19 @@ export function getAllDevices(
     const domain = entityId.split('.')[0];
     if (!DEVICE_DOMAINS.has(domain)) continue;
     // Universal-mode domain allow/deny (no-op in shelly mode: sets are null).
-    if (excDom?.has(domain)) continue;
-    if (incDom && !incDom.has(domain)) continue;
+    if (excDom?.has(domain)) { refuse(regEntry.device_id, 'domain'); continue; }
+    if (incDom && !incDom.has(domain)) { refuse(regEntry.device_id, 'domain'); continue; }
 
     const platform: string = (regEntry.platform ?? '').toLowerCase();
     // Shelly mode: keep only Shelly + BTHome (Shelly BLU sensors report through
     // HA's BTHome integration, not the Shelly one). Universal mode: keep all.
-    if (!universal && platform !== 'shelly' && platform !== 'bthome') continue;
+    if (!universal && platform !== 'shelly' && platform !== 'bthome') {
+      refuse(regEntry.device_id, 'shelly'); continue;
+    }
     // Universal-mode integration deny (built-in + user), unless force-included.
-    if (excInt?.has(platform) && !forceInt?.has(platform)) continue;
+    if (excInt?.has(platform) && !forceInt?.has(platform)) {
+      refuse(regEntry.device_id, 'integration', platform); continue;
+    }
 
     const deviceId: string = regEntry.device_id;
 
@@ -107,11 +122,14 @@ export function getAllDevices(
       const isShelly = mfr.includes('shelly') || platform === 'shelly';
       // In Shelly mode, BTHome devices from other vendors (Tuya, generic BLE)
       // aren't ours — skip. In universal mode they're legitimate devices.
-      if (!universal && platform === 'bthome' && !isShelly) continue;
+      if (!universal && platform === 'bthome' && !isShelly) {
+        refuse(deviceId, 'shelly'); continue;
+      }
 
       const areaId = devInfo.area_id ?? regEntry.area_id;
       const area = areaId ? (areaRegistry[areaId]?.name as string | undefined) : undefined;
 
+      survived.add(deviceId);
       devices.set(deviceId, {
         device_id:   deviceId,
         name:        devInfo.name_by_user ?? devInfo.name ?? deviceId,
@@ -242,8 +260,27 @@ export function getAllDevices(
 
   let out = Array.from(devices.values()).filter(d => d.entities.length > 0);
   // Universal-mode scope: tame the firehose (default 'devices').
+  const beforeScope = out.length;
   if (universal) {
     out = out.filter(d => deviceInUniversalScope(d, opts.scope ?? 'devices'));
+  }
+
+  if (stats) {
+    const byInt = new Map<string, number>();
+    stats.notShelly = stats.byIntegration = stats.byDomain = 0;
+    for (const [id, why] of refused) {
+      // Something of this device got through, so it is on the card, not hidden.
+      if (survived.has(id)) continue;
+      if (why === 'shelly') stats.notShelly++;
+      else if (why === 'domain') stats.byDomain++;
+      else {
+        stats.byIntegration++;
+        const p = refusedBy.get(id);
+        if (p) byInt.set(p, (byInt.get(p) ?? 0) + 1);
+      }
+    }
+    stats.byScope = beforeScope - out.length;
+    stats.integrations = [...byInt.entries()].sort((a, b) => b[1] - a[1]).map(([p]) => p);
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -272,6 +309,32 @@ export const DEFAULT_EXCLUDE_INTEGRATIONS = new Set([
   'mobile_app', 'browser_mod', 'hassio', 'systemmonitor', 'backup', 'sun', 'nws',
   'netgear', 'tplink_router', 'huawei_lte', 'huawei_ont', 'asuswrt', 'fritzbox_tools', 'fritz',
 ]);
+
+/**
+ * What discovery threw away, and why.
+ *
+ * Both filters are right by default — without them a smart-home dashboard fills
+ * with routers, phones and diagnostics — but they are silent, so a user whose
+ * devices were dropped sees an incomplete card and concludes it is broken. The
+ * counts exist so the card can say so out loud.
+ *
+ * Attribution is per *device*: a device counts as dropped by a filter only when
+ * no entity of it survived that filter. A device whose entities come from two
+ * integrations, one denied and one kept, is not hidden and is not counted.
+ */
+export interface DiscoveryStats {
+  /** Dropped for not being Shelly/BTHome — i.e. the card is in Shelly mode. */
+  notShelly: number;
+  /** Dropped by the integration deny-list, built-in or user. Universal only. */
+  byIntegration: number;
+  /** Dropped by include_domains / exclude_domains. Universal only. */
+  byDomain: number;
+  /** Dropped by universal_scope. Universal only. */
+  byScope: number;
+  /** Integrations responsible for byIntegration, commonest first — so the
+   *  notice can name them instead of asking the user to guess. */
+  integrations: string[];
+}
 
 /** Domains you can actuate — the signal for "this is a controllable device" used
  *  by universal-mode scoping. */

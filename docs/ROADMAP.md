@@ -7,35 +7,6 @@ not here. This file is for structural work that no user will ever file.
 
 ## Next
 
-**Render sensors that carry no recognised `device_class`.** *Promised publicly on
-the launch thread — this one has a waiting user.*
-
-The card decides what to show by `device_class`, in two places: the chip row and
-the sensor tile's primary value. Anything outside those lists is discovered and
-then silently not rendered.
-
-That excludes an entire category of device. CPU and memory percentages carry **no
-device class at all**; disk and memory in bytes are **`data_size`**, which is in
-neither list. So a computer, NAS, server or VM host can be discovered, grouped
-into a room, and show nothing but its own name.
-
-Reproduced on a live instance: a card scoped to System Monitor, Home Assistant
-Core and a Windows PC over MQTT rendered four tiles, `4/4 online`, and not one
-reading between them. Switching to `tile_style: sensor-card` was worse — the
-System Monitor tile led with **"unavailable %"** labelled `battery`, having found
-the single entity whose class it recognised and preferred a dead one to a dozen
-live ones.
-
-Two things follow. The obvious fix is to let `sensors` and `graph_sensors` accept
-explicit entity ids alongside device classes, so a tile can be told what to show
-when the card cannot infer it. The subtler one is that the sensor tile should
-prefer a *live* entity over an unavailable one when choosing its primary, which
-is a bug independent of everything above.
-
-This supersedes the virtual-device idea below. The request that prompted that one
-— CPU/RAM/storage — needs neither a new tile type nor a synthetic device: those
-sensors already sit on real, discovered devices. They just cannot be drawn.
-
 **A fixture library for device detection.** Detection is the most fragile part of
 the card and the part most likely to be wrong on hardware the author has never
 seen. It is currently exercised by a handful of hand-written fixtures.
@@ -52,39 +23,32 @@ one evening, both by real device data and neither by reading the code —
 
 Reasoning alone found neither. This is the highest-value item on the list.
 
-**Say when discovery hid something.** Universal mode filters twice — a built-in
-integration deny-list (`systemmonitor`, `hassio`, `netgear`, `tplink_router`,
-`mobile_app` …) and `universal_scope`, which keeps only devices with a
-controllable entity or a sensor carrying a recognised `device_class`. Both
-defaults are right: without them a smart-home dashboard fills up with routers,
-phones and diagnostics.
-
-What is wrong is that they are **silent**. A user whose devices were filtered
-sees an incomplete card and concludes it is broken, and nothing on screen points
-at the setting responsible. This is the shape of the first question the project
-got after launch — someone asking whether Proxmox CPU/RAM/disk could be shown.
-
-They can. Verified against a live instance: with `include_integrations` and
-`universal_scope: all`, System Monitor, Home Assistant Core, a Windows PC over
-MQTT, a Netgear router and three TP-Link routers all render with sensor tiles
-and graphs. Every one of those sensors was already attached to a device — none
-of it needed a new tile type, only the two filters turned off.
-
-Note this is necessary but not sufficient: turning the filters off reveals the
-devices, and the item above is what makes them worth revealing. A notice that
-leads someone to an empty tile has helped nobody.
-
-So the fix is a notice, not a feature: *"N devices hidden — 12 by integration,
-40 by scope"*, with a link to the setting. The pattern already exists — the
-delegated-controls notice counts affected devices and dispatches
-`hdd-editor-goto` to jump to its setting — so this is a second instance of
-something the card already does, not new machinery.
-
 **Measure render cost at 200+ tiles.** `npm run bench` covers discovery (3.7 ms
 for 224 devices, cached against registry+config identity) and the cascades. What
 is *not* measured is DOM render time for a large fleet, which is the more likely
 real-world limit. Benchmark the thing that hurts, not the thing already known to
 be fast.
+
+## Done
+
+Kept only where the reasoning is still worth having; the changelog is the record.
+
+**Render sensors with no recognised `device_class`** — v1.4.0. The card decided
+what to show by `device_class` in two places, so a computer, NAS or VM host was
+discovered and then drawn blank. Both selections moved to `src/sensor-pick.ts`,
+and `sensors` / `graph_sensors` now take entity ids alongside class keys
+(`src/sensor-keys.ts`). The fleet check that verified it also caught a
+regression on the way in: HA files battery under `diagnostic`, and for a door
+sensor the battery is the only reading there is.
+
+**Say when discovery hid something** — the notice counts what each filter
+dropped and links to the setting. Two things learned building it. Attribution
+has to be per *device* and only when nothing of it survived, or a device with
+entities from two integrations gets blamed on the denied one. And the count must
+come from the browser's `hass.entities`, which omits disabled entities — the
+websocket registry includes them, and counting those inflated the figure roughly
+2.5×, reporting devices as "hidden by your settings" that are simply disabled in
+Home Assistant.
 
 ## Later
 

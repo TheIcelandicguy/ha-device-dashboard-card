@@ -1154,6 +1154,48 @@ try {
       sp.pickPrimarySensor(dead, { 'sensor.a': st('unknown', '%', undefined) }), undefined);
   }
 
+  console.log('\ndiscovery stats - saying what was hidden');
+  {
+    const stats = () => ({ notShelly: 0, byIntegration: 0, byDomain: 0, byScope: 0, integrations: [] });
+
+    // Shelly mode drops everything that is not a Shelly, and that is the whole
+    // mode rather than a filter - most "my device is missing" reports are this.
+    const sh = stats();
+    const shOut = h.getAllDevices(hass, {}, sh);
+    ok('shelly mode reports what it left out', sh.notShelly > 0);
+    eq('and blames nothing else', [sh.byIntegration, sh.byDomain, sh.byScope], [0, 0, 0]);
+    // The Hue lamp is the non-Shelly device in the fixture fleet.
+    ok('the dropped device really is absent', !shOut.some(d => d.name === 'Hue lamp'));
+
+    // Universal mode with everything in scope hides nothing at all.
+    const uni = stats();
+    const uniOut = h.getAllDevices(hass, { universal: true, scope: 'all' }, uni);
+    // The fixture carries one mobile_app device, and mobile_app is on the
+    // built-in deny list - so "hides nothing" would be the wrong claim here.
+    eq('universal mode still applies the built-in deny list',
+      [uni.notShelly, uni.byDomain, uni.byScope], [0, 0, 0]);
+    eq('and names the integration responsible', uni.integrations, ['mobile_app']);
+    eq('one device, counted once', uni.byIntegration, 1);
+    ok('and shows more than shelly mode did', uniOut.length > shOut.length);
+
+    // A domain filter is attributed to the domain, not to the integration.
+    const dom = stats();
+    h.getAllDevices(hass, { universal: true, scope: 'all', excludeDomains: ['light'] }, dom);
+    ok('excluding a domain is reported as such', dom.byDomain > 0);
+    eq('and does not inflate the integration count', dom.byIntegration, 1);
+
+    // Scope is counted after the device is built, so it is exact: the two
+    // scopes differ by precisely the number the stats claim.
+    const narrow = stats();
+    const narrowOut = h.getAllDevices(hass, { universal: true, scope: 'controllable' }, narrow);
+    eq('scope accounting balances', narrowOut.length + narrow.byScope, uniOut.length);
+
+    // Attribution is per device, not per entity: a device only counts as hidden
+    // when nothing of it survived. Every count must be within the fleet size.
+    ok('no count exceeds the fleet',
+      sh.notShelly <= Object.keys(hass.devices).length);
+  }
+
   console.log('\nsensor keys - one list, classes and entity ids');
   {
     const ent = (id, domain, category) => ({ entity_id: id, domain, entity_category: category });
