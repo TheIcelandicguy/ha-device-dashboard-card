@@ -5,6 +5,46 @@ installs from them.
 
 ## Unreleased
 
+### Sensor tiles show what the device actually reports
+
+A sensor tile chose its headline reading from five hardcoded device classes —
+`temperature`, `humidity`, `carbon_dioxide`, `illuminance`, `battery` — and did
+not check the value was usable. The chips *below* it, in the same file, already
+asked the right question: is this a live number with a unit? Two rules for one
+decision, and they disagreed.
+
+So a machine reporting a dozen live figures led with **"unavailable %"**: its
+dead battery sensor was the only entity whose class was on the list, so it won.
+And CPU, memory and disk — which carry no `device_class` at all — could never be
+chosen, so computers, NAS boxes, routers and VM hosts rendered as **"No sensor"**
+however many sensors they had. This is what the Proxmox report on Reddit was
+about.
+
+Both selections now come from `src/sensor-pick.ts`, so they cannot drift again.
+The five classes are a *preference* rather than a filter: a recognised class
+wins if the device has one, otherwise the tile leads with whatever the device
+does report, and a dead entity never outranks a live one.
+
+Checked against a live 200-device instance rather than asserted: 14 devices that
+rendered "No sensor" now lead with a real reading (CPU load, printer ink, power,
+drive life), and the only tiles that lost their headline are four whose value
+was `unavailable`. Relays that used to lead with their own chip temperature — a
+diagnostic value — now lead with power, with the temperature still graphed
+beneath.
+
+That fleet check also caught a regression on the way in. Home Assistant files
+battery level under `diagnostic`, and for a door sensor, a remote or a phone the
+battery is the *only* thing it reports; excluding diagnostics outright blanked
+nine working devices. A diagnostic reading is now a documented last resort for
+the headline — and only for a priority class, so nothing leads with its signal
+strength — while chips still refuse them.
+
+Thirteen new assertions in `npm run test:card`, including the exact
+"unavailable battery beats live CPU" case.
+
+**Still to come:** naming the entities you want per tile, rather than relying on
+this order. That is the part that lets you build an arbitrary system tile.
+
 ### Three duplications removed, and a render decision made testable
 
 An outside review of the source pointed at these; all three were real.

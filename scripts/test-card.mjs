@@ -166,7 +166,8 @@ try {
   execFileSync(process.execPath, [
     join('node_modules', 'typescript', 'bin', 'tsc'),
     'src/helpers.ts', 'src/cascade.ts', 'src/attention.ts', 'src/shelly-cloud-import.ts',
-    'src/design-scope.ts', 'src/localize.ts', 'src/update-policy.ts', 'src/font-options.ts', '--outDir', OUT,
+    'src/design-scope.ts', 'src/localize.ts', 'src/update-policy.ts', 'src/font-options.ts',
+    'src/sensor-pick.ts', '--outDir', OUT,
     '--module', 'commonjs', '--target', 'es2020', '--skipLibCheck', '--moduleResolution', 'node',
   ], { stdio: 'inherit' });
   // The project is "type": "module", which would make these .js files ESM.
@@ -180,6 +181,7 @@ try {
   const loc = req(join(process.cwd(), OUT, 'localize.js'));
   const up  = req(join(process.cwd(), OUT, 'update-policy.js'));
   const fo  = req(join(process.cwd(), OUT, 'font-options.js'));
+  const sp  = req(join(process.cwd(), OUT, 'sensor-pick.js'));
   const hass = fleet();
   const byName = (list, name) => list.find(d => d.name === name);
 
@@ -1058,6 +1060,96 @@ try {
     // Bundled fonts must not also be fetched from the CDN.
     eq('bundled and CDN groups do not overlap',
       fo.FONT_OPTIONS.filter((f) => f.group === 'Bundled' && f.cdn), []);
+  }
+
+  console.log('\nsensor tile - what it leads with');
+  {
+    const ent = (id, domain, category) => ({ entity_id: id, domain, entity_category: category });
+    const st = (state, unit, dc) => ({ state, attributes: { unit_of_measurement: unit, device_class: dc } });
+
+    // A room sensor: a priority class present and live.
+    const room = { device_id: 'r', entities: [
+      ent('sensor.rssi', 'sensor'), ent('sensor.temp', 'sensor'), ent('sensor.hum', 'sensor'),
+    ]};
+    const roomStates = {
+      'sensor.rssi': st('-60', 'dBm', 'signal_strength'),
+      'sensor.temp': st('21.5', '°C', 'temperature'),
+      'sensor.hum':  st('44', '%', 'humidity'),
+    };
+    eq('a priority class wins over other readings',
+      sp.pickPrimarySensor(room, roomStates).entity_id, 'sensor.temp');
+
+    // The regression that prompted this: a machine whose only recognised class
+    // is a dead battery, and whose real readings carry no device_class at all.
+    const pc = { device_id: 'pc', entities: [
+      ent('sensor.batt', 'sensor'), ent('sensor.cpu', 'sensor'), ent('sensor.mem', 'sensor'),
+      ent('sensor.disk', 'sensor'), ent('sensor.fw', 'sensor'),
+    ]};
+    const pcStates = {
+      'sensor.batt': st('unavailable', '%', 'battery'),
+      'sensor.cpu':  st('24', '%', undefined),
+      'sensor.mem':  st('49.2', '%', undefined),
+      'sensor.disk': st('476.4', 'GB', 'data_size'),
+      'sensor.fw':   { state: '20260311-095847/1.7.5', attributes: {} },
+    };
+    eq('an unavailable priority class is skipped, not preferred',
+      sp.pickPrimarySensor(pc, pcStates).entity_id, 'sensor.cpu');
+    ok('a classless reading is usable', sp.isMeasurement(ent('sensor.cpu', 'sensor'), pcStates));
+    ok('an unavailable one is not', !sp.isMeasurement(ent('sensor.batt', 'sensor'), pcStates));
+    // The unit test is load-bearing: without it this parses to a "2026.0" chip.
+    ok('a firmware string is not a measurement',
+      !sp.isMeasurement(ent('sensor.fw', 'sensor'), pcStates));
+
+    eq('the rest become chips, primary excluded',
+      sp.pickSecondarySensors(pc, pcStates, 'sensor.cpu').map(e => e.entity_id),
+      ['sensor.mem', 'sensor.disk']);
+
+    // Diagnostic readings are a last resort, not a chip. A door sensor or a
+    // phone reports nothing BUT its battery, and HA files battery as
+    // diagnostic - excluding it outright blanked nine real devices.
+    const doorSensor = { device_id: 'ds', entities: [
+      ent('sensor.rssi', 'sensor', 'diagnostic'), ent('sensor.batt', 'sensor', 'diagnostic'),
+    ]};
+    const doorStates = {
+      'sensor.rssi': st('-71', 'dBm', 'signal_strength'),
+      'sensor.batt': st('50', '%', 'battery'),
+    };
+    eq('a battery-only device leads with its battery',
+      sp.pickPrimarySensor(doorSensor, doorStates).entity_id, 'sensor.batt');
+    eq('but a diagnostic reading never becomes a chip',
+      sp.pickSecondarySensors(doorSensor, doorStates, 'sensor.batt'), []);
+    // Only a priority class earns the last resort, or every device would lead
+    // with its signal strength.
+    const rssiOnly = { device_id: 'ro', entities: [ent('sensor.rssi', 'sensor', 'diagnostic')] };
+    eq('an off-list diagnostic is still not a headline',
+      sp.pickPrimarySensor(rssiOnly, { 'sensor.rssi': st('-71', 'dBm', 'signal_strength') }), undefined);
+    // A real reading always outranks the diagnostic fallback.
+    const relay = { device_id: 'rl', entities: [
+      ent('sensor.devtemp', 'sensor', 'diagnostic'), ent('sensor.power', 'sensor'),
+    ]};
+    eq('a live power reading beats a diagnostic temperature',
+      sp.pickPrimarySensor(relay, {
+        'sensor.devtemp': st('63.5', '°C', 'temperature'),
+        'sensor.power': st('2.8', 'W', 'power'),
+      }).entity_id, 'sensor.power');
+
+    // Nothing numeric at all: fall through to the binary sensor.
+    const motion = { device_id: 'm', entities: [
+      ent('binary_sensor.motion', 'binary_sensor'), ent('sensor.batt', 'sensor'),
+    ]};
+    const motionStates = {
+      'binary_sensor.motion': st('on', undefined, 'motion'),
+      'sensor.batt': st('unavailable', '%', 'battery'),
+    };
+    eq('no usable number means no primary',
+      sp.pickPrimarySensor(motion, motionStates), undefined);
+    eq('and the binary sensor carries the tile',
+      sp.pickPrimaryBinary(motion, motionStates).entity_id, 'binary_sensor.motion');
+
+    // A device reporting nothing usable renders "No sensor" — still correct.
+    const dead = { device_id: 'x', entities: [ent('sensor.a', 'sensor')] };
+    eq('a device with nothing live has no primary',
+      sp.pickPrimarySensor(dead, { 'sensor.a': st('unknown', '%', undefined) }), undefined);
   }
 
   console.log('\nshelly generation - integration first, then guesswork');
