@@ -5,6 +5,23 @@ installs from them.
 
 ## v1.4.1 — 2026-09-08
 
+### Naming a sensor adds to the tile's chips instead of replacing them
+
+v1.4.0 let you name entities in `sensors`, and treated a named list as the whole
+answer: name one reading and the tile showed that and nothing else. That was the
+wrong default. "Which sensors show on the tile" is a general setting people use
+on its own, and naming one reading should not silently switch the rest off.
+
+Named entities now lead — in the order named — and the automatic selection fills
+whatever slots are left, up to the four-chip cap. Name four and the list is
+exactly yours; name one and you get it first, plus three the tile chose.
+
+**Chips label the whole row once any of them is named.** Named chips carried
+their name and automatic ones did not, which was fine while a tile had only one
+kind. Mixing them put a labelled `memoryusage 50.6 %` beside a bare `34.0 %` —
+the worst of both, since the second is unreadable and the mismatch looks like a
+fault. Tiles that name nothing are unchanged.
+
 ### Show or hide a whole room's devices at once
 
 Expanding a room lists its devices with a switch each, and hiding a dozen of
