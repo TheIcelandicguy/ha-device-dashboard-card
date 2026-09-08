@@ -6,7 +6,7 @@ import { styleMap } from 'lit/directives/style-map.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent, LovelaceCardConfig } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout, EnergyPeriod, InputActionConfig, SortBy, ExtraCardStyle, AreaCardPlacement } from './types';
-import { selectAllKeys } from './sensor-keys';
+import { selectAllKeys, entityKeys, classKeys } from './sensor-keys';
 import { areaKeyUniverse, toggleAreaSelection, isAreaOn as isAreaSelected, setDevicesHidden, NO_AREA_KEY } from './room-filter';
 import { getAllDevices, GRAPH_SENSOR_DEFS, GAUGE_RING_DEFS, gaugeStops, colorAt, hexToHsv, hsvToHex, parseCssColor, withAlpha, deviceHasControllable, getDeviceProfile,HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels,
   CONFIG_KEYS, LOVELACE_KEYS } from './helpers';
@@ -1270,6 +1270,51 @@ export class HADeviceDashboardEditor extends LitElement {
   /** Compact sensor-chip whitelist picker with inherit semantics.
    *  selected = undefined → inheriting (shows the inherited set greyed);
    *  onChange(undefined) clears the override; empty selections normalize to undefined. */
+  /**
+   * Naming individual entities, alongside the class pills.
+   *
+   * A pill exists per device_class, which is the whole vocabulary — and plenty
+   * of hardware reports nothing in it. CPU load, memory use and free disk carry
+   * no device_class at all, so before this there was no pill that could reach
+   * them and no way to put them on a tile except hand-written YAML.
+   *
+   * Both kinds live in one list, told apart by the dot (`src/sensor-keys.ts`).
+   * The pills read and write only the class half; this field reads and writes
+   * only the entity half, so neither can clobber the other.
+   */
+  private _namedEntityField(
+    selected: string[] | undefined,
+    effective: Set<string>,
+    allKeys: string[],
+    onChange: (next: string[] | undefined) => void,
+    deviceEntities?: string[],
+  ): TemplateResult {
+    const ids = entityKeys(selected ?? []);
+    const commit = (next: string | string[] | undefined) => {
+      const picked = Array.isArray(next) ? next : next ? [next] : [];
+      // While inheriting there is no stored list to add to. Write the set that
+      // is actually in force, so naming an entity does not also silently switch
+      // every class chip off.
+      const classes = selected !== undefined
+        ? classKeys(selected)
+        : [...effective].filter(k => allKeys.includes(k));
+      const merged = [...classes, ...picked];
+      onChange(merged.length ? merged : undefined);
+    };
+    return html`
+      <div class="chip-picker-ents">
+        <div class="chip-picker-grp-lbl">⌗ Specific entities</div>
+        ${this._entityField(ids, commit, {
+          deviceEntities: deviceEntities ?? [],
+          scopeAll: !deviceEntities?.length,
+          placeholder: 'sensor.davidpc_cpuload',
+          multi: true,
+          note: 'For readings with no device class — CPU, memory, disk. '
+              + 'Shown first, in the order added, and only on the device that owns them.',
+        })}
+      </div>`;
+  }
+
   /** Compact "All · None" control for a multi-select group. */
   private _selAllNone(onAll: () => void, onNone: () => void): TemplateResult {
     return html`
@@ -1289,6 +1334,11 @@ export class HADeviceDashboardEditor extends LitElement {
     /** When set, only offer these chip keys — the ones the device can actually
      *  produce. Keys already selected stay visible so nothing becomes unreachable. */
     only?: Set<string>,
+    /** Sensor entities of the device this picker is scoped to, so the entity
+     *  field can offer that device's readings rather than all of Home
+     *  Assistant. Undefined at global/room scope, where any device's entity is
+     *  a legitimate choice. */
+    deviceEntities?: string[],
   ): TemplateResult {
     const inherited = inheritedSel ?? [];
     const isOverride = selected !== undefined;
@@ -1318,6 +1368,7 @@ export class HADeviceDashboardEditor extends LitElement {
             ? html`<button class="color-reset" @click=${() => onChange(undefined)}>↺ Inherit</button>`
             : html`<button class="color-reset" @click=${() => onChange([...effective])}>Customize</button>`}
         </div>
+        ${this._namedEntityField(selected, effective, allKeys, onChange, deviceEntities)}
         ${groups.map(grp => html`
           <div class="chip-picker-grp">
             <span class="chip-picker-grp-lbl" style="color:${grp.iconColor}">${grp.icon} ${grp.group}</span>
@@ -3605,6 +3656,8 @@ export class HADeviceDashboardEditor extends LitElement {
           this._inheritedFrom('sensors')?.value as string[] | undefined,
           this._inheritedFrom('sensors')?.label ?? 'the default (all shown)',
           (next) => this._patchScope({ sensors: next }),
+          undefined,
+          this._scopeSensorEntities(),
         ))}
 
       ${this._designRow('Energy window', 'energy_period',
@@ -3870,6 +3923,18 @@ export class HADeviceDashboardEditor extends LitElement {
       await el?.constructor?.getConfigElement?.();
     } catch { /* fall back to text inputs */ }
     this._haPickersReady = !!customElements.get('ha-entity-picker');
+  }
+
+  /** Sensor entities of the device the Design tab is scoped to, so its entity
+   *  field offers that device's readings. Empty at global/room scope, where any
+   *  device's entity is a legitimate thing to name. */
+  private _scopeSensorEntities(): string[] {
+    const sc = this._designScope;
+    if (sc.kind !== 'device') return [];
+    const dev = this._allDevices().find(d => d.device_id === sc.id);
+    return (dev?.entities ?? [])
+      .filter(e => e.domain === 'sensor' || e.domain === 'binary_sensor')
+      .map(e => e.entity_id);
   }
 
   private _entityName(id: string): string {
@@ -5425,6 +5490,7 @@ export class HADeviceDashboardEditor extends LitElement {
     const sensorColors = c.graph_sensor_colors ?? {};
     const getColor = (key: string) => sensorColors[key] ?? GRAPH_SENSOR_DEFS.find(s=>s.key===key)?.defaultColor ?? '#f4601e';
 
+    const selectedGraphs = c.graph_sensors ?? DEFAULT_GRAPH_SENSORS;
     const gtBody = html`
       <div class="tog-row" style="border:none;padding:0 0 6px">
         <div class="tog-lbl">Show graphs on tiles
@@ -5438,6 +5504,42 @@ export class HADeviceDashboardEditor extends LitElement {
         <div class="pill-grp">
           ${(['line','area','bar'] as const).map(t => html`
             <span class="pill ${graphType === t ? 'on' : ''}" @click=${()=>this._set('graph_style',{...gs,type:t})}>${t[0].toUpperCase()+t.slice(1)}</span>`)}
+        </div>
+      </div>
+      <div class="field" style="margin-top:10px">
+        <div class="field-lbl">Which sensors to graph
+          ${this._selAllNone(
+            () => this._set('graph_sensors',
+              selectAllKeys(selectedGraphs, GRAPH_SENSOR_DEFS.map(s => s.key))),
+            () => this._set('graph_sensors', []))}</div>
+        <div class="pill-grp">
+          ${GRAPH_SENSOR_DEFS.map(s => {
+            const on = selectedGraphs.some(k => normalizeGraphKey(k) === s.key);
+            return html`
+            <span class="pill ${on ? 'on' : ''}" @click=${() => {
+              const next = on
+                ? selectedGraphs.filter(k => normalizeGraphKey(k) !== s.key)
+                : [...selectedGraphs, s.key];
+              this._set('graph_sensors', next);
+            }}>${s.label}</span>`;
+          })}
+        </div>
+        <div class="chip-picker-ents" style="margin-top:8px">
+          <div class="chip-picker-grp-lbl">⌗ Specific entities</div>
+          ${this._entityField(entityKeys(selectedGraphs), (next) => {
+            const picked = Array.isArray(next) ? next : next ? [next] : [];
+            // Same split as the chip picker: pills own the classes, this owns
+            // the ids. graph_sensors is card-wide, but a named entity only
+            // draws on the device that owns it, so one list serves the fleet.
+            this._set('graph_sensors', [...classKeys(selectedGraphs), ...picked]);
+          }, {
+            deviceEntities: [],
+            scopeAll: true,
+            placeholder: 'sensor.davidpc_cpuload',
+            multi: true,
+            note: 'Plots readings with no device class. Drawn first, in the order added, '
+                + 'and only on the device that owns them.',
+          })}
         </div>
       </div>
       ${this._adv(html`
@@ -5492,7 +5594,6 @@ export class HADeviceDashboardEditor extends LitElement {
 
     // Unset = the card graphs a default set, so show that here too (ticked), not
     // an empty picker. An explicit [] stays empty. First toggle materialises it.
-    const selectedGraphs = c.graph_sensors ?? DEFAULT_GRAPH_SENSORS;
 
     // Gauge rings: one row per class the gauge can draw, each flat (one colour,
     // graph_sensor_colors) or a gradient along the arc (graph_style.gauge_gradients,
@@ -5585,25 +5686,7 @@ export class HADeviceDashboardEditor extends LitElement {
           const meta = GRAPH_SENSOR_DEFS.find(s => s.key === key);
           return colorRow(key, meta?.label ?? key, getColor(key));
         })}` : nothing}
-      <div class="field" style="margin-top:10px">
-        <div class="field-lbl">Which sensors to graph
-          ${this._selAllNone(
-            () => this._set('graph_sensors',
-              selectAllKeys(selectedGraphs, GRAPH_SENSOR_DEFS.map(s => s.key))),
-            () => this._set('graph_sensors', []))}</div>
-        <div class="pill-grp">
-          ${GRAPH_SENSOR_DEFS.map(s => {
-            const on = selectedGraphs.some(k => normalizeGraphKey(k) === s.key);
-            return html`
-            <span class="pill ${on ? 'on' : ''}" @click=${() => {
-              const next = on
-                ? selectedGraphs.filter(k => normalizeGraphKey(k) !== s.key)
-                : [...selectedGraphs, s.key];
-              this._set('graph_sensors', next);
-            }}>${s.label}</span>`;
-          })}
-        </div>
-      </div>`;
+`;
 
     const ranges = gs.sensor_ranges ?? {};
 
@@ -6737,6 +6820,10 @@ export class HADeviceDashboardEditor extends LitElement {
     .chip-picker-state { font-size:11px; color:var(--t3); font-style:italic; }
     .chip-picker-grp { display:flex; flex-direction:column; gap:4px; }
     .chip-picker-grp-lbl { font-size:10px; font-weight:600; letter-spacing:.04em; }
+    /* Naming entities sits below the class pills and is visibly a different
+       kind of choice — the pills are a fixed vocabulary, this is anything. */
+    .chip-picker-ents { margin-top:8px; padding-top:8px; border-top:1px dashed var(--border); }
+    .chip-picker-ents .chip-picker-grp-lbl { color:var(--t3); display:block; margin-bottom:4px; }
 
     /* ── Hint line ── */
     /* Helper text sits next to HA's 14px chrome; 11px italic muted was the
