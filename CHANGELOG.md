@@ -5,6 +5,22 @@ installs from them.
 
 ## v1.4.1 — 2026-09-08
 
+### Show or hide a whole room's devices at once
+
+Expanding a room lists its devices with a switch each, and hiding a dozen of
+them meant a dozen clicks. Rooms already had **All · None** for switching the
+rooms themselves; their contents now have the same control, and so does the
+Favourites row.
+
+It only appears when a room holds more than one device — a two-button control
+over a single row is noise.
+
+`hidden_devices` is a card-wide list, so the one thing this must not do is
+disturb another room while rewriting one. That bookkeeping is
+`setDevicesHidden()` in `src/room-filter.ts` rather than an inline filter at the
+call site, with 7 assertions over it — including that showing everything again
+removes the key rather than leaving an empty array behind.
+
 ### Switching one room off no longer hides every device that has no room
 
 Devices with no Home Assistant area are grouped under **No Room**, and as far as

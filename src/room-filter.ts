@@ -60,3 +60,25 @@ export function toggleAreaSelection(
   // an incomplete selection look complete.
   return allKeys.every(k => on.has(k)) ? undefined : [...on];
 }
+
+/**
+ * `hidden_devices` after showing or hiding a whole room at once.
+ *
+ * The list is card-wide, so a room-level action must touch only that room's
+ * devices and leave every other room's hidden set exactly as it was — the
+ * reason this is a function rather than an inline `filter` at the call site.
+ *
+ * Returns `undefined` when nothing is hidden any more, matching how the rest of
+ * the editor stores an empty list: absent, not `[]`.
+ */
+export function setDevicesHidden(
+  hidden: readonly string[],
+  deviceIds: readonly string[],
+  hide: boolean,
+): string[] | undefined {
+  const inRoom = new Set(deviceIds);
+  // Start from everything hidden elsewhere, so other rooms are untouched.
+  const next = hidden.filter(id => !inRoom.has(id));
+  if (hide) next.push(...deviceIds);
+  return next.length ? next : undefined;
+}
