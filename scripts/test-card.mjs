@@ -167,7 +167,7 @@ try {
     join('node_modules', 'typescript', 'bin', 'tsc'),
     'src/helpers.ts', 'src/cascade.ts', 'src/attention.ts', 'src/shelly-cloud-import.ts',
     'src/design-scope.ts', 'src/localize.ts', 'src/update-policy.ts', 'src/font-options.ts',
-    'src/sensor-pick.ts', 'src/sensor-keys.ts', '--outDir', OUT,
+    'src/sensor-pick.ts', 'src/sensor-keys.ts', 'src/room-filter.ts', '--outDir', OUT,
     '--module', 'commonjs', '--target', 'es2020', '--skipLibCheck', '--moduleResolution', 'node',
   ], { stdio: 'inherit' });
   // The project is "type": "module", which would make these .js files ESM.
@@ -183,6 +183,7 @@ try {
   const fo  = req(join(process.cwd(), OUT, 'font-options.js'));
   const sp  = req(join(process.cwd(), OUT, 'sensor-pick.js'));
   const sk  = req(join(process.cwd(), OUT, 'sensor-keys.js'));
+  const rf  = req(join(process.cwd(), OUT, 'room-filter.js'));
   const hass = fleet();
   const byName = (list, name) => list.find(d => d.name === name);
 
@@ -1236,6 +1237,57 @@ try {
     eq('big numbers lose the noise', h.formatReading(1123826285.4, 'B'), '1123826285 B');
     eq('no unit, no trailing space', h.formatReading(7, ''), '7');
     eq('nonsense is the placeholder', h.formatReading(NaN, '%'), '—');
+  }
+
+  console.log('\nroom filter - the unassigned bucket is a room too');
+  {
+    const ROOMS = ['Kitchen', 'Stofa', 'Bilskur'];
+    const uni = rf.areaKeyUniverse(ROOMS, true);
+    eq('the universe carries the No Room key', uni, ['Kitchen', 'Stofa', 'Bilskur', '']);
+    eq('and omits it when nothing is unassigned',
+      rf.areaKeyUniverse(ROOMS, false), ROOMS);
+
+    ok('everything is on when there is no filter', rf.isAreaOn(undefined, ''));
+    ok('an explicit list decides', rf.isAreaOn(['Kitchen'], 'Kitchen'));
+    ok('and excludes what it omits', !rf.isAreaOn(['Kitchen'], ''));
+
+    // THE BUG: switching one room off wrote a list built from the real areas
+    // only, so '' could never be in it and every unassigned device vanished
+    // from the card at the same time. The user reported it as "turning it off
+    // hides the devices".
+    const afterKitchenOff = rf.toggleAreaSelection(uni, undefined, 'Kitchen');
+    ok('switching a room off leaves No Room on', afterKitchenOff.includes(''));
+    eq('and keeps every other room', afterKitchenOff, ['Stofa', 'Bilskur', '']);
+
+    // With the old universe (no ''), this is what used to be written - kept as
+    // the shape that caused it.
+    eq('the old universe is what dropped it',
+      rf.toggleAreaSelection(ROOMS, undefined, 'Kitchen'), ['Stofa', 'Bilskur']);
+
+    // No Room must be switchable in its own right. It never was: the toggle
+    // read as on, and clicking it added '' to a set that lacked it, so the row
+    // stayed on however many times you pressed it.
+    const afterNoRoomOff = rf.toggleAreaSelection(uni, undefined, '');
+    ok('No Room can actually be switched off', !afterNoRoomOff.includes(''));
+    eq('leaving the real rooms alone', afterNoRoomOff, ROOMS);
+
+    // Turning the last one back on returns to "no filter" rather than freezing
+    // a list that would silently exclude a room added later.
+    eq('switching everything back on clears the filter',
+      rf.toggleAreaSelection(uni, ['Stofa', 'Bilskur', ''], 'Kitchen'), undefined);
+    eq('and restoring No Room does the same',
+      rf.toggleAreaSelection(uni, ROOMS, ''), undefined);
+
+    // A stale key from a deleted room must not make an incomplete selection
+    // look complete - counting by size alone would have said "all on" here.
+    eq('a stale key does not fake a full selection',
+      rf.toggleAreaSelection(uni, ['Kitchen', 'Stofa', 'Ghost'], ''),
+      ['Kitchen', 'Stofa', 'Ghost', '']);
+
+    // Round trip: off then on again is where you started.
+    eq('off then on is a no-op',
+      rf.toggleAreaSelection(uni, rf.toggleAreaSelection(uni, undefined, 'Stofa'), 'Stofa'),
+      undefined);
   }
 
   console.log('\nshelly generation - integration first, then guesswork');

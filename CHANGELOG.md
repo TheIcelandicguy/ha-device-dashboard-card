@@ -3,6 +3,46 @@
 All notable changes to HA Device Dashboard. Versions are git tags; HACS
 installs from them.
 
+## Unreleased
+
+### Switching one room off no longer hides every device that has no room
+
+Devices with no Home Assistant area are grouped under **No Room**, and as far as
+the `areas` filter is concerned that bucket is a room like any other — the card
+matches on `(d.area ?? '')`, so its key is the empty string.
+
+The editor drew a row for it but left that key out of the list of rooms it knew
+about. Two things followed, and both looked like the card losing devices on its
+own:
+
+- Switching **any** room off wrote an explicit `areas` list built from the real
+  areas only. The empty string could never be in that list, so every unassigned
+  device disappeared from the card at the same moment — nothing on screen
+  connected the two.
+- The No Room row was built from the *filtered* device list, so once those
+  devices were filtered out the row vanished with them. The switch that would
+  have brought them back was gone, which made it unrecoverable from the UI: the
+  only fix was to hand-edit YAML.
+
+The No Room switch also never worked in its own right. Clicking it while
+everything was on added the key to a set that lacked it, so the row stayed on
+however many times you pressed it.
+
+The rule now lives in one place, `src/room-filter.ts`: the unassigned bucket is
+part of the room universe whenever any device is in it, and that is decided from
+every discovered device rather than from the filtered view — the old way was
+self-referential, since the filter removed the devices that justified the row
+that would have restored them.
+
+The Rooms & devices tree is now built from the unfiltered device list generally,
+so a room you switch off still shows its contents instead of reading as empty,
+and a favourite in a switched-off room no longer disappears from the Favourites
+row.
+
+Verified by rendering the editor against a live instance and reading its rows
+back: with `areas: ['Kitchen']` the No Room row was **missing** before and is now
+present, switched off, still listing its 80 devices. 14 new assertions.
+
 ## v1.4.0 — 2026-09-08
 
 ### Name the sensors you want, by entity id
