@@ -3,7 +3,7 @@
 All notable changes to HA Device Dashboard. Versions are git tags; HACS
 installs from them.
 
-## Unreleased
+## v1.4.0 — 2026-09-08
 
 ### Name the sensors you want, by entity id
 
