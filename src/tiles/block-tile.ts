@@ -5,6 +5,7 @@ import { formatPower, getIntegrationLabel, isPrivateIp, delegatableEntities, DEL
 import type { EntityAnimationType, TileBlockId, HassAttrs } from '../types';
 import type { TileCtx, SensorChip } from './tile-context';
 import { renderInputRow, renderEffectPicker } from './tile-parts';
+import { isEntityKey } from '../sensor-keys';
 import * as cascade from '../cascade';
 import { t, tOr } from '../localize';
 
@@ -112,6 +113,12 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
       // Primary values carry their unit; a short label is kept only where the
       // unit alone is ambiguous (%, ppm) or for alert states.
       const LABELED = new Set(['humidity', 'battery', 'gas', 'co2', 'door', 'motion', 'flood', 'smoke', 'vibration', 'overtemp', 'overpower']);
+      // A chip for an entity named by id is ALWAYS ambiguous: its key is the
+      // entity id, so no amount of vocabulary covers it, and a PC's readings are
+      // mostly percentages. Unlabelled they read "37 % 52.5 % 14.81 % 2904 MHz",
+      // which says nothing. Same rule as the sensor-card tile.
+      const needsLabel = (s: SensorChip) =>
+        !!s.key && (LABELED.has(s.key) || isEntityKey(s.key));
       const elecByCh = new Map<string, typeof elec>();
       for (const s of elec) {
         const k = s.ch ?? '';
@@ -128,7 +135,7 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
             ${primary.map(s => html`
               <span class="stat-item ${s.warn ? 'warn' : ''}">
                 ${s.ch ? html`<span class="stat-lbl">${s.ch}</span>` : nothing}
-                ${!s.ch && s.key && LABELED.has(s.key) ? html`<span class="stat-lbl">${s.label}</span>` : nothing}
+                ${!s.ch && needsLabel(s) ? html`<span class="stat-lbl">${s.label}</span>` : nothing}
                 ${s.value}
               </span>`)}
           </div>` : nothing}

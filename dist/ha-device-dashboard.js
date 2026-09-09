@@ -3009,19 +3009,19 @@ function e(e,t,i,s){var o,a=arguments.length,n=a<3?t:null===s?s=Object.getOwnPro
             </div>
           `:Y}
         </div>
-      `}case"sensors":{if(!g.length)return q``;const e=g.filter(e=>"primary"===(e.tier??"primary")),t=g.filter(e=>"electrical"===e.tier),i=g.filter(e=>"diag"===e.tier),s=new Set(["humidity","battery","gas","co2","door","motion","flood","smoke","vibration","overtemp","overpower"]),o=new Map;for(const e of t){const t=e.ch??"";o.has(t)||o.set(t,[]),o.get(t).push(e)}const a=e=>"cloud"===e.key||"mqtt"===e.key||"eth"===e.key?`${e.label} ${e.value===it("state.connected")?"✓":"✗"}`:`${e.label} ${e.value}`;return q`
+      `}case"sensors":{if(!g.length)return q``;const e=g.filter(e=>"primary"===(e.tier??"primary")),t=g.filter(e=>"electrical"===e.tier),i=g.filter(e=>"diag"===e.tier),s=new Set(["humidity","battery","gas","co2","door","motion","flood","smoke","vibration","overtemp","overpower"]),o=e=>!!e.key&&(s.has(e.key)||vs(e.key)),a=new Map;for(const e of t){const t=e.ch??"";a.has(t)||a.set(t,[]),a.get(t).push(e)}const n=e=>"cloud"===e.key||"mqtt"===e.key||"eth"===e.key?`${e.label} ${e.value===it("state.connected")?"✓":"✗"}`:`${e.label} ${e.value}`;return q`
         ${e.length?q`
           <div class="tile-stats">
             ${e.map(e=>q`
               <span class="stat-item ${e.warn?"warn":""}">
                 ${e.ch?q`<span class="stat-lbl">${e.ch}</span>`:Y}
-                ${!e.ch&&e.key&&s.has(e.key)?q`<span class="stat-lbl">${e.label}</span>`:Y}
+                ${!e.ch&&o(e)?q`<span class="stat-lbl">${e.label}</span>`:Y}
                 ${e.value}
               </span>`)}
           </div>`:Y}
         ${t.length?q`
           <div class="tile-elec-wrap">
-            ${[...o.entries()].map(([e,t])=>q`
+            ${[...a.entries()].map(([e,t])=>q`
               <div class="tile-elec">
                 ${e?q`<span class="stat-lbl">${e}</span>`:Y}
                 ${t.map((e,t)=>q`${t>0?q`<span class="sep">·</span>`:Y}${"power_factor"===e.key?`PF ${e.value}`:e.value}`)}
@@ -3029,7 +3029,7 @@ function e(e,t,i,s){var o,a=arguments.length,n=a<3?t:null===s?s=Object.getOwnPro
           </div>`:Y}
         ${i.length?q`
           <div class="tile-diag" title=${i.map(e=>`${e.label}: ${e.value}`).join("  ·  ")}>
-            ${i.map((e,t)=>q`${t>0?q`<span class="sep">·</span>`:Y}<span class="${e.warn?"warn":""}">${a(e)}</span>`)}
+            ${i.map((e,t)=>q`${t>0?q`<span class="sep">·</span>`:Y}<span class="${e.warn?"warn":""}">${n(e)}</span>`)}
           </div>`:Y}
       `}case"graph":return e.renderSparklines(i);case"dimmer":{const t=r?a.states[r.entityId]:null,i=t?.attributes?.effect_list??[],s=t?.attributes?.effect??null,o=r?.whiteValue??0;return r&&m?q`
         <div class="tile-dim-row" @click=${e=>e.stopPropagation()}>
