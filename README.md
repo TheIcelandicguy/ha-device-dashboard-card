@@ -39,6 +39,11 @@ Frontend only: no custom integration, no Python, no helper entities.
   diagnostics, firmware, IP, RSSI and uptime
 - **Sparkline graphs** — per-metric labelled graphs with time axis, peak/min markers,
   hover tooltips and a tick grid; line, area or bar
+- **Computers, servers and routers too** — CPU, memory and disk carry no
+  `device_class`, so name the entities you want and the tile shows them. A
+  Proxmox host, NAS or PC gets the same treatment as a smart plug
+- **It tells you what it hid** — discovery filters are on by default and used to
+  be silent; the card now counts what they dropped and links to the setting
 - **Energy windows** — every energy chip can show the lifetime total or consumption
   today / this week / this month, computed from recorder statistics (no helpers)
 - **Views** — filtered tabs over the same fleet, each with its own layout overrides
@@ -170,6 +175,22 @@ universal_scope: devices # devices | controllable | all
 | `exclude_domains` | string[] | — | Universal only. Domains to drop entirely, e.g. `[update, device_tracker]`. |
 | `delegate_controls` | boolean | `false` | Render Home Assistant's own tile controls for domains this card doesn't draw itself (lock, media_player, fan, vacuum …). Off by default: each one embeds a native element, which costs render time on large media fleets. |
 
+**The card tells you when these have hidden something.** A dismissible line at the
+top reports the count and why — *"165 devices are not shown: 93 by integration,
+72 by scope"*, or in Shelly mode *"270 more devices are in Home Assistant but not
+on this card"* — and links to the setting. The defaults above are deliberate;
+without them a smart-home dashboard fills with routers, phones and diagnostics.
+They were just silent about it, which read as the card being broken.
+
+A device is only counted as hidden when **none** of its entities survived, so a
+device with entities from two integrations — one denied, one kept — is on the
+card and is not reported.
+
+If you are looking for a computer, NAS, router or Proxmox host: turning the
+filters off is necessary but not sufficient. Those machines report readings with
+no `device_class`, which is what [Sensor chips](#sensor-chips) and
+[Graphs](#graphs) cover.
+
 ---
 
 ## Configuration reference
@@ -251,7 +272,7 @@ stragglers. A device caught by both routes is still counted once.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `graph_sensors` | string[] | `[power, temperature, humidity, battery]` | Which device classes to plot. `[]` means none |
+| `graph_sensors` | string[] | `[power, temperature, humidity, battery]` | Which device classes **or entity ids** to plot. `[]` means none |
 | `graph_hours` | number | `24` | History window, 1–168 |
 | `graph_line_color` | string | per-sensor | Global fallback line colour |
 | `graph_sensor_colors` | map | per-sensor | Line colour per sensor key |
@@ -265,6 +286,21 @@ stragglers. A device caught by both routes is still counted once.
 Graphable keys: `power`, `voltage`, `current`, `energy`, `apparent_power`,
 `reactive_power`, `frequency`, `power_factor`, `temperature`, `humidity`,
 `illuminance`, `carbon_dioxide`, `gas`, `battery`, `signal_strength`.
+
+Entity ids go in the same list, and are the only way to plot a reading with no
+device class:
+
+```yaml
+graph_sensors:
+  - power                          # keep the defaults you still want —
+  - temperature                    #   setting this key replaces them
+  - sensor.davidpc_cpuload         # plots only on the device that owns it
+  - sensor.davidpc_memoryusage
+```
+
+Note the comment: `graph_sensors` is card-wide and setting it replaces the
+default set, so list any class keys you still want. Named entities are drawn
+first, in the order given.
 
 ### Energy
 
@@ -287,6 +323,26 @@ the override never renders next to the raw values it stands in for.
 
 `sensors` is a whitelist of chip keys; omit it to use each profile's curated set.
 `[]` means no chips at all.
+
+It also takes **entity ids**, mixed into the same list — the only way to show a
+reading Home Assistant gives no `device_class`, which is most of what a PC, NAS,
+router or Proxmox host reports:
+
+```yaml
+device_styles:
+  a1b2c3d4e5f6:                     # the device id
+    tile_style: sensor-card
+    sensors:
+      - sensor.davidpc_cpuload      # named entities lead, in this order
+      - sensor.davidpc_memoryusage
+      - temperature                 # class keys still work alongside them
+```
+
+The dot is the whole difference: entity ids have one, device classes never do. A
+named entity only ever appears on the device that owns it, so one card-wide list
+can configure a whole fleet. Named readings come first and the automatic
+selection fills the remaining chip slots, so naming one does not switch the rest
+off. On `tile_style: sensor-card` the first one named is also the headline value.
 
 | Category | Keys |
 |---|---|

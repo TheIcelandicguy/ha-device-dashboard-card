@@ -59,7 +59,7 @@ export const HELP_CONCEPTS: HelpTopic[] = [
       'A named entity only ever appears on the device that owns it. That is what lets one list configure a whole fleet at once: name your PC\'s CPU sensor and your router\'s CPU sensor in the same card-wide list, and each tile picks up only its own.',
       'On the **Sensor card** tile style the first entity you name is also the big number the tile leads with, and the order you name them is the order the chips appear — so naming entities is how you build a tile that shows exactly what you want, in the order you want it.',
       '`graph_sensors` takes the same mixed list, so you can plot readings that have no class either. Named lines are drawn first, in the order given.',
-      'This is YAML for now — the editor\'s pickers still offer classes only, and a future release will let you pick entities there too. Ticking **All** in a picker leaves any entity ids you have named alone; **None** clears everything.',
+      'In the editor, both pickers carry a **Specific entities** field under the class pills — under **Design → Sensor chips** for a tile, and **Graphs & Sensors → Graph Type** for the graphs. Picked on a single device, it offers that device\'s own entities; card-wide it offers anything. Ticking **All** leaves the entities you named alone, since no pill stands for them; **None** clears everything.',
     ],
   },
   {

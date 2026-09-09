@@ -16,7 +16,7 @@ and commit it with your change, or CI will fail on a stale bundle.
 ```bash
 npm run typecheck
 npm run lint
-npm test          # card logic, palette, config-builder, + the docs checker
+npm test          # card logic, detection, palette, config-builder, + the docs checker
 npm run check:docs
 ```
 
@@ -118,3 +118,51 @@ than tidy ones (a device that appears twice in the registry under one MAC, a
 Gen1 switch whose channels are all `event.` entities, a device whose input
 sensors are tagged `device_class: power`). If you fix a bug, add the shape that
 caused it.
+
+## Device detection fixtures
+
+`npm run test:detection` is separate, and works differently. It runs
+`getDeviceProfile` and `detectShellyGen` over **real registry rows** in
+`scripts/fixtures/detection-devices.json` — 215 of them, harvested from a live
+instance across 30-odd integrations and deduplicated to one exemplar per hardware
+shape.
+
+It exists because hand-written fixtures pin the rules someone thought to write
+down, which is exactly the set that does not contain the bugs. Both detection
+bugs found so far came from looking at real device data: a `/^sh/i` rule that
+matched every device named "Shelly…", and the BLU Gateway — a mains WiFi Gen3
+unit whose name says Bluetooth — resolving to `ble`.
+
+**`detection-expected.json` records what the code does today, not what is
+correct.** A failure means detection changed. Read the diff and decide:
+
+```bash
+npm run test:detection            # compare
+npm run test:detection -- --bless # re-record, once you have decided the change is right
+```
+
+Rows carrying a `why` are different: someone checked those against real hardware,
+and the suite reports a change to one as a **regression** rather than a drift. Add
+a `why` when you fix a detection bug — it is the part `--bless` preserves and the
+part a machine cannot regenerate.
+
+### Contributing fixtures for hardware we do not own
+
+This is the most useful thing you can send. Run:
+
+```bash
+HA_URL=http://your-ha:8123 HA_TOKEN=... npm run fixtures:harvest
+```
+
+**Read the diff before you commit it.** The file is published. The harvester
+replaces MACs, IPs and long hex instance ids with stable fakes, drops
+configuration URLs, identifiers and serial numbers, drops every attribute except
+`device_class`, and keeps device names only for `shelly` / `bthome` — the
+integrations whose detection reads them. Everything else is renamed after its
+model, because a phone is usually named after its owner. That is thorough, not
+exhaustive: a Shelly you named after someone will still come through.
+
+One gotcha if you write a detection test by hand: `detectShellyGen` is never
+handed a display name. Both call sites pass `device.model ?? ''`, so the "name"
+its comments describe is the model string, and passing a device name tests a path
+production cannot reach.

@@ -54,7 +54,7 @@ On the **Sensor card** tile style the first entity you name is also the big numb
 
 `graph_sensors` takes the same mixed list, so you can plot readings that have no class either. Named lines are drawn first, in the order given.
 
-This is YAML for now — the editor's pickers still offer classes only, and a future release will let you pick entities there too. Ticking **All** in a picker leaves any entity ids you have named alone; **None** clears everything.
+In the editor, both pickers carry a **Specific entities** field under the class pills — under **Design → Sensor chips** for a tile, and **Graphs & Sensors → Graph Type** for the graphs. Picked on a single device, it offers that device's own entities; card-wide it offers anything. Ticking **All** leaves the entities you named alone, since no pill stands for them; **None** clears everything.
 
 ### Discovery: what the card looks at
 
