@@ -1234,6 +1234,30 @@ try {
     eq('select-all from nothing is just the classes',
       sk.selectAllKeys(undefined, ['temperature']), ['temperature']);
 
+    // THE BUG the audit found: while inheriting, the editor's entity field was
+    // seeded from this scope's own list (undefined) rather than what is in
+    // force, so it showed nothing while entities were live - and because the
+    // field commits what it shows, adding one deleted every inherited one.
+    const INHERITED = ['temperature', 'sensor.pc_cpu'];
+    eq('an inheriting scope shows the ids in force',
+      sk.namedEntitiesInForce(undefined, INHERITED), ['sensor.pc_cpu']);
+    eq('a scope with its own list shows its own',
+      sk.namedEntitiesInForce(['sensor.pc_mem'], INHERITED), ['sensor.pc_mem']);
+    eq('adding one while inheriting keeps the inherited one',
+      sk.withNamedEntities(undefined, INHERITED, ['temperature', 'power'],
+        ['sensor.pc_cpu', 'sensor.pc_mem']),
+      ['temperature', 'sensor.pc_cpu', 'sensor.pc_mem']);
+    eq('and keeps the class half too',
+      sk.withNamedEntities(['power', 'sensor.pc_cpu'], INHERITED, ['temperature', 'power'],
+        ['sensor.pc_cpu']),
+      ['power', 'sensor.pc_cpu']);
+    eq('removing the last of everything clears the override',
+      sk.withNamedEntities([], INHERITED, ['temperature', 'power'], []), undefined);
+    // An inherited class key that is not on offer here must not be invented.
+    eq('only offered class keys survive the inherit path',
+      sk.withNamedEntities(undefined, ['temperature', 'ghost'], ['temperature'], []),
+      ['temperature']);
+
     // Naming entities is how you build a tile the class vocabulary cannot reach.
     const pcStates = {
       'sensor.pc_cpu': st('24', '%', undefined),
@@ -1373,6 +1397,12 @@ try {
       rf.setDevicesHidden(['other'], KITCHEN, false), ['other']);
     eq('a room with nothing in it changes nothing',
       rf.setDevicesHidden(['other'], [], true), ['other']);
+    // hidden_devices is persisted, so a repeated id would live in config
+    // forever with nothing on screen explaining it.
+    eq('a repeated device id is only stored once',
+      rf.setDevicesHidden(['a'], ['a', 'a'], true), ['a']);
+    eq('and an already-hidden device is not duplicated',
+      rf.setDevicesHidden(['a', 'b'], ['a'], true), ['b', 'a']);
 
     // Round trip: off then on again is where you started.
     eq('off then on is a no-op',

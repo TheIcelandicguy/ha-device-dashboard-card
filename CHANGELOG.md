@@ -5,6 +5,32 @@ installs from them.
 
 ## Unreleased
 
+### An inherited entity id was invisible, and adding another deleted it
+
+Found in an audit pass over the release, not by anyone hitting it.
+
+The editor's **Specific entities** field was seeded from the scope's *own* list.
+While a device or room is inheriting, that list is `undefined` — so the field
+showed nothing even though inherited entity ids were live on the tile. And
+because the field commits whatever it is showing, adding one entity wrote a list
+containing only that one: every inherited id silently gone.
+
+Verified against a running editor rather than argued. Card-wide
+`sensors: [temperature, sensor.davidpc_cpuload]`, device scope inheriting: the
+field showed **no chips**, and picking `sensor.davidpc_gpuload` produced
+`[temperature, sensor.davidpc_gpuload]`. Now it shows `DAVIDPC cpuload` and
+produces `[temperature, sensor.davidpc_cpuload, sensor.davidpc_gpuload]`.
+
+This is the same shape as the "Select all" bug fixed in v1.5.0 — a choice with
+nothing on screen to represent it, removed by an unrelated action — one layer
+down, which is why the first fix did not cover it. The rule now lives in
+`namedEntitiesInForce()` and `withNamedEntities()` in `src/sensor-keys.ts` with
+six assertions over it, rather than inline in the editor where the first one hid.
+
+Also hardened: `setDevicesHidden()` deduplicates. `hidden_devices` is persisted,
+so a repeated id would have lived in config forever with nothing explaining it.
+Not reachable from the UI today; the function was simply loose.
+
 ### Render cost measured, not assumed
 
 `npm run bench` covers the card's logic — discovery, attention, the cascades —

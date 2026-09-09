@@ -6,7 +6,7 @@ import { styleMap } from 'lit/directives/style-map.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, fireEvent, LovelaceCardConfig } from 'custom-card-helpers';
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout, EnergyPeriod, InputActionConfig, SortBy, ExtraCardStyle, AreaCardPlacement } from './types';
-import { selectAllKeys, entityKeys, classKeys } from './sensor-keys';
+import { selectAllKeys, entityKeys, classKeys, namedEntitiesInForce, withNamedEntities } from './sensor-keys';
 import { areaKeyUniverse, toggleAreaSelection, isAreaOn as isAreaSelected, setDevicesHidden, NO_AREA_KEY } from './room-filter';
 import { getAllDevices, GRAPH_SENSOR_DEFS, GAUGE_RING_DEFS, gaugeStops, colorAt, hexToHsv, hsvToHex, parseCssColor, withAlpha, deviceHasControllable, getDeviceProfile,HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels,
   CONFIG_KEYS, LOVELACE_KEYS } from './helpers';
@@ -1289,17 +1289,16 @@ export class HADeviceDashboardEditor extends LitElement {
     onChange: (next: string[] | undefined) => void,
     deviceEntities?: string[],
   ): TemplateResult {
-    const ids = entityKeys(selected ?? []);
+    // The EFFECTIVE ids, not just this scope's own. While inheriting, `selected`
+    // is undefined but inherited entity ids are still in force — showing an
+    // empty field there hid them, and because the field commits whatever it is
+    // showing, adding one more silently deleted the rest. Exactly the failure
+    // `selectAllKeys` exists to prevent: a choice with nothing on screen to
+    // represent it, removed by an unrelated action.
+    const ids = namedEntitiesInForce(selected, [...effective]);
     const commit = (next: string | string[] | undefined) => {
       const picked = Array.isArray(next) ? next : next ? [next] : [];
-      // While inheriting there is no stored list to add to. Write the set that
-      // is actually in force, so naming an entity does not also silently switch
-      // every class chip off.
-      const classes = selected !== undefined
-        ? classKeys(selected)
-        : [...effective].filter(k => allKeys.includes(k));
-      const merged = [...classes, ...picked];
-      onChange(merged.length ? merged : undefined);
+      onChange(withNamedEntities(selected, [...effective], allKeys, picked));
     };
     return html`
       <div class="chip-picker-ents">
