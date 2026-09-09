@@ -6010,6 +6010,27 @@ export class HADeviceDashboardEditor extends LitElement {
       }
     }
 
+    // A graph needs a number. An entity named in graph_sensors whose state is
+    // text can never be plotted, and the runtime skips it — silently, which is
+    // the failure this card keeps making. Say so instead.
+    {
+      const named = entityKeys(c.graph_sensors ?? []);
+      const unplottable = named.filter((id) => {
+        const st = this.hass?.states[id];
+        // Unknown ids are a different complaint, handled with dangling refs below.
+        return st && isNaN(parseFloat(st.state));
+      });
+      if (unplottable.length) {
+        out.push({
+          title: `${unplottable.length} graph ${unplottable.length === 1 ? 'entity has' : 'entities have'} no numeric value`,
+          detail: `graph_sensors: ${unplottable.slice(0, 3).map(id => this._entityName(id)).join(', ')}`
+            + `${unplottable.length > 3 ? ` and ${unplottable.length - 3} more` : ''} `
+            + 'read as text, so no line can be drawn and they are skipped. '
+            + 'They still work as chips under Sensor chips, where the value is shown as it reads.',
+        });
+      }
+    }
+
     // Dangling references — a saved style that was deleted, or config keyed to a
     // device/area that no longer exists (device ids change when a device is re-added).
     const customKeys = new Set(Object.keys(c.custom_styles ?? {}));

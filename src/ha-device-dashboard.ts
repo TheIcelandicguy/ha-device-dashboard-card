@@ -1589,6 +1589,11 @@ export class HADeviceDashboard extends LitElement {
     for (const ent of namedEntitiesOn(device, rawList)) {
       const st = this.hass.states[ent.entity_id];
       if (!st || st.state === 'unavailable' || st.state === 'unknown') continue;
+      // A graph needs a number. Chips show a named entity however it reads —
+      // "Drives health OK" is a useful chip — but a line through "OK" is not a
+      // thing, and drawing the row anyway gave an empty graph with a label and
+      // no explanation. The editor flags this as a config conflict.
+      if (isNaN(parseFloat(st.state))) continue;
       const a = st.attributes as HassAttrs;
       const unit = (a.unit_of_measurement as string) ?? '';
       const label = stripDevicePrefix((a.friendly_name as string) ?? '', device.name)

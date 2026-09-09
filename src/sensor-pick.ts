@@ -61,6 +61,25 @@ export function isReading(e: HAEntity, states: StatesMap): boolean {
 }
 
 /**
+ * A reading you named by entity id, which is shown as it reads.
+ *
+ * `isReading` demands a unit and a number because it also guards the
+ * *automatic* selection, where a firmware version like
+ * `20260311-095847/1.7.5` would otherwise parse into a "2026.0" chip. Nothing
+ * you typed an entity id for needs guarding from you — so the only things left
+ * to check are that it is a reading at all and that it is alive.
+ *
+ * Without this, naming a unitless sensor (`sensor.davidpc_drives_health`,
+ * state `OK`) put a chip on the default tile and nothing whatsoever on a
+ * sensor-card: no chip, no warning, no way to tell why.
+ */
+export function isNamedReadable(e: HAEntity, states: StatesMap): boolean {
+  if (e.domain !== 'sensor' && e.domain !== 'binary_sensor') return false;
+  const s = states[e.entity_id];
+  return !!s && s.state !== 'unavailable' && s.state !== 'unknown';
+}
+
+/**
  * The tile's headline reading: a priority class if the device has one, else any
  * usable measurement. Returns undefined only when the device reports nothing
  * numeric at all — at which point the caller falls back to a binary sensor.
@@ -74,7 +93,7 @@ export function pickPrimarySensor(
   // an entity in `sensors` is for. Diagnostics included: if you asked for it by
   // id, you meant it.
   for (const e of namedEntitiesOn(device, named)) {
-    if (isReading(e, states)) return e;
+    if (isNamedReadable(e, states)) return e;
   }
 
   const classed = (usable: (e: HAEntity) => boolean) => {
@@ -126,7 +145,7 @@ export function pickSecondarySensors(
   named?: readonly string[],
 ): HAEntity[] {
   const explicit = namedEntitiesOn(device, named)
-    .filter(e => e.entity_id !== primaryId && isReading(e, states));
+    .filter(e => e.entity_id !== primaryId && isNamedReadable(e, states));
   const taken = new Set(explicit.map(e => e.entity_id));
   const rest = device.entities.filter(e =>
     e.entity_id !== primaryId && !taken.has(e.entity_id) && isMeasurement(e, states));
