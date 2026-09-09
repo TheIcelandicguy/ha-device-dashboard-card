@@ -1299,6 +1299,42 @@ try {
         undefined, 4, ['sensor.c']).map(e => e.entity_id),
       ['sensor.a', 'sensor.b', 'sensor.d']);
 
+    // A named entity is shown as it reads. The unit test guards the AUTOMATIC
+    // selection from firmware strings; it must not filter something the user
+    // typed an entity id for. Before this, naming a unitless sensor gave a chip
+    // on the default tile and nothing at all on a sensor-card.
+    const box2 = { device_id: 'b2', entities: [
+      ent('sensor.health', 'sensor'), ent('sensor.count', 'sensor'),
+      ent('sensor.watts', 'sensor'), ent('binary_sensor.up', 'binary_sensor'),
+      ent('sensor.dead', 'sensor'),
+    ]};
+    const box2States = {
+      'sensor.health': { state: 'OK', attributes: {} },          // no unit, not a number
+      'sensor.count':  { state: '8', attributes: {} },           // a number, still no unit
+      'sensor.watts':  st('4.1', 'W', 'power'),
+      'binary_sensor.up': { state: 'on', attributes: {} },
+      'sensor.dead':   { state: 'unavailable', attributes: {} },
+    };
+    ok('a named unitless string is readable', sp.isNamedReadable(ent('sensor.health', 'sensor'), box2States));
+    ok('so is a named unitless number', sp.isNamedReadable(ent('sensor.count', 'sensor'), box2States));
+    ok('and a named binary sensor', sp.isNamedReadable(ent('binary_sensor.up', 'binary_sensor'), box2States));
+    ok('a dead one is still refused', !sp.isNamedReadable(ent('sensor.dead', 'sensor'), box2States));
+    ok('and a domain that is not a reading',
+      !sp.isNamedReadable({ entity_id: 'switch.x', domain: 'switch' }, { 'switch.x': { state: 'on' } }));
+    // The automatic path keeps its guard - that is what stops "2026.0".
+    ok('the automatic test still demands a unit',
+      !sp.isMeasurement(ent('sensor.health', 'sensor'), box2States));
+
+    eq('a named unitless sensor can lead the tile',
+      sp.pickPrimarySensor(box2, box2States, ['sensor.health']).entity_id, 'sensor.health');
+    eq('and can be a chip',
+      sp.pickSecondarySensors(box2, box2States, 'sensor.watts', 4,
+        ['sensor.health', 'sensor.count']).map(e => e.entity_id),
+      ['sensor.health', 'sensor.count']);
+    eq('a named dead entity is still skipped',
+      sp.pickSecondarySensors(box2, box2States, undefined, 4, ['sensor.dead', 'sensor.count'])
+        .map(e => e.entity_id)[0], 'sensor.count');
+
     // An explicit choice outranks the class preference - that is the point.
     const room = { device_id: 'r', entities: [ent('sensor.temp', 'sensor'), ent('sensor.co', 'sensor')] };
     const roomStates = {

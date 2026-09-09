@@ -3,6 +3,34 @@
 All notable changes to HA Device Dashboard. Versions are git tags; HACS
 installs from them.
 
+## Unreleased
+
+### A sensor you named by entity id is shown even without a unit
+
+Naming `sensor.davidpc_drives_health` (state `OK`) put a chip on the default
+tile and produced **nothing at all** on a `sensor-card` — no chip, no headline,
+no warning, no way to tell why. Three of the eight readings on a Windows PC are
+like that: disk counts, audio sessions, drive health.
+
+The cause was one predicate doing two jobs. `isReading()` demands a unit and a
+number because it also guards the *automatic* selection, where a firmware
+version like `20260311-095847/1.7.5` would otherwise parse into a "2026.0" chip.
+That guard is right for a reading the card picked on your behalf and wrong for
+one you typed an entity id for — `pickPrimarySensor` even says so in a comment
+("if you asked for it by id, you meant it") while calling the strict test two
+lines below.
+
+Named entities now go through `isNamedReadable()`: a sensor or binary_sensor
+that is alive. No unit required, no number required — the value is shown as it
+reads, so `OK` renders as `OK`. Dead entities are still skipped, and the
+automatic path keeps its guard, so nothing starts leading with a firmware
+string.
+
+Found by measuring the chip and graph limits rather than by hitting it. While
+there: the caps themselves are now written down — `sensor-card` shows four chips
+plus the headline value, the default tile has no cap, and graphs have no cap on
+any style.
+
 ## v1.5.1 — 2026-09-09
 
 ### An inherited entity id was invisible, and adding another deleted it

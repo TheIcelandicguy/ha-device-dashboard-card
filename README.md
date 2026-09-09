@@ -344,6 +344,21 @@ can configure a whole fleet. Named readings come first and the automatic
 selection fills the remaining chip slots, so naming one does not switch the rest
 off. On `tile_style: sensor-card` the first one named is also the headline value.
 
+A named entity is shown as it reads, so a unitless or non-numeric sensor
+(`drives_health` → `OK`) works. Automatic selection is stricter — it needs a unit
+and a number, which is what stops a firmware version becoming a "2026.0" chip.
+
+**How many fit:**
+
+| tile style | chips | graphs |
+|---|---|---|
+| `sensor-card` | 4, plus the headline value | no limit |
+| `default` (block tile) | no limit | no limit |
+| `power-monitor` | fixed set of 5 (V, A, kWh, °C, dBm) | no limit |
+
+Name more than a `sensor-card` can show and the extras are ignored, so the block
+tile is the style to use for a device with a lot worth reading.
+
 | Category | Keys |
 |---|---|
 | Electrical | `power`, `voltage`, `current`, `energy`, `frequency`, `apparent_power`, `reactive_power`, `power_factor` |
