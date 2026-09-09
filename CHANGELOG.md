@@ -3,89 +3,7 @@
 All notable changes to HA Device Dashboard. Versions are git tags; HACS
 installs from them.
 
-## Unreleased
-
-### Docs caught up, and two gates so they stay that way
-
-The docs had fallen behind the last few releases in ways the existing checker
-could not see:
-
-- **`src/help.ts` told a lie.** The Help section on naming entities said "this is
-  YAML for now — the editor's pickers still offer classes only, and a future
-  release will let you pick entities there too". That release was the previous
-  commit. It now describes where the field actually is.
-- **README's Sensor chips and Graphs sections** documented device_class keys as
-  the only thing those options take, which stopped being true in v1.4.0.
-- **OVERVIEW.md calls itself the full architecture tour** and was missing five
-  modules — `sensor-pick`, `sensor-keys`, `room-filter`, `update-policy` and
-  `font-options` — every one of them extracted precisely so it could be found
-  and tested.
-- **CONTRIBUTING** said nothing about the detection fixtures, including the part
-  a contributor most needs to know: the expected file records what the code does
-  today rather than what is right, and the harvester's scrubbing is thorough but
-  not exhaustive.
-
-Two new `check:docs` gates, both proven to fail before being committed:
-
-- every `src/*.ts` must appear in OVERVIEW.md, so a module cannot be extracted
-  and then be undiscoverable;
-- README and OVERVIEW must both still mention entity ids, which is the half of
-  the `sensors` / `graph_sensors` story a doc sweep would most easily drop —
-  the class list reads complete on its own.
-
-### A fixture library for device detection
-
-Detection is the most fragile part of the card and the part most likely to be
-wrong on hardware the author has never seen. Both bugs found in it so far came
-from looking at real device data, neither from reading the code: a `/^sh/i` rule
-that matched every device named "Shelly…", and the BLU Gateway — a mains WiFi
-Gen3 unit whose name says Bluetooth — resolving to `ble`. It was exercised by a
-handful of hand-written fixtures, which is precisely the set that does not
-contain the bugs.
-
-`npm run test:detection` now runs `getDeviceProfile` and `detectShellyGen` over
-**215 real registry rows**, harvested from a live instance across 30-odd
-integrations and deduplicated to one exemplar per hardware shape — 148 sensors,
-25 media, 12 dimmers, 9 plugs, 9 relays, and Shelly generations spread across
-Gen1, 2, 3, BLU and unknown.
-
-`npm run fixtures:harvest` regenerates them. The output is committed to a public
-repo, so it carries only what detection reads: MACs, IPs and long hex instance
-ids are replaced with stable fakes, configuration URLs, identifiers and serial
-numbers are dropped, every attribute except `device_class` is dropped, and device
-names survive only for `shelly` / `bthome` — the integrations whose detection
-reads them. Everything else is named after its model, because a phone is usually
-named after a person.
-
-Expected results are a record of what the code does **today**, not a claim that
-today's answer is right; a diff means detection changed, and `--bless` re-records
-it. Rows carrying a `why` were checked against real hardware, and the suite calls
-a change to one a regression rather than a drift.
-
-Proven rather than asserted: reintroducing the original ordering bug — the name
-test above `hw_version` — makes the suite fail on the BLU Gateway and print the
-reasoning next to it.
-
-### Pick sensors by entity in the editor, not just in YAML
-
-v1.4.0 let `sensors` and `graph_sensors` name individual entities, which is the
-only way to reach a reading with no `device_class` — CPU, memory, free disk. The
-editor still offered a pill per device class and nothing else, so the feature was
-YAML-only and effectively invisible.
-
-Both pickers now carry a **Specific entities** field beneath the class pills,
-using Home Assistant's own entity picker with a plain text field as the fallback.
-Under Design at device scope it offers that device's own entities; card-wide it
-offers anything, since a named entity only ever draws on the device that owns it.
-
-The two halves cannot clobber each other: the pills read and write the class keys,
-the field reads and writes the entity ids, and the same is true of **All** — which
-already kept named entities, and now has a visible control that put them there.
-
-**"Which sensors to graph" was hidden behind advanced mode.** It sat in the
-*Per-sensor Colors* section, which is advanced-only, while the Graph Type
-section's own hint told you it was "below" — pointing at a control most users
-could not see. It has moved to Graph Type, where the hint already said it was.
+## v1.5.0 — 2026-09-09
 
 ### The card says when discovery hid something
 
@@ -127,6 +45,27 @@ devices as "hidden by your settings" that are simply disabled in Home Assistant.
 `getAllDevices` fills the counts as it filters, through an optional out-param, so
 the notice costs no second pass over the registry.
 
+### Pick sensors by entity in the editor, not just in YAML
+
+v1.4.0 let `sensors` and `graph_sensors` name individual entities, which is the
+only way to reach a reading with no `device_class` — CPU, memory, free disk. The
+editor still offered a pill per device class and nothing else, so the feature was
+YAML-only and effectively invisible.
+
+Both pickers now carry a **Specific entities** field beneath the class pills,
+using Home Assistant's own entity picker with a plain text field as the fallback.
+Under Design at device scope it offers that device's own entities; card-wide it
+offers anything, since a named entity only ever draws on the device that owns it.
+
+The two halves cannot clobber each other: the pills read and write the class keys,
+the field reads and writes the entity ids, and the same is true of **All** — which
+already kept named entities, and now has a visible control that put them there.
+
+**"Which sensors to graph" was hidden behind advanced mode.** It sat in the
+*Per-sensor Colors* section, which is advanced-only, while the Graph Type
+section's own hint told you it was "below" — pointing at a control most users
+could not see. It has moved to Graph Type, where the hint already said it was.
+
 ### Naming a sensor adds to the tile's chips instead of replacing them
 
 v1.4.0 let you name entities in `sensors`, and treated a named list as the whole
@@ -159,6 +98,67 @@ disturb another room while rewriting one. That bookkeeping is
 `setDevicesHidden()` in `src/room-filter.ts` rather than an inline filter at the
 call site, with 7 assertions over it — including that showing everything again
 removes the key rather than leaving an empty array behind.
+
+### A fixture library for device detection
+
+Detection is the most fragile part of the card and the part most likely to be
+wrong on hardware the author has never seen. Both bugs found in it so far came
+from looking at real device data, neither from reading the code: a `/^sh/i` rule
+that matched every device named "Shelly…", and the BLU Gateway — a mains WiFi
+Gen3 unit whose name says Bluetooth — resolving to `ble`. It was exercised by a
+handful of hand-written fixtures, which is precisely the set that does not
+contain the bugs.
+
+`npm run test:detection` now runs `getDeviceProfile` and `detectShellyGen` over
+**215 real registry rows**, harvested from a live instance across 30-odd
+integrations and deduplicated to one exemplar per hardware shape — 148 sensors,
+25 media, 12 dimmers, 9 plugs, 9 relays, and Shelly generations spread across
+Gen1, 2, 3, BLU and unknown.
+
+`npm run fixtures:harvest` regenerates them. The output is committed to a public
+repo, so it carries only what detection reads: MACs, IPs and long hex instance
+ids are replaced with stable fakes, configuration URLs, identifiers and serial
+numbers are dropped, every attribute except `device_class` is dropped, and device
+names survive only for `shelly` / `bthome` — the integrations whose detection
+reads them. Everything else is named after its model, because a phone is usually
+named after a person.
+
+Expected results are a record of what the code does **today**, not a claim that
+today's answer is right; a diff means detection changed, and `--bless` re-records
+it. Rows carrying a `why` were checked against real hardware, and the suite calls
+a change to one a regression rather than a drift.
+
+Proven rather than asserted: reintroducing the original ordering bug — the name
+test above `hw_version` — makes the suite fail on the BLU Gateway and print the
+reasoning next to it.
+
+### Docs caught up, and two gates so they stay that way
+
+The docs had fallen behind the last few releases in ways the existing checker
+could not see:
+
+- **`src/help.ts` told a lie.** The Help section on naming entities said "this is
+  YAML for now — the editor's pickers still offer classes only, and a future
+  release will let you pick entities there too". That release was the previous
+  commit. It now describes where the field actually is.
+- **README's Sensor chips and Graphs sections** documented device_class keys as
+  the only thing those options take, which stopped being true in v1.4.0.
+- **OVERVIEW.md calls itself the full architecture tour** and was missing five
+  modules — `sensor-pick`, `sensor-keys`, `room-filter`, `update-policy` and
+  `font-options` — every one of them extracted precisely so it could be found
+  and tested.
+- **CONTRIBUTING** said nothing about the detection fixtures, including the part
+  a contributor most needs to know: the expected file records what the code does
+  today rather than what is right, and the harvester's scrubbing is thorough but
+  not exhaustive.
+
+Two new `check:docs` gates, both proven to fail before being committed:
+
+- every `src/*.ts` must appear in OVERVIEW.md, so a module cannot be extracted
+  and then be undiscoverable;
+- README and OVERVIEW must both still mention entity ids, which is the half of
+  the `sensors` / `graph_sensors` story a doc sweep would most easily drop —
+  the class list reads complete on its own.
 
 ## v1.4.1 — 2026-09-08
 
