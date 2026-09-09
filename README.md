@@ -421,6 +421,19 @@ The firmware block groups the fleet by version — Shelly's
 `20260311-095847/1.7.5-g9979d16` reduces to `1.7.5` — marks the newest one, and
 only appears when more than one version is present.
 
+**Versions are compared within an integration, never across.** Version strings
+from different vendors are not on a common scale, and comparing them produced a
+wrong answer rather than a useless one: on a mixed fleet the "newest" tag landed
+on a BTHome device labelled `BTHome BLE v2`, leaving every Shelly looking out of
+date against a string that is not a version number. Each integration now gets
+its own spread and its own newest.
+
+Integrations whose devices all agree are left out — that is not drift, and on one
+real fleet ten of thirteen integrations were in that position, each contributing
+a row that said nothing. Muted integrations
+(`attention_muted_integrations`) drop out of the spread too, since the block
+lives inside the same section.
+
 ## Tile styles
 
 ```yaml

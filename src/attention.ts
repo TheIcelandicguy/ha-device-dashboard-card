@@ -370,3 +370,50 @@ export function splitMuted(
 export function countItems(groups: AttentionGroup[]): number {
   return groups.reduce((n, g) => n + g.items.length, 0);
 }
+
+/**
+ * The firmware spread, cut by integration.
+ *
+ * `firmwareGroups` sorts every version string in the fleet into one list, which
+ * is fine for a fleet of Shellys and nonsense once a fleet spans vendors: the
+ * versions are not on a common scale. On a real 178-device instance it marked
+ * **"BTHome BLE v2" as the newest firmware** — one device, and not a version
+ * number — leaving every Shelly looking out of date against a string from
+ * another vendor entirely. "Newest" only means something inside one
+ * integration.
+ *
+ * Integrations sitting on a single version are dropped: they are not drifting,
+ * and on that same instance ten of the thirteen were in that position, each
+ * contributing a row that said nothing. What is left is the actual answer to
+ * "what is lagging" — 3 integrations, not 24 version rows.
+ */
+export interface FirmwareByIntegration {
+  integration: string;
+  /** Version groups within this integration, newest first, `current` on the top. */
+  groups: FirmwareGroup[];
+  /** Devices with a firmware version, across those groups. */
+  total: number;
+}
+
+export function firmwareByIntegration(
+  devices: HADevice[],
+  muted: readonly string[] = [],
+): FirmwareByIntegration[] {
+  const off = new Set(muted.map(m => m.toLowerCase()));
+  const by = new Map<string, HADevice[]>();
+  for (const d of devices) {
+    if (d.sw_version == null || d.sw_version === '') continue;
+    const key = d.integration || 'other';
+    if (off.has(key.toLowerCase())) continue;
+    if (!by.has(key)) by.set(key, []);
+    by.get(key)!.push(d);
+  }
+  return [...by.entries()]
+    .map(([integration, ds]) => ({ integration, groups: firmwareGroups(ds), total: ds.length }))
+    // One version is not a spread. Nothing to say about an integration whose
+    // devices all agree.
+    .filter(x => x.groups.length > 1)
+    .sort((a, b) => b.groups.length - a.groups.length
+      || b.total - a.total
+      || a.integration.localeCompare(b.integration));
+}

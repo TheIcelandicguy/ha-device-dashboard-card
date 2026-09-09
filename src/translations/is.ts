@@ -101,6 +101,7 @@ export const IS: Translations = {
   'header.collapse_every_room': 'Loka öllum herbergjum',
   'header.firmware': 'Fastbúnaður',
   'header.firmware_versions': '{n} fastbúnaðarútgáfur',
+  'header.firmware_mixed': '{n} samþættingar með ólíkar útgáfur',
   'header.newest': 'nýjast',
 
   // ── Aðgerðir ──

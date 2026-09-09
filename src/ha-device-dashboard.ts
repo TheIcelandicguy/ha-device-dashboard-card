@@ -23,7 +23,7 @@ import { renderInputControlTile } from './tiles/input-control';
 import { renderEffectPicker } from './tiles/tile-parts';
 import * as cascade from './cascade';
 import {
-  attentionItems, firmwareGroups, lightCounts, deviceFaults, environmentAlarms, hasUpdate,
+  attentionItems, firmwareByIntegration, lightCounts, deviceFaults, environmentAlarms, hasUpdate,
   groupAttention, splitMuted, countItems,
   isOnline as deviceIsOnline, isBetaUpdate, isOwn, ownDevice, type AttentionItem, type AttentionKind,
 } from './attention';
@@ -3907,8 +3907,13 @@ export class HADeviceDashboard extends LitElement {
       batteryBelow: this._config.attention_battery,
       includeBeta: this._config.include_beta_updates,
     });
-    const fw = this._config.show_firmware_summary === false ? [] : firmwareGroups(devices);
-    const drifting = fw.length > 1;
+    // Per integration, and only where an integration actually disagrees with
+    // itself. A flat list across vendors put "newest" on whichever version
+    // string sorted highest, which on a mixed fleet was a BTHome label rather
+    // than a Shelly release — see firmwareByIntegration.
+    const fwInts = this._config.show_firmware_summary === false ? []
+      : firmwareByIntegration(devices, this._config.attention_muted_integrations ?? []);
+    const drifting = fwInts.length > 0;
 
     // Split by integration and set aside whatever the user has muted. In Shelly
     // mode this is one group and the list renders flat, exactly as before; the
@@ -3950,9 +3955,14 @@ export class HADeviceDashboard extends LitElement {
     // are both "Spotify". Muting is per slug, so two identically-named groups
     // would make it impossible to tell which one a mute button silenced. Fall
     // back to the slug for exactly the labels that collide.
+    // Count DISTINCT integrations per label. An integration appears in both the
+    // attention groups and the firmware spread, and counting it twice made it
+    // look like it collided with itself — which is why Shelly briefly rendered
+    // as its slug next to a perfectly friendly "Hue".
     const labelCount = new Map<string, number>();
-    for (const g of [...groups, ...mutedGroups]) {
-      const l = getIntegrationLabel(g.integration);
+    for (const key of new Set([...groups, ...mutedGroups].map(g => g.integration)
+      .concat(fwInts.map(f => f.integration)))) {
+      const l = getIntegrationLabel(key);
       labelCount.set(l, (labelCount.get(l) ?? 0) + 1);
     }
     const groupLabel = (integration: string) => {
@@ -3966,7 +3976,9 @@ export class HADeviceDashboard extends LitElement {
           <span class="att-caret">${this._attentionOpen ? '▾' : '▸'}</span>
           <span class="att-title">${t('header.needs_attention')}</span>
           ${shownCount ? html`<span class="att-count">${shownCount}</span>` : nothing}
-          ${drifting ? html`<span class="att-fw-chip">${t('header.firmware_versions', { n: fw.length })}</span>` : nothing}
+          ${drifting ? html`<span class="att-fw-chip">${fwInts.length === 1
+            ? t('header.firmware_versions', { n: fwInts[0].groups.length })
+            : t('header.firmware_mixed', { n: fwInts.length })}</span>` : nothing}
         </div>
         ${this._attentionOpen ? html`
           <div class="att-body">
@@ -3994,13 +4006,16 @@ export class HADeviceDashboard extends LitElement {
             ${drifting ? html`
               <div class="att-fw">
                 <div class="att-fw-title">${t('header.firmware')}</div>
-                ${fw.map(g => html`
-                  <div class="att-fw-row ${g.current ? 'current' : ''}">
-                    <span class="att-fw-ver">${g.version}</span>
-                    <span class="att-fw-bar"><i style="width:${Math.round((g.devices.length / devices.length) * 100)}%"></i></span>
-                    <span class="att-fw-n">${g.devices.length}</span>
-                    ${g.current ? html`<span class="att-fw-tag">${t('header.newest')}</span>` : nothing}
-                  </div>`)}
+                ${fwInts.map(fi => html`
+                  ${fwInts.length > 1 ? html`
+                    <div class="att-fw-int">${groupLabel(fi.integration)}</div>` : nothing}
+                  ${fi.groups.map(g => html`
+                    <div class="att-fw-row ${g.current ? 'current' : ''}">
+                      <span class="att-fw-ver">${g.version}</span>
+                      <span class="att-fw-bar"><i style="width:${Math.round((g.devices.length / fi.total) * 100)}%"></i></span>
+                      <span class="att-fw-n">${g.devices.length}</span>
+                      ${g.current ? html`<span class="att-fw-tag">${t('header.newest')}</span>` : nothing}
+                    </div>`)}`)}
               </div>` : nothing}
           </div>` : nothing}
       </div>`;

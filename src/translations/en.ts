@@ -103,6 +103,7 @@ export const EN: Translations = {
   'header.collapse_every_room': 'Collapse every room',
   'header.firmware': 'Firmware',
   'header.firmware_versions': '{n} firmware versions',
+  'header.firmware_mixed': '{n} integrations on mixed versions',
   'header.newest': 'newest',
 
   // ── Actions ──

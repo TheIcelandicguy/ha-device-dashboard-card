@@ -1366,6 +1366,10 @@ export const mainCss = css`
       overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .att-area { font-size:10.5px; color:var(--sc-text-muted); white-space:nowrap; }
     .att-fw { margin-top:6px; padding-top:7px; border-top:1px solid rgba(255,255,255,.07); }
+    /* Which integration the version rows beneath belong to. Only drawn when
+       more than one is drifting — otherwise the section title says it. */
+    .att-fw-int { font-size:10px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;
+      color:var(--sc-text-muted); margin:6px 0 2px; }
     .att-fw-title { font-size:10.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
       color:var(--sc-text-muted); margin:0 8px 5px; }
     .att-fw-row { display:flex; align-items:center; gap:8px; padding:2px 8px; font-size:11.5px; }

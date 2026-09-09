@@ -5,6 +5,37 @@ installs from them.
 
 ## Unreleased
 
+### The firmware spread is per integration, and "newest" was wrong
+
+Same treatment as the attention list above, and it turned up a real bug rather
+than just noise.
+
+`firmwareGroups` sorted every version string in the fleet into one list and
+marked the top one newest. That is right for a fleet of Shellys and wrong the
+moment a fleet spans vendors, because version strings are not on a common scale.
+On a real 178-device instance the **"newest" tag landed on `BTHome BLE v2`** — a
+single device, and not a version number — while the highest Shelly release,
+2.7.4, was not marked at all. Every Shelly row read as out of date against a
+label from another vendor.
+
+Each integration now gets its own spread and its own newest: `SHELLY 2.7.4` and
+`HUE 2.85.1`, each correct within its vendor.
+
+**Integrations that agree with themselves are dropped.** A single version is not
+a spread. Ten of thirteen integrations on that instance were in that position,
+each contributing a row that said nothing — 24 version rows became the 3
+integrations actually drifting.
+
+The header chip follows: one drifting integration still reads "8 firmware
+versions", more than one reads "2 integrations on mixed versions". And muting an
+integration removes it from the firmware block too, since the block lives inside
+the same section.
+
+Also fixed while verifying: an integration appearing in both the attention list
+and the firmware spread was counted twice by the label-collision check, so Shelly
+briefly rendered as its slug next to a perfectly friendly "Hue". Distinct
+integrations are counted now, not appearances.
+
 ### Needs attention groups by integration, and you can stop counting one
 
 In universal mode the attention list was a flat run of everything. Measured on a

@@ -1248,6 +1248,54 @@ try {
     eq('an empty list groups to nothing', att.groupAttention([]), []);
   }
 
+  console.log('\nfirmware spread - per integration, or it means nothing');
+  {
+    const dev = (name, integration, sw) => ({ device_id: name, name, integration, sw_version: sw, entities: [] });
+    // Shaped like the real fleet: one integration drifting badly, one mildly,
+    // several settled, and a vendor whose version string is not a number.
+    const fleet = [
+      dev('s1', 'shelly', '1.7.5'), dev('s2', 'shelly', '1.7.5'),
+      dev('s3', 'shelly', '2.7.4'), dev('s4', 'shelly', '1.4.4'),
+      dev('h1', 'hue', '1.2.3'), dev('h2', 'hue', '1.2.4'),
+      dev('w1', 'wled', '16.0.1'), dev('w2', 'wled', '16.0.1'),
+      dev('b1', 'bthome', 'BTHome BLE v2'),
+      dev('n1', 'nofw', undefined),
+    ];
+
+    // The old flat call is what put "newest" on a BTHome label: version strings
+    // from different vendors are not on a common scale.
+    const flat = att.firmwareGroups(fleet);
+    ok('flat grouping still mixes vendors', flat.length > 3);
+    ok('and its "newest" is whatever sorted highest, not per vendor',
+      flat.find(g => g.current).devices[0].integration !== 'shelly');
+
+    const byInt = att.firmwareByIntegration(fleet);
+    eq('only integrations that disagree with themselves',
+      byInt.map(x => x.integration), ['shelly', 'hue']);
+    eq('the widest spread leads', byInt[0].groups.length, 3);
+    eq('and counts only its own devices', byInt[0].total, 4);
+
+    // The whole point: newest is now newest WITHIN the integration.
+    eq('newest is the top version of that integration',
+      byInt[0].groups.find(g => g.current).version, '2.7.4');
+    eq('and hue gets its own newest', byInt[1].groups.find(g => g.current).version, '1.2.4');
+
+    ok('a settled integration is dropped', !byInt.some(x => x.integration === 'wled'));
+    ok('so is one with a single odd version string',
+      !byInt.some(x => x.integration === 'bthome'));
+    eq('a device with no firmware is not counted',
+      byInt.reduce((n, x) => n + x.total, 0), 6);
+
+    // Muting reaches the firmware block too - it lives inside the same section.
+    eq('a muted integration drops out of the spread',
+      att.firmwareByIntegration(fleet, ['shelly']).map(x => x.integration), ['hue']);
+    eq('case-insensitively',
+      att.firmwareByIntegration(fleet, ['SHELLY']).map(x => x.integration), ['hue']);
+    eq('a settled fleet reports no drift',
+      att.firmwareByIntegration([dev('a', 'shelly', '1.0.0'), dev('b', 'shelly', '1.0.0')]), []);
+    eq('and an empty fleet likewise', att.firmwareByIntegration([]), []);
+  }
+
   console.log('\nsensor keys - one list, classes and entity ids');
   {
     const ent = (id, domain, category) => ({ entity_id: id, domain, entity_category: category });
