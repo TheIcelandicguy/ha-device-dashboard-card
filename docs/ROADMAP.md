@@ -7,13 +7,35 @@ not here. This file is for structural work that no user will ever file.
 
 ## Next
 
-**Measure render cost at 200+ tiles.** `npm run bench` covers discovery (3.7 ms
-for 224 devices, cached against registry+config identity) and the cascades. What
-is *not* measured is DOM render time for a large fleet, which is the more likely
-real-world limit. Benchmark the thing that hurts, not the thing already known to
-be fast.
+Nothing. Everything that was queued here is in **Done** below; what remains is in
+**Later**, which is deliberately not queued — each item there is a refactor with
+no user waiting for it, and the argument against doing them now is written next
+to each one.
+
+The honest next move is not on this list: watch what people report. Detection on
+hardware nobody here owns is the likeliest source of the next real bug, which is
+what the fixture library exists to catch, and contributing a fixture is the most
+useful thing an affected user can do (see CONTRIBUTING).
 
 ## Done
+
+**Measure render cost at 200+ tiles** — `npm run bench:render` drives headless
+Chrome against a live instance and times the real element at increasing fleet
+sizes. On 276 real devices: first render 306 ms, and a state push touching 10% of
+entities 16.4 ms, which is one whole frame.
+
+The finding worth keeping: **cost tracks fleet size, not how much changed.** The
+same 10%-of-entities push costs 4.6 ms at 25 devices and 16.4 ms at 276, because
+Lit re-runs every tile's template and its cascades even where the output is
+identical and the DOM is left alone. The 2s coalescing window in `shouldUpdate`
+is not amortising a small constant — it is what keeps a full-frame render off the
+critical path. If this ever needs fixing the lever is rendering fewer tiles, not
+making each one cheaper.
+
+Two measurement notes. Graphs add roughly a quarter to both numbers. And device
+*mix* matters as much as count — a run including routers with 90 entities each
+was nearly twice the first-render cost of one with the same number of Shellys, so
+compare runs with the same discovery settings or not at all.
 
 Kept only where the reasoning is still worth having; the changelog is the record.
 

@@ -3,6 +3,43 @@
 All notable changes to HA Device Dashboard. Versions are git tags; HACS
 installs from them.
 
+## Unreleased
+
+### Render cost measured, not assumed
+
+`npm run bench` covers the card's logic — discovery, attention, the cascades —
+and found it cheap: 4 ms of discovery for 224 devices, cached so it does not run
+on a state push. That was always the part known to be fast. The part nobody had
+measured is the DOM, which cannot be measured in Node at all.
+
+`npm run bench:render` drives headless Chrome against a running Home Assistant,
+builds the real card with the real `hass`, and times it at increasing fleet
+sizes. On 276 real devices:
+
+| devices | tiles | first render | state push |
+|---|---|---|---|
+| 25 | 25 | 38 ms | 4.6 ms |
+| 100 | 100 | 208 ms | 7.9 ms |
+| 200 | 200 | 267 ms | 9.9 ms |
+| 276 | 276 | 306 ms | **16.4 ms** |
+
+**The finding: cost tracks fleet size, not how much changed.** Every one of those
+pushes altered the same 10% of entities. It costs 4.6 ms at 25 devices and 16.4 ms
+at 276 — one whole frame — because Lit re-runs every tile's template and its
+cascades even where the output is byte-identical and the DOM is left untouched.
+
+That reframes the 2s coalescing window in `shouldUpdate`. It is not amortising a
+small constant; it is what keeps a full-frame render off the critical path on a
+large fleet. Nothing is being changed on the strength of this — the card is fine
+at these sizes and guessing at performance produces complexity nobody needs — but
+if it ever does need fixing, the lever is rendering fewer tiles, not making each
+one cheaper.
+
+Two notes for anyone rerunning it. Graphs add roughly a quarter to both numbers.
+And device *mix* matters as much as count: a run including routers with 90
+entities each cost nearly twice the first render of one with the same number of
+Shellys, so runs are only comparable with the same discovery settings.
+
 ## v1.5.0 — 2026-09-09
 
 ### The card says when discovery hid something

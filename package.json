@@ -19,6 +19,7 @@
     "test:builder": "node scripts/test-config-builder.mjs",
     "check:docs": "node scripts/check-docs.mjs",
     "bench": "node scripts/bench.mjs",
+    "bench:render": "node scripts/bench-render.mjs",
     "test:palette": "node scripts/test-palette.mjs",
     "test:card": "node scripts/test-card.mjs",
     "test:detection": "node scripts/test-detection.mjs",

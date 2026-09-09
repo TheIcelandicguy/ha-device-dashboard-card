@@ -569,7 +569,10 @@ passes in. `getAllDevices(hass)` in `helpers.ts`:
     against real hardware and a change to one is reported as a regression.
   - `npm run fixtures:harvest` — regenerate those fixtures from a running HA.
     Read the output before committing: it is published.
-  - `npm run test:palette`, `npm run test:builder`, `npm run bench`.
+  - `npm run test:palette`, `npm run test:builder`.
+  - `npm run bench` — logic hot paths against a synthetic fleet (Node).
+  - `npm run bench:render` — DOM render cost in headless Chrome against a live
+    HA. The logic was already known to be cheap; drawing is the real limit.
 - **Runtime deps:** `lit` ^3.1, `custom-card-helpers` ^1.9.
 - `src/index.ts` prints a `BUILD_TAG` (e.g. `mobile-editor-2026-07-10f`) to the
   browser console so you can confirm which bundle HA actually loaded.
@@ -629,6 +632,11 @@ reference/` contains Shelly API / HA-integration reference notes.
 - **Docs tools duplicate the model.** The `docs/tools/*.html` designers inline
   their own copy of `card-reference.json` and are kept in sync by hand; a build
   step to generate them from the JSON is noted as future work.
-- **Performance on large fleets** is handled by render throttling/caching, but very
-  large HA instances with heavy Shelly power-sensor churn remain the main scaling
-  concern the card actively guards against.
+- **Performance on large fleets** is handled by render throttling/caching, and is
+  now measured rather than assumed (`npm run bench:render`). On a 276-device
+  instance: first render 306 ms, and a push touching 10% of entities 16.4 ms —
+  one whole frame. The cost tracks **fleet size, not how much changed**, because
+  every tile's template and cascades re-run even where the DOM is left untouched.
+  The 2s coalescing window is what keeps that off the critical path. Beyond a few
+  hundred tiles the lever would be rendering fewer of them (virtualisation),
+  not making each cheaper.
