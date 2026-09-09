@@ -3,49 +3,7 @@
 All notable changes to HA Device Dashboard. Versions are git tags; HACS
 installs from them.
 
-## Unreleased
-
-### The default tile labels named chips too
-
-The same fix, on the other tile style. A `sensor-card` learned to label chips it
-was told to show by entity id; the **default** tile did not, so a PC read:
-
-> 37 %  52.5 %  14.81 %  2904 MHz
-
-Four numbers, no idea which is which. The default tile has its own chip renderer
-with its own rule — *label only where the unit alone is ambiguous* — and a
-hardcoded list of the class keys that qualify. A named entity's key is its
-entity id, so it matched nothing and never got a label.
-
-A chip named by entity id is *always* the ambiguous case: no vocabulary covers
-an arbitrary entity, and a computer's readings are mostly percentages. It now
-reads `cpuload 43 %  memoryusage 53.6 %  gpuload 24.22 %  currentclockspeed
-2904 MHz`.
-
-Worth naming the pattern: this is the third time one change has needed applying
-in two places, because the two tile styles keep their own chip renderers. The
-predicate is shared (`isEntityKey`), but the decision to call it is not.
-
-### A graph entity that cannot be plotted is skipped, and the editor says so
-
-`graph_sensors` already takes entity ids, so more graphs on one tile has always
-been a matter of naming more of that device's entities — there is no cap on any
-tile style. Six on a PC works exactly as three did.
-
-What did not work is naming something unplottable. `sensor.davidpc_drives_health`
-reads `OK`, and it got a graph row: a label, an empty plot area, and no
-explanation. Now it is skipped, because a line through `OK` is not a thing.
-
-The skip is deliberate but it must not be silent — that is the failure this card
-keeps repeating. The editor's conflict list reports it:
-
-> **2 graph entities have no numeric value** — `graph_sensors`: DavidPC Drives
-> health, DAVIDPC Default Device read as text, so no line can be drawn and they
-> are skipped. They still work as chips under Sensor chips, where the value is
-> shown as it reads.
-
-Note the asymmetry is intended: a chip shows a named entity however it reads,
-because "Drives health OK" is useful. A graph cannot.
+## v1.5.2 — 2026-09-09
 
 ### A sensor you named by entity id is shown even without a unit
 
@@ -72,6 +30,48 @@ Found by measuring the chip and graph limits rather than by hitting it. While
 there: the caps themselves are now written down — `sensor-card` shows four chips
 plus the headline value, the default tile has no cap, and graphs have no cap on
 any style.
+
+### A graph entity that cannot be plotted is skipped, and the editor says so
+
+`graph_sensors` already takes entity ids, so more graphs on one tile has always
+been a matter of naming more of that device's entities — there is no cap on any
+tile style. Six on a PC works exactly as three did.
+
+What did not work is naming something unplottable. `sensor.davidpc_drives_health`
+reads `OK`, and it got a graph row: a label, an empty plot area, and no
+explanation. Now it is skipped, because a line through `OK` is not a thing.
+
+The skip is deliberate but it must not be silent — that is the failure this card
+keeps repeating. The editor's conflict list reports it:
+
+> **2 graph entities have no numeric value** — `graph_sensors`: DavidPC Drives
+> health, DAVIDPC Default Device read as text, so no line can be drawn and they
+> are skipped. They still work as chips under Sensor chips, where the value is
+> shown as it reads.
+
+Note the asymmetry is intended: a chip shows a named entity however it reads,
+because "Drives health OK" is useful. A graph cannot.
+
+### The default tile labels named chips too
+
+The same fix, on the other tile style. A `sensor-card` learned to label chips it
+was told to show by entity id; the **default** tile did not, so a PC read:
+
+> 37 %  52.5 %  14.81 %  2904 MHz
+
+Four numbers, no idea which is which. The default tile has its own chip renderer
+with its own rule — *label only where the unit alone is ambiguous* — and a
+hardcoded list of the class keys that qualify. A named entity's key is its
+entity id, so it matched nothing and never got a label.
+
+A chip named by entity id is *always* the ambiguous case: no vocabulary covers
+an arbitrary entity, and a computer's readings are mostly percentages. It now
+reads `cpuload 43 %  memoryusage 53.6 %  gpuload 24.22 %  currentclockspeed
+2904 MHz`.
+
+Worth naming the pattern: this is the third time one change has needed applying
+in two places, because the two tile styles keep their own chip renderers. The
+predicate is shared (`isEntityKey`), but the decision to call it is not.
 
 ## v1.5.1 — 2026-09-09
 
