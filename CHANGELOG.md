@@ -5,6 +5,20 @@ installs from them.
 
 ## Unreleased
 
+### A firmware version row names its devices
+
+The spread told you 18 devices are on 1.7.5 and three are on 1.14.0. It never
+told you *which* three, which is the question you actually have when you are
+deciding what to go and update.
+
+Tap a version row and it lists them, each with its room, each opening that
+device's detail sheet — the same thing an attention row does. One row at a time:
+the point is to answer "which are those" about a single version, not to unroll
+the whole spread.
+
+A tooltip would have been cheaper and useless — this gets read on a wall tablet,
+where there is no hover.
+
 ### The firmware spread is per integration, and "newest" was wrong
 
 Same treatment as the attention list above, and it turned up a real bug rather

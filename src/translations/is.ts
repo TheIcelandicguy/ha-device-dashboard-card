@@ -102,6 +102,7 @@ export const IS: Translations = {
   'header.firmware': 'Fastbúnaður',
   'header.firmware_versions': '{n} fastbúnaðarútgáfur',
   'header.firmware_mixed': '{n} samþættingar með ólíkar útgáfur',
+  'firmware.which': 'Sýna {n} tæki á þessari útgáfu',
   'header.newest': 'nýjast',
 
   // ── Aðgerðir ──

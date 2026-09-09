@@ -1372,7 +1372,19 @@ export const mainCss = css`
       color:var(--sc-text-muted); margin:6px 0 2px; }
     .att-fw-title { font-size:10.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
       color:var(--sc-text-muted); margin:0 8px 5px; }
-    .att-fw-row { display:flex; align-items:center; gap:8px; padding:2px 8px; font-size:11.5px; }
+    .att-fw-row { display:flex; align-items:center; gap:8px; padding:2px 8px; font-size:11.5px;
+      width:100%; background:none; border:none; color:inherit; font:inherit; cursor:pointer;
+      border-radius:6px; text-align:left; }
+    .att-fw-row:hover, .att-fw-row.open { background:var(--sc-sensor-bg); }
+    /* Which devices are on this version — the count alone says how many, never
+       which, and on a touch screen a tooltip says nothing at all. */
+    .att-fw-devs { display:flex; flex-wrap:wrap; gap:4px; padding:4px 8px 8px 66px; }
+    .att-fw-dev { display:inline-flex; align-items:baseline; gap:5px; font:inherit; font-size:11px;
+      padding:2px 8px; border-radius:10px; cursor:pointer;
+      background:var(--sc-sensor-bg); border:1px solid var(--sc-tile-border);
+      color:var(--sc-text-secondary); }
+    .att-fw-dev:hover { color:var(--sc-text-primary); border-color:var(--sc-accent); }
+    .att-fw-dev-area { font-size:9.5px; opacity:.6; }
     .att-fw-ver { min-width:58px; color:var(--sc-text-secondary); font-variant-numeric:tabular-nums; }
     .att-fw-row.current .att-fw-ver { color:var(--sc-online-color); font-weight:700; }
     .att-fw-bar { flex:1; height:6px; border-radius:3px; background:rgba(255,255,255,.06); overflow:hidden; }

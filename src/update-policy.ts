@@ -25,6 +25,7 @@ export const LOCAL_RENDER_KEYS: readonly string[] = [
   '_valveDragPos',
   '_trvDragTemp',
   '_detailDevice',
+  '_fwOpen',
   '_detailHistoryRange',
   '_activeViewId',
   '_cloudDetailOpen',
