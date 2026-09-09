@@ -1196,6 +1196,58 @@ try {
       sh.notShelly <= Object.keys(hass.devices).length);
   }
 
+  console.log('\nattention - grouping and muting by integration');
+  {
+    const item = (name, integration, kinds) => ({
+      device: { device_id: name, name, integration }, kinds, detail: kinds,
+    });
+    // Shaped like the real measurement: one integration drowning the rest.
+    const items = [
+      item('Speaker 1', 'music_assistant', ['offline']),
+      item('Speaker 2', 'music_assistant', ['offline']),
+      item('Speaker 3', 'music_assistant', ['offline']),
+      item('Relay',     'shelly',          ['offline']),
+      item('Dimmer',    'shelly',          ['update']),
+      item('Repo A',    'hacs',            ['update']),
+      item('Nameless',  '',                ['battery']),
+    ];
+
+    const groups = att.groupAttention(items);
+    // Order is by worst kind first: a flat battery outranks an available
+    // update, so 'other' sits above 'hacs' despite being smaller.
+    eq('one group per integration, worst first', groups.map(g => g.integration),
+      ['music_assistant', 'shelly', 'other', 'hacs']);
+    eq('and every item is kept', att.countItems(groups), items.length);
+    eq('a missing integration lands under "other"',
+      groups.find(g => g.integration === 'other').items.length, 1);
+
+    // Ordering: worst kind first, then size. shelly has an offline too, so it
+    // outranks hacs (updates only) despite being smaller than music_assistant.
+    eq('worst kind orders above size', groups.map(g => g.worst),
+      ['offline', 'offline', 'battery', 'update']);
+    ok('the bigger offline group leads',
+      groups[0].integration === 'music_assistant' && groups[0].items.length === 3);
+
+    // Muting sets aside rather than deletes: a setting you cannot see is a
+    // setting you cannot undo, which is what the No Room filter taught.
+    const split = att.splitMuted(groups, ['music_assistant']);
+    eq('muted groups leave the shown list',
+      split.shown.map(g => g.integration), ['shelly', 'other', 'hacs']);
+    eq('but are still returned, with their items',
+      [split.muted.length, split.muted[0].items.length], [1, 3]);
+    eq('the count drops by exactly what was muted', att.countItems(split.shown), 4);
+
+    eq('muting is case-insensitive',
+      att.splitMuted(groups, ['MUSIC_ASSISTANT']).shown.length, 3);
+    eq('muting nothing changes nothing', att.splitMuted(groups, []).shown.length, 4);
+    eq('and neither does an unset list', att.splitMuted(groups, undefined).shown.length, 4);
+    eq('muting an integration that is not there is harmless',
+      att.splitMuted(groups, ['zwave']).shown.length, 4);
+    eq('muting everything leaves a zero count',
+      att.countItems(att.splitMuted(groups, ['music_assistant', 'shelly', 'hacs', 'other']).shown), 0);
+    eq('an empty list groups to nothing', att.groupAttention([]), []);
+  }
+
   console.log('\nsensor keys - one list, classes and entity ids');
   {
     const ent = (id, domain, category) => ({ entity_id: id, domain, entity_category: category });

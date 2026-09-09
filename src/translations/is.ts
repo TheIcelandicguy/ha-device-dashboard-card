@@ -248,6 +248,9 @@ export const IS: Translations = {
   'notice.discovery_link': 'Uppgötvun',
   'notice.discovery_here': 'geymir stillingarnar.',
   'notice.discovery_editor': 'í ritlinum geymir stillingarnar.',
+  'attention.mute': 'Hætta að telja þessa samþættingu',
+  'attention.unmute': 'Telja þessa samþættingu aftur',
+  'attention.muted': 'Ekki talið',
 
   // ── Villur ──
   'error.replay_needs_admin':

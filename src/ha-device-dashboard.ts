@@ -24,6 +24,7 @@ import { renderEffectPicker } from './tiles/tile-parts';
 import * as cascade from './cascade';
 import {
   attentionItems, firmwareGroups, lightCounts, deviceFaults, environmentAlarms, hasUpdate,
+  groupAttention, splitMuted, countItems,
   isOnline as deviceIsOnline, isBetaUpdate, isOwn, ownDevice, type AttentionItem, type AttentionKind,
 } from './attention';
 import { renderSensorCardTile } from './tiles/sensor-card';
@@ -40,6 +41,7 @@ import {
   formatFrequency, formatHumidity, formatIlluminance, formatPpm, formatPercent,
   detectInputChannels, detectShellyGen, shellyClickTypes, shellyInputChannel, shellyHostname,
   deviceSensorValues, attachExtraSensors, stripDevicePrefix, colorAt, formatReading,
+  getIntegrationLabel,
 } from './helpers';
 import type { DiscoveryStats } from './helpers';
 import { namedEntitiesOn, classKeys } from './sensor-keys';
@@ -3907,29 +3909,88 @@ export class HADeviceDashboard extends LitElement {
     });
     const fw = this._config.show_firmware_summary === false ? [] : firmwareGroups(devices);
     const drifting = fw.length > 1;
-    if (!items.length && !drifting) return html``;
+
+    // Split by integration and set aside whatever the user has muted. In Shelly
+    // mode this is one group and the list renders flat, exactly as before; the
+    // grouping only appears once a fleet actually spans integrations.
+    const allGroups = groupAttention(items);
+    const { shown: groups, muted: mutedGroups } =
+      splitMuted(allGroups, this._config.attention_muted_integrations);
+    const shownCount = countItems(groups);
+    if (!shownCount && !mutedGroups.length && !drifting) return html``;
 
     const ICON: Record<AttentionKind, string> = { offline: '○', alert: '▲', battery: '▮', update: '↑' };
     const worst = (i: AttentionItem): AttentionKind =>
       (['offline', 'alert', 'battery', 'update'] as AttentionKind[]).find(k => i.kinds.includes(k))!;
+
+    // Muting writes config, and a card on a dashboard cannot — only the edit
+    // dialog's preview can act. Same rule the delegate notice follows: offer the
+    // control where it works rather than one that goes nowhere.
+    const inEditor = this.preview || this.hasAttribute('data-edit-preview');
+    const muteBtn = (integration: string, on: boolean) => inEditor
+      ? html`<button class="att-mute" title=${on ? t('attention.unmute') : t('attention.mute')}
+          @click=${(e: Event) => {
+            e.stopPropagation();
+            window.dispatchEvent(new CustomEvent('hdd-attention-mute', { detail: { integration } }));
+          }}>${on ? '🔔' : '🔕'}</button>`
+      : nothing;
+
+    const row = (i: AttentionItem) => html`
+      <button class="att-row att-${worst(i)}" @click=${() => { this._detailDevice = i.device.device_id; }}>
+        <span class="att-icon">${ICON[worst(i)]}</span>
+        <span class="att-name">${i.device.name}</span>
+        <span class="att-why">${i.detail.join(' · ')}</span>
+        ${i.device.area ? html`<span class="att-area">${i.device.area}</span>` : nothing}
+      </button>`;
+
+    // One integration is not a grouping, it is a heading over the whole list.
+    const flat = groups.length <= 1 && !mutedGroups.length;
+
+    // Two integrations can share a friendly label — `spotify` and `spotifyplus`
+    // are both "Spotify". Muting is per slug, so two identically-named groups
+    // would make it impossible to tell which one a mute button silenced. Fall
+    // back to the slug for exactly the labels that collide.
+    const labelCount = new Map<string, number>();
+    for (const g of [...groups, ...mutedGroups]) {
+      const l = getIntegrationLabel(g.integration);
+      labelCount.set(l, (labelCount.get(l) ?? 0) + 1);
+    }
+    const groupLabel = (integration: string) => {
+      const l = getIntegrationLabel(integration);
+      return (labelCount.get(l) ?? 0) > 1 ? integration : l;
+    };
 
     return html`
       <div class="attention">
         <div class="att-hdr" @click=${() => { this._attentionOpen = !this._attentionOpen; }}>
           <span class="att-caret">${this._attentionOpen ? '▾' : '▸'}</span>
           <span class="att-title">${t('header.needs_attention')}</span>
-          ${items.length ? html`<span class="att-count">${items.length}</span>` : nothing}
+          ${shownCount ? html`<span class="att-count">${shownCount}</span>` : nothing}
           ${drifting ? html`<span class="att-fw-chip">${t('header.firmware_versions', { n: fw.length })}</span>` : nothing}
         </div>
         ${this._attentionOpen ? html`
           <div class="att-body">
-            ${items.map(i => html`
-              <button class="att-row att-${worst(i)}" @click=${() => { this._detailDevice = i.device.device_id; }}>
-                <span class="att-icon">${ICON[worst(i)]}</span>
-                <span class="att-name">${i.device.name}</span>
-                <span class="att-why">${i.detail.join(' · ')}</span>
-                ${i.device.area ? html`<span class="att-area">${i.device.area}</span>` : nothing}
-              </button>`)}
+            ${flat
+              ? groups.flatMap(g => g.items).map(row)
+              : groups.map(g => html`
+                  <div class="att-grp">
+                    <div class="att-grp-hdr">
+                      <span class="att-icon att-${g.worst}">${ICON[g.worst]}</span>
+                      <span class="att-grp-name">${groupLabel(g.integration)}</span>
+                      <span class="att-grp-n">${g.items.length}</span>
+                      ${muteBtn(g.integration, false)}
+                    </div>
+                    ${g.items.map(row)}
+                  </div>`)}
+            ${mutedGroups.length ? html`
+              <div class="att-muted">
+                <span class="att-muted-lbl">${t('attention.muted')}</span>
+                ${mutedGroups.map(g => html`
+                  <span class="att-muted-chip">${groupLabel(g.integration)}
+                    <span class="att-grp-n">${g.items.length}</span>
+                    ${muteBtn(g.integration, true)}
+                  </span>`)}
+              </div>` : nothing}
             ${drifting ? html`
               <div class="att-fw">
                 <div class="att-fw-title">${t('header.firmware')}</div>

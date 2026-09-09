@@ -3,6 +3,43 @@
 All notable changes to HA Device Dashboard. Versions are git tags; HACS
 installs from them.
 
+## Unreleased
+
+### Needs attention groups by integration, and you can stop counting one
+
+In universal mode the attention list was a flat run of everything. Measured on a
+176-device instance: **53 rows**, of which 18 were Music Assistant speakers and
+13 were HACS repositories — burying the three Shellys that were genuinely
+offline.
+
+None of those rows was wrong. The speakers really do report `unavailable` on
+every entity and the repositories really do have updates. But a speaker that is
+not currently reachable is normal for a speaker, and one integration drowning
+the rest is the shape of the problem — so the integration is the axis to cut on.
+
+**Grouped.** Once a fleet spans more than one integration the list groups, worst
+kind first and then by size, each group showing its own count. A fleet on one
+integration renders flat, exactly as before.
+
+**Muted, not hidden.** `attention_muted_integrations` stops an integration being
+*counted*: 53 becomes 22. The muted groups stay at the foot of the list with
+their counts, because a setting you cannot see is a setting you cannot undo —
+which is what the No Room filter taught, by deleting the row that held the
+switch.
+
+Editable two ways: a picker under **Needs attention** in the editor, listing the
+integrations actually producing rows with their counts so you never have to know
+a slug; and a mute toggle on each group header in the edit dialog's live preview.
+The preview is the only place the toggle appears, because a card on a dashboard
+cannot write its own config — the same rule the delegate notice follows.
+
+Two details worth the words. Integrations whose friendly labels collide fall back
+to their slugs, so `spotify` and `spotifyplus` are tellable apart — muting is per
+slug, and two groups both reading "Spotify" would make it impossible to know
+which one a toggle silenced. And the mute uses its own event rather than a third
+payload shape on `hdd-editor-goto`, which is already on the roadmap as a thing to
+stop doing.
+
 ## v1.5.2 — 2026-09-09
 
 ### A sensor you named by entity id is shown even without a unit

@@ -1741,6 +1741,7 @@ export const CONFIG_KEYS: readonly string[] = [
   'card_bg_image_size', 'show_power_bar', 'power_bar_max', 'show_entity_list', 'theme',
   'light_labels', 'light_entities',
   'show_attention', 'attention_battery', 'show_firmware_summary', 'include_beta_updates',
+  'attention_muted_integrations',
   'style', 'area_styles', 'device_styles', 'profile_styles', 'style_presets', 'custom_styles',
   'energy_period', 'graph_sensors', 'graph_hours', 'graph_style', 'graph_line_color', 'radio_stations',
   'extra_card_style', 'area_card_placement', 'devices', 'show_header', 'show_rooms',

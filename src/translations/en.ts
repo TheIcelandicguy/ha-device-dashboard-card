@@ -256,6 +256,9 @@ export const EN: Translations = {
   'notice.discovery_link': 'Discovery',
   'notice.discovery_here': 'has the settings.',
   'notice.discovery_editor': 'in the editor has the settings.',
+  'attention.mute': 'Stop counting this integration',
+  'attention.unmute': 'Count this integration again',
+  'attention.muted': 'Not counted',
 
   // ── Errors ──
   'error.replay_needs_admin':

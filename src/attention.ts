@@ -300,3 +300,73 @@ export function compareVersions(a: string, b: string): number {
   }
   return 0;
 }
+
+// ─── Grouping and muting ───────────────────────────────────────────────────────
+
+/**
+ * The attention list, split by the integration each device came from.
+ *
+ * Measured on a 176-device instance: universal mode produces 53 rows, of which
+ * 20 are Music Assistant speakers and 13 are HACS repositories. Those are not
+ * wrong — the speakers really are unavailable and the repositories really do
+ * have updates — but a speaker that is not currently reachable is normal for a
+ * speaker, and a flat list of 53 buries the three Shellys that are genuinely
+ * offline. One integration drowning the rest is the shape of the problem, so
+ * the integration is the axis to cut on.
+ *
+ * Groups are ordered by their worst item, then by size, then by name: an
+ * integration with something offline sorts above one with only updates,
+ * whatever the counts. Devices with no integration land under `'other'`.
+ */
+export interface AttentionGroup {
+  integration: string;
+  items: AttentionItem[];
+  /** Worst kind present, for the group's own icon and ordering. */
+  worst: AttentionKind;
+}
+
+const KIND_RANK: Record<AttentionKind, number> = { offline: 0, alert: 1, battery: 2, update: 3 };
+
+export function groupAttention(items: AttentionItem[]): AttentionGroup[] {
+  const by = new Map<string, AttentionItem[]>();
+  for (const item of items) {
+    const key = item.device.integration || 'other';
+    if (!by.has(key)) by.set(key, []);
+    by.get(key)!.push(item);
+  }
+  const groups: AttentionGroup[] = [...by.entries()].map(([integration, list]) => ({
+    integration,
+    items: list,
+    worst: (['offline', 'alert', 'battery', 'update'] as AttentionKind[])
+      .find(k => list.some(i => i.kinds.includes(k)))!,
+  }));
+  return groups.sort((a, b) =>
+    KIND_RANK[a.worst] - KIND_RANK[b.worst]
+    || b.items.length - a.items.length
+    || a.integration.localeCompare(b.integration));
+}
+
+/**
+ * Split the groups into the ones that count and the ones the user has muted.
+ *
+ * Muted groups are kept, not dropped. A setting you cannot see is a setting you
+ * cannot undo — the No Room filter taught that the expensive way, by removing
+ * the row that held the switch — so the card still lists what it is ignoring,
+ * with its counts, and the editor is where the list is edited.
+ */
+export function splitMuted(
+  groups: AttentionGroup[],
+  muted: readonly string[] | undefined,
+): { shown: AttentionGroup[]; muted: AttentionGroup[] } {
+  if (!muted?.length) return { shown: groups, muted: [] };
+  const off = new Set(muted.map(m => m.toLowerCase()));
+  return {
+    shown: groups.filter(g => !off.has(g.integration.toLowerCase())),
+    muted: groups.filter(g => off.has(g.integration.toLowerCase())),
+  };
+}
+
+/** Total rows across groups — the header count, once muting has been applied. */
+export function countItems(groups: AttentionGroup[]): number {
+  return groups.reduce((n, g) => n + g.items.length, 0);
+}

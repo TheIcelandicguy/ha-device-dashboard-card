@@ -8,6 +8,7 @@ import { HomeAssistant, fireEvent, LovelaceCardConfig } from 'custom-card-helper
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout, EnergyPeriod, InputActionConfig, SortBy, ExtraCardStyle, AreaCardPlacement } from './types';
 import { selectAllKeys, entityKeys, classKeys, namedEntitiesInForce, withNamedEntities } from './sensor-keys';
 import { areaKeyUniverse, toggleAreaSelection, isAreaOn as isAreaSelected, setDevicesHidden, NO_AREA_KEY } from './room-filter';
+import { attentionItems, groupAttention } from './attention';
 import { getAllDevices, GRAPH_SENSOR_DEFS, GAUGE_RING_DEFS, gaugeStops, colorAt, hexToHsv, hsvToHex, parseCssColor, withAlpha, deviceHasControllable, getDeviceProfile,HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels,
   CONFIG_KEYS, LOVELACE_KEYS } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, detectTheme, paletteFor, type ThemePalette } from './themes';
@@ -721,6 +722,28 @@ export class HADeviceDashboardEditor extends LitElement {
   private _editorLayoutTimers: number[] = [];
   private _editorRAF?: number;
 
+  /**
+   * Toggle an integration in and out of the Needs-attention count, from the
+   * live preview's group headers.
+   *
+   * Its own event rather than another shape on `hdd-editor-goto`: that channel
+   * already carries two unrelated payloads told apart by which fields happen to
+   * be present, which is on the roadmap as a thing to stop doing — not a
+   * pattern to extend.
+   *
+   * The card cannot write config, so the button only renders inside the edit
+   * dialog, where this listener exists to answer it.
+   */
+  private _onAttentionMute = (ev: Event) => {
+    const integration = (ev as CustomEvent).detail?.integration as string | undefined;
+    if (!integration) return;
+    const cur = this._config?.attention_muted_integrations ?? [];
+    const next = cur.includes(integration)
+      ? cur.filter(i => i !== integration)
+      : [...cur, integration];
+    this._set('attention_muted_integrations', next.length ? next : undefined);
+  };
+
   connectedCallback() {
     super.connectedCallback();
     ensureCdnFontsLoaded();
@@ -729,6 +752,7 @@ export class HADeviceDashboardEditor extends LitElement {
     // The card can't reach the editor directly — in HA's edit dialog the two are
     // siblings — so a window event is the channel. Fired by the delegate notice.
     window.addEventListener('hdd-editor-goto', this._onEditorGoto);
+    window.addEventListener('hdd-attention-mute', this._onAttentionMute);
     this._loadSnapshots();
     void this._ensureHaPickers();
     this._editorRAF = requestAnimationFrame(() => {
@@ -854,6 +878,7 @@ export class HADeviceDashboardEditor extends LitElement {
     window.removeEventListener('mousedown', this._onIconPickerOutsideClick, true);
     window.removeEventListener('mousedown', this._onWheelOutsideClick, true);
     window.removeEventListener('hdd-editor-goto', this._onEditorGoto);
+    window.removeEventListener('hdd-attention-mute', this._onAttentionMute);
     if (this._flashTimer) { clearTimeout(this._flashTimer); this._flashTimer = null; }
     clearTimeout(this._styleClipTimer);
     clearTimeout(this._viewDeleteTimer);
@@ -5310,6 +5335,31 @@ export class HADeviceDashboardEditor extends LitElement {
             @change=${(e: Event) => this._set('include_beta_updates', (e.target as HTMLInputElement).checked || undefined)}>
             <span class="sw-t"></span><span class="sw-b"></span></label>
         </div>
+        ${(() => {
+          // Offer the integrations that are actually producing rows, with their
+          // counts, so nobody has to know an integration slug to silence one.
+          const items = attentionItems(this._allDevices(), (this.hass?.states ?? {}) as never, {
+            batteryBelow: c.attention_battery, includeBeta: c.include_beta_updates,
+          });
+          const groups = groupAttention(items);
+          if (groups.length < 2) return nothing;
+          const muted = c.attention_muted_integrations ?? [];
+          return html`
+            <div class="field">
+              <div class="field-lbl">Count these integrations
+                <span class="dev-style-hint">a speaker that is not reachable, or a HACS repository with an update, is technically true and usually noise — switch one off and it stays listed with its count, just not counted</span></div>
+              <div class="pill-grp">
+                ${groups.map(g => {
+                  const on = !muted.includes(g.integration);
+                  return html`
+                    <span class="pill ${on ? 'on' : ''}" @click=${() => {
+                      const next = on ? [...muted, g.integration] : muted.filter(i => i !== g.integration);
+                      this._set('attention_muted_integrations', next.length ? next : undefined);
+                    }}>${getIntegrationLabel(g.integration)} ${g.items.length}</span>`;
+                })}
+              </div>
+            </div>`;
+        })()}
         <div class="tog-row">
           <div class="tog-lbl">Firmware spread
             <div class="hint">Inside that summary, group the fleet by firmware version so you can see what is lagging. Hidden when everything is on one version.</div>

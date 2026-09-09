@@ -873,6 +873,19 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   show_attention?: boolean;
   /** Battery percentage at or below which a device is flagged. Default 20. */
   attention_battery?: number;
+  /**
+   * Integrations whose devices are listed but not counted in Needs attention.
+   *
+   * Universal mode surfaces things that are technically true and practically
+   * noise: a Music Assistant speaker that is not currently reachable, a HACS
+   * repository with an update. On one 176-device instance those two accounted
+   * for 33 of 53 rows, burying the three Shellys that were genuinely offline.
+   *
+   * Muted integrations still appear, collapsed and with their counts, at the
+   * foot of the list — hiding them outright would hide the way back. Empty or
+   * unset counts everything.
+   */
+  attention_muted_integrations?: string[];
   /** Count beta firmware as an available update. Off by default: a Shelly offers
    *  a beta almost permanently, which drowns the real updates. */
   include_beta_updates?: boolean;

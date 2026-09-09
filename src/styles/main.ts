@@ -1333,6 +1333,25 @@ export const mainCss = css`
       align-items:center; justify-content:center; font-size:11px; font-weight:800;
       background:var(--sc-offline-color); color:#1e1a17; }
     .att-fw-chip { margin-left:auto; font-size:11px; color:var(--sc-text-secondary); }
+    /* Grouping by integration. Only rendered once a fleet spans more than one,
+       so a Shelly-only card looks exactly as it always did. */
+    .att-grp { margin-bottom:6px; }
+    .att-grp-hdr { display:flex; align-items:center; gap:8px; padding:4px 8px; font-size:11px;
+      font-weight:600; letter-spacing:.03em; color:var(--sc-text-secondary); text-transform:uppercase; }
+    .att-grp-name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .att-grp-n { font-variant-numeric:tabular-nums; opacity:.8; }
+    .att-mute { background:none; border:none; cursor:pointer; padding:0 2px; font-size:12px;
+      opacity:.55; line-height:1; }
+    .att-mute:hover { opacity:1; }
+    /* Muted integrations stay visible with their counts: a setting you cannot
+       see is a setting you cannot undo. */
+    .att-muted { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:6px 8px;
+      margin-top:4px; border-top:1px dashed var(--sc-tile-border); }
+    .att-muted-lbl { font-size:10px; text-transform:uppercase; letter-spacing:.04em;
+      color:var(--sc-text-muted); }
+    .att-muted-chip { display:inline-flex; align-items:center; gap:5px; font-size:11px;
+      padding:2px 7px; border-radius:10px; background:var(--sc-sensor-bg);
+      border:1px solid var(--sc-tile-border); color:var(--sc-text-muted); }
     .att-body { display:flex; flex-direction:column; gap:3px; padding:0 8px 8px; }
     .att-row { display:flex; align-items:center; gap:8px; width:100%; padding:6px 8px; border-radius:8px;
       cursor:pointer; font:inherit; text-align:left; border:1px solid transparent;

@@ -392,6 +392,22 @@ out of all of them. It lists offline devices, firing alerts (overtemp, overpower
 smoke, water, gas), flat batteries and pending updates — worst first, each row
 opening that device's detail sheet. It renders only when something qualifies.
 
+`attention_muted_integrations` stops an integration being *counted* without
+hiding it. Universal mode surfaces things that are technically true and
+practically noise — a Music Assistant speaker that is not currently reachable, a
+HACS repository with an update. On one 176-device instance those two accounted
+for 33 of 53 rows, burying the three Shellys that were genuinely offline.
+
+```yaml
+attention_muted_integrations: [music_assistant, hacs]
+```
+
+Muted integrations stay at the foot of the list with their counts, so the way
+back is always on screen. When a fleet spans more than one integration the list
+groups by integration, each group showing its own count; in the edit dialog's
+preview every group header carries a mute toggle, so you never need to know an
+integration's slug. A single-integration fleet renders flat, exactly as before.
+
 An offline device is reported as offline and nothing else: its last-known alert
 is a stale reading, not news.
 
