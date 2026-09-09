@@ -79,6 +79,8 @@ export function setDevicesHidden(
   const inRoom = new Set(deviceIds);
   // Start from everything hidden elsewhere, so other rooms are untouched.
   const next = hidden.filter(id => !inRoom.has(id));
-  if (hide) next.push(...deviceIds);
-  return next.length ? next : undefined;
+  // Dedupe rather than trust the caller: this list is persisted, and a repeated
+  // id would survive in config forever for no visible reason.
+  if (hide) next.push(...inRoom);
+  return next.length ? [...new Set(next)] : undefined;
 }

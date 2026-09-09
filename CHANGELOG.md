@@ -3,6 +3,69 @@
 All notable changes to HA Device Dashboard. Versions are git tags; HACS
 installs from them.
 
+## Unreleased
+
+### An inherited entity id was invisible, and adding another deleted it
+
+Found in an audit pass over the release, not by anyone hitting it.
+
+The editor's **Specific entities** field was seeded from the scope's *own* list.
+While a device or room is inheriting, that list is `undefined` — so the field
+showed nothing even though inherited entity ids were live on the tile. And
+because the field commits whatever it is showing, adding one entity wrote a list
+containing only that one: every inherited id silently gone.
+
+Verified against a running editor rather than argued. Card-wide
+`sensors: [temperature, sensor.davidpc_cpuload]`, device scope inheriting: the
+field showed **no chips**, and picking `sensor.davidpc_gpuload` produced
+`[temperature, sensor.davidpc_gpuload]`. Now it shows `DAVIDPC cpuload` and
+produces `[temperature, sensor.davidpc_cpuload, sensor.davidpc_gpuload]`.
+
+This is the same shape as the "Select all" bug fixed in v1.5.0 — a choice with
+nothing on screen to represent it, removed by an unrelated action — one layer
+down, which is why the first fix did not cover it. The rule now lives in
+`namedEntitiesInForce()` and `withNamedEntities()` in `src/sensor-keys.ts` with
+six assertions over it, rather than inline in the editor where the first one hid.
+
+Also hardened: `setDevicesHidden()` deduplicates. `hidden_devices` is persisted,
+so a repeated id would have lived in config forever with nothing explaining it.
+Not reachable from the UI today; the function was simply loose.
+
+### Render cost measured, not assumed
+
+`npm run bench` covers the card's logic — discovery, attention, the cascades —
+and found it cheap: 4 ms of discovery for 224 devices, cached so it does not run
+on a state push. That was always the part known to be fast. The part nobody had
+measured is the DOM, which cannot be measured in Node at all.
+
+`npm run bench:render` drives headless Chrome against a running Home Assistant,
+builds the real card with the real `hass`, and times it at increasing fleet
+sizes. On 276 real devices:
+
+| devices | tiles | first render | state push |
+|---|---|---|---|
+| 25 | 25 | 38 ms | 4.6 ms |
+| 100 | 100 | 208 ms | 7.9 ms |
+| 200 | 200 | 267 ms | 9.9 ms |
+| 276 | 276 | 306 ms | **16.4 ms** |
+
+**The finding: cost tracks fleet size, not how much changed.** Every one of those
+pushes altered the same 10% of entities. It costs 4.6 ms at 25 devices and 16.4 ms
+at 276 — one whole frame — because Lit re-runs every tile's template and its
+cascades even where the output is byte-identical and the DOM is left untouched.
+
+That reframes the 2s coalescing window in `shouldUpdate`. It is not amortising a
+small constant; it is what keeps a full-frame render off the critical path on a
+large fleet. Nothing is being changed on the strength of this — the card is fine
+at these sizes and guessing at performance produces complexity nobody needs — but
+if it ever does need fixing, the lever is rendering fewer tiles, not making each
+one cheaper.
+
+Two notes for anyone rerunning it. Graphs add roughly a quarter to both numbers.
+And device *mix* matters as much as count: a run including routers with 90
+entities each cost nearly twice the first render of one with the same number of
+Shellys, so runs are only comparable with the same discovery settings.
+
 ## v1.5.0 — 2026-09-09
 
 ### The card says when discovery hid something

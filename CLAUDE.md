@@ -61,6 +61,12 @@ The repo went public on 2026-09-07 and HACS installs from its releases, so
   and keeps device names only for `shelly` / `bthome` (the integrations whose
   detection reads them). Read the output before committing it — it goes public.
 - `npm test` — check:docs + the test scripts.
+- `npm run bench:render` — the cost of actually DRAWING the card, measured in
+  headless Chrome against a live HA (needs a token, like the other browser
+  tooling). `bench` covers the logic and found it cheap; this covers the DOM,
+  which is the real limit. Measured on a 276-device instance: first render
+  306 ms, and a state push touching 10% of entities costs **16.4 ms — a whole
+  frame**. That last number scales with *fleet size*, not with how much changed.
 - `npm run bench` — time the hot paths against a synthetic fleet. Measure before
   claiming something needs optimising: the fleet summaries were suspected of
   needing memoisation and came in at 0.18ms for 56 devices.
@@ -252,6 +258,13 @@ The repo went public on 2026-09-07 and HACS installs from its releases, so
   dangling `custom:` references, `device_styles` keyed to a device that no longer
   exists, input actions pointing at missing entities. Add a check there when adding
   a cascade layer.
+- **Render cost is O(fleet), not O(changes).** Measured, not assumed: a push
+  changing 10% of entities costs 4.6 ms at 25 devices and 16.4 ms at 276 — a
+  full frame — because Lit re-runs every tile's template and cascades even where
+  the output is byte-identical and the DOM is left alone. The 2s coalescing
+  window is what keeps this off the critical path; it is not a small constant
+  being amortised. If this ever needs fixing, the lever is rendering fewer tiles
+  (virtualisation), not making each one cheaper.
 - **Render throttling**: `shouldUpdate()` coalesces pure sensor updates over ~2s so
   heavy Shelly power-sensor churn doesn't re-render the whole fleet. Card-level
   CSS-var map is cached and only rebuilt on config change (bg images can be huge

@@ -75,3 +75,40 @@ export function selectAllKeys(
 ): string[] {
   return [...entityKeys(current ?? []), ...allClassKeys];
 }
+
+/**
+ * The named entities in force at a scope — what the editor's entity field must
+ * show.
+ *
+ * `selected` is this scope's own list, `undefined` while inheriting. The
+ * inherited list still applies, so a field seeded from `selected` alone showed
+ * nothing while entities were live. That is not merely cosmetic: the field
+ * commits whatever it is showing, so adding one entity deleted every inherited
+ * one. Same shape as the "Select all" bug, one layer down.
+ */
+export function namedEntitiesInForce(
+  selected: readonly string[] | undefined,
+  effective: readonly string[],
+): string[] {
+  return entityKeys(selected ?? effective);
+}
+
+/**
+ * What to write when that field commits `picked`.
+ *
+ * The class half is preserved from whatever is in force — this scope's own list
+ * when it has one, otherwise the inherited set — so naming an entity never
+ * silently switches the class chips off.
+ */
+export function withNamedEntities(
+  selected: readonly string[] | undefined,
+  effective: readonly string[],
+  allClassKeys: readonly string[],
+  picked: readonly string[],
+): string[] | undefined {
+  const classes = selected !== undefined
+    ? classKeys(selected)
+    : effective.filter(k => allClassKeys.includes(k));
+  const merged = [...classes, ...picked];
+  return merged.length ? merged : undefined;
+}
