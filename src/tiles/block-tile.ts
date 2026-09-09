@@ -1,7 +1,7 @@
 import { html, nothing, TemplateResult } from 'lit';
 import { styleMap } from 'lit/directives/style-map.js';
 import { renderAnimSvg } from '../anim-icons';
-import { formatPower, getIntegrationLabel, isPrivateIp, delegatableEntities, DELEGATE_FEATURES } from '../helpers';
+import { formatPower, getIntegrationLabel, isPrivateIp, delegatableEntities, DELEGATE_FEATURES, genLabel } from '../helpers';
 import type { EntityAnimationType, TileBlockId, HassAttrs } from '../types';
 import type { TileCtx, SensorChip } from './tile-context';
 import { renderInputRow, renderEffectPicker } from './tile-parts';
@@ -28,7 +28,7 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
   const hexColor = sw?.rgbColor ? ctx.rgbToHex(...sw.rgbColor) : '#ffffff';
   const isRgbw = !!sw?.colorModes?.some(m => m === 'rgbw' || m === 'rgbww');
   const isHeating = trv?.hvacMode === 'heat';
-  const genLabel = profile.gen === 'ble' ? 'BLE' : profile.gen === 'other' ? '' : `G${profile.gen}`;
+  const genBadge = genLabel(profile.gen);
   const intLabel = getIntegrationLabel(device.integration);
 
   switch (blockId) {
@@ -484,7 +484,7 @@ export function renderBlockTile(ctx: TileCtx, blockId: TileBlockId): TemplateRes
           <div class="tile-badges">
             ${alerts.map(a => html`<span class="alert-badge alert-${a}">${a === 'overtemp' ? '🌡' : '⚡'}!</span>`)}
             ${profile.label ? html`<span class="type-badge type-${profile.type}">${tOr(`profile.${profile.type}`, profile.label)}</span>` : nothing}
-            ${genLabel ? html`<span class="gen-badge gen-${profile.gen}">${genLabel}</span>` : nothing}
+            ${genBadge ? html`<span class="gen-badge gen-${profile.gen}">${genBadge}</span>` : nothing}
             ${intLabel ? html`<span class="int-badge-tile">${intLabel}</span>` : nothing}
             ${device.isShelly && device.ip && isPrivateIp(device.ip) ? html`
               <a href="http://${device.ip}" target="_blank" class="tile-ui-link"

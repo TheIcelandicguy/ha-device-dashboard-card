@@ -1611,6 +1611,17 @@ try {
     eq('esp32 is not a generation', gen('Node', 'esp32'), 'other');
   }
 
+  console.log('\ngeneration label - one home for the rule');
+  {
+    // How a generation is written on screen. It lived inline in block-tile.ts,
+    // and the firmware spread wanting it too would otherwise have made a second
+    // copy to keep in step.
+    eq('a numbered generation', [1, 2, 3, 4].map(h.genLabel), ['G1', 'G2', 'G3', 'G4']);
+    eq('BLU is not a number', h.genLabel('ble'), 'BLE');
+    // 'other' means "no idea" - a badge saying so is worse than no badge.
+    eq('unknown renders as nothing', h.genLabel('other'), '');
+  }
+
   console.log('\nlocalize - catalogues and lookup');
   {
     const keys = loc.knownKeys();

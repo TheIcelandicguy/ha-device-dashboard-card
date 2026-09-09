@@ -1383,6 +1383,11 @@ export const mainCss = css`
       background:var(--sc-sensor-bg); border:1px solid var(--sc-tile-border);
       color:var(--sc-text-secondary); }
     .att-fw-dev:hover { color:var(--sc-text-primary); border-color:var(--sc-accent); }
+    /* Generation sits in front of the version because it is what decides
+       whether that version is even applicable — a Gen1 will never see a 2.x. */
+    .att-fw-dev-gen { font-size:9px; font-weight:700; letter-spacing:.03em;
+      padding:0 4px; border-radius:4px; background:var(--sc-tile-border);
+      color:var(--sc-text-secondary); }
     .att-fw-dev-ver { font-size:9.5px; opacity:.75; font-variant-numeric:tabular-nums; }
     .att-fw-dev-area { font-size:9.5px; opacity:.5; }
     .att-fw-ver { min-width:58px; color:var(--sc-text-secondary); font-variant-numeric:tabular-nums; }

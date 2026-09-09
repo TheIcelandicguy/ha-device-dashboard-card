@@ -23,6 +23,18 @@ was mostly empty space to the right of a two-digit count.
 A tooltip would have been the cheap version of this and useless: it gets read on
 a wall tablet, where there is no hover.
 
+**Each device shows its generation in front of the version**, because the
+generation is what decides whether a version is even applicable — a Gen1 will
+never see a 2.x build, so "out of date" means something different per row. On one
+real fleet the two track each other exactly: 2.7.4 is entirely G2, 2.0.1 entirely
+G3, 1.14.x entirely G1. That is only visible once both are on the same line.
+
+The `G1`/`BLE`/blank rule moved to `genLabel()` in `src/helpers.ts`. It was inline
+in `block-tile.ts`, and the firmware spread wanting it too would have made a
+second copy of a formatting decision — the thing the roadmap's "one chip
+renderer" item is about. `'other'` still renders as nothing: it means "no idea",
+and a badge saying so is worse than no badge.
+
 ### The firmware spread is per integration, and "newest" was wrong
 
 Same treatment as the attention list above, and it turned up a real bug rather

@@ -41,7 +41,7 @@ import {
   formatFrequency, formatHumidity, formatIlluminance, formatPpm, formatPercent,
   detectInputChannels, detectShellyGen, shellyClickTypes, shellyInputChannel, shellyHostname,
   deviceSensorValues, attachExtraSensors, stripDevicePrefix, colorAt, formatReading,
-  getIntegrationLabel,
+  getIntegrationLabel, genLabel,
 } from './helpers';
 import type { DiscoveryStats } from './helpers';
 import { namedEntitiesOn, classKeys } from './sensor-keys';
@@ -4017,11 +4017,20 @@ export class HADeviceDashboard extends LitElement {
                     </div>
                     <div class="att-fw-devs">
                       ${g.devices.map(d => html`
-                        <button class="att-fw-dev" @click=${() => { this._detailDevice = d.device_id; }}>
-                          <span class="att-fw-dev-name">${d.name}</span>
-                          <span class="att-fw-dev-ver">${g.version}</span>
-                          ${d.area ? html`<span class="att-fw-dev-area">${d.area}</span>` : nothing}
-                        </button>`)}
+                        ${(() => {
+                          // The generation is the thing that decides whether a
+                          // version is even applicable — a Gen1 will never see a
+                          // 2.x build — so it belongs beside the version rather
+                          // than only on the tile.
+                          const gen = genLabel(this._profile(d).gen);
+                          return html`
+                            <button class="att-fw-dev" @click=${() => { this._detailDevice = d.device_id; }}>
+                              <span class="att-fw-dev-name">${d.name}</span>
+                              ${gen ? html`<span class="att-fw-dev-gen gen-${this._profile(d).gen}">${gen}</span>` : nothing}
+                              <span class="att-fw-dev-ver">${g.version}</span>
+                              ${d.area ? html`<span class="att-fw-dev-area">${d.area}</span>` : nothing}
+                            </button>`;
+                        })()}`)}
                     </div>`)}`)}
               </div>` : nothing}
           </div>` : nothing}

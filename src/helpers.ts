@@ -1125,6 +1125,20 @@ export function getDeviceProfile(device: HADevice): DeviceProfileResult {
  * this is a Shelly: other integrations put arbitrary text in that field
  * (`esp32`, `RAX50`), hence the strict `gen<n>` shape check.
  */
+/**
+ * How a hardware generation is written on screen: `G1`…`G4`, `BLE`, or nothing
+ * at all when detection could not tell.
+ *
+ * One home for the rule. It lived inline in block-tile.ts, and the moment a
+ * second surface wanted it — the firmware spread — copying the expression would
+ * have made a third place to keep in step. `'other'` renders as empty rather
+ * than as "other": it means "no idea", and a badge saying so is worse than no
+ * badge.
+ */
+export function genLabel(gen: DeviceGen): string {
+  return gen === 'ble' ? 'BLE' : gen === 'other' ? '' : `G${gen}`;
+}
+
 export function detectShellyGen(
   model: string,
   hwVersion?: string,
