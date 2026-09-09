@@ -3,7 +3,7 @@
 All notable changes to HA Device Dashboard. Versions are git tags; HACS
 installs from them.
 
-## Unreleased
+## v1.5.1 — 2026-09-09
 
 ### An inherited entity id was invisible, and adding another deleted it
 
