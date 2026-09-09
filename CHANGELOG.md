@@ -5,6 +5,27 @@ installs from them.
 
 ## Unreleased
 
+### A graph entity that cannot be plotted is skipped, and the editor says so
+
+`graph_sensors` already takes entity ids, so more graphs on one tile has always
+been a matter of naming more of that device's entities — there is no cap on any
+tile style. Six on a PC works exactly as three did.
+
+What did not work is naming something unplottable. `sensor.davidpc_drives_health`
+reads `OK`, and it got a graph row: a label, an empty plot area, and no
+explanation. Now it is skipped, because a line through `OK` is not a thing.
+
+The skip is deliberate but it must not be silent — that is the failure this card
+keeps repeating. The editor's conflict list reports it:
+
+> **2 graph entities have no numeric value** — `graph_sensors`: DavidPC Drives
+> health, DAVIDPC Default Device read as text, so no line can be drawn and they
+> are skipped. They still work as chips under Sensor chips, where the value is
+> shown as it reads.
+
+Note the asymmetry is intended: a chip shows a named entity however it reads,
+because "Drives health OK" is useful. A graph cannot.
+
 ### A sensor you named by entity id is shown even without a unit
 
 Naming `sensor.davidpc_drives_health` (state `OK`) put a chip on the default

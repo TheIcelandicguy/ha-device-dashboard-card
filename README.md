@@ -300,7 +300,14 @@ graph_sensors:
 
 Note the comment: `graph_sensors` is card-wide and setting it replaces the
 default set, so list any class keys you still want. Named entities are drawn
-first, in the order given.
+first, in the order given, and only on the device that owns them — so adding
+more of one machine's entities is how you get more graphs on that one tile.
+There is no cap.
+
+A graph needs a number. An entity whose state is text (`drives_health` → `OK`)
+is skipped rather than drawn as an empty plot, and the editor flags it under
+config conflicts. It still works as a **chip**, where the value is shown as it
+reads.
 
 ### Energy
 
