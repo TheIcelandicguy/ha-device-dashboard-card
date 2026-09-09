@@ -7,15 +7,38 @@ not here. This file is for structural work that no user will ever file.
 
 ## Next
 
-Nothing. Everything that was queued here is in **Done** below; what remains is in
-**Later**, which is deliberately not queued — each item there is a refactor with
-no user waiting for it, and the argument against doing them now is written next
-to each one.
+**One chip renderer, not two.** `sensor-card` and the `default` block tile each
+build their own chip row, and the same change has now had to be made twice three
+times running:
 
-The honest next move is not on this list: watch what people report. Detection on
-hardware nobody here owns is the likeliest source of the next real bug, which is
-what the fixture library exists to catch, and contributing a fixture is the most
-useful thing an affected user can do (see CONTRIBUTING).
+- **labels for named entities** — added to `sensor-card`, missed on the block
+  tile, which went on rendering `37 % 52.5 % 14.81 % 2904 MHz` until a screenshot
+  showed it;
+- **named readings adding to the automatic selection** rather than replacing it;
+- **which value formatter a named chip uses** — `sensor-card` requires a unit and
+  a number (`isReading`), the block tile requires neither, so the same named
+  entity is a chip on one style and absent from the other.
+
+Each was a small fix. The pattern is not: a chip decision has two homes, so
+"fixed" means "fixed in the one I was looking at". The predicates are already
+shared (`isEntityKey`, `isNamedReadable` in `sensor-keys.ts` / `sensor-pick.ts`)
+— what is duplicated is the decision to call them.
+
+The precedent is `chipsInHeader()` in `src/tiles/tile-parts.ts`, which exists
+verbatim for this reason: one predicate for the opt-in header placement "so
+power-monitor and sensor-card can never disagree about when chips move into the
+name row". The shape wanted is the same — a `chipLabel()` and a chip-eligibility
+test in `tile-parts.ts`, with both renderers calling them.
+
+Deliberately scoped small: share the *decisions*, not the markup. The two styles
+lay chips out differently on purpose (a compact pill row versus tiered
+primary/electrical/diagnostic strips), and merging the markup would be a much
+larger change with no user asking for it.
+
+Beyond that, the honest next move is not a list item: watch what people report.
+Detection on hardware nobody here owns is the likeliest source of the next real
+bug, which is what the fixture library exists to catch, and contributing a
+fixture is the most useful thing an affected user can do (see CONTRIBUTING).
 
 ## Done
 
