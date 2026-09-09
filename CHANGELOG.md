@@ -5,19 +5,23 @@ installs from them.
 
 ## Unreleased
 
-### A firmware version row names its devices
+### The firmware spread names every device, and the bars are gone
 
 The spread told you 18 devices are on 1.7.5 and three are on 1.14.0. It never
-told you *which* three, which is the question you actually have when you are
-deciding what to go and update.
+told you *which* three, which is the question you actually have when deciding
+what to go and update.
 
-Tap a version row and it lists them, each with its room, each opening that
-device's detail sheet — the same thing an attention row does. One row at a time:
-the point is to answer "which are those" about a single version, not to unroll
-the whole spread.
+Every version now lists its devices, each with its room, each opening that
+device's detail sheet — the same thing an attention row does. No click: the
+names are the content, and hiding them behind an interaction to preserve a bar
+chart had it backwards.
 
-A tooltip would have been cheaper and useless — this gets read on a wall tablet,
-where there is no hover.
+The bars went with it. They drew a proportion the device names answer better,
+and they were occupying the width the names needed — on a 1500px tablet the bar
+was mostly empty space to the right of a two-digit count.
+
+A tooltip would have been the cheap version of this and useless: it gets read on
+a wall tablet, where there is no hover.
 
 ### The firmware spread is per integration, and "newest" was wrong
 

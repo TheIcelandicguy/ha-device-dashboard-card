@@ -113,10 +113,6 @@ export class HADeviceDashboard extends LitElement {
   /** One-time notice: delegatable devices exist but native controls are off. */
   @state() private _delegateNoticeDismissed = false;
   @state() private _discoveryNoticeDismissed = false;
-  /** Which firmware version row is showing its device names, as
-   *  `integration/version`. One at a time: the point is to answer "which ones
-   *  are those" for a single row, not to unroll the whole spread. */
-  @state() private _fwOpen: string | null = null;
   /** What the last discovery threw away. Filled by getAllDevices as it filters,
    *  so the notice costs no second pass over the registry. */
   private _discoveryStats: DiscoveryStats = {
@@ -4013,28 +4009,20 @@ export class HADeviceDashboard extends LitElement {
                 ${fwInts.map(fi => html`
                   ${fwInts.length > 1 ? html`
                     <div class="att-fw-int">${groupLabel(fi.integration)}</div>` : nothing}
-                  ${fi.groups.map(g => {
-                    const key = `${fi.integration}/${g.version}`;
-                    const open = this._fwOpen === key;
-                    return html`
-                      <button class="att-fw-row ${g.current ? 'current' : ''} ${open ? 'open' : ''}"
-                        title=${t('firmware.which', { n: g.devices.length })}
-                        @click=${() => { this._fwOpen = open ? null : key; }}>
-                        <span class="att-fw-ver">${g.version}</span>
-                        <span class="att-fw-bar"><i style="width:${Math.round((g.devices.length / fi.total) * 100)}%"></i></span>
-                        <span class="att-fw-n">${g.devices.length}</span>
-                        ${g.current ? html`<span class="att-fw-tag">${t('header.newest')}</span>` : nothing}
-                      </button>
-                      ${open ? html`
-                        <div class="att-fw-devs">
-                          ${g.devices.map(d => html`
-                            <button class="att-fw-dev" @click=${(e: Event) => {
-                              e.stopPropagation();
-                              this._detailDevice = d.device_id;
-                            }}>${d.name}${d.area
-                              ? html`<span class="att-fw-dev-area">${d.area}</span>` : nothing}</button>`)}
-                        </div>` : nothing}`;
-                  })}`)}
+                  ${fi.groups.map(g => html`
+                    <div class="att-fw-row ${g.current ? 'current' : ''}">
+                      <span class="att-fw-ver">${g.version}</span>
+                      <span class="att-fw-n">${g.devices.length}</span>
+                      ${g.current ? html`<span class="att-fw-tag">${t('header.newest')}</span>` : nothing}
+                    </div>
+                    <div class="att-fw-devs">
+                      ${g.devices.map(d => html`
+                        <button class="att-fw-dev" @click=${() => { this._detailDevice = d.device_id; }}>
+                          <span class="att-fw-dev-name">${d.name}</span>
+                          <span class="att-fw-dev-ver">${g.version}</span>
+                          ${d.area ? html`<span class="att-fw-dev-area">${d.area}</span>` : nothing}
+                        </button>`)}
+                    </div>`)}`)}
               </div>` : nothing}
           </div>` : nothing}
       </div>`;

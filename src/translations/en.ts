@@ -104,7 +104,6 @@ export const EN: Translations = {
   'header.firmware': 'Firmware',
   'header.firmware_versions': '{n} firmware versions',
   'header.firmware_mixed': '{n} integrations on mixed versions',
-  'firmware.which': 'Show the {n} devices on this version',
   'header.newest': 'newest',
 
   // ── Actions ──
