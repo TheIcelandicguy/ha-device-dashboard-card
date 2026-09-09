@@ -228,6 +228,23 @@ src/
   design-scope.ts       The Design tab's scope model as pure functions
                         (scopeCanSet, scope keys, device grouping, override
                         collection). Tested by test:card.
+  sensor-pick.ts        What a sensor tile leads with and what it chips —
+                        isMeasurement/isReading, pickPrimarySensor,
+                        pickPrimaryBinary, pickSecondarySensors. One predicate
+                        shared by both selections, which had drifted apart.
+  sensor-keys.ts        The `sensors` / `graph_sensors` list, which holds
+                        device_class keys AND entity ids in one list, told
+                        apart by the dot. isEntityKey, classKeys, entityKeys,
+                        namedEntitiesOn, selectAllKeys.
+  room-filter.ts        The `areas` filter as pure functions. The unassigned
+                        bucket ('' — "No Room") is a room like any other;
+                        leaving it out of the key universe silently dropped
+                        every device without an area.
+  update-policy.ts      computeUpdateReason() — should the card re-render.
+                        The element keeps only the parts needing a DOM
+                        (starting the coalescing timer, stamping the clock).
+  font-options.ts       The one font catalogue. CDN_FONT_FAMILIES is derived
+                        from FONT_OPTIONS rather than declared twice.
   types.ts              All config + data model types (single source of truth
                         for options); HADeviceDashboardConfig.
   helpers.ts            Device discovery (getAllDevices), profile detection,
@@ -244,6 +261,13 @@ src/
   tiles/                Per-style tile renderers (see below).
   detail/detail-sheet.ts  The expanded per-device detail panel.
   styles/               main.ts / tiles.ts / detail.ts — Lit css blocks.
+  translations/         en.ts / is.ts — the string catalogues; localize.ts
+                        holds the pure translate() and the ambient t().
+scripts/fixtures/       Real device rows for detection tests, plus the expected
+                        results. Data, not code — regenerate with
+                        `npm run fixtures:harvest` rather than hand-editing,
+                        except the `why` notes, which are the part a machine
+                        cannot recreate.
 docs/                   README, card-reference.json, shelly-reference/, tools/.
 dist/ha-device-dashboard.js   Built bundle (committed).
 rollup.config.mjs, tsconfig.json, package.json, hacs.json
@@ -401,12 +425,12 @@ runtime defaults from `docs/card-reference.json` where applicable.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `graph_sensors` | string[] | `[]` | device_class keys to graph as sparklines. |
+| `graph_sensors` | string[] | `[power, temperature, humidity, battery]` | device_class keys **or entity ids** to graph as sparklines. Setting the key replaces the default set. |
 | `graph_hours` | number | `24` | History window (1–168 h). |
 | `graph_style` | GraphStyle | — | `type` (line/area/bar), line_width, fill, height, show_dots, time_labels, tick_lines, bar_radius, per-sensor `sensor_ranges`. |
 | `graph_line_color` | string | — | Global fallback line colour. |
 | `graph_sensor_colors` | Record<key,color> | — | Per-sensor-class line colours. |
-| `sensors` | string[] | all | Which sensor chip keys to show on tiles. |
+| `sensors` | string[] | all | Which sensor chip keys **or entity ids** to show on tiles. |
 
 ### Sensor-chip keys
 
@@ -417,6 +441,23 @@ runtime defaults from `docs/card-reference.json` where applicable.
   `cloud`, `mqtt`, `eth`
 - **Alerts:** `motion`, `door`, `flood`, `smoke`, `vibration`, `overpower`,
   `overtemp`
+
+Both `sensors` and `graph_sensors` also take **entity ids**, mixed into the same
+list and told apart by the dot — every entity id has one, no device class does
+(`src/sensor-keys.ts`). That is the only way to reach a reading Home Assistant
+gives no `device_class`, which is most of what a PC, NAS, router or Proxmox host
+reports; before it, those devices were discovered and then drawn blank.
+
+A named entity applies only to the device that owns it, so one card-wide list can
+configure a whole fleet. Named readings lead, in the order given, and the
+automatic selection fills the remaining slots — naming one does not switch the
+rest off. On `tile_style: sensor-card` the first one named is the headline value.
+
+The editor exposes this as a **Specific entities** field under the class pills,
+in Design → Sensor chips and in Graphs & Sensors → Graph Type. The pills own the
+class half of the list and the field owns the entity half, so neither can clobber
+the other — including "All", which keeps named entities because no pill stands
+for them.
 
 ### The resolution cascade
 
@@ -518,6 +559,17 @@ passes in. `getAllDevices(hass)` in `helpers.ts`:
   - `npm run watch` — rebuild on change (also auto-deploys, see below).
   - `npm run typecheck` — `tsc --noEmit`.
   - `npm run lint` — ESLint over `src`.
+  - `npm test` — `check:docs` plus the four test scripts below.
+  - `npm run test:card` — discovery, both merge passes, the cascades, the design
+    scope model, sensor selection, the room filter, update policy, i18n.
+  - `npm run test:detection` — `getDeviceProfile` + `detectShellyGen` over 215
+    real registry rows in `scripts/fixtures/`, harvested from a live instance and
+    scrubbed. The expected file records what the code does *today*; a diff means
+    detection changed, and `--bless` re-records it. Rows with a `why` were checked
+    against real hardware and a change to one is reported as a regression.
+  - `npm run fixtures:harvest` — regenerate those fixtures from a running HA.
+    Read the output before committing: it is published.
+  - `npm run test:palette`, `npm run test:builder`, `npm run bench`.
 - **Runtime deps:** `lit` ^3.1, `custom-card-helpers` ^1.9.
 - `src/index.ts` prints a `BUILD_TAG` (e.g. `mobile-editor-2026-07-10f`) to the
   browser console so you can confirm which bundle HA actually loaded.
@@ -560,7 +612,13 @@ reference/` contains Shelly API / HA-integration reference notes.
 - **Shelly-first defaults.** Universal mode exists and does discover ZHA / Hue /
   ESPHome / Matter, but `mode` defaults to `shelly`, so out of the box only
   Shelly/BTHome devices appear. Profile detection and tile styling remain far
-  richer for Shelly than for anything else.
+  richer for Shelly than for anything else. The card now says so on screen — a
+  dismissible notice counts what discovery dropped and links to the setting —
+  which was the single most common "my device is missing" report.
+- **Detection is the fragile part.** Both bugs found in it came from real device
+  data rather than from reading the code, which is why `npm run test:detection`
+  exists and why the fixtures are harvested rather than invented. Hardware nobody
+  here owns is still the likeliest source of the next one.
 - **Doc drift.** Most of `docs/` is hand-synced and lags `src/types.ts` between
   sweeps (`npm run check:docs` catches part of it, not all).
   **`src/types.ts` is the only always-current source** — check the JSON against it

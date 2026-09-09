@@ -5,6 +5,34 @@ installs from them.
 
 ## Unreleased
 
+### Docs caught up, and two gates so they stay that way
+
+The docs had fallen behind the last few releases in ways the existing checker
+could not see:
+
+- **`src/help.ts` told a lie.** The Help section on naming entities said "this is
+  YAML for now — the editor's pickers still offer classes only, and a future
+  release will let you pick entities there too". That release was the previous
+  commit. It now describes where the field actually is.
+- **README's Sensor chips and Graphs sections** documented device_class keys as
+  the only thing those options take, which stopped being true in v1.4.0.
+- **OVERVIEW.md calls itself the full architecture tour** and was missing five
+  modules — `sensor-pick`, `sensor-keys`, `room-filter`, `update-policy` and
+  `font-options` — every one of them extracted precisely so it could be found
+  and tested.
+- **CONTRIBUTING** said nothing about the detection fixtures, including the part
+  a contributor most needs to know: the expected file records what the code does
+  today rather than what is right, and the harvester's scrubbing is thorough but
+  not exhaustive.
+
+Two new `check:docs` gates, both proven to fail before being committed:
+
+- every `src/*.ts` must appear in OVERVIEW.md, so a module cannot be extracted
+  and then be undiscoverable;
+- README and OVERVIEW must both still mention entity ids, which is the half of
+  the `sensors` / `graph_sensors` story a doc sweep would most easily drop —
+  the class list reads complete on its own.
+
 ### A fixture library for device detection
 
 Detection is the most fragile part of the card and the part most likely to be

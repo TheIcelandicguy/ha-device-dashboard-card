@@ -5,7 +5,7 @@
  *
  * Run with `npm run check:docs`.
  */
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 
 const read = (f) => readFileSync(f, 'utf8');
 const ref = JSON.parse(read('docs/card-reference.json'));
@@ -238,6 +238,34 @@ for (const sym of ['CDN_FONT_FAMILIES', 'FONT_OPTIONS']) {
   const stray = ['ha-device-dashboard.ts', 'editor.ts', 'fonts.ts'].filter(declares);
   if (stray.length) {
     note('src/font-options.ts', `${sym} is declared again in ${stray.join(', ')} — it must have one home`);
+  }
+}
+
+// ── every source module appears in the architecture tour ──
+// OVERVIEW.md calls itself the full tour, and it silently fell five modules
+// behind: sensor-pick, sensor-keys, room-filter, update-policy and font-options
+// were all extracted, documented in their own headers, and never added to it.
+// Nothing caught that, because prose drift has no compiler. This is the cheapest
+// check that would have: a module nobody mentioned is a module nobody can find.
+{
+  const overview = read('OVERVIEW.md');
+  const undocumented = readdirSync('src')
+    .filter((f) => f.endsWith('.ts') && f !== 'index.ts')
+    .filter((f) => !overview.includes(f));
+  if (undocumented.length) {
+    note('OVERVIEW.md', `no mention of ${undocumented.join(', ')} — add it to the repo layout`);
+  }
+}
+
+// ── the mixed sensor list must stay documented as mixed ──
+// `sensors` and `graph_sensors` take device_class keys AND entity ids. The entity
+// half is the only way to reach a reading HA gives no device_class, and it is the
+// part a doc sweep is most likely to drop, because the class list reads complete
+// on its own.
+for (const file of ['README.md', 'OVERVIEW.md']) {
+  const text = read(file);
+  if (!text.includes('entity id')) {
+    note(file, 'never mentions entity ids — `sensors` / `graph_sensors` take them too');
   }
 }
 
