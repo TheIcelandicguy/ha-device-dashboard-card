@@ -1490,6 +1490,8 @@ export const mainCss = css`
       font-variant-numeric:tabular-nums; opacity:.75; padding:1px 0; }
     .spark-axis-l { text-align:right; margin-right:3px; }
     .spark-axis-r { text-align:left;  margin-left:3px; }
+    /* One value, centred: a flat series has a level, not a range. */
+    .spark-axis.flat { justify-content:center; }
 
 
     .spark-val { font-size:.75em; font-weight:600; color:var(--sc-text-secondary); white-space:nowrap; min-width:44px; text-align:right; }

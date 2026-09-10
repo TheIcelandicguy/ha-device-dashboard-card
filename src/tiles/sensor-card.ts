@@ -27,7 +27,15 @@ export function renderSensorCardTile(ctx: TileCtx): TemplateResult {
     const st = hass.states[primaryEnt.entity_id];
     const val = parseFloat(st?.state ?? '');
     const unit = (st?.attributes as HassAttrs)?.unit_of_measurement ?? '';
-    const dc = (st?.attributes as HassAttrs)?.device_class ?? '';
+    // What the big number is. A device_class says it for recognised hardware
+    // ("temperature"), and says nothing at all for the readings that have none
+    // — a PC led with a bare "35 %" and left you to infer from the graphs
+    // underneath which of them it was. Fall back to the entity's own name.
+    const primaryAttrs = st?.attributes as HassAttrs | undefined;
+    const dc = (primaryAttrs?.device_class as string)
+      || stripDevicePrefix((primaryAttrs?.friendly_name as string) ?? '', device.name)
+      || primaryEnt.entity_id.split('.')[1]?.replace(/_/g, ' ')
+      || '';
     const tileH = config.graph_hours ?? 24;
     ctx.requestGraphData(primaryEnt.entity_id);
     const pts = ctx.getGraphPoints(primaryEnt.entity_id, tileH);

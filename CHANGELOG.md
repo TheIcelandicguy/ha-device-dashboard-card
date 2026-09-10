@@ -5,6 +5,23 @@ installs from them.
 
 ## Unreleased
 
+### The big number says what it is
+
+A sensor tile labelled its headline value with the reading's `device_class` —
+"temperature", "humidity" — which works for hardware that has one and leaves a
+blank for everything else. A PC led with a bare **35 %** and no clue which of the
+readings graphed underneath it was, leaving you to infer it from the values
+below.
+
+It falls back to the entity's own name now: **SPCC free space**, **cpuload**.
+Devices that report a class are unchanged.
+
+### A flat graph shows one number, not the same one twice
+
+With the scale printed at both ends, a series that never moved rendered its value
+top *and* bottom — `190` over `190`. Honest, and it read as a rendering fault. A
+flat series has a level rather than a range, so it prints once, centred.
+
 ### Graphs show the scale they are drawn against
 
 A sparkline autoscales to its own data, which makes the shape readable and the

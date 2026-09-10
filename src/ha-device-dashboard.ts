@@ -2192,9 +2192,13 @@ export class HADeviceDashboard extends LitElement {
       // configured sensor_range shows as the range rather than the data's own
       // extremes — which is the point when a range is pinned.
       const axisNum = (v: number) => (v % 1 === 0 ? `${v}` : v.toFixed(1));
+      // A flat series has one value, not a range. Printing it top and bottom
+      // read as a rendering fault rather than as "nothing moved".
+      const flatLine = max === min;
       const axis = (side: string) => showAxis ? html`
-        <span class="spark-axis spark-axis-${side}" aria-hidden="true">
-          <i>${axisNum(max)}</i><i>${axisNum(min)}</i>
+        <span class="spark-axis spark-axis-${side} ${flatLine ? 'flat' : ''}" aria-hidden="true">
+          ${flatLine ? html`<i>${axisNum(max)}</i>`
+            : html`<i>${axisNum(max)}</i><i>${axisNum(min)}</i>`}
         </span>` : nothing;
       return html`
         <div class="spark-group">
