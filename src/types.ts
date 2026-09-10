@@ -566,7 +566,17 @@ export interface ViewFilter {
   integrations?: string[];
   /** Case-insensitive area name whitelist. */
   areas?: string[];
-  /** device_id whitelist. */
+  /**
+   * device_id whitelist. **Legacy — no longer editable, and stripped by
+   * `migrateConfig`.**
+   *
+   * It read as "add these devices to the view" and behaved as an intersection
+   * with every other gate, so a view listing every room plus two devices in no
+   * room matched nothing at all: areas removed them, then this kept only them.
+   * Still honoured when present so hand-written YAML does not change meaning
+   * mid-session, but the editor now builds a view from the pills and subtracts
+   * with `exclude_devices`.
+   */
   devices?: string[];
   /** device_id blacklist (applied after all include gates). */
   exclude_devices?: string[];

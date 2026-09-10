@@ -898,16 +898,19 @@ views:
     power_monitor_variant: gauge
 ```
 
-Filter keys: `profiles`, `domains`, `integrations`, `areas`, `devices`,
-`exclude_devices`, `entity_id_pattern`.
+Filter keys: `profiles`, `domains`, `integrations`, `areas`, `exclude_devices`,
+`entity_id_pattern`.
 
-**Two things worth knowing before building one.**
+**A view is what its filters select, minus what you exclude.** The pills add —
+pick profiles, domains, integrations and rooms — and `exclude_devices` takes
+individual devices back out. Filters are ANDed with each other, so a device has
+to pass all of them.
 
-Filters are **ANDed**, including `devices`. That list narrows the result rather
-than adding to it, so a view with `areas: [Kitchen]` and
-`devices: [<a device in the Garage>]` matches nothing at all — the area gate
-removed it before the device gate could keep it. The label in the editor says
-"AND with other gates" for this reason.
+There used to be a per-device *include* list (`filter.devices`). It read as "add
+these to the view" and behaved as an intersection with every other gate, so a
+view listing every room plus two devices that have none matched nothing at all:
+the area gate removed them, then the include gate kept only them. It is gone from
+the editor and stripped from saved configs on load.
 
 `areas` is a list of room names, and a device with **no room** is not in any of
 them. Ticking every room still excludes them; add `''` — shown as **No Room** in

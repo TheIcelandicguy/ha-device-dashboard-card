@@ -4696,7 +4696,6 @@ export class HADeviceDashboardEditor extends LitElement {
   ): TemplateResult {
     const expanded = this._expandedViewIds.has(v.id);
     const filter = v.filter ?? {};
-    const selectedDevices = new Set(filter.devices ?? []);
     const excludedDevices = new Set(filter.exclude_devices ?? []);
     const matchCount = this._countViewMatches(v, allDevices, byId);
     const totalCount = allDevices.length;
@@ -4844,20 +4843,8 @@ export class HADeviceDashboardEditor extends LitElement {
             })()}
 
             <div class="field">
-              <div class="field-lbl">Include specific devices (overrides profiles/domains filter — AND with other gates)</div>
-              <div class="view-dev-list">
-                ${repeat(allDevices, d => d.device_id, d => html`
-                  <label class="view-dev-row">
-                    <input type="checkbox" .checked=${selectedDevices.has(d.device_id)}
-                      @change=${() => this._toggleViewFilterValue(v.id, 'devices', d.device_id)}>
-                    <span class="view-dev-name">${d.name}</span>
-                    ${d.area ? html`<span class="view-dev-area">${d.area}</span>` : nothing}
-                  </label>`)}
-              </div>
-            </div>
-
-            <div class="field">
-              <div class="field-lbl">Exclude devices</div>
+              <div class="field-lbl">Exclude devices
+                <span class="dev-style-hint">the pills above decide what the view holds; this takes individual devices back out of it</span></div>
               <div class="view-dev-list">
                 ${repeat(allDevices, d => d.device_id, d => html`
                   <label class="view-dev-row">

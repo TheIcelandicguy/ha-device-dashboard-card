@@ -5,6 +5,24 @@ installs from them.
 
 ## Unreleased
 
+### A view is what its pills select, minus what you exclude
+
+The view filter had both a per-device **include** list and an **exclude** list.
+The include one read as "add these devices to the view" and behaved as an
+intersection with every other gate — which is how a view listing every room plus
+two devices that have none ended up matching nothing at all.
+
+It is gone. The pills — profiles, domains, integrations, rooms — decide what the
+view holds, and `exclude_devices` takes individual devices back out. One
+direction, no way to write a filter that quietly cancels itself.
+
+`migrateConfig` strips `filter.devices` from saved configs rather than leaving
+it in place, because the editor can no longer show it: a view narrowed by a
+setting nobody can see or clear is the failure this card keeps repeating. Views
+that used it widen to what their pills select, which is visible and adjustable
+rather than silent. Hand-written YAML still honours the key at runtime until it
+is next saved.
+
 ### Views can filter by integration, and the filter has one implementation
 
 A view could be cut by profile, domain, area, device or entity pattern — every

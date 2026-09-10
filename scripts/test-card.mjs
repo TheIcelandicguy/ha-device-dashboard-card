@@ -1624,6 +1624,32 @@ try {
     eq('unknown renders as nothing', h.genLabel('other'), '');
   }
 
+  console.log('\nview include list - migrated away');
+  {
+    // The view include list is gone from the editor, so it must not survive in a
+    // saved config: a view filtered by a setting nobody can see or clear is the
+    // failure this card keeps making. Davíð's real config had every room listed
+    // plus two devices that have none, and matched nothing.
+    {
+      const cfg = { views: [
+        { id: 'a', filter: { areas: ['Kitchen'], devices: ['d1', 'd2'], domains: ['light'] } },
+        { id: 'b', filter: { areas: ['Garage'] } },
+        { id: 'c' },
+      ] };
+      const out = h.migrateConfig(cfg);
+      eq('the include list is dropped', out.views[0].filter.devices, undefined);
+      eq('and the rest of that filter survives',
+        [out.views[0].filter.areas, out.views[0].filter.domains], [['Kitchen'], ['light']]);
+      eq('a view without one is untouched', out.views[1].filter.areas, ['Garage']);
+      eq('and a view with no filter at all is fine', out.views[2].filter, undefined);
+      ok('the original config is not mutated', Array.isArray(cfg.views[0].filter.devices));
+      // The identity contract: unchanged configs must return the same reference
+      // or the card's memoisation is busted on every load.
+      const clean = { views: [{ id: 'a', filter: { areas: ['Kitchen'] } }] };
+      ok('an already-clean config returns the same object', h.migrateConfig(clean) === clean);
+    }
+  }
+
   console.log('\nview filter - six AND-ed gates, one implementation');
   {
     const dev = (id, integration, area, domains) => ({
