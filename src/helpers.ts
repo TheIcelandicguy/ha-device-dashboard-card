@@ -9,7 +9,7 @@ import { THEME_KEYS, detectTheme } from './themes';
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
 /** Entity domains treated as "device-like" for grouping purposes */
-const DEVICE_DOMAINS = new Set([
+export const DEVICE_DOMAINS = new Set([
   'switch', 'light', 'cover', 'valve', 'climate', 'sensor', 'binary_sensor',
   'fan', 'lock', 'media_player', 'vacuum', 'alarm_control_panel', 'humidifier',
   'water_heater', 'update', 'button', 'number', 'select', 'text', 'camera',
@@ -336,6 +336,13 @@ export interface DiscoveryStats {
   integrations: string[];
 }
 
+/**
+ * Device domains, ordered for a picker. Same set discovery uses, so a filter
+ * built from it can express "everything" — the editor's own list had ten of
+ * these twenty-one.
+ */
+export const ALL_DEVICE_DOMAINS: string[] = [...DEVICE_DOMAINS].sort();
+
 /** Domains you can actuate — the signal for "this is a controllable device" used
  *  by universal-mode scoping. */
 export const CONTROLLABLE_DOMAINS = new Set([
@@ -419,6 +426,20 @@ export const PROFILE_LABELS: Record<DeviceProfile, string> = {
   wall_display: 'Display',
   generic:      '',
 };
+
+/**
+ * Every profile a device can be detected as — derived from the label table
+ * rather than typed out again.
+ *
+ * The editor's view filter had its own hand-written list of twelve, and
+ * detection produces seventeen: `ble`, `generic`, `lock`, `media` and `other`
+ * had no pill at all. So ticking **All** selected twelve of seventeen and
+ * silently dropped every device of the missing five — thirty-four of them on one
+ * real fleet — which is exactly what made the pills look like they *exclude*
+ * rather than include.
+ */
+export const ALL_PROFILES = Object.keys(PROFILE_LABELS) as DeviceProfile[];
+
 
 /**
  * Per-profile default tile *style*, used only when `smart_tile_styles` is on and

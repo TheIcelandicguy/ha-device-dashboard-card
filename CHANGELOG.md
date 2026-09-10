@@ -3,6 +3,31 @@
 All notable changes to HA Device Dashboard. Versions are git tags; HACS
 installs from them.
 
+## Unreleased
+
+### "All" in a view filter now means all
+
+The pills are an **include** list: pick `relay` and the view holds relays. Nothing
+picked in a group means everything in it. That is what the label always said —
+but the lists themselves were incomplete, so ticking **All** was not the same as
+picking nothing, and a view that looked wide open still quietly dropped devices.
+
+- **Profiles** offered 12 of the 15 a device can be detected as. `lock`, `media`
+  and `generic` had no pill, so every device of those kinds was excluded by a
+  filter with everything ticked — 34 devices on one real fleet, most of them
+  media players.
+- **Entity domains** offered 10 of the 21 discovery produces. No `media_player`,
+  `lock`, `fan`, `vacuum`, `update`, `camera`, `event` …
+
+Both lists now derive from the source of truth — `ALL_PROFILES` from the label
+table, `ALL_DEVICE_DOMAINS` from the set discovery itself uses — so a pill cannot
+go missing again. 17 assertions, including that every pill ticked matches exactly
+what no filter matches, which is the promise "All" makes.
+
+The header reads **"Filter — pick what to include. A group with nothing picked
+includes all of it."** The old "(empty = all devices)" was true and easy to read
+as the opposite once a fully-ticked filter still hid things.
+
 ## v1.6.0 — 2026-09-10
 
 ### A view filtered by rooms silently dropped every device that has none
