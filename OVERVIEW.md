@@ -236,6 +236,11 @@ src/
                         device_class keys AND entity ids in one list, told
                         apart by the dot. isEntityKey, classKeys, entityKeys,
                         namedEntitiesOn, selectAllKeys.
+  view-filter.ts        Which devices a view shows: the six AND-ed gates, one
+                        implementation shared by the card that renders them and
+                        the editor that counts them. Records what each gate
+                        removed, so an empty view can name the one that emptied
+                        it instead of rendering blank.
   room-filter.ts        The `areas` filter as pure functions. The unassigned
                         bucket ('' — "No Room") is a room like any other;
                         leaving it out of the key universe silently dropped

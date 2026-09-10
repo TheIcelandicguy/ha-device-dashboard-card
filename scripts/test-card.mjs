@@ -167,7 +167,8 @@ try {
     join('node_modules', 'typescript', 'bin', 'tsc'),
     'src/helpers.ts', 'src/cascade.ts', 'src/attention.ts', 'src/shelly-cloud-import.ts',
     'src/design-scope.ts', 'src/localize.ts', 'src/update-policy.ts', 'src/font-options.ts',
-    'src/sensor-pick.ts', 'src/sensor-keys.ts', 'src/room-filter.ts', '--outDir', OUT,
+    'src/sensor-pick.ts', 'src/sensor-keys.ts', 'src/room-filter.ts', 'src/view-filter.ts',
+    '--outDir', OUT,
     '--module', 'commonjs', '--target', 'es2020', '--skipLibCheck', '--moduleResolution', 'node',
   ], { stdio: 'inherit' });
   // The project is "type": "module", which would make these .js files ESM.
@@ -184,6 +185,7 @@ try {
   const sp  = req(join(process.cwd(), OUT, 'sensor-pick.js'));
   const sk  = req(join(process.cwd(), OUT, 'sensor-keys.js'));
   const rf  = req(join(process.cwd(), OUT, 'room-filter.js'));
+  const vf  = req(join(process.cwd(), OUT, 'view-filter.js'));
   const hass = fleet();
   const byName = (list, name) => list.find(d => d.name === name);
 
@@ -1196,6 +1198,106 @@ try {
       sh.notShelly <= Object.keys(hass.devices).length);
   }
 
+  console.log('\nattention - grouping and muting by integration');
+  {
+    const item = (name, integration, kinds) => ({
+      device: { device_id: name, name, integration }, kinds, detail: kinds,
+    });
+    // Shaped like the real measurement: one integration drowning the rest.
+    const items = [
+      item('Speaker 1', 'music_assistant', ['offline']),
+      item('Speaker 2', 'music_assistant', ['offline']),
+      item('Speaker 3', 'music_assistant', ['offline']),
+      item('Relay',     'shelly',          ['offline']),
+      item('Dimmer',    'shelly',          ['update']),
+      item('Repo A',    'hacs',            ['update']),
+      item('Nameless',  '',                ['battery']),
+    ];
+
+    const groups = att.groupAttention(items);
+    // Order is by worst kind first: a flat battery outranks an available
+    // update, so 'other' sits above 'hacs' despite being smaller.
+    eq('one group per integration, worst first', groups.map(g => g.integration),
+      ['music_assistant', 'shelly', 'other', 'hacs']);
+    eq('and every item is kept', att.countItems(groups), items.length);
+    eq('a missing integration lands under "other"',
+      groups.find(g => g.integration === 'other').items.length, 1);
+
+    // Ordering: worst kind first, then size. shelly has an offline too, so it
+    // outranks hacs (updates only) despite being smaller than music_assistant.
+    eq('worst kind orders above size', groups.map(g => g.worst),
+      ['offline', 'offline', 'battery', 'update']);
+    ok('the bigger offline group leads',
+      groups[0].integration === 'music_assistant' && groups[0].items.length === 3);
+
+    // Muting sets aside rather than deletes: a setting you cannot see is a
+    // setting you cannot undo, which is what the No Room filter taught.
+    const split = att.splitMuted(groups, ['music_assistant']);
+    eq('muted groups leave the shown list',
+      split.shown.map(g => g.integration), ['shelly', 'other', 'hacs']);
+    eq('but are still returned, with their items',
+      [split.muted.length, split.muted[0].items.length], [1, 3]);
+    eq('the count drops by exactly what was muted', att.countItems(split.shown), 4);
+
+    eq('muting is case-insensitive',
+      att.splitMuted(groups, ['MUSIC_ASSISTANT']).shown.length, 3);
+    eq('muting nothing changes nothing', att.splitMuted(groups, []).shown.length, 4);
+    eq('and neither does an unset list', att.splitMuted(groups, undefined).shown.length, 4);
+    eq('muting an integration that is not there is harmless',
+      att.splitMuted(groups, ['zwave']).shown.length, 4);
+    eq('muting everything leaves a zero count',
+      att.countItems(att.splitMuted(groups, ['music_assistant', 'shelly', 'hacs', 'other']).shown), 0);
+    eq('an empty list groups to nothing', att.groupAttention([]), []);
+  }
+
+  console.log('\nfirmware spread - per integration, or it means nothing');
+  {
+    const dev = (name, integration, sw) => ({ device_id: name, name, integration, sw_version: sw, entities: [] });
+    // Shaped like the real fleet: one integration drifting badly, one mildly,
+    // several settled, and a vendor whose version string is not a number.
+    const fleet = [
+      dev('s1', 'shelly', '1.7.5'), dev('s2', 'shelly', '1.7.5'),
+      dev('s3', 'shelly', '2.7.4'), dev('s4', 'shelly', '1.4.4'),
+      dev('h1', 'hue', '1.2.3'), dev('h2', 'hue', '1.2.4'),
+      dev('w1', 'wled', '16.0.1'), dev('w2', 'wled', '16.0.1'),
+      dev('b1', 'bthome', 'BTHome BLE v2'),
+      dev('n1', 'nofw', undefined),
+    ];
+
+    // The old flat call is what put "newest" on a BTHome label: version strings
+    // from different vendors are not on a common scale.
+    const flat = att.firmwareGroups(fleet);
+    ok('flat grouping still mixes vendors', flat.length > 3);
+    ok('and its "newest" is whatever sorted highest, not per vendor',
+      flat.find(g => g.current).devices[0].integration !== 'shelly');
+
+    const byInt = att.firmwareByIntegration(fleet);
+    eq('only integrations that disagree with themselves',
+      byInt.map(x => x.integration), ['shelly', 'hue']);
+    eq('the widest spread leads', byInt[0].groups.length, 3);
+    eq('and counts only its own devices', byInt[0].total, 4);
+
+    // The whole point: newest is now newest WITHIN the integration.
+    eq('newest is the top version of that integration',
+      byInt[0].groups.find(g => g.current).version, '2.7.4');
+    eq('and hue gets its own newest', byInt[1].groups.find(g => g.current).version, '1.2.4');
+
+    ok('a settled integration is dropped', !byInt.some(x => x.integration === 'wled'));
+    ok('so is one with a single odd version string',
+      !byInt.some(x => x.integration === 'bthome'));
+    eq('a device with no firmware is not counted',
+      byInt.reduce((n, x) => n + x.total, 0), 6);
+
+    // Muting reaches the firmware block too - it lives inside the same section.
+    eq('a muted integration drops out of the spread',
+      att.firmwareByIntegration(fleet, ['shelly']).map(x => x.integration), ['hue']);
+    eq('case-insensitively',
+      att.firmwareByIntegration(fleet, ['SHELLY']).map(x => x.integration), ['hue']);
+    eq('a settled fleet reports no drift',
+      att.firmwareByIntegration([dev('a', 'shelly', '1.0.0'), dev('b', 'shelly', '1.0.0')]), []);
+    eq('and an empty fleet likewise', att.firmwareByIntegration([]), []);
+  }
+
   console.log('\nsensor keys - one list, classes and entity ids');
   {
     const ent = (id, domain, category) => ({ entity_id: id, domain, entity_category: category });
@@ -1509,6 +1611,107 @@ try {
     // A non-Shelly hw_version string must not be mistaken for a generation.
     eq('arbitrary hw_version is ignored', gen('Some Router', 'RAX50'), 'other');
     eq('esp32 is not a generation', gen('Node', 'esp32'), 'other');
+  }
+
+  console.log('\ngeneration label - one home for the rule');
+  {
+    // How a generation is written on screen. It lived inline in block-tile.ts,
+    // and the firmware spread wanting it too would otherwise have made a second
+    // copy to keep in step.
+    eq('a numbered generation', [1, 2, 3, 4].map(h.genLabel), ['G1', 'G2', 'G3', 'G4']);
+    eq('BLU is not a number', h.genLabel('ble'), 'BLE');
+    // 'other' means "no idea" - a badge saying so is worse than no badge.
+    eq('unknown renders as nothing', h.genLabel('other'), '');
+  }
+
+  console.log('\nview include list - migrated away');
+  {
+    // The view include list is gone from the editor, so it must not survive in a
+    // saved config: a view filtered by a setting nobody can see or clear is the
+    // failure this card keeps making. Davíð's real config had every room listed
+    // plus two devices that have none, and matched nothing.
+    {
+      const cfg = { views: [
+        { id: 'a', filter: { areas: ['Kitchen'], devices: ['d1', 'd2'], domains: ['light'] } },
+        { id: 'b', filter: { areas: ['Garage'] } },
+        { id: 'c' },
+      ] };
+      const out = h.migrateConfig(cfg);
+      eq('the include list is dropped', out.views[0].filter.devices, undefined);
+      eq('and the rest of that filter survives',
+        [out.views[0].filter.areas, out.views[0].filter.domains], [['Kitchen'], ['light']]);
+      eq('a view without one is untouched', out.views[1].filter.areas, ['Garage']);
+      eq('and a view with no filter at all is fine', out.views[2].filter, undefined);
+      ok('the original config is not mutated', Array.isArray(cfg.views[0].filter.devices));
+      // The identity contract: unchanged configs must return the same reference
+      // or the card's memoisation is busted on every load.
+      const clean = { views: [{ id: 'a', filter: { areas: ['Kitchen'] } }] };
+      ok('an already-clean config returns the same object', h.migrateConfig(clean) === clean);
+    }
+  }
+
+  console.log('\nview filter - six AND-ed gates, one implementation');
+  {
+    const dev = (id, integration, area, domains) => ({
+      device_id: id, integration, area,
+      entities: (domains ?? ['sensor']).map((d, i) => ({ domain: d, entity_id: `${d}.${id}_${i}` })),
+    });
+    const fleet = [
+      dev('kitchen_light', 'shelly', 'Kitchen', ['light']),
+      dev('garage_relay', 'shelly', 'Garage', ['switch']),
+      dev('hue_lamp', 'hue', 'Kitchen', ['light']),
+      dev('pc', 'mqtt', undefined, ['sensor']),      // no room
+      dev('nas', 'mqtt', undefined, ['sensor']),     // no room
+    ];
+    const profileOf = (d) => (d.integration === 'shelly' ? 'relay' : 'sensor');
+    const run = (f, trace) => vf.applyViewFilter(fleet, f, profileOf, trace).map(d => d.device_id);
+
+    eq('no filter is everything', run(undefined).length, 5);
+    eq('an empty filter is everything', run({}).length, 5);
+
+    // The new gate.
+    eq('by integration', run({ integrations: ['shelly'] }), ['kitchen_light', 'garage_relay']);
+    eq('and it is case-insensitive', run({ integrations: ['SHELLY'] }).length, 2);
+    eq('several integrations', run({ integrations: ['hue', 'mqtt'] }), ['hue_lamp', 'pc', 'nas']);
+
+    // THE BUG: a list of every room still excludes devices that have none.
+    eq('every room named still drops the roomless',
+      run({ areas: ['Kitchen', 'Garage'] }), ['kitchen_light', 'garage_relay', 'hue_lamp']);
+    eq('until the unassigned bucket is named too',
+      run({ areas: ['Kitchen', 'Garage', vf.NO_AREA] }).length, 5);
+    eq('the bucket alone selects exactly the roomless',
+      run({ areas: [vf.NO_AREA] }), ['pc', 'nas']);
+
+    // And the compounding half: devices ANDs, it does not add.
+    eq('naming a device outside the area gate matches nothing',
+      run({ areas: ['Kitchen'], devices: ['pc'] }), []);
+    eq('naming one inside it narrows to that one',
+      run({ areas: ['Kitchen'], devices: ['hue_lamp'] }), ['hue_lamp']);
+
+    // What the empty-view message is built from.
+    const trace = [];
+    run({ areas: ['Kitchen'], devices: ['pc'] }, trace);
+    eq('every gate that ran is recorded', trace.map(g => g.gate), ['areas', 'devices']);
+    eq('and the one that emptied it is findable', vf.emptiedBy(trace).gate, 'devices');
+    eq('a gate that removed nothing is not blamed',
+      vf.emptiedBy([{ gate: 'areas', before: 5, after: 5 }]), undefined);
+    // A gate that starts empty did not empty anything - something before it did.
+    eq('an already-empty pool does not steal the blame',
+      vf.emptiedBy([{ gate: 'areas', before: 5, after: 0 }, { gate: 'devices', before: 0, after: 0 }]).gate,
+      'areas');
+
+    ok('the No Room trap is detectable',
+      vf.missesNoRoom({ areas: ['Kitchen'] }, 2));
+    ok('not when the bucket is named', !vf.missesNoRoom({ areas: ['Kitchen', ''] }, 2));
+    ok('not when nothing is unassigned', !vf.missesNoRoom({ areas: ['Kitchen'] }, 0));
+    ok('and not when no areas are filtered at all', !vf.missesNoRoom({ devices: ['pc'] }, 2));
+
+    // A half-typed regex in the editor must not blank the card being edited.
+    eq('an invalid pattern filters nothing', run({ entity_id_pattern: '([' }).length, 5);
+    eq('a valid one matches on any entity', run({ entity_id_pattern: '^light\\.' }),
+      ['kitchen_light', 'hue_lamp']);
+    eq('exclude runs after the include gates',
+      run({ integrations: ['shelly'], exclude_devices: ['garage_relay'] }), ['kitchen_light']);
   }
 
   console.log('\nlocalize - catalogues and lookup');

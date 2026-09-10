@@ -8,6 +8,8 @@ import { HomeAssistant, fireEvent, LovelaceCardConfig } from 'custom-card-helper
 import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAnimationType, TileStyle, PowerMonitorVariant, ViewConfig, DeviceProfile, ThemePreset, CustomStyleDef, TileLayout, EnergyPeriod, InputActionConfig, SortBy, ExtraCardStyle, AreaCardPlacement } from './types';
 import { selectAllKeys, entityKeys, classKeys, namedEntitiesInForce, withNamedEntities } from './sensor-keys';
 import { areaKeyUniverse, toggleAreaSelection, isAreaOn as isAreaSelected, setDevicesHidden, NO_AREA_KEY } from './room-filter';
+import { attentionItems, groupAttention } from './attention';
+import { applyViewFilter } from './view-filter';
 import { getAllDevices, GRAPH_SENSOR_DEFS, GAUGE_RING_DEFS, gaugeStops, colorAt, hexToHsv, hsvToHex, parseCssColor, withAlpha, deviceHasControllable, getDeviceProfile,HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels,
   CONFIG_KEYS, LOVELACE_KEYS } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, detectTheme, paletteFor, type ThemePalette } from './themes';
@@ -721,6 +723,28 @@ export class HADeviceDashboardEditor extends LitElement {
   private _editorLayoutTimers: number[] = [];
   private _editorRAF?: number;
 
+  /**
+   * Toggle an integration in and out of the Needs-attention count, from the
+   * live preview's group headers.
+   *
+   * Its own event rather than another shape on `hdd-editor-goto`: that channel
+   * already carries two unrelated payloads told apart by which fields happen to
+   * be present, which is on the roadmap as a thing to stop doing — not a
+   * pattern to extend.
+   *
+   * The card cannot write config, so the button only renders inside the edit
+   * dialog, where this listener exists to answer it.
+   */
+  private _onAttentionMute = (ev: Event) => {
+    const integration = (ev as CustomEvent).detail?.integration as string | undefined;
+    if (!integration) return;
+    const cur = this._config?.attention_muted_integrations ?? [];
+    const next = cur.includes(integration)
+      ? cur.filter(i => i !== integration)
+      : [...cur, integration];
+    this._set('attention_muted_integrations', next.length ? next : undefined);
+  };
+
   connectedCallback() {
     super.connectedCallback();
     ensureCdnFontsLoaded();
@@ -729,6 +753,7 @@ export class HADeviceDashboardEditor extends LitElement {
     // The card can't reach the editor directly — in HA's edit dialog the two are
     // siblings — so a window event is the channel. Fired by the delegate notice.
     window.addEventListener('hdd-editor-goto', this._onEditorGoto);
+    window.addEventListener('hdd-attention-mute', this._onAttentionMute);
     this._loadSnapshots();
     void this._ensureHaPickers();
     this._editorRAF = requestAnimationFrame(() => {
@@ -854,6 +879,7 @@ export class HADeviceDashboardEditor extends LitElement {
     window.removeEventListener('mousedown', this._onIconPickerOutsideClick, true);
     window.removeEventListener('mousedown', this._onWheelOutsideClick, true);
     window.removeEventListener('hdd-editor-goto', this._onEditorGoto);
+    window.removeEventListener('hdd-attention-mute', this._onAttentionMute);
     if (this._flashTimer) { clearTimeout(this._flashTimer); this._flashTimer = null; }
     clearTimeout(this._styleClipTimer);
     clearTimeout(this._viewDeleteTimer);
@@ -4540,7 +4566,9 @@ export class HADeviceDashboardEditor extends LitElement {
   }
 
   private _toggleViewFilterValue(
-    id: string, key: 'profiles' | 'domains' | 'areas' | 'devices' | 'exclude_devices', value: string,
+    id: string,
+    key: 'profiles' | 'domains' | 'integrations' | 'areas' | 'devices' | 'exclude_devices',
+    value: string,
   ): void {
     const v = (this._config.views ?? []).find(x => x.id === id);
     const cur = (v?.filter?.[key] as string[] | undefined) ?? [];
@@ -4600,44 +4628,23 @@ export class HADeviceDashboardEditor extends LitElement {
   /** Editor-side mirror of the runtime filter — returns how many discovered devices a view matches.
    *  `discovered` (sorted list) and `byId` (device_id → full device) are built ONCE by the caller
    *  and shared across all view cards, so we don't re-scan/sort per view on every re-render. */
+  /**
+   * How many devices a view matches — through the SAME function the card
+   * renders with (`view-filter.ts`).
+   *
+   * This used to be a second copy of the six gates, kept in step by hand. The
+   * count is what someone trusts while building a view, before they can see the
+   * result, so a copy that drifts is worse than no count at all.
+   */
   private _countViewMatches(
     v: ViewConfig,
     discovered: Array<{ device_id: string; name: string; area?: string }>,
     byId: Map<string, ReturnType<typeof getAllDevices>[number]>,
   ): number {
-    const f = v.filter;
-    let pool = discovered;
-    if (!f) return pool.length;
-    if (f.profiles?.length) {
-      const allow = new Set(f.profiles);
-      pool = pool.filter(d => {
-        const full = byId.get(d.device_id);
-        return full && allow.has(getDeviceProfile(full).type);
-      });
-    }
-    if (f.domains?.length) {
-      const allow = new Set(f.domains);
-      pool = pool.filter(d => byId.get(d.device_id)?.entities.some(e => allow.has(e.domain)));
-    }
-    if (f.areas?.length) {
-      const allow = new Set(f.areas.map(a => a.toLowerCase()));
-      pool = pool.filter(d => allow.has((d.area ?? '').toLowerCase()));
-    }
-    if (f.devices?.length) {
-      const allow = new Set(f.devices);
-      pool = pool.filter(d => allow.has(d.device_id));
-    }
-    if (f.exclude_devices?.length) {
-      const block = new Set(f.exclude_devices);
-      pool = pool.filter(d => !block.has(d.device_id));
-    }
-    if (f.entity_id_pattern) {
-      try {
-        const re = new RegExp(f.entity_id_pattern);
-        pool = pool.filter(d => byId.get(d.device_id)?.entities.some(e => re.test(e.entity_id)));
-      } catch { /* invalid regex → no filtering */ }
-    }
-    return pool.length;
+    const full = discovered
+      .map(d => byId.get(d.device_id))
+      .filter((d): d is NonNullable<typeof d> => !!d);
+    return applyViewFilter(full, v.filter, d => getDeviceProfile(d).type).length;
   }
 
   private _renderViewsTab(): TemplateResult {
@@ -4689,7 +4696,6 @@ export class HADeviceDashboardEditor extends LitElement {
   ): TemplateResult {
     const expanded = this._expandedViewIds.has(v.id);
     const filter = v.filter ?? {};
-    const selectedDevices = new Set(filter.devices ?? []);
     const excludedDevices = new Set(filter.exclude_devices ?? []);
     const matchCount = this._countViewMatches(v, allDevices, byId);
     const totalCount = allDevices.length;
@@ -4786,34 +4792,59 @@ export class HADeviceDashboardEditor extends LitElement {
               </div>
             </div>`)}
 
-            ${areas.length ? html`
-              <div class="field">
-                <div class="field-lbl">Areas
-                  ${this._selAllNone(
-                    () => this._updateViewFilter(v.id, { areas: areas.map(a => a.name) }),
-                    () => this._updateViewFilter(v.id, { areas: [] }))}</div>
-                <div class="pill-grp">
-                  ${areas.map(a => html`
-                    <span class="pill ${(filter.areas ?? []).includes(a.name) ? 'on' : ''}"
-                      @click=${() => this._toggleViewFilterValue(v.id, 'areas', a.name)}>${a.name}</span>`)}
-                </div>
-              </div>` : nothing}
+            ${(() => {
+              // Integrations present in the fleet, with counts. The axis a mixed
+              // fleet is most naturally cut on — "the Shelly view", "the Hue
+              // view" — and the one this filter was missing entirely.
+              const counts = new Map<string, number>();
+              for (const d of allDevices) {
+                const k = byId.get(d.device_id)?.integration;
+                if (k) counts.set(k, (counts.get(k) ?? 0) + 1);
+              }
+              if (counts.size < 2) return nothing;
+              const keys = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+              const on = filter.integrations ?? [];
+              return html`
+                <div class="field">
+                  <div class="field-lbl">Integrations
+                    ${this._selAllNone(
+                      () => this._updateViewFilter(v.id, { integrations: keys.map(([k]) => k) }),
+                      () => this._updateViewFilter(v.id, { integrations: [] }))}</div>
+                  <div class="pill-grp">
+                    ${keys.map(([k, n]) => html`
+                      <span class="pill ${on.includes(k) ? 'on' : ''}"
+                        @click=${() => this._toggleViewFilterValue(v.id, 'integrations', k)}
+                      >${getIntegrationLabel(k)} ${n}</span>`)}
+                  </div>
+                </div>`;
+            })()}
+
+            ${(() => {
+              // A view's area list must be able to name the unassigned bucket,
+              // or a view filtered by rooms silently drops every device that
+              // has none — and the filters are AND-ed, so adding those devices
+              // by name afterwards leaves the view empty rather than fixing it.
+              // Exactly the No Room bug fixed in v1.4.1, one layer over.
+              const keys = areaKeyUniverse(areas.map(a => a.name), allDevices.some(d => !d.area));
+              if (!keys.length) return nothing;
+              const label = (k: string) => k || 'No Room';
+              return html`
+                <div class="field">
+                  <div class="field-lbl">Areas
+                    ${this._selAllNone(
+                      () => this._updateViewFilter(v.id, { areas: keys }),
+                      () => this._updateViewFilter(v.id, { areas: [] }))}</div>
+                  <div class="pill-grp">
+                    ${keys.map(k => html`
+                      <span class="pill ${(filter.areas ?? []).includes(k) ? 'on' : ''}"
+                        @click=${() => this._toggleViewFilterValue(v.id, 'areas', k)}>${label(k)}</span>`)}
+                  </div>
+                </div>`;
+            })()}
 
             <div class="field">
-              <div class="field-lbl">Include specific devices (overrides profiles/domains filter — AND with other gates)</div>
-              <div class="view-dev-list">
-                ${repeat(allDevices, d => d.device_id, d => html`
-                  <label class="view-dev-row">
-                    <input type="checkbox" .checked=${selectedDevices.has(d.device_id)}
-                      @change=${() => this._toggleViewFilterValue(v.id, 'devices', d.device_id)}>
-                    <span class="view-dev-name">${d.name}</span>
-                    ${d.area ? html`<span class="view-dev-area">${d.area}</span>` : nothing}
-                  </label>`)}
-              </div>
-            </div>
-
-            <div class="field">
-              <div class="field-lbl">Exclude devices</div>
+              <div class="field-lbl">Exclude devices
+                <span class="dev-style-hint">the pills above decide what the view holds; this takes individual devices back out of it</span></div>
               <div class="view-dev-list">
                 ${repeat(allDevices, d => d.device_id, d => html`
                   <label class="view-dev-row">
@@ -5310,6 +5341,31 @@ export class HADeviceDashboardEditor extends LitElement {
             @change=${(e: Event) => this._set('include_beta_updates', (e.target as HTMLInputElement).checked || undefined)}>
             <span class="sw-t"></span><span class="sw-b"></span></label>
         </div>
+        ${(() => {
+          // Offer the integrations that are actually producing rows, with their
+          // counts, so nobody has to know an integration slug to silence one.
+          const items = attentionItems(this._allDevices(), (this.hass?.states ?? {}) as never, {
+            batteryBelow: c.attention_battery, includeBeta: c.include_beta_updates,
+          });
+          const groups = groupAttention(items);
+          if (groups.length < 2) return nothing;
+          const muted = c.attention_muted_integrations ?? [];
+          return html`
+            <div class="field">
+              <div class="field-lbl">Count these integrations
+                <span class="dev-style-hint">a speaker that is not reachable, or a HACS repository with an update, is technically true and usually noise — switch one off and it stays listed with its count, just not counted</span></div>
+              <div class="pill-grp">
+                ${groups.map(g => {
+                  const on = !muted.includes(g.integration);
+                  return html`
+                    <span class="pill ${on ? 'on' : ''}" @click=${() => {
+                      const next = on ? [...muted, g.integration] : muted.filter(i => i !== g.integration);
+                      this._set('attention_muted_integrations', next.length ? next : undefined);
+                    }}>${getIntegrationLabel(g.integration)} ${g.items.length}</span>`;
+                })}
+              </div>
+            </div>`;
+        })()}
         <div class="tog-row">
           <div class="tog-lbl">Firmware spread
             <div class="hint">Inside that summary, group the fleet by firmware version so you can see what is lagging. Hidden when everything is on one version.</div>
@@ -5589,6 +5645,12 @@ export class HADeviceDashboardEditor extends LitElement {
       <div class="tog-row">
         <div class="tog-lbl">Tick grid lines</div>
         <label class="sw"><input type="checkbox" .checked=${gs.tick_lines !== false} @change=${(e:Event)=>this._set('graph_style',{...gs,tick_lines:(e.target as HTMLInputElement).checked})}><span class="sw-t"></span><span class="sw-b"></span></label>
+      </div>
+      <div class="tog-row">
+        <div class="tog-lbl">Scale numbers
+          <div class="hint">The top and bottom of the y-axis, printed either side of the plot. A sparkline scales to its own data, so without them the same shape could be a 2° wobble or a 40° swing.</div>
+        </div>
+        <label class="sw"><input type="checkbox" .checked=${gs.axis_labels !== false} @change=${(e:Event)=>this._set('graph_style',{...gs,axis_labels:(e.target as HTMLInputElement).checked})}><span class="sw-t"></span><span class="sw-b"></span></label>
       </div>`)}`;
 
     // Unset = the card graphs a default set, so show that here too (ticked), not

@@ -101,6 +101,11 @@ export const IS: Translations = {
   'header.collapse_every_room': 'Loka öllum herbergjum',
   'header.firmware': 'Fastbúnaður',
   'header.firmware_versions': '{n} fastbúnaðarútgáfur',
+  'header.firmware_mixed': '{n} samþættingar með ólíkar útgáfur',
+  'view.empty': 'Ekkert passar við „{name}“ sýnina.',
+  'view.empty_gate': '{gate}-sían fjarlægði síðustu {n} tækin.',
+  'view.empty_no_room': '{n} tæki eru ekki í neinu herbergi, og listi yfir herbergi tekur þau ekki með — hakaðu líka við Ekkert herbergi.',
+  'view.empty_and': 'Allar síur sýnarinnar verða að standast, svo það að nefna tæki þrengir niðurstöðuna í stað þess að bæta við hana.',
   'header.newest': 'nýjast',
 
   // ── Aðgerðir ──
@@ -248,6 +253,9 @@ export const IS: Translations = {
   'notice.discovery_link': 'Uppgötvun',
   'notice.discovery_here': 'geymir stillingarnar.',
   'notice.discovery_editor': 'í ritlinum geymir stillingarnar.',
+  'attention.mute': 'Hætta að telja þessa samþættingu',
+  'attention.unmute': 'Telja þessa samþættingu aftur',
+  'attention.muted': 'Ekki talið',
 
   // ── Villur ──
   'error.replay_needs_admin':

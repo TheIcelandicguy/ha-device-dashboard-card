@@ -3,6 +3,209 @@
 All notable changes to HA Device Dashboard. Versions are git tags; HACS
 installs from them.
 
+## Unreleased
+
+### A view is what its pills select, minus what you exclude
+
+The view filter had both a per-device **include** list and an **exclude** list.
+The include one read as "add these devices to the view" and behaved as an
+intersection with every other gate — which is how a view listing every room plus
+two devices that have none ended up matching nothing at all.
+
+It is gone. The pills — profiles, domains, integrations, rooms — decide what the
+view holds, and `exclude_devices` takes individual devices back out. One
+direction, no way to write a filter that quietly cancels itself.
+
+`migrateConfig` strips `filter.devices` from saved configs rather than leaving
+it in place, because the editor can no longer show it: a view narrowed by a
+setting nobody can see or clear is the failure this card keeps repeating. Views
+that used it widen to what their pills select, which is visible and adjustable
+rather than silent. Hand-written YAML still honours the key at runtime until it
+is next saved.
+
+### Views can filter by integration, and the filter has one implementation
+
+A view could be cut by profile, domain, area, device or entity pattern — every
+axis except the one a mixed fleet is most naturally cut on. "The Shelly view" was
+not expressible. `filter.integrations` now is, with a picker listing what the
+fleet actually has and how many of each.
+
+**The gates moved to `src/view-filter.ts` first.** There were two copies: the
+card filtered devices to render them, the editor filtered them again to print
+"42 of 178 match", each with its own version of the same six gates and nothing
+keeping them in step. Adding a seventh to one would have silently made the
+other's count wrong — and that count is what you trust while building a view,
+before you can see the result. One implementation now, with 21 assertions over
+it, including the ordering that made the No Room bug above so confusing.
+
+### A view filtered by rooms silently dropped every device that has none
+
+Reported: views were created, the card showed no No Room section, and after
+adding two specific devices to those views they rendered **completely blank**.
+
+Two faults compounding, and the second made the first look like the fix:
+
+**A view's area picker could not name the unassigned bucket.** It listed the real
+areas only, so ticking every room still excluded every device without one — and
+the pill that would have included them did not exist. This is the No Room bug
+fixed in v1.4.1 for the Rooms tab, sitting one layer over in the view filter,
+which that fix did not reach.
+
+**Every view gate is an AND.** So the obvious next move — naming the missing
+devices under *Include specific devices* — did not add them back. It intersected:
+areas kept the 94 devices that have a room, then the device list narrowed those
+to two that had already been removed. Nothing left.
+
+And a view that filters to nothing rendered a blank page. No tiles, no rooms,
+nothing saying why — the failure this card keeps repeating.
+
+Now: the picker offers **No Room**, and an empty view explains itself.
+
+> Nothing matches the "Default" view.
+> The devices filter removed the last 94 devices.
+> 80 devices have no room, and a list of rooms does not include them — tick No
+> Room as well.
+> A view's filters all have to pass, so naming devices narrows the result rather
+> than adding to it.
+
+Each gate now records what it removed, so the message names the one that took the
+last device rather than guessing.
+
+### The big number says what it is
+
+A sensor tile labelled its headline value with the reading's `device_class` —
+"temperature", "humidity" — which works for hardware that has one and leaves a
+blank for everything else. A PC led with a bare **35 %** and no clue which of the
+readings graphed underneath it was, leaving you to infer it from the values
+below.
+
+It falls back to the entity's own name now: **SPCC free space**, **cpuload**.
+Devices that report a class are unchanged.
+
+### A flat graph shows one number, not the same one twice
+
+With the scale printed at both ends, a series that never moved rendered its value
+top *and* bottom — `190` over `190`. Honest, and it read as a rendering fault. A
+flat series has a level rather than a range, so it prints once, centred.
+
+### Graphs show the scale they are drawn against
+
+A sparkline autoscales to its own data, which makes the shape readable and the
+height meaningless: the same line can be a 2 °C wobble or a 40 °C swing, and
+nothing on screen said which.
+
+The top and bottom of the y-axis now print either side of every plot — on
+**both** sides, because on a wide graph the number you want is whichever edge
+your eye is already at.
+
+It pays for itself immediately on a PC tile: `gpuload` draws a violently spiky
+line that turns out to run between 13.0 and 22.3, and `memoryusage` looks like a
+steep climb across 52.6 to 59.3. Neither shape means what it looks like without
+the numbers beside it.
+
+Where `sensor_ranges` pins a range the labels show that range rather than the
+data's extremes, since the pinned range is what the line is drawn against — which
+is the whole point of pinning one.
+
+`graph_style.axis_labels`, default on, with a switch in Graphs & Sensors beside
+the other graph toggles.
+
+### The firmware spread names every device, and the bars are gone
+
+The spread told you 18 devices are on 1.7.5 and three are on 1.14.0. It never
+told you *which* three, which is the question you actually have when deciding
+what to go and update.
+
+Every version now lists its devices, each with its room, each opening that
+device's detail sheet — the same thing an attention row does. No click: the
+names are the content, and hiding them behind an interaction to preserve a bar
+chart had it backwards.
+
+The bars went with it. They drew a proportion the device names answer better,
+and they were occupying the width the names needed — on a 1500px tablet the bar
+was mostly empty space to the right of a two-digit count.
+
+A tooltip would have been the cheap version of this and useless: it gets read on
+a wall tablet, where there is no hover.
+
+**Each device shows its generation in front of the version**, because the
+generation is what decides whether a version is even applicable — a Gen1 will
+never see a 2.x build, so "out of date" means something different per row. On one
+real fleet the two track each other exactly: 2.7.4 is entirely G2, 2.0.1 entirely
+G3, 1.14.x entirely G1. That is only visible once both are on the same line.
+
+The `G1`/`BLE`/blank rule moved to `genLabel()` in `src/helpers.ts`. It was inline
+in `block-tile.ts`, and the firmware spread wanting it too would have made a
+second copy of a formatting decision — the thing the roadmap's "one chip
+renderer" item is about. `'other'` still renders as nothing: it means "no idea",
+and a badge saying so is worse than no badge.
+
+### The firmware spread is per integration, and "newest" was wrong
+
+Same treatment as the attention list above, and it turned up a real bug rather
+than just noise.
+
+`firmwareGroups` sorted every version string in the fleet into one list and
+marked the top one newest. That is right for a fleet of Shellys and wrong the
+moment a fleet spans vendors, because version strings are not on a common scale.
+On a real 178-device instance the **"newest" tag landed on `BTHome BLE v2`** — a
+single device, and not a version number — while the highest Shelly release,
+2.7.4, was not marked at all. Every Shelly row read as out of date against a
+label from another vendor.
+
+Each integration now gets its own spread and its own newest: `SHELLY 2.7.4` and
+`HUE 2.85.1`, each correct within its vendor.
+
+**Integrations that agree with themselves are dropped.** A single version is not
+a spread. Ten of thirteen integrations on that instance were in that position,
+each contributing a row that said nothing — 24 version rows became the 3
+integrations actually drifting.
+
+The header chip follows: one drifting integration still reads "8 firmware
+versions", more than one reads "2 integrations on mixed versions". And muting an
+integration removes it from the firmware block too, since the block lives inside
+the same section.
+
+Also fixed while verifying: an integration appearing in both the attention list
+and the firmware spread was counted twice by the label-collision check, so Shelly
+briefly rendered as its slug next to a perfectly friendly "Hue". Distinct
+integrations are counted now, not appearances.
+
+### Needs attention groups by integration, and you can stop counting one
+
+In universal mode the attention list was a flat run of everything. Measured on a
+176-device instance: **53 rows**, of which 18 were Music Assistant speakers and
+13 were HACS repositories — burying the three Shellys that were genuinely
+offline.
+
+None of those rows was wrong. The speakers really do report `unavailable` on
+every entity and the repositories really do have updates. But a speaker that is
+not currently reachable is normal for a speaker, and one integration drowning
+the rest is the shape of the problem — so the integration is the axis to cut on.
+
+**Grouped.** Once a fleet spans more than one integration the list groups, worst
+kind first and then by size, each group showing its own count. A fleet on one
+integration renders flat, exactly as before.
+
+**Muted, not hidden.** `attention_muted_integrations` stops an integration being
+*counted*: 53 becomes 22. The muted groups stay at the foot of the list with
+their counts, because a setting you cannot see is a setting you cannot undo —
+which is what the No Room filter taught, by deleting the row that held the
+switch.
+
+Editable two ways: a picker under **Needs attention** in the editor, listing the
+integrations actually producing rows with their counts so you never have to know
+a slug; and a mute toggle on each group header in the edit dialog's live preview.
+The preview is the only place the toggle appears, because a card on a dashboard
+cannot write its own config — the same rule the delegate notice follows.
+
+Two details worth the words. Integrations whose friendly labels collide fall back
+to their slugs, so `spotify` and `spotifyplus` are tellable apart — muting is per
+slug, and two groups both reading "Spotify" would make it impossible to know
+which one a toggle silenced. And the mute uses its own event rather than a third
+payload shape on `hdd-editor-goto`, which is already on the roadmap as a thing to
+stop doing.
+
 ## v1.5.2 — 2026-09-09
 
 ### A sensor you named by entity id is shown even without a unit

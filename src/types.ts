@@ -108,6 +108,12 @@ export interface GraphStyle {
   show_dots?: boolean;        // peak/min dots, default true
   time_labels?: boolean;      // time axis labels, default true
   tick_lines?: boolean;       // vertical tick marks, default true
+  /** The y-axis top and bottom printed either side of the plot, default true.
+   *  A sparkline autoscales to its own data, so the same shape can mean a 2 °C
+   *  wobble or a 40 °C swing — without the numbers the line's height says
+   *  nothing. Shown on BOTH sides: on a wide graph the value you want is
+   *  whichever edge your eye is already at. */
+  axis_labels?: boolean;
   bar_radius?: number;        // bar corner radius px, default 1.5
   /** Manual y-axis min/max per sensor device_class key */
   sensor_ranges?: Record<string, SensorRange>;
@@ -553,9 +559,24 @@ export interface ViewFilter {
   profiles?: DeviceProfile[];
   /** Device matches if ANY of its entities has a domain in this list. */
   domains?: string[];
+  /** Integration (platform) whitelist, case-insensitive — `shelly`, `hue`,
+   *  `mqtt`. The axis a mixed fleet is most naturally cut on, and the one the
+   *  view filter was missing: everything else here describes what a device *is*
+   *  rather than where it came from. */
+  integrations?: string[];
   /** Case-insensitive area name whitelist. */
   areas?: string[];
-  /** device_id whitelist. */
+  /**
+   * device_id whitelist. **Legacy — no longer editable, and stripped by
+   * `migrateConfig`.**
+   *
+   * It read as "add these devices to the view" and behaved as an intersection
+   * with every other gate, so a view listing every room plus two devices in no
+   * room matched nothing at all: areas removed them, then this kept only them.
+   * Still honoured when present so hand-written YAML does not change meaning
+   * mid-session, but the editor now builds a view from the pills and subtracts
+   * with `exclude_devices`.
+   */
   devices?: string[];
   /** device_id blacklist (applied after all include gates). */
   exclude_devices?: string[];
@@ -873,6 +894,19 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
   show_attention?: boolean;
   /** Battery percentage at or below which a device is flagged. Default 20. */
   attention_battery?: number;
+  /**
+   * Integrations whose devices are listed but not counted in Needs attention.
+   *
+   * Universal mode surfaces things that are technically true and practically
+   * noise: a Music Assistant speaker that is not currently reachable, a HACS
+   * repository with an update. On one 176-device instance those two accounted
+   * for 33 of 53 rows, burying the three Shellys that were genuinely offline.
+   *
+   * Muted integrations still appear, collapsed and with their counts, at the
+   * foot of the list — hiding them outright would hide the way back. Empty or
+   * unset counts everything.
+   */
+  attention_muted_integrations?: string[];
   /** Count beta firmware as an available update. Off by default: a Shelly offers
    *  a beta almost permanently, which drowns the real updates. */
   include_beta_updates?: boolean;

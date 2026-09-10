@@ -1125,6 +1125,20 @@ export function getDeviceProfile(device: HADevice): DeviceProfileResult {
  * this is a Shelly: other integrations put arbitrary text in that field
  * (`esp32`, `RAX50`), hence the strict `gen<n>` shape check.
  */
+/**
+ * How a hardware generation is written on screen: `G1`…`G4`, `BLE`, or nothing
+ * at all when detection could not tell.
+ *
+ * One home for the rule. It lived inline in block-tile.ts, and the moment a
+ * second surface wanted it — the firmware spread — copying the expression would
+ * have made a third place to keep in step. `'other'` renders as empty rather
+ * than as "other": it means "no idea", and a badge saying so is worse than no
+ * badge.
+ */
+export function genLabel(gen: DeviceGen): string {
+  return gen === 'ble' ? 'BLE' : gen === 'other' ? '' : `G${gen}`;
+}
+
 export function detectShellyGen(
   model: string,
   hwVersion?: string,
@@ -1553,7 +1567,7 @@ export function migrateConfig<T extends {
     device_styles?: Record<string, { tile_layout?: unknown }>;
     profile_styles?: Record<string, { tile_layout?: unknown }>;
     area_styles?: Record<string, { tile_layout?: unknown }>;
-    views?: Array<{ tile_layout?: unknown }>;
+    views?: Array<{ tile_layout?: unknown; filter?: Record<string, unknown> }>;
     custom_styles?: Record<string, { tile_layout?: unknown }>;
     style_presets?: Record<string, { tile_layout?: unknown }>;
   };
@@ -1595,11 +1609,27 @@ export function migrateConfig<T extends {
   if (Array.isArray(nextViews)) {
     let hit = false;
     const mapped = nextViews.map(v => {
+      let next = v;
       const l = withMedia(v?.tile_layout);
-      if (v && l !== v.tile_layout) { hit = true; return { ...v, tile_layout: l }; }
-      return v;
+      if (v && l !== v.tile_layout) { next = { ...next, tile_layout: l }; hit = true; }
+      // `filter.devices` was an include list that ANDed with every other gate,
+      // so it narrowed rather than added: a view listing every room plus two
+      // devices that have none matched nothing, because the area gate removed
+      // them before this one could keep them. The editor no longer offers it,
+      // and leaving it in a saved config would filter the view by a setting
+      // nobody can see or clear. A view is what its pills select, minus
+      // `exclude_devices`.
+      const f = (next as { filter?: { devices?: unknown } } | undefined)?.filter;
+      if (f && Array.isArray(f.devices)) {
+        const { devices: _dropped, ...restFilter } = f as Record<string, unknown>;
+        next = { ...(next as object), filter: restFilter } as typeof next;
+        hit = true;
+      }
+      return next;
     });
-    if (hit) nextViews = mapped;
+    // Same flag the layout rewrites use: it is what makes the new views array
+    // actually reach the output. Setting `nextViews` alone changed nothing.
+    if (hit) { nextViews = mapped; layoutsChanged = true; }
   }
   if (layoutsChanged) changed = true;
 
@@ -1741,6 +1771,7 @@ export const CONFIG_KEYS: readonly string[] = [
   'card_bg_image_size', 'show_power_bar', 'power_bar_max', 'show_entity_list', 'theme',
   'light_labels', 'light_entities',
   'show_attention', 'attention_battery', 'show_firmware_summary', 'include_beta_updates',
+  'attention_muted_integrations',
   'style', 'area_styles', 'device_styles', 'profile_styles', 'style_presets', 'custom_styles',
   'energy_period', 'graph_sensors', 'graph_hours', 'graph_style', 'graph_line_color', 'radio_stations',
   'extra_card_style', 'area_card_placement', 'devices', 'show_header', 'show_rooms',

@@ -23,7 +23,8 @@ import { renderInputControlTile } from './tiles/input-control';
 import { renderEffectPicker } from './tiles/tile-parts';
 import * as cascade from './cascade';
 import {
-  attentionItems, firmwareGroups, lightCounts, deviceFaults, environmentAlarms, hasUpdate,
+  attentionItems, firmwareByIntegration, lightCounts, deviceFaults, environmentAlarms, hasUpdate,
+  groupAttention, splitMuted, countItems,
   isOnline as deviceIsOnline, isBetaUpdate, isOwn, ownDevice, type AttentionItem, type AttentionKind,
 } from './attention';
 import { renderSensorCardTile } from './tiles/sensor-card';
@@ -40,8 +41,11 @@ import {
   formatFrequency, formatHumidity, formatIlluminance, formatPpm, formatPercent,
   detectInputChannels, detectShellyGen, shellyClickTypes, shellyInputChannel, shellyHostname,
   deviceSensorValues, attachExtraSensors, stripDevicePrefix, colorAt, formatReading,
+  getIntegrationLabel, genLabel,
 } from './helpers';
 import type { DiscoveryStats } from './helpers';
+import { applyViewFilter, emptiedBy, missesNoRoom } from './view-filter';
+import type { ViewGate } from './view-filter';
 import { namedEntitiesOn, classKeys } from './sensor-keys';
 import { renderAnimSvg } from './anim-icons';
 import { t, tOr, setLanguage } from './localize';
@@ -427,38 +431,49 @@ export class HADeviceDashboard extends LitElement {
   }
 
   /** Apply a view's filter on top of the baseline device list. No-op if no filter present. */
-  private _applyViewFilter(devices: HADevice[], view: ViewConfig): HADevice[] {
-    const f = view.filter;
-    if (!f) return devices;
-    let out = devices;
+  /**
+   * A view's gates, applied in order. Every gate is an AND — a device has to
+   * pass all of them — which is easy to forget when the UI reads as a series of
+   * things you switch on.
+   *
+   * `trace` records what each gate removed, so an empty view can say which one
+   * emptied it instead of rendering a blank page. That is not a nicety: a view
+   * listing every room still drops devices that have none, and the next move —
+   * naming those devices under "include specific devices" — makes it worse,
+   * because that gate ANDs with the area gate rather than adding to it.
+   */
+  /** Thin wrapper: the gates live in view-filter.ts so the editor's match count
+   *  cannot drift from what the card actually renders. */
+  private _applyViewFilter(
+    devices: HADevice[],
+    view: ViewConfig,
+    trace?: ViewGate[],
+  ): HADevice[] {
+    return applyViewFilter(devices, view.filter, d => this._profile(d).type, trace);
+  }
 
-    if (f.profiles?.length) {
-      const allow = new Set(f.profiles);
-      out = out.filter(d => allow.has(this._profile(d).type));
-    }
-    if (f.domains?.length) {
-      const allow = new Set(f.domains);
-      out = out.filter(d => d.entities.some(e => allow.has(e.domain)));
-    }
-    if (f.areas?.length) {
-      const allow = new Set(f.areas.map(a => a.toLowerCase()));
-      out = out.filter(d => allow.has((d.area ?? '').toLowerCase()));
-    }
-    if (f.devices?.length) {
-      const allow = new Set(f.devices);
-      out = out.filter(d => allow.has(d.device_id));
-    }
-    if (f.exclude_devices?.length) {
-      const block = new Set(f.exclude_devices);
-      out = out.filter(d => !block.has(d.device_id));
-    }
-    if (f.entity_id_pattern) {
-      let re: RegExp | null = null;
-      try { re = new RegExp(f.entity_id_pattern); }
-      catch { console.warn(`[ha-device-dashboard] invalid entity_id_pattern in view "${view.id}": ${f.entity_id_pattern}`); }
-      if (re) out = out.filter(d => d.entities.some(e => re!.test(e.entity_id)));
-    }
-    return out;
+  /** The empty-view explanation: which gate took the last device, and — when it
+   *  was the area gate and the fleet has unassigned devices — the specific trap
+   *  that a full list of rooms still excludes "No Room". */
+  private _renderEmptyView(
+    trace: ViewGate[],
+    devices: HADevice[],
+    view: ViewConfig,
+  ): TemplateResult {
+    const culprit = emptiedBy(trace);
+    const unassigned = devices.filter(d => !d.area).length;
+    const noRoomTrap = missesNoRoom(view.filter, unassigned);
+    return html`
+      <ha-card>
+        <div class="empty">
+          <p>${t('view.empty', { name: view.name ?? view.id })}</p>
+          ${culprit ? html`
+            <p class="hint">${t('view.empty_gate', { gate: culprit.gate, n: culprit.before })}</p>` : nothing}
+          ${noRoomTrap ? html`
+            <p class="hint">${t('view.empty_no_room', { n: unassigned })}</p>` : nothing}
+          <p class="hint">${t('view.empty_and')}</p>
+        </div>
+      </ha-card>`;
   }
 
   private _viewStorageKey(): string {
@@ -2065,6 +2080,7 @@ export class HADeviceDashboard extends LitElement {
     const showDots = gs.show_dots !== false;
     const showTicks = gs.tick_lines !== false;
     const showTimeLabels = gs.time_labels !== false;
+    const showAxis = gs.axis_labels !== false;
     const graphType = gs.type ?? 'line';
     const barRadius = gs.bar_radius ?? 1.5;
     // 'area' type always fills; 'line' type never fills; 'bar' type is separate
@@ -2184,10 +2200,24 @@ export class HADeviceDashboard extends LitElement {
       };
 
       const openDialog = (e: Event) => { e.stopPropagation(); this._detailDevice = device.device_id; };
+
+      // The scale the line is drawn against. Same numbers the plot uses, so a
+      // configured sensor_range shows as the range rather than the data's own
+      // extremes — which is the point when a range is pinned.
+      const axisNum = (v: number) => (v % 1 === 0 ? `${v}` : v.toFixed(1));
+      // A flat series has one value, not a range. Printing it top and bottom
+      // read as a rendering fault rather than as "nothing moved".
+      const flatLine = max === min;
+      const axis = (side: string) => showAxis ? html`
+        <span class="spark-axis spark-axis-${side} ${flatLine ? 'flat' : ''}" aria-hidden="true">
+          ${flatLine ? html`<i>${axisNum(max)}</i>`
+            : html`<i>${axisNum(max)}</i><i>${axisNum(min)}</i>`}
+        </span>` : nothing;
       return html`
         <div class="spark-group">
           <div class="spark-row ${expanded ? '' : 'spark-row-clickable'}" @click=${expanded ? nothing : openDialog}>
             <span class="spark-lbl">${label}</span>
+            ${axis('l')}
             <div class="spark-svg-wrap">
               <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"
                 class="sparkline-svg"
@@ -2238,6 +2268,7 @@ export class HADeviceDashboard extends LitElement {
                 <span class="spark-tooltip-time"></span>
               </div>
             </div>
+            ${axis('r')}
             <span class="spark-val">${disp} ${unit}</span>
           </div>
           ${showTimeLabels ? html`
@@ -3795,7 +3826,11 @@ export class HADeviceDashboard extends LitElement {
     }
 
     const activeView = this._getActiveView();
-    const viewDevices = activeView ? this._applyViewFilter(devices, activeView) : devices;
+    const viewTrace: ViewGate[] = [];
+    const viewDevices = activeView ? this._applyViewFilter(devices, activeView, viewTrace) : devices;
+    // A view that filters everything out used to render a blank page: no tiles,
+    // no rooms, nothing saying why. Say which gate did it.
+    if (activeView && !viewDevices.length) return this._renderEmptyView(viewTrace, devices, activeView);
     const grouped = this._groupByArea(viewDevices);
     const showFavourites = !activeView || activeView.show_favourites === true;
     // A view's own choice wins; otherwise the card's. Both default to on, so a
@@ -3905,41 +3940,131 @@ export class HADeviceDashboard extends LitElement {
       batteryBelow: this._config.attention_battery,
       includeBeta: this._config.include_beta_updates,
     });
-    const fw = this._config.show_firmware_summary === false ? [] : firmwareGroups(devices);
-    const drifting = fw.length > 1;
-    if (!items.length && !drifting) return html``;
+    // Per integration, and only where an integration actually disagrees with
+    // itself. A flat list across vendors put "newest" on whichever version
+    // string sorted highest, which on a mixed fleet was a BTHome label rather
+    // than a Shelly release — see firmwareByIntegration.
+    const fwInts = this._config.show_firmware_summary === false ? []
+      : firmwareByIntegration(devices, this._config.attention_muted_integrations ?? []);
+    const drifting = fwInts.length > 0;
+
+    // Split by integration and set aside whatever the user has muted. In Shelly
+    // mode this is one group and the list renders flat, exactly as before; the
+    // grouping only appears once a fleet actually spans integrations.
+    const allGroups = groupAttention(items);
+    const { shown: groups, muted: mutedGroups } =
+      splitMuted(allGroups, this._config.attention_muted_integrations);
+    const shownCount = countItems(groups);
+    if (!shownCount && !mutedGroups.length && !drifting) return html``;
 
     const ICON: Record<AttentionKind, string> = { offline: '○', alert: '▲', battery: '▮', update: '↑' };
     const worst = (i: AttentionItem): AttentionKind =>
       (['offline', 'alert', 'battery', 'update'] as AttentionKind[]).find(k => i.kinds.includes(k))!;
+
+    // Muting writes config, and a card on a dashboard cannot — only the edit
+    // dialog's preview can act. Same rule the delegate notice follows: offer the
+    // control where it works rather than one that goes nowhere.
+    const inEditor = this.preview || this.hasAttribute('data-edit-preview');
+    const muteBtn = (integration: string, on: boolean) => inEditor
+      ? html`<button class="att-mute" title=${on ? t('attention.unmute') : t('attention.mute')}
+          @click=${(e: Event) => {
+            e.stopPropagation();
+            window.dispatchEvent(new CustomEvent('hdd-attention-mute', { detail: { integration } }));
+          }}>${on ? '🔔' : '🔕'}</button>`
+      : nothing;
+
+    const row = (i: AttentionItem) => html`
+      <button class="att-row att-${worst(i)}" @click=${() => { this._detailDevice = i.device.device_id; }}>
+        <span class="att-icon">${ICON[worst(i)]}</span>
+        <span class="att-name">${i.device.name}</span>
+        <span class="att-why">${i.detail.join(' · ')}</span>
+        ${i.device.area ? html`<span class="att-area">${i.device.area}</span>` : nothing}
+      </button>`;
+
+    // One integration is not a grouping, it is a heading over the whole list.
+    const flat = groups.length <= 1 && !mutedGroups.length;
+
+    // Two integrations can share a friendly label — `spotify` and `spotifyplus`
+    // are both "Spotify". Muting is per slug, so two identically-named groups
+    // would make it impossible to tell which one a mute button silenced. Fall
+    // back to the slug for exactly the labels that collide.
+    // Count DISTINCT integrations per label. An integration appears in both the
+    // attention groups and the firmware spread, and counting it twice made it
+    // look like it collided with itself — which is why Shelly briefly rendered
+    // as its slug next to a perfectly friendly "Hue".
+    const labelCount = new Map<string, number>();
+    for (const key of new Set([...groups, ...mutedGroups].map(g => g.integration)
+      .concat(fwInts.map(f => f.integration)))) {
+      const l = getIntegrationLabel(key);
+      labelCount.set(l, (labelCount.get(l) ?? 0) + 1);
+    }
+    const groupLabel = (integration: string) => {
+      const l = getIntegrationLabel(integration);
+      return (labelCount.get(l) ?? 0) > 1 ? integration : l;
+    };
 
     return html`
       <div class="attention">
         <div class="att-hdr" @click=${() => { this._attentionOpen = !this._attentionOpen; }}>
           <span class="att-caret">${this._attentionOpen ? '▾' : '▸'}</span>
           <span class="att-title">${t('header.needs_attention')}</span>
-          ${items.length ? html`<span class="att-count">${items.length}</span>` : nothing}
-          ${drifting ? html`<span class="att-fw-chip">${t('header.firmware_versions', { n: fw.length })}</span>` : nothing}
+          ${shownCount ? html`<span class="att-count">${shownCount}</span>` : nothing}
+          ${drifting ? html`<span class="att-fw-chip">${fwInts.length === 1
+            ? t('header.firmware_versions', { n: fwInts[0].groups.length })
+            : t('header.firmware_mixed', { n: fwInts.length })}</span>` : nothing}
         </div>
         ${this._attentionOpen ? html`
           <div class="att-body">
-            ${items.map(i => html`
-              <button class="att-row att-${worst(i)}" @click=${() => { this._detailDevice = i.device.device_id; }}>
-                <span class="att-icon">${ICON[worst(i)]}</span>
-                <span class="att-name">${i.device.name}</span>
-                <span class="att-why">${i.detail.join(' · ')}</span>
-                ${i.device.area ? html`<span class="att-area">${i.device.area}</span>` : nothing}
-              </button>`)}
+            ${flat
+              ? groups.flatMap(g => g.items).map(row)
+              : groups.map(g => html`
+                  <div class="att-grp">
+                    <div class="att-grp-hdr">
+                      <span class="att-icon att-${g.worst}">${ICON[g.worst]}</span>
+                      <span class="att-grp-name">${groupLabel(g.integration)}</span>
+                      <span class="att-grp-n">${g.items.length}</span>
+                      ${muteBtn(g.integration, false)}
+                    </div>
+                    ${g.items.map(row)}
+                  </div>`)}
+            ${mutedGroups.length ? html`
+              <div class="att-muted">
+                <span class="att-muted-lbl">${t('attention.muted')}</span>
+                ${mutedGroups.map(g => html`
+                  <span class="att-muted-chip">${groupLabel(g.integration)}
+                    <span class="att-grp-n">${g.items.length}</span>
+                    ${muteBtn(g.integration, true)}
+                  </span>`)}
+              </div>` : nothing}
             ${drifting ? html`
               <div class="att-fw">
                 <div class="att-fw-title">${t('header.firmware')}</div>
-                ${fw.map(g => html`
-                  <div class="att-fw-row ${g.current ? 'current' : ''}">
-                    <span class="att-fw-ver">${g.version}</span>
-                    <span class="att-fw-bar"><i style="width:${Math.round((g.devices.length / devices.length) * 100)}%"></i></span>
-                    <span class="att-fw-n">${g.devices.length}</span>
-                    ${g.current ? html`<span class="att-fw-tag">${t('header.newest')}</span>` : nothing}
-                  </div>`)}
+                ${fwInts.map(fi => html`
+                  ${fwInts.length > 1 ? html`
+                    <div class="att-fw-int">${groupLabel(fi.integration)}</div>` : nothing}
+                  ${fi.groups.map(g => html`
+                    <div class="att-fw-row ${g.current ? 'current' : ''}">
+                      <span class="att-fw-ver">${g.version}</span>
+                      <span class="att-fw-n">${g.devices.length}</span>
+                      ${g.current ? html`<span class="att-fw-tag">${t('header.newest')}</span>` : nothing}
+                    </div>
+                    <div class="att-fw-devs">
+                      ${g.devices.map(d => html`
+                        ${(() => {
+                          // The generation is the thing that decides whether a
+                          // version is even applicable — a Gen1 will never see a
+                          // 2.x build — so it belongs beside the version rather
+                          // than only on the tile.
+                          const gen = genLabel(this._profile(d).gen);
+                          return html`
+                            <button class="att-fw-dev" @click=${() => { this._detailDevice = d.device_id; }}>
+                              <span class="att-fw-dev-name">${d.name}</span>
+                              ${gen ? html`<span class="att-fw-dev-gen gen-${this._profile(d).gen}">${gen}</span>` : nothing}
+                              <span class="att-fw-dev-ver">${g.version}</span>
+                              ${d.area ? html`<span class="att-fw-dev-area">${d.area}</span>` : nothing}
+                            </button>`;
+                        })()}`)}
+                    </div>`)}`)}
               </div>` : nothing}
           </div>` : nothing}
       </div>`;

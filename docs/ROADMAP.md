@@ -35,6 +35,39 @@ lay chips out differently on purpose (a compact pill row versus tiered
 primary/electrical/diagnostic strips), and merging the markup would be a much
 larger change with no user asking for it.
 
+**One discovery-opts mapping, not two.** `ha-device-dashboard.ts` and
+`editor.ts` each map the same six config keys (`mode`, `universal_scope`,
+`include_integrations`, `exclude_integrations`, `include_domains`,
+`exclude_domains`) into `getAllDevices` opts, and the editor's own comment says
+*"Editor device list must match what the card discovers, so mirror the
+universal-mode discovery opts."*
+
+A comment asking a human to remember is the exact thing this repo has already
+deleted twice — the font catalogue and the cascades. Add a seventh discovery
+option, forget the editor, and its device list silently differs from the card's.
+That list is what you pick from for `devices`, `hidden_devices`, `favorites` and
+Design scope, so drift means the editor offers devices the card will not render.
+
+A `discoveryOptsFrom(config)` in `helpers.ts` called by both, plus a
+`check:docs` gate that fails if either side constructs the opts inline. Small,
+and the failure it prevents is silent.
+
+**Traffic that goes around its own contract.** Two instances, both minor on
+their own and both the same shape as the chip renderer above:
+
+- `TileCtx` carries explicit actions — `toggle`, `setTemp`, `coverAction`,
+  `valveAction`, `pressButton`, `setNumberValue` — and yet five tile call sites
+  reach `hass.callService` directly for light colour, colour temperature,
+  effects and media transport. Checked: none of them turn a load off, so the
+  `confirm_off` guard is not being bypassed and this is consistency rather than
+  safety. But nothing tells a reader which actions belong in the contract.
+- `hdd-editor-goto` carries two unrelated message shapes on one event name —
+  `{device}` from a tile tap, `{tab, section, flash}` from a notice — told apart
+  by which fields happen to be present.
+
+Neither is worth a dedicated pass. Both are worth fixing the next time that code
+is open for another reason.
+
 Beyond that, the honest next move is not a list item: watch what people report.
 Detection on hardware nobody here owns is the likeliest source of the next real
 bug, which is what the fixture library exists to catch, and contributing a
@@ -107,6 +140,18 @@ reported, is a poor trade.
 caveat: the editor is already mid-migration toward the data-driven
 `EDITOR_LAYOUT` spec, and only Graphs & Sensors renders from it. A split by tab
 now would collide with finishing that. Finish the migration first.
+
+**`TileCtx` has grown into a god interface.** 71 members, 60 of them functions:
+every renderer in `src/tiles/` receives everything the card can do, whether it
+needs two of them or forty. It is one-directional and fully typed, so it is not
+tangled and nothing is currently broken by it — but nothing records which tile
+needs what, adding a member costs nothing, and it therefore only grows.
+
+Parked rather than queued because the obvious fix is worse than the problem:
+splitting it per tile style means a type per renderer and a assembly step per
+tile, for no behaviour change. The realistic move is to stop it growing —
+prefer a pure function in a module over a new `ctx.doThing` — and revisit if a
+tile ever needs something genuinely per-style.
 
 **Typed Home Assistant registry interfaces.** Registry access goes through
 `(hass as any).entities` / `.devices` / `.areas`. Small local interfaces plus

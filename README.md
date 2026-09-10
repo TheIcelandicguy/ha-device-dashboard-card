@@ -280,8 +280,17 @@ stragglers. A device caught by both routes is still counted once.
 
 `graph_style` keys: `type` (`line` \| `area` \| `bar`, default `line`), `line_width`
 (`1.5`), `fill` (`true`), `height` (`32`), `show_dots` (`true`), `time_labels`
-(`true`), `tick_lines` (`true`), `bar_radius` (`1.5`), and `sensor_ranges`
-(`{ power: { min: 0, max: 3000 } }`) to pin a y-axis instead of auto-scaling.
+(`true`), `tick_lines` (`true`), `axis_labels` (`true`), `bar_radius` (`1.5`), and
+`sensor_ranges` (`{ power: { min: 0, max: 3000 } }`) to pin a y-axis instead of
+auto-scaling.
+
+`axis_labels` prints the top and bottom of the y-axis on **both** sides of the
+plot. A sparkline scales to its own data, so the same shape can be a 2 °C wobble
+or a 40 °C swing — a GPU load that looks violently spiky turns out to run between
+13 % and 22 %. Both sides because on a wide graph the number you want is
+whichever edge your eye is already at. When a range is pinned with
+`sensor_ranges` the labels show that range, since that is what the line is drawn
+against.
 
 Graphable keys: `power`, `voltage`, `current`, `energy`, `apparent_power`,
 `reactive_power`, `frequency`, `power_factor`, `temperature`, `humidity`,
@@ -392,6 +401,22 @@ out of all of them. It lists offline devices, firing alerts (overtemp, overpower
 smoke, water, gas), flat batteries and pending updates — worst first, each row
 opening that device's detail sheet. It renders only when something qualifies.
 
+`attention_muted_integrations` stops an integration being *counted* without
+hiding it. Universal mode surfaces things that are technically true and
+practically noise — a Music Assistant speaker that is not currently reachable, a
+HACS repository with an update. On one 176-device instance those two accounted
+for 33 of 53 rows, burying the three Shellys that were genuinely offline.
+
+```yaml
+attention_muted_integrations: [music_assistant, hacs]
+```
+
+Muted integrations stay at the foot of the list with their counts, so the way
+back is always on screen. When a fleet spans more than one integration the list
+groups by integration, each group showing its own count; in the edit dialog's
+preview every group header carries a mute toggle, so you never need to know an
+integration's slug. A single-integration fleet renders flat, exactly as before.
+
 An offline device is reported as offline and nothing else: its last-known alert
 is a stale reading, not news.
 
@@ -404,6 +429,19 @@ you set `include_beta_updates: true`.
 The firmware block groups the fleet by version — Shelly's
 `20260311-095847/1.7.5-g9979d16` reduces to `1.7.5` — marks the newest one, and
 only appears when more than one version is present.
+
+**Versions are compared within an integration, never across.** Version strings
+from different vendors are not on a common scale, and comparing them produced a
+wrong answer rather than a useless one: on a mixed fleet the "newest" tag landed
+on a BTHome device labelled `BTHome BLE v2`, leaving every Shelly looking out of
+date against a string that is not a version number. Each integration now gets
+its own spread and its own newest.
+
+Integrations whose devices all agree are left out — that is not drift, and on one
+real fleet ten of thirteen integrations were in that position, each contributing
+a row that said nothing. Muted integrations
+(`attention_muted_integrations`) drop out of the spread too, since the block
+lives inside the same section.
 
 ## Tile styles
 
@@ -860,8 +898,31 @@ views:
     power_monitor_variant: gauge
 ```
 
-Filter keys: `profiles`, `domains`, `areas`, `devices`, `exclude_devices`,
-`entity_id_pattern`. Style and layout overrides: everything a view rung can carry
+Filter keys: `profiles`, `domains`, `integrations`, `areas`, `exclude_devices`,
+`entity_id_pattern`.
+
+**A view is what its filters select, minus what you exclude.** The pills add —
+pick profiles, domains, integrations and rooms — and `exclude_devices` takes
+individual devices back out. Filters are ANDed with each other, so a device has
+to pass all of them.
+
+There used to be a per-device *include* list (`filter.devices`). It read as "add
+these to the view" and behaved as an intersection with every other gate, so a
+view listing every room plus two devices that have none matched nothing at all:
+the area gate removed them, then the include gate kept only them. It is gone from
+the editor and stripped from saved configs on load.
+
+`areas` is a list of room names, and a device with **no room** is not in any of
+them. Ticking every room still excludes them; add `''` — shown as **No Room** in
+the editor — to include the unassigned bucket:
+
+```yaml
+filter:
+  areas: [Kitchen, Garage, '']   # …and the devices with no room
+```
+
+A view that matches nothing now says which gate emptied it, rather than
+rendering a blank page. Style and layout overrides: everything a view rung can carry
 — `theme`, `tile_style`, `power_monitor_variant`, `tile_layout`, `sensors`,
 `elements`, `show_graphs`, `energy_period`, `columns`, `tile_size`, `tile_gap`,
 `sort_by`, and a chrome `style` sub-object.

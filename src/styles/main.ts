@@ -1333,6 +1333,25 @@ export const mainCss = css`
       align-items:center; justify-content:center; font-size:11px; font-weight:800;
       background:var(--sc-offline-color); color:#1e1a17; }
     .att-fw-chip { margin-left:auto; font-size:11px; color:var(--sc-text-secondary); }
+    /* Grouping by integration. Only rendered once a fleet spans more than one,
+       so a Shelly-only card looks exactly as it always did. */
+    .att-grp { margin-bottom:6px; }
+    .att-grp-hdr { display:flex; align-items:center; gap:8px; padding:4px 8px; font-size:11px;
+      font-weight:600; letter-spacing:.03em; color:var(--sc-text-secondary); text-transform:uppercase; }
+    .att-grp-name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .att-grp-n { font-variant-numeric:tabular-nums; opacity:.8; }
+    .att-mute { background:none; border:none; cursor:pointer; padding:0 2px; font-size:12px;
+      opacity:.55; line-height:1; }
+    .att-mute:hover { opacity:1; }
+    /* Muted integrations stay visible with their counts: a setting you cannot
+       see is a setting you cannot undo. */
+    .att-muted { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:6px 8px;
+      margin-top:4px; border-top:1px dashed var(--sc-tile-border); }
+    .att-muted-lbl { font-size:10px; text-transform:uppercase; letter-spacing:.04em;
+      color:var(--sc-text-muted); }
+    .att-muted-chip { display:inline-flex; align-items:center; gap:5px; font-size:11px;
+      padding:2px 7px; border-radius:10px; background:var(--sc-sensor-bg);
+      border:1px solid var(--sc-tile-border); color:var(--sc-text-muted); }
     .att-body { display:flex; flex-direction:column; gap:3px; padding:0 8px 8px; }
     .att-row { display:flex; align-items:center; gap:8px; width:100%; padding:6px 8px; border-radius:8px;
       cursor:pointer; font:inherit; text-align:left; border:1px solid transparent;
@@ -1347,9 +1366,30 @@ export const mainCss = css`
       overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .att-area { font-size:10.5px; color:var(--sc-text-muted); white-space:nowrap; }
     .att-fw { margin-top:6px; padding-top:7px; border-top:1px solid rgba(255,255,255,.07); }
+    /* Which integration the version rows beneath belong to. Only drawn when
+       more than one is drifting — otherwise the section title says it. */
+    .att-fw-int { font-size:10px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;
+      color:var(--sc-text-muted); margin:6px 0 2px; }
     .att-fw-title { font-size:10.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
       color:var(--sc-text-muted); margin:0 8px 5px; }
-    .att-fw-row { display:flex; align-items:center; gap:8px; padding:2px 8px; font-size:11.5px; }
+    /* No bar. The proportion it drew is answered better by the devices
+       themselves, which now use that width. */
+    .att-fw-row { display:flex; align-items:baseline; gap:8px; padding:4px 8px 1px; font-size:11.5px; }
+    /* Which devices are on this version — the count says how many, never which,
+       and on a wall tablet a tooltip says nothing at all. */
+    .att-fw-devs { display:flex; flex-wrap:wrap; gap:4px; padding:0 8px 6px; }
+    .att-fw-dev { display:inline-flex; align-items:baseline; gap:5px; font:inherit; font-size:11px;
+      padding:2px 8px; border-radius:10px; cursor:pointer;
+      background:var(--sc-sensor-bg); border:1px solid var(--sc-tile-border);
+      color:var(--sc-text-secondary); }
+    .att-fw-dev:hover { color:var(--sc-text-primary); border-color:var(--sc-accent); }
+    /* Generation sits in front of the version because it is what decides
+       whether that version is even applicable — a Gen1 will never see a 2.x. */
+    .att-fw-dev-gen { font-size:9px; font-weight:700; letter-spacing:.03em;
+      padding:0 4px; border-radius:4px; background:var(--sc-tile-border);
+      color:var(--sc-text-secondary); }
+    .att-fw-dev-ver { font-size:9.5px; opacity:.75; font-variant-numeric:tabular-nums; }
+    .att-fw-dev-area { font-size:9.5px; opacity:.5; }
     .att-fw-ver { min-width:58px; color:var(--sc-text-secondary); font-variant-numeric:tabular-nums; }
     .att-fw-row.current .att-fw-ver { color:var(--sc-online-color); font-weight:700; }
     .att-fw-bar { flex:1; height:6px; border-radius:3px; background:rgba(255,255,255,.06); overflow:hidden; }
@@ -1441,6 +1481,18 @@ export const mainCss = css`
     .spark-tooltip-val  { font-size:.78em; font-weight:700; color:var(--sc-graph-line); }
 
     .spark-tooltip-time { font-size:.65em; color:var(--sc-text-muted); }
+    /* The y-axis, both ends, both sides. A sparkline autoscales to its own
+       data, so the same shape can be a 2 degree wobble or a 40 degree swing —
+       the numbers are what make the height mean anything. Both sides because on
+       a wide graph the one you want is whichever edge your eye is already at. */
+    .spark-axis { display:flex; flex-direction:column; justify-content:space-between;
+      align-self:stretch; font-size:8.5px; line-height:1; color:var(--sc-text-muted);
+      font-variant-numeric:tabular-nums; opacity:.75; padding:1px 0; }
+    .spark-axis-l { text-align:right; margin-right:3px; }
+    .spark-axis-r { text-align:left;  margin-left:3px; }
+    /* One value, centred: a flat series has a level, not a range. */
+    .spark-axis.flat { justify-content:center; }
+
 
     .spark-val { font-size:.75em; font-weight:600; color:var(--sc-text-secondary); white-space:nowrap; min-width:44px; text-align:right; }
 

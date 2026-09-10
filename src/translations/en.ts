@@ -103,6 +103,11 @@ export const EN: Translations = {
   'header.collapse_every_room': 'Collapse every room',
   'header.firmware': 'Firmware',
   'header.firmware_versions': '{n} firmware versions',
+  'header.firmware_mixed': '{n} integrations on mixed versions',
+  'view.empty': 'Nothing matches the “{name}” view.',
+  'view.empty_gate': 'The {gate} filter removed the last {n} devices.',
+  'view.empty_no_room': '{n} devices have no room, and a list of rooms does not include them — tick No Room as well.',
+  'view.empty_and': 'A view’s filters all have to pass, so naming devices narrows the result rather than adding to it.',
   'header.newest': 'newest',
 
   // ── Actions ──
@@ -256,6 +261,9 @@ export const EN: Translations = {
   'notice.discovery_link': 'Discovery',
   'notice.discovery_here': 'has the settings.',
   'notice.discovery_editor': 'in the editor has the settings.',
+  'attention.mute': 'Stop counting this integration',
+  'attention.unmute': 'Count this integration again',
+  'attention.muted': 'Not counted',
 
   // ── Errors ──
   'error.replay_needs_admin':
