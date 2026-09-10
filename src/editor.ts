@@ -4811,18 +4811,28 @@ export class HADeviceDashboardEditor extends LitElement {
               </div>
             </div>`)}
 
-            ${areas.length ? html`
-              <div class="field">
-                <div class="field-lbl">Areas
-                  ${this._selAllNone(
-                    () => this._updateViewFilter(v.id, { areas: areas.map(a => a.name) }),
-                    () => this._updateViewFilter(v.id, { areas: [] }))}</div>
-                <div class="pill-grp">
-                  ${areas.map(a => html`
-                    <span class="pill ${(filter.areas ?? []).includes(a.name) ? 'on' : ''}"
-                      @click=${() => this._toggleViewFilterValue(v.id, 'areas', a.name)}>${a.name}</span>`)}
-                </div>
-              </div>` : nothing}
+            ${(() => {
+              // A view's area list must be able to name the unassigned bucket,
+              // or a view filtered by rooms silently drops every device that
+              // has none — and the filters are AND-ed, so adding those devices
+              // by name afterwards leaves the view empty rather than fixing it.
+              // Exactly the No Room bug fixed in v1.4.1, one layer over.
+              const keys = areaKeyUniverse(areas.map(a => a.name), allDevices.some(d => !d.area));
+              if (!keys.length) return nothing;
+              const label = (k: string) => k || 'No Room';
+              return html`
+                <div class="field">
+                  <div class="field-lbl">Areas
+                    ${this._selAllNone(
+                      () => this._updateViewFilter(v.id, { areas: keys }),
+                      () => this._updateViewFilter(v.id, { areas: [] }))}</div>
+                  <div class="pill-grp">
+                    ${keys.map(k => html`
+                      <span class="pill ${(filter.areas ?? []).includes(k) ? 'on' : ''}"
+                        @click=${() => this._toggleViewFilterValue(v.id, 'areas', k)}>${label(k)}</span>`)}
+                  </div>
+                </div>`;
+            })()}
 
             <div class="field">
               <div class="field-lbl">Include specific devices (overrides profiles/domains filter — AND with other gates)</div>

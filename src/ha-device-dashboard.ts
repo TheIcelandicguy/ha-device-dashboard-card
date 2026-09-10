@@ -429,38 +429,82 @@ export class HADeviceDashboard extends LitElement {
   }
 
   /** Apply a view's filter on top of the baseline device list. No-op if no filter present. */
-  private _applyViewFilter(devices: HADevice[], view: ViewConfig): HADevice[] {
+  /**
+   * A view's gates, applied in order. Every gate is an AND — a device has to
+   * pass all of them — which is easy to forget when the UI reads as a series of
+   * things you switch on.
+   *
+   * `trace` records what each gate removed, so an empty view can say which one
+   * emptied it instead of rendering a blank page. That is not a nicety: a view
+   * listing every room still drops devices that have none, and the next move —
+   * naming those devices under "include specific devices" — makes it worse,
+   * because that gate ANDs with the area gate rather than adding to it.
+   */
+  private _applyViewFilter(
+    devices: HADevice[],
+    view: ViewConfig,
+    trace?: Array<{ gate: string; before: number; after: number }>,
+  ): HADevice[] {
     const f = view.filter;
     if (!f) return devices;
     let out = devices;
+    const gate = (name: string, next: HADevice[]) => {
+      trace?.push({ gate: name, before: out.length, after: next.length });
+      out = next;
+    };
 
     if (f.profiles?.length) {
       const allow = new Set(f.profiles);
-      out = out.filter(d => allow.has(this._profile(d).type));
+      gate('profiles', out.filter(d => allow.has(this._profile(d).type)));
     }
     if (f.domains?.length) {
       const allow = new Set(f.domains);
-      out = out.filter(d => d.entities.some(e => allow.has(e.domain)));
+      gate('domains', out.filter(d => d.entities.some(e => allow.has(e.domain))));
     }
     if (f.areas?.length) {
       const allow = new Set(f.areas.map(a => a.toLowerCase()));
-      out = out.filter(d => allow.has((d.area ?? '').toLowerCase()));
+      gate('areas', out.filter(d => allow.has((d.area ?? '').toLowerCase())));
     }
     if (f.devices?.length) {
       const allow = new Set(f.devices);
-      out = out.filter(d => allow.has(d.device_id));
+      gate('devices', out.filter(d => allow.has(d.device_id)));
     }
     if (f.exclude_devices?.length) {
       const block = new Set(f.exclude_devices);
-      out = out.filter(d => !block.has(d.device_id));
+      gate('exclude_devices', out.filter(d => !block.has(d.device_id)));
     }
     if (f.entity_id_pattern) {
       let re: RegExp | null = null;
       try { re = new RegExp(f.entity_id_pattern); }
       catch { console.warn(`[ha-device-dashboard] invalid entity_id_pattern in view "${view.id}": ${f.entity_id_pattern}`); }
-      if (re) out = out.filter(d => d.entities.some(e => re!.test(e.entity_id)));
+      if (re) gate('entity_id_pattern', out.filter(d => d.entities.some(e => re!.test(e.entity_id))));
     }
     return out;
+  }
+
+  /** The empty-view explanation: which gate took the last device, and — when it
+   *  was the area gate and the fleet has unassigned devices — the specific trap
+   *  that a full list of rooms still excludes "No Room". */
+  private _renderEmptyView(
+    trace: Array<{ gate: string; before: number; after: number }>,
+    devices: HADevice[],
+    view: ViewConfig,
+  ): TemplateResult {
+    const culprit = trace.find(t => t.after === 0 && t.before > 0);
+    const unassigned = devices.filter(d => !d.area).length;
+    const areasGate = (view.filter?.areas ?? []);
+    const missesNoRoom = unassigned > 0 && areasGate.length > 0 && !areasGate.includes('');
+    return html`
+      <ha-card>
+        <div class="empty">
+          <p>${t('view.empty', { name: view.name ?? view.id })}</p>
+          ${culprit ? html`
+            <p class="hint">${t('view.empty_gate', { gate: culprit.gate, n: culprit.before })}</p>` : nothing}
+          ${missesNoRoom ? html`
+            <p class="hint">${t('view.empty_no_room', { n: unassigned })}</p>` : nothing}
+          <p class="hint">${t('view.empty_and')}</p>
+        </div>
+      </ha-card>`;
   }
 
   private _viewStorageKey(): string {
@@ -3813,7 +3857,11 @@ export class HADeviceDashboard extends LitElement {
     }
 
     const activeView = this._getActiveView();
-    const viewDevices = activeView ? this._applyViewFilter(devices, activeView) : devices;
+    const viewTrace: Array<{ gate: string; before: number; after: number }> = [];
+    const viewDevices = activeView ? this._applyViewFilter(devices, activeView, viewTrace) : devices;
+    // A view that filters everything out used to render a blank page: no tiles,
+    // no rooms, nothing saying why. Say which gate did it.
+    if (activeView && !viewDevices.length) return this._renderEmptyView(viewTrace, devices, activeView);
     const grouped = this._groupByArea(viewDevices);
     const showFavourites = !activeView || activeView.show_favourites === true;
     // A view's own choice wins; otherwise the card's. Both default to on, so a

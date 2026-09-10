@@ -102,6 +102,10 @@ export const IS: Translations = {
   'header.firmware': 'Fastbúnaður',
   'header.firmware_versions': '{n} fastbúnaðarútgáfur',
   'header.firmware_mixed': '{n} samþættingar með ólíkar útgáfur',
+  'view.empty': 'Ekkert passar við „{name}“ sýnina.',
+  'view.empty_gate': '{gate}-sían fjarlægði síðustu {n} tækin.',
+  'view.empty_no_room': '{n} tæki eru ekki í neinu herbergi, og listi yfir herbergi tekur þau ekki með — hakaðu líka við Ekkert herbergi.',
+  'view.empty_and': 'Allar síur sýnarinnar verða að standast, svo það að nefna tæki þrengir niðurstöðuna í stað þess að bæta við hana.',
   'header.newest': 'nýjast',
 
   // ── Aðgerðir ──

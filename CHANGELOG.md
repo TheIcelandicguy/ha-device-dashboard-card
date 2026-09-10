@@ -5,6 +5,39 @@ installs from them.
 
 ## Unreleased
 
+### A view filtered by rooms silently dropped every device that has none
+
+Reported: views were created, the card showed no No Room section, and after
+adding two specific devices to those views they rendered **completely blank**.
+
+Two faults compounding, and the second made the first look like the fix:
+
+**A view's area picker could not name the unassigned bucket.** It listed the real
+areas only, so ticking every room still excluded every device without one — and
+the pill that would have included them did not exist. This is the No Room bug
+fixed in v1.4.1 for the Rooms tab, sitting one layer over in the view filter,
+which that fix did not reach.
+
+**Every view gate is an AND.** So the obvious next move — naming the missing
+devices under *Include specific devices* — did not add them back. It intersected:
+areas kept the 94 devices that have a room, then the device list narrowed those
+to two that had already been removed. Nothing left.
+
+And a view that filters to nothing rendered a blank page. No tiles, no rooms,
+nothing saying why — the failure this card keeps repeating.
+
+Now: the picker offers **No Room**, and an empty view explains itself.
+
+> Nothing matches the "Default" view.
+> The devices filter removed the last 94 devices.
+> 80 devices have no room, and a list of rooms does not include them — tick No
+> Room as well.
+> A view's filters all have to pass, so naming devices narrows the result rather
+> than adding to it.
+
+Each gate now records what it removed, so the message names the one that took the
+last device rather than guessing.
+
 ### The big number says what it is
 
 A sensor tile labelled its headline value with the reading's `device_class` —

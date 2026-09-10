@@ -104,6 +104,10 @@ export const EN: Translations = {
   'header.firmware': 'Firmware',
   'header.firmware_versions': '{n} firmware versions',
   'header.firmware_mixed': '{n} integrations on mixed versions',
+  'view.empty': 'Nothing matches the “{name}” view.',
+  'view.empty_gate': 'The {gate} filter removed the last {n} devices.',
+  'view.empty_no_room': '{n} devices have no room, and a list of rooms does not include them — tick No Room as well.',
+  'view.empty_and': 'A view’s filters all have to pass, so naming devices narrows the result rather than adding to it.',
   'header.newest': 'newest',
 
   // ── Actions ──
