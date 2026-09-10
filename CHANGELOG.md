@@ -5,6 +5,21 @@ installs from them.
 
 ## Unreleased
 
+### Views can filter by integration, and the filter has one implementation
+
+A view could be cut by profile, domain, area, device or entity pattern — every
+axis except the one a mixed fleet is most naturally cut on. "The Shelly view" was
+not expressible. `filter.integrations` now is, with a picker listing what the
+fleet actually has and how many of each.
+
+**The gates moved to `src/view-filter.ts` first.** There were two copies: the
+card filtered devices to render them, the editor filtered them again to print
+"42 of 178 match", each with its own version of the same six gates and nothing
+keeping them in step. Adding a seventh to one would have silently made the
+other's count wrong — and that count is what you trust while building a view,
+before you can see the result. One implementation now, with 21 assertions over
+it, including the ordering that made the No Room bug above so confusing.
+
 ### A view filtered by rooms silently dropped every device that has none
 
 Reported: views were created, the card showed no No Room section, and after

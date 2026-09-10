@@ -167,7 +167,8 @@ try {
     join('node_modules', 'typescript', 'bin', 'tsc'),
     'src/helpers.ts', 'src/cascade.ts', 'src/attention.ts', 'src/shelly-cloud-import.ts',
     'src/design-scope.ts', 'src/localize.ts', 'src/update-policy.ts', 'src/font-options.ts',
-    'src/sensor-pick.ts', 'src/sensor-keys.ts', 'src/room-filter.ts', '--outDir', OUT,
+    'src/sensor-pick.ts', 'src/sensor-keys.ts', 'src/room-filter.ts', 'src/view-filter.ts',
+    '--outDir', OUT,
     '--module', 'commonjs', '--target', 'es2020', '--skipLibCheck', '--moduleResolution', 'node',
   ], { stdio: 'inherit' });
   // The project is "type": "module", which would make these .js files ESM.
@@ -184,6 +185,7 @@ try {
   const sp  = req(join(process.cwd(), OUT, 'sensor-pick.js'));
   const sk  = req(join(process.cwd(), OUT, 'sensor-keys.js'));
   const rf  = req(join(process.cwd(), OUT, 'room-filter.js'));
+  const vf  = req(join(process.cwd(), OUT, 'view-filter.js'));
   const hass = fleet();
   const byName = (list, name) => list.find(d => d.name === name);
 
@@ -1620,6 +1622,70 @@ try {
     eq('BLU is not a number', h.genLabel('ble'), 'BLE');
     // 'other' means "no idea" - a badge saying so is worse than no badge.
     eq('unknown renders as nothing', h.genLabel('other'), '');
+  }
+
+  console.log('\nview filter - six AND-ed gates, one implementation');
+  {
+    const dev = (id, integration, area, domains) => ({
+      device_id: id, integration, area,
+      entities: (domains ?? ['sensor']).map((d, i) => ({ domain: d, entity_id: `${d}.${id}_${i}` })),
+    });
+    const fleet = [
+      dev('kitchen_light', 'shelly', 'Kitchen', ['light']),
+      dev('garage_relay', 'shelly', 'Garage', ['switch']),
+      dev('hue_lamp', 'hue', 'Kitchen', ['light']),
+      dev('pc', 'mqtt', undefined, ['sensor']),      // no room
+      dev('nas', 'mqtt', undefined, ['sensor']),     // no room
+    ];
+    const profileOf = (d) => (d.integration === 'shelly' ? 'relay' : 'sensor');
+    const run = (f, trace) => vf.applyViewFilter(fleet, f, profileOf, trace).map(d => d.device_id);
+
+    eq('no filter is everything', run(undefined).length, 5);
+    eq('an empty filter is everything', run({}).length, 5);
+
+    // The new gate.
+    eq('by integration', run({ integrations: ['shelly'] }), ['kitchen_light', 'garage_relay']);
+    eq('and it is case-insensitive', run({ integrations: ['SHELLY'] }).length, 2);
+    eq('several integrations', run({ integrations: ['hue', 'mqtt'] }), ['hue_lamp', 'pc', 'nas']);
+
+    // THE BUG: a list of every room still excludes devices that have none.
+    eq('every room named still drops the roomless',
+      run({ areas: ['Kitchen', 'Garage'] }), ['kitchen_light', 'garage_relay', 'hue_lamp']);
+    eq('until the unassigned bucket is named too',
+      run({ areas: ['Kitchen', 'Garage', vf.NO_AREA] }).length, 5);
+    eq('the bucket alone selects exactly the roomless',
+      run({ areas: [vf.NO_AREA] }), ['pc', 'nas']);
+
+    // And the compounding half: devices ANDs, it does not add.
+    eq('naming a device outside the area gate matches nothing',
+      run({ areas: ['Kitchen'], devices: ['pc'] }), []);
+    eq('naming one inside it narrows to that one',
+      run({ areas: ['Kitchen'], devices: ['hue_lamp'] }), ['hue_lamp']);
+
+    // What the empty-view message is built from.
+    const trace = [];
+    run({ areas: ['Kitchen'], devices: ['pc'] }, trace);
+    eq('every gate that ran is recorded', trace.map(g => g.gate), ['areas', 'devices']);
+    eq('and the one that emptied it is findable', vf.emptiedBy(trace).gate, 'devices');
+    eq('a gate that removed nothing is not blamed',
+      vf.emptiedBy([{ gate: 'areas', before: 5, after: 5 }]), undefined);
+    // A gate that starts empty did not empty anything - something before it did.
+    eq('an already-empty pool does not steal the blame',
+      vf.emptiedBy([{ gate: 'areas', before: 5, after: 0 }, { gate: 'devices', before: 0, after: 0 }]).gate,
+      'areas');
+
+    ok('the No Room trap is detectable',
+      vf.missesNoRoom({ areas: ['Kitchen'] }, 2));
+    ok('not when the bucket is named', !vf.missesNoRoom({ areas: ['Kitchen', ''] }, 2));
+    ok('not when nothing is unassigned', !vf.missesNoRoom({ areas: ['Kitchen'] }, 0));
+    ok('and not when no areas are filtered at all', !vf.missesNoRoom({ devices: ['pc'] }, 2));
+
+    // A half-typed regex in the editor must not blank the card being edited.
+    eq('an invalid pattern filters nothing', run({ entity_id_pattern: '([' }).length, 5);
+    eq('a valid one matches on any entity', run({ entity_id_pattern: '^light\\.' }),
+      ['kitchen_light', 'hue_lamp']);
+    eq('exclude runs after the include gates',
+      run({ integrations: ['shelly'], exclude_devices: ['garage_relay'] }), ['kitchen_light']);
   }
 
   console.log('\nlocalize - catalogues and lookup');

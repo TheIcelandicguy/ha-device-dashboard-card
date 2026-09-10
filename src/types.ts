@@ -559,6 +559,11 @@ export interface ViewFilter {
   profiles?: DeviceProfile[];
   /** Device matches if ANY of its entities has a domain in this list. */
   domains?: string[];
+  /** Integration (platform) whitelist, case-insensitive — `shelly`, `hue`,
+   *  `mqtt`. The axis a mixed fleet is most naturally cut on, and the one the
+   *  view filter was missing: everything else here describes what a device *is*
+   *  rather than where it came from. */
+  integrations?: string[];
   /** Case-insensitive area name whitelist. */
   areas?: string[];
   /** device_id whitelist. */

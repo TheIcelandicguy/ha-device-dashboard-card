@@ -44,6 +44,8 @@ import {
   getIntegrationLabel, genLabel,
 } from './helpers';
 import type { DiscoveryStats } from './helpers';
+import { applyViewFilter, emptiedBy, missesNoRoom } from './view-filter';
+import type { ViewGate } from './view-filter';
 import { namedEntitiesOn, classKeys } from './sensor-keys';
 import { renderAnimSvg } from './anim-icons';
 import { t, tOr, setLanguage } from './localize';
@@ -440,67 +442,34 @@ export class HADeviceDashboard extends LitElement {
    * naming those devices under "include specific devices" — makes it worse,
    * because that gate ANDs with the area gate rather than adding to it.
    */
+  /** Thin wrapper: the gates live in view-filter.ts so the editor's match count
+   *  cannot drift from what the card actually renders. */
   private _applyViewFilter(
     devices: HADevice[],
     view: ViewConfig,
-    trace?: Array<{ gate: string; before: number; after: number }>,
+    trace?: ViewGate[],
   ): HADevice[] {
-    const f = view.filter;
-    if (!f) return devices;
-    let out = devices;
-    const gate = (name: string, next: HADevice[]) => {
-      trace?.push({ gate: name, before: out.length, after: next.length });
-      out = next;
-    };
-
-    if (f.profiles?.length) {
-      const allow = new Set(f.profiles);
-      gate('profiles', out.filter(d => allow.has(this._profile(d).type)));
-    }
-    if (f.domains?.length) {
-      const allow = new Set(f.domains);
-      gate('domains', out.filter(d => d.entities.some(e => allow.has(e.domain))));
-    }
-    if (f.areas?.length) {
-      const allow = new Set(f.areas.map(a => a.toLowerCase()));
-      gate('areas', out.filter(d => allow.has((d.area ?? '').toLowerCase())));
-    }
-    if (f.devices?.length) {
-      const allow = new Set(f.devices);
-      gate('devices', out.filter(d => allow.has(d.device_id)));
-    }
-    if (f.exclude_devices?.length) {
-      const block = new Set(f.exclude_devices);
-      gate('exclude_devices', out.filter(d => !block.has(d.device_id)));
-    }
-    if (f.entity_id_pattern) {
-      let re: RegExp | null = null;
-      try { re = new RegExp(f.entity_id_pattern); }
-      catch { console.warn(`[ha-device-dashboard] invalid entity_id_pattern in view "${view.id}": ${f.entity_id_pattern}`); }
-      if (re) gate('entity_id_pattern', out.filter(d => d.entities.some(e => re!.test(e.entity_id))));
-    }
-    return out;
+    return applyViewFilter(devices, view.filter, d => this._profile(d).type, trace);
   }
 
   /** The empty-view explanation: which gate took the last device, and — when it
    *  was the area gate and the fleet has unassigned devices — the specific trap
    *  that a full list of rooms still excludes "No Room". */
   private _renderEmptyView(
-    trace: Array<{ gate: string; before: number; after: number }>,
+    trace: ViewGate[],
     devices: HADevice[],
     view: ViewConfig,
   ): TemplateResult {
-    const culprit = trace.find(t => t.after === 0 && t.before > 0);
+    const culprit = emptiedBy(trace);
     const unassigned = devices.filter(d => !d.area).length;
-    const areasGate = (view.filter?.areas ?? []);
-    const missesNoRoom = unassigned > 0 && areasGate.length > 0 && !areasGate.includes('');
+    const noRoomTrap = missesNoRoom(view.filter, unassigned);
     return html`
       <ha-card>
         <div class="empty">
           <p>${t('view.empty', { name: view.name ?? view.id })}</p>
           ${culprit ? html`
             <p class="hint">${t('view.empty_gate', { gate: culprit.gate, n: culprit.before })}</p>` : nothing}
-          ${missesNoRoom ? html`
+          ${noRoomTrap ? html`
             <p class="hint">${t('view.empty_no_room', { n: unassigned })}</p>` : nothing}
           <p class="hint">${t('view.empty_and')}</p>
         </div>
@@ -3857,7 +3826,7 @@ export class HADeviceDashboard extends LitElement {
     }
 
     const activeView = this._getActiveView();
-    const viewTrace: Array<{ gate: string; before: number; after: number }> = [];
+    const viewTrace: ViewGate[] = [];
     const viewDevices = activeView ? this._applyViewFilter(devices, activeView, viewTrace) : devices;
     // A view that filters everything out used to render a blank page: no tiles,
     // no rooms, nothing saying why. Say which gate did it.

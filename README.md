@@ -898,8 +898,28 @@ views:
     power_monitor_variant: gauge
 ```
 
-Filter keys: `profiles`, `domains`, `areas`, `devices`, `exclude_devices`,
-`entity_id_pattern`. Style and layout overrides: everything a view rung can carry
+Filter keys: `profiles`, `domains`, `integrations`, `areas`, `devices`,
+`exclude_devices`, `entity_id_pattern`.
+
+**Two things worth knowing before building one.**
+
+Filters are **ANDed**, including `devices`. That list narrows the result rather
+than adding to it, so a view with `areas: [Kitchen]` and
+`devices: [<a device in the Garage>]` matches nothing at all — the area gate
+removed it before the device gate could keep it. The label in the editor says
+"AND with other gates" for this reason.
+
+`areas` is a list of room names, and a device with **no room** is not in any of
+them. Ticking every room still excludes them; add `''` — shown as **No Room** in
+the editor — to include the unassigned bucket:
+
+```yaml
+filter:
+  areas: [Kitchen, Garage, '']   # …and the devices with no room
+```
+
+A view that matches nothing now says which gate emptied it, rather than
+rendering a blank page. Style and layout overrides: everything a view rung can carry
 — `theme`, `tile_style`, `power_monitor_variant`, `tile_layout`, `sensors`,
 `elements`, `show_graphs`, `energy_period`, `columns`, `tile_size`, `tile_gap`,
 `sort_by`, and a chrome `style` sub-object.

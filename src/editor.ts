@@ -9,6 +9,7 @@ import { HADeviceDashboardConfig, AreaStyle, DeviceStyle, TileBlockId, EntityAni
 import { selectAllKeys, entityKeys, classKeys, namedEntitiesInForce, withNamedEntities } from './sensor-keys';
 import { areaKeyUniverse, toggleAreaSelection, isAreaOn as isAreaSelected, setDevicesHidden, NO_AREA_KEY } from './room-filter';
 import { attentionItems, groupAttention } from './attention';
+import { applyViewFilter } from './view-filter';
 import { getAllDevices, GRAPH_SENSOR_DEFS, GAUGE_RING_DEFS, gaugeStops, colorAt, hexToHsv, hsvToHex, parseCssColor, withAlpha, deviceHasControllable, getDeviceProfile,HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels,
   CONFIG_KEYS, LOVELACE_KEYS } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, detectTheme, paletteFor, type ThemePalette } from './themes';
@@ -4565,7 +4566,9 @@ export class HADeviceDashboardEditor extends LitElement {
   }
 
   private _toggleViewFilterValue(
-    id: string, key: 'profiles' | 'domains' | 'areas' | 'devices' | 'exclude_devices', value: string,
+    id: string,
+    key: 'profiles' | 'domains' | 'integrations' | 'areas' | 'devices' | 'exclude_devices',
+    value: string,
   ): void {
     const v = (this._config.views ?? []).find(x => x.id === id);
     const cur = (v?.filter?.[key] as string[] | undefined) ?? [];
@@ -4625,44 +4628,23 @@ export class HADeviceDashboardEditor extends LitElement {
   /** Editor-side mirror of the runtime filter — returns how many discovered devices a view matches.
    *  `discovered` (sorted list) and `byId` (device_id → full device) are built ONCE by the caller
    *  and shared across all view cards, so we don't re-scan/sort per view on every re-render. */
+  /**
+   * How many devices a view matches — through the SAME function the card
+   * renders with (`view-filter.ts`).
+   *
+   * This used to be a second copy of the six gates, kept in step by hand. The
+   * count is what someone trusts while building a view, before they can see the
+   * result, so a copy that drifts is worse than no count at all.
+   */
   private _countViewMatches(
     v: ViewConfig,
     discovered: Array<{ device_id: string; name: string; area?: string }>,
     byId: Map<string, ReturnType<typeof getAllDevices>[number]>,
   ): number {
-    const f = v.filter;
-    let pool = discovered;
-    if (!f) return pool.length;
-    if (f.profiles?.length) {
-      const allow = new Set(f.profiles);
-      pool = pool.filter(d => {
-        const full = byId.get(d.device_id);
-        return full && allow.has(getDeviceProfile(full).type);
-      });
-    }
-    if (f.domains?.length) {
-      const allow = new Set(f.domains);
-      pool = pool.filter(d => byId.get(d.device_id)?.entities.some(e => allow.has(e.domain)));
-    }
-    if (f.areas?.length) {
-      const allow = new Set(f.areas.map(a => a.toLowerCase()));
-      pool = pool.filter(d => allow.has((d.area ?? '').toLowerCase()));
-    }
-    if (f.devices?.length) {
-      const allow = new Set(f.devices);
-      pool = pool.filter(d => allow.has(d.device_id));
-    }
-    if (f.exclude_devices?.length) {
-      const block = new Set(f.exclude_devices);
-      pool = pool.filter(d => !block.has(d.device_id));
-    }
-    if (f.entity_id_pattern) {
-      try {
-        const re = new RegExp(f.entity_id_pattern);
-        pool = pool.filter(d => byId.get(d.device_id)?.entities.some(e => re.test(e.entity_id)));
-      } catch { /* invalid regex → no filtering */ }
-    }
-    return pool.length;
+    const full = discovered
+      .map(d => byId.get(d.device_id))
+      .filter((d): d is NonNullable<typeof d> => !!d);
+    return applyViewFilter(full, v.filter, d => getDeviceProfile(d).type).length;
   }
 
   private _renderViewsTab(): TemplateResult {
@@ -4810,6 +4792,33 @@ export class HADeviceDashboardEditor extends LitElement {
                     @click=${() => this._toggleViewFilterValue(v.id, 'domains', d)}>${d}</span>`)}
               </div>
             </div>`)}
+
+            ${(() => {
+              // Integrations present in the fleet, with counts. The axis a mixed
+              // fleet is most naturally cut on — "the Shelly view", "the Hue
+              // view" — and the one this filter was missing entirely.
+              const counts = new Map<string, number>();
+              for (const d of allDevices) {
+                const k = byId.get(d.device_id)?.integration;
+                if (k) counts.set(k, (counts.get(k) ?? 0) + 1);
+              }
+              if (counts.size < 2) return nothing;
+              const keys = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+              const on = filter.integrations ?? [];
+              return html`
+                <div class="field">
+                  <div class="field-lbl">Integrations
+                    ${this._selAllNone(
+                      () => this._updateViewFilter(v.id, { integrations: keys.map(([k]) => k) }),
+                      () => this._updateViewFilter(v.id, { integrations: [] }))}</div>
+                  <div class="pill-grp">
+                    ${keys.map(([k, n]) => html`
+                      <span class="pill ${on.includes(k) ? 'on' : ''}"
+                        @click=${() => this._toggleViewFilterValue(v.id, 'integrations', k)}
+                      >${getIntegrationLabel(k)} ${n}</span>`)}
+                  </div>
+                </div>`;
+            })()}
 
             ${(() => {
               // A view's area list must be able to name the unassigned bucket,
