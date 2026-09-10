@@ -1481,6 +1481,16 @@ export const mainCss = css`
     .spark-tooltip-val  { font-size:.78em; font-weight:700; color:var(--sc-graph-line); }
 
     .spark-tooltip-time { font-size:.65em; color:var(--sc-text-muted); }
+    /* The y-axis, both ends, both sides. A sparkline autoscales to its own
+       data, so the same shape can be a 2 degree wobble or a 40 degree swing —
+       the numbers are what make the height mean anything. Both sides because on
+       a wide graph the one you want is whichever edge your eye is already at. */
+    .spark-axis { display:flex; flex-direction:column; justify-content:space-between;
+      align-self:stretch; font-size:8.5px; line-height:1; color:var(--sc-text-muted);
+      font-variant-numeric:tabular-nums; opacity:.75; padding:1px 0; }
+    .spark-axis-l { text-align:right; margin-right:3px; }
+    .spark-axis-r { text-align:left;  margin-left:3px; }
+
 
     .spark-val { font-size:.75em; font-weight:600; color:var(--sc-text-secondary); white-space:nowrap; min-width:44px; text-align:right; }
 

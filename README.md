@@ -280,8 +280,17 @@ stragglers. A device caught by both routes is still counted once.
 
 `graph_style` keys: `type` (`line` \| `area` \| `bar`, default `line`), `line_width`
 (`1.5`), `fill` (`true`), `height` (`32`), `show_dots` (`true`), `time_labels`
-(`true`), `tick_lines` (`true`), `bar_radius` (`1.5`), and `sensor_ranges`
-(`{ power: { min: 0, max: 3000 } }`) to pin a y-axis instead of auto-scaling.
+(`true`), `tick_lines` (`true`), `axis_labels` (`true`), `bar_radius` (`1.5`), and
+`sensor_ranges` (`{ power: { min: 0, max: 3000 } }`) to pin a y-axis instead of
+auto-scaling.
+
+`axis_labels` prints the top and bottom of the y-axis on **both** sides of the
+plot. A sparkline scales to its own data, so the same shape can be a 2 °C wobble
+or a 40 °C swing — a GPU load that looks violently spiky turns out to run between
+13 % and 22 %. Both sides because on a wide graph the number you want is
+whichever edge your eye is already at. When a range is pinned with
+`sensor_ranges` the labels show that range, since that is what the line is drawn
+against.
 
 Graphable keys: `power`, `voltage`, `current`, `energy`, `apparent_power`,
 `reactive_power`, `frequency`, `power_factor`, `temperature`, `humidity`,

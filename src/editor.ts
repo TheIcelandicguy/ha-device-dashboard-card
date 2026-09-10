@@ -5639,6 +5639,12 @@ export class HADeviceDashboardEditor extends LitElement {
       <div class="tog-row">
         <div class="tog-lbl">Tick grid lines</div>
         <label class="sw"><input type="checkbox" .checked=${gs.tick_lines !== false} @change=${(e:Event)=>this._set('graph_style',{...gs,tick_lines:(e.target as HTMLInputElement).checked})}><span class="sw-t"></span><span class="sw-b"></span></label>
+      </div>
+      <div class="tog-row">
+        <div class="tog-lbl">Scale numbers
+          <div class="hint">The top and bottom of the y-axis, printed either side of the plot. A sparkline scales to its own data, so without them the same shape could be a 2° wobble or a 40° swing.</div>
+        </div>
+        <label class="sw"><input type="checkbox" .checked=${gs.axis_labels !== false} @change=${(e:Event)=>this._set('graph_style',{...gs,axis_labels:(e.target as HTMLInputElement).checked})}><span class="sw-t"></span><span class="sw-b"></span></label>
       </div>`)}`;
 
     // Unset = the card graphs a default set, so show that here too (ticked), not

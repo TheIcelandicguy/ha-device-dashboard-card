@@ -5,6 +5,28 @@ installs from them.
 
 ## Unreleased
 
+### Graphs show the scale they are drawn against
+
+A sparkline autoscales to its own data, which makes the shape readable and the
+height meaningless: the same line can be a 2 °C wobble or a 40 °C swing, and
+nothing on screen said which.
+
+The top and bottom of the y-axis now print either side of every plot — on
+**both** sides, because on a wide graph the number you want is whichever edge
+your eye is already at.
+
+It pays for itself immediately on a PC tile: `gpuload` draws a violently spiky
+line that turns out to run between 13.0 and 22.3, and `memoryusage` looks like a
+steep climb across 52.6 to 59.3. Neither shape means what it looks like without
+the numbers beside it.
+
+Where `sensor_ranges` pins a range the labels show that range rather than the
+data's extremes, since the pinned range is what the line is drawn against — which
+is the whole point of pinning one.
+
+`graph_style.axis_labels`, default on, with a switch in Graphs & Sensors beside
+the other graph toggles.
+
 ### The firmware spread names every device, and the bars are gone
 
 The spread told you 18 devices are on 1.7.5 and three are on 1.14.0. It never

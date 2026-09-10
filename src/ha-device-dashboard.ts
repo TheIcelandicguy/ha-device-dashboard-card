@@ -2067,6 +2067,7 @@ export class HADeviceDashboard extends LitElement {
     const showDots = gs.show_dots !== false;
     const showTicks = gs.tick_lines !== false;
     const showTimeLabels = gs.time_labels !== false;
+    const showAxis = gs.axis_labels !== false;
     const graphType = gs.type ?? 'line';
     const barRadius = gs.bar_radius ?? 1.5;
     // 'area' type always fills; 'line' type never fills; 'bar' type is separate
@@ -2186,10 +2187,20 @@ export class HADeviceDashboard extends LitElement {
       };
 
       const openDialog = (e: Event) => { e.stopPropagation(); this._detailDevice = device.device_id; };
+
+      // The scale the line is drawn against. Same numbers the plot uses, so a
+      // configured sensor_range shows as the range rather than the data's own
+      // extremes — which is the point when a range is pinned.
+      const axisNum = (v: number) => (v % 1 === 0 ? `${v}` : v.toFixed(1));
+      const axis = (side: string) => showAxis ? html`
+        <span class="spark-axis spark-axis-${side}" aria-hidden="true">
+          <i>${axisNum(max)}</i><i>${axisNum(min)}</i>
+        </span>` : nothing;
       return html`
         <div class="spark-group">
           <div class="spark-row ${expanded ? '' : 'spark-row-clickable'}" @click=${expanded ? nothing : openDialog}>
             <span class="spark-lbl">${label}</span>
+            ${axis('l')}
             <div class="spark-svg-wrap">
               <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"
                 class="sparkline-svg"
@@ -2240,6 +2251,7 @@ export class HADeviceDashboard extends LitElement {
                 <span class="spark-tooltip-time"></span>
               </div>
             </div>
+            ${axis('r')}
             <span class="spark-val">${disp} ${unit}</span>
           </div>
           ${showTimeLabels ? html`

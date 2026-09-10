@@ -108,6 +108,12 @@ export interface GraphStyle {
   show_dots?: boolean;        // peak/min dots, default true
   time_labels?: boolean;      // time axis labels, default true
   tick_lines?: boolean;       // vertical tick marks, default true
+  /** The y-axis top and bottom printed either side of the plot, default true.
+   *  A sparkline autoscales to its own data, so the same shape can mean a 2 °C
+   *  wobble or a 40 °C swing — without the numbers the line's height says
+   *  nothing. Shown on BOTH sides: on a wide graph the value you want is
+   *  whichever edge your eye is already at. */
+  axis_labels?: boolean;
   bar_radius?: number;        // bar corner radius px, default 1.5
   /** Manual y-axis min/max per sensor device_class key */
   sensor_ranges?: Record<string, SensorRange>;
