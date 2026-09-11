@@ -3,7 +3,7 @@
 All notable changes to HA Device Dashboard. Versions are git tags; HACS
 installs from them.
 
-## Unreleased
+## v1.6.1 — 2026-09-11
 
 ### "All" in a view filter now means all
 
