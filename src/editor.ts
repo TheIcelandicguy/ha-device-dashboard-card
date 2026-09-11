@@ -10,7 +10,7 @@ import { selectAllKeys, entityKeys, classKeys, namedEntitiesInForce, withNamedEn
 import { areaKeyUniverse, toggleAreaSelection, isAreaOn as isAreaSelected, setDevicesHidden, NO_AREA_KEY } from './room-filter';
 import { attentionItems, groupAttention } from './attention';
 import { applyViewFilter } from './view-filter';
-import { getAllDevices, GRAPH_SENSOR_DEFS, GAUGE_RING_DEFS, gaugeStops, colorAt, hexToHsv, hsvToHex, parseCssColor, withAlpha, deviceHasControllable, getDeviceProfile,HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels,
+import { ALL_PROFILES, ALL_DEVICE_DOMAINS, getAllDevices, GRAPH_SENSOR_DEFS, GAUGE_RING_DEFS, gaugeStops, colorAt, hexToHsv, hsvToHex, parseCssColor, withAlpha, deviceHasControllable, getDeviceProfile,HEADER_CHIP_DEFS, DEFAULT_HEADER_CHIPS, AREA_CHIP_DEFS, DEFAULT_AREA_HEADER_CHIPS, normalizeGraphKey, migrateConfig, STYLE_ELEMENTS, PROFILE_DEFAULT_TILE_STYLE, profileDefaultTileStyle, normalizeTileLayout, flattenTileLayout, cloneTileLayout, PROFILE_DEFAULT_BLOCKS, DEFAULT_GRAPH_SENSORS, factoryLook, getDiscoverySources, getIntegrationLabel, detectInputChannels,
   CONFIG_KEYS, LOVELACE_KEYS } from './helpers';
 import { THEME_ORDER, THEME_PRESETS, THEME_LABELS, THEME_KEYS, detectTheme, paletteFor, type ThemePalette } from './themes';
 import {
@@ -4649,11 +4649,11 @@ export class HADeviceDashboardEditor extends LitElement {
 
   private _renderViewsTab(): TemplateResult {
     const views = this._config.views ?? [];
-    const PROFILE_OPTS: DeviceProfile[] = [
-      'relay', 'plug', 'dimmer', 'rgb', 'climate', 'wall_display',
-      'cover', 'valve', 'energy', 'sensor', 'input', 'uni',
-    ];
-    const DOMAIN_OPTS = ['light', 'switch', 'sensor', 'binary_sensor', 'climate', 'cover', 'valve', 'button', 'select', 'number'];
+    // Both lists come from the source of truth. Hand-written copies had twelve
+    // of seventeen profiles and ten of twenty-one domains, so "All" excluded
+    // whatever was missing — which is what made the pills read as an exclude.
+    const PROFILE_OPTS: DeviceProfile[] = ALL_PROFILES;
+    const DOMAIN_OPTS = ALL_DEVICE_DOMAINS;
     const allAreas = this._getAreas();
     const allDiscovered = this._getDiscoveredDevices();
     // Build the id→device map once and share it across all view cards.
@@ -4765,7 +4765,7 @@ export class HADeviceDashboardEditor extends LitElement {
             </div>
 
             <!-- Filter -->
-            <div class="subgroup-lbl" style="margin-top:10px">Filter (empty = all devices)</div>
+            <div class="subgroup-lbl" style="margin-top:10px">Filter — pick what to include. A group with nothing picked includes all of it.</div>
 
             <div class="field">
               <div class="field-lbl">Profiles

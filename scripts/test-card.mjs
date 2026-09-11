@@ -1624,6 +1624,47 @@ try {
     eq('unknown renders as nothing', h.genLabel('other'), '');
   }
 
+  console.log('\nfilter pills - "All" has to mean all');
+  {
+    // The editor's view filter had hand-written lists: twelve profiles of
+    // seventeen, ten domains of twenty-one. Ticking All therefore selected a
+    // subset and silently dropped every device of a missing kind - 34 on a real
+    // fleet - which is what made the pills read as an exclude rather than an
+    // include. Both lists now derive from the source of truth.
+    ok('every profile with a label is offered',
+      h.ALL_PROFILES.length === Object.keys(h.PROFILE_LABELS).length);
+    // The three the editor's own list left out. Most of a mixed fleet's media
+    // players are 'media', which is why the profiles gate dropped 34 devices
+    // on a real instance with every pill ticked.
+    for (const p of ['generic', 'lock', 'media']) {
+      ok(`the ${p} profile is offered`, h.ALL_PROFILES.includes(p));
+    }
+    ok('and the familiar ones still are', h.ALL_PROFILES.includes('relay'));
+
+    ok('every discovered domain is offered',
+      h.ALL_DEVICE_DOMAINS.length === h.DEVICE_DOMAINS.size);
+    for (const d of ['media_player', 'lock', 'fan', 'vacuum', 'update', 'camera', 'event']) {
+      ok(`the ${d} domain is offered`, h.ALL_DEVICE_DOMAINS.includes(d));
+    }
+    // device_tracker is deliberately not discovered, so it must not appear.
+    ok('a domain discovery skips is not offered', !h.ALL_DEVICE_DOMAINS.includes('device_tracker'));
+
+    // The consequence that matters: selecting every pill is the same as
+    // selecting none. That is what "All" promises and what it did not deliver.
+    const dev = (id, profile, domain) => ({
+      device_id: id, entities: [{ domain, entity_id: `${domain}.${id}` }],
+    });
+    const fleet = [dev('a', 'relay', 'switch'), dev('b', 'media', 'media_player'),
+                   dev('c', 'lock', 'lock'), dev('d', 'generic', 'update')];
+    const profileOf = (d) => ({ a: 'relay', b: 'media', c: 'lock', d: 'generic' })[d.device_id];
+    eq('every profile pill on matches everything',
+      vf.applyViewFilter(fleet, { profiles: h.ALL_PROFILES }, profileOf).length, fleet.length);
+    eq('every domain pill on matches everything',
+      vf.applyViewFilter(fleet, { domains: h.ALL_DEVICE_DOMAINS }, profileOf).length, fleet.length);
+    eq('and no filter at all agrees with them',
+      vf.applyViewFilter(fleet, undefined, profileOf).length, fleet.length);
+  }
+
   console.log('\nview include list - migrated away');
   {
     // The view include list is gone from the editor, so it must not survive in a

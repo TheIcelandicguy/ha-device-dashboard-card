@@ -1,10 +1,11 @@
 # HA Device Dashboard — Project Overview
 
 A Home Assistant **Lovelace custom card** (frontend, TypeScript + Lit) that
-auto-discovers Shelly devices from Home Assistant and renders them as a live,
-device-centric fleet dashboard with per-device tiles, an expandable detail
-panel, sparkline history graphs, themes, animated status icons, and a full
-visual (GUI) config editor.
+auto-discovers Shelly devices from Home Assistant — or, in universal mode, every
+device Home Assistant has — and renders them as a live, device-centric fleet
+dashboard with per-device tiles, an expandable detail panel, sparkline history
+graphs, a needs-attention summary, filtered views, themes, animated status
+icons, and a full visual (GUI) config editor.
 
 > This is a **frontend card**, not a Python integration. It registers the custom
 > element `ha-device-dashboard` and is added to a dashboard as
@@ -58,8 +59,10 @@ in the default Shelly mode only Shelly/BTHome devices appear (see §7).
 
 - **Auto-discovery** — finds Shelly (and Shelly BLU/BTHome) devices registered in
   HA; no manual entity list required. Opt into `mode: universal` to discover every
-  HA device, scoped by `universal_scope` and integration/domain allow- and
-  deny-lists.
+  HA device, scoped by `universal_scope`, a built-in integration deny-list you can
+  extend or override, and entity-domain allow/deny lists. Shelly devices are
+  detected with the same fidelity in both modes, and a dismissible notice says
+  how many devices the current mode and filters have dropped (§7).
 - **Embedded Lovelace cards** — render your own cards above (`header_cards`),
   below (`footer_cards`) or inside a specific room's section (`area_cards`).
 - **Delegated native controls** — `delegate_controls` renders HA's own control
@@ -92,9 +95,15 @@ in the default Shelly mode only Shelly/BTHome devices appear (see §7).
 - **Header stats** — clickable header chips (online/offline/power/energy/temp/
   humidity/light/rssi/alerts/updates) that open high-to-low device drill-downs.
 - **Power bar** — optional mini wattage indicator at the tile bottom.
-- **Views** — optional multiple named dashboard views (tabs) with per-view filters
-  (profiles, domains, areas, device include/exclude, entity-id regex) and layout
-  overrides.
+- **Views** — optional multiple named dashboard views (tabs). A view is what its
+  filter pills select — profiles, entity domains, integrations, rooms (including
+  **No Room**) — minus `exclude_devices`, optionally narrowed by an entity-id
+  regex; plus per-view layout and style overrides. A view that matches nothing
+  says which filter emptied it instead of rendering blank (§6, §7).
+- **Needs attention** — a summary above the rooms listing offline devices, firing
+  alerts, flat batteries and pending updates, grouped by integration once a fleet
+  spans more than one, with `attention_muted_integrations` to stop an integration
+  being counted without hiding it; and a firmware spread computed per integration.
 - **Favourites** — devices pinned to a Favourites section.
 - **Theming** — 8 built-in colour presets (`warm_dusk` default, `shelly_blue`,
   `dark_industrial`, `teal_terminal`, `brutalist`, `frosted_light`, `nordic_warm`,
@@ -118,8 +127,9 @@ in the default Shelly mode only Shelly/BTHome devices appear (see §7).
 
 ## 3. Installation
 
-**Requires** Home Assistant with a dashboard that accepts custom cards, and the
-official **Shelly** integration set up for your devices.
+**Requires** Home Assistant with a dashboard that accepts custom cards. In the
+default Shelly mode it reads the official **Shelly** integration (and BTHome for
+Shelly BLU sensors); in universal mode any integration will do.
 
 ### HACS (custom repository)
 
@@ -197,9 +207,10 @@ the 15 profiles, themes, tile blocks, header chips, and every editor control wit
 its config key, scope, default and advanced flag) — but it lags `types.ts`, so
 check it against the type rather than trusting it alone.
 
-> `README.md` was resynced with `types.ts` (2026-08-19, and again 2026-09-02) and
-> is a fair summary — but `src/types.ts` remains the authority for the option
-> surface whenever the two disagree.
+> `README.md` was resynced with `types.ts` (2026-08-19, again 2026-09-02, and its
+> Discovery / Views / Needs attention sections rewritten for v1.6.0) and is a
+> fair summary — but `src/types.ts` remains the authority for the option surface
+> whenever the two disagree.
 
 ---
 
@@ -212,11 +223,12 @@ src/
   index.ts              Entry point — imports the card + editor, registers
                         the <ha-device-dashboard> custom card metadata,
                         prints a BUILD_TAG marker to the console.
-  ha-device-dashboard.ts  The main card LitElement (~3.6k lines): config, hass
-                        wiring, device grouping, header, tiles, detail sheet,
+  ha-device-dashboard.ts  The main card LitElement (~4.2k lines): config, hass
+                        wiring, device grouping, the discovery notice, the
+                        needs-attention block, header, tiles, detail sheet,
                         graph fetching, CSS-var/style building.
   editor.ts             The visual editor LitElement
-                        <ha-device-dashboard-editor> (~5.8k lines): accordion
+                        <ha-device-dashboard-editor> (~7.2k lines): accordion
                         tabs, live preview, YAML export.
   editor-layout.ts      Data-driven EDITOR_LAYOUT — tabs/sections spec that the
                         editor renders from (section-registry refactor).
@@ -236,11 +248,13 @@ src/
                         device_class keys AND entity ids in one list, told
                         apart by the dot. isEntityKey, classKeys, entityKeys,
                         namedEntitiesOn, selectAllKeys.
-  view-filter.ts        Which devices a view shows: the six AND-ed gates, one
-                        implementation shared by the card that renders them and
-                        the editor that counts them. Records what each gate
-                        removed, so an empty view can name the one that emptied
-                        it instead of rendering blank.
+  view-filter.ts        Which devices a view shows: the AND-ed gates (profiles,
+                        domains, integrations, areas, legacy devices,
+                        exclude_devices, entity-id regex), one implementation
+                        shared by the card that renders them and the editor
+                        that counts them. Records what each gate removed, so an
+                        empty view can name the one that emptied it instead of
+                        rendering blank. NO_AREA ('') is the No Room key.
   room-filter.ts        The `areas` filter as pure functions. The unassigned
                         bucket ('' — "No Room") is a room like any other;
                         leaving it out of the key universe silently dropped
@@ -252,13 +266,19 @@ src/
                         from FONT_OPTIONS rather than declared twice.
   types.ts              All config + data model types (single source of truth
                         for options); HADeviceDashboardConfig.
-  helpers.ts            Device discovery (getAllDevices), profile detection,
-                        tile-block/sensor/graph constants and defaults
-                        (incl. STYLE_ELEMENTS with per-element defaults),
-                        value formatters, config migration.
+  helpers.ts            Device discovery (getAllDevices, the
+                        DEFAULT_EXCLUDE_INTEGRATIONS deny-list,
+                        deviceInUniversalScope, DiscoveryStats), the
+                        ProfileProvider registry behind getDeviceProfile,
+                        ALL_PROFILES / ALL_DEVICE_DOMAINS (the view-filter pill
+                        vocabularies), tile-block/sensor/graph constants and
+                        defaults (incl. STYLE_ELEMENTS with per-element
+                        defaults), value formatters, config migration.
   help.ts               The ? Help content; docs/GUIDE.md is generated from it.
   palette.ts            Random theme/palette rolls with WCAG floors (test:palette).
-  attention.ts          The needs-attention summary logic.
+  attention.ts          The needs-attention summary logic, pure: attentionItems,
+                        groupAttention (by integration), splitMuted,
+                        firmwareGroups / firmwareByIntegration, lightCounts.
   shelly-cloud-import.ts  Shelly Cloud room/device matching for the importer.
   themes.ts             THEME_PRESETS (8 palettes) + apply/detect helpers.
   anim-icons.ts         SVG animated status-icon library + renderer.
@@ -350,10 +370,29 @@ edit-dialog's live preview jumps to that device's scope (a cancelable
 `hdd-editor-goto` window event; with no editor listening the tap opens the
 detail sheet as usual).
 
+**Rooms & devices** carries the **Discovery** section: a Shelly only / Universal
+mode pill, and in universal mode a scope pill row (Real devices / Controllable /
+Everything) and two checklists — *Hide integrations* and *Hide entity types* —
+built from what `getDiscoverySources` finds in the running instance. They write
+`exclude_integrations` / `exclude_domains`; the force-include keys are YAML-only.
+
+**Views** renders one card per view with a live `matched/total` count computed
+through the same `applyViewFilter` the card renders with. The filter block is
+headed *"Filter — pick what to include. A group with nothing picked includes all
+of it."* and holds pill groups with Select all / none: **Profiles** (from
+`ALL_PROFILES`), **Entity domains** (advanced, from `ALL_DEVICE_DOMAINS`),
+**Integrations** (only when the fleet spans two or more, each pill labelled with
+its device count) and **Areas** (from `areaKeyUniverse` over every discovered
+device, so a **No Room** pill exists whenever anything is unassigned). Below the
+pills, **Exclude devices** is a checklist that takes individual devices back out;
+the old per-device *include* list is gone. An entity-id regex field (advanced)
+flags an invalid pattern inline.
+
 Structure is being migrated to the data-driven `EDITOR_LAYOUT` spec (the Graphs tab
 is wired to it first; the others render bespoke bodies and must render registry
-sections explicitly). Editor and card must keep the `CDN_FONT_FAMILIES` /
-`FONT_OPTIONS` lists in sync.
+sections explicitly). The font catalogue has one home, `src/font-options.ts`;
+`CDN_FONT_FAMILIES` is derived from it, and `check:docs` fails if a second
+declaration reappears.
 
 ---
 
@@ -368,17 +407,18 @@ runtime defaults from `docs/card-reference.json` where applicable.
 |---|---|---|---|
 | `type` | string | — | Must be `custom:ha-device-dashboard`. |
 | `title` | string | `Shelly` | Header title text. |
-| `mode` | `shelly`\|`universal` | `shelly` | Discovery breadth. `shelly` = Shelly + BTHome only; `universal` = every HA device, with Shelly devices keeping full-fidelity Shelly detection. |
-| `universal_scope` | `all`\|`devices`\|`controllable` | `devices` | Universal only. `devices` = actuators + devices with a recognised sensor (drops routers, PCs, browsers, pure-diagnostic integrations); `controllable` = only devices with a controllable entity; `all` = raw firehose. |
-| `include_integrations` | string[] | — | Universal only. Force-include platforms the deny-list removed (e.g. `['mobile_app']`). |
-| `exclude_integrations` | string[] | — | Universal only. Added to the built-in deny-list (`mobile_app`, `browser_mod`, routers, `systemmonitor`, …). |
-| `include_domains` | string[] | — | Universal only. Entity-domain allow-list; when set, only these. |
-| `exclude_domains` | string[] | — | Universal only. Entity-domain deny-list (e.g. `['update','device_tracker']`). |
+| `mode` | `shelly`\|`universal` | `shelly` | Discovery breadth. `shelly` = entities on the `shelly` / `bthome` platforms only (non-Shelly BTHome vendors dropped); `universal` = every HA device, filtered by the five options below. Shelly devices get full-fidelity Shelly detection in both modes. |
+| `universal_scope` | `all`\|`devices`\|`controllable` | `devices` | Universal only; tested per device after merging. `devices` = devices with a primary controllable entity **or** a primary sensor with a recognised `device_class` (drops routers, PCs, browsers, pure-diagnostic integrations); `controllable` = only devices with a controllable entity; `all` = raw firehose. |
+| `include_integrations` | string[] | — | Universal only. Force-include platforms the deny-lists removed (e.g. `['mobile_app']`). Wins over both deny-lists. YAML only. |
+| `exclude_integrations` | string[] | — | Universal only. Added to the built-in deny-list `DEFAULT_EXCLUDE_INTEGRATIONS` (`mobile_app`, `browser_mod`, `hassio`, `systemmonitor`, `backup`, `sun`, `nws`, `netgear`, `tplink_router`, `huawei_lte`, `huawei_ont`, `asuswrt`, `fritzbox_tools`, `fritz`). Case-insensitive. |
+| `include_domains` | string[] | all | Universal only. Entity-domain allow-list; when set, only these. YAML only. |
+| `exclude_domains` | string[] | — | Universal only. Entity-domain deny-list (e.g. `['update','camera']`). Wins over `include_domains` on a clash. `device_tracker` is never discovered in any mode. |
 | `header_cards` / `footer_cards` | LovelaceCardConfig[] | — | Your own Lovelace cards rendered above / below the device grid. |
 | `area_cards` | Record<area, LovelaceCardConfig[]> | — | Cards rendered inside a specific room's section, above its tiles. |
 | `delegate_controls` | boolean | `false` | Render native HA controls for long-tail domains via the `delegated_controls` block. |
 | `energy_period` | EnergyPeriod | lifetime total | What the Energy value shows: cumulative total, or current day/week/month from recorder statistics. Overridable per room/device. |
-| `areas` | string[] | all | Area-name filter (`[]` = none). |
+| `areas` | string[] | all | Area-name filter (`[]` = none). `''` is the No Room bucket's key. |
+| `devices` | string[] | all | Card-wide device whitelist, applied before `hidden_devices` (a device in both stays hidden). |
 | `name_groups` | string[] | — | Extra sections built from device-name prefixes. |
 | `hidden_devices` | string[] | `[]` | Device IDs to hide. |
 | `favorites` | string[] | `[]` | Device IDs pinned to the Favourites section. |
@@ -389,8 +429,40 @@ runtime defaults from `docs/card-reference.json` where applicable.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `views` | ViewConfig[] | — | Named dashboard views (tabs). Each has `id`, `name`, `icon`, `show_favourites`, `show_rooms`, a `filter` (profiles/domains/areas/devices/exclude_devices/entity_id_pattern), and layout overrides. |
+| `views` | ViewConfig[] | — | Named dashboard views (tabs). Each has `id`, `name`, `icon`, `show_favourites` (default false), `show_rooms` (default true), a `filter`, and layout / style overrides (`theme`, `tile_style`, `power_monitor_variant`, `columns`, `tile_size`, `tile_gap`, `sort_by`, `tile_layout`, `sensors`, `elements`, `show_graphs`, `energy_period`, `header_cards` / `footer_cards`, `extra_card_style`, `area_card_placement`, a chrome `style` sub-object). |
+| `views[].filter` | ViewFilter | — | `profiles` (DeviceProfile[]), `domains` (any entity's domain), `integrations` (platform slugs, case-insensitive), `areas` (room names, case-insensitive; `''` = No Room), `exclude_devices` (device ids), `entity_id_pattern` (RegExp source; any entity hit). `devices` is legacy: still honoured at runtime, no longer editable, stripped by `migrateConfig`. |
 | `default_view` | string | first | `id` of the view selected on first load. |
+
+**A view is what its pills select, minus what you exclude.** Every gate is an
+AND, values inside one list are OR-ed, and an absent or empty list is no gate —
+so "All" ticked in the editor is the same as nothing ticked, which only holds
+because the pill vocabularies derive from the source (`ALL_PROFILES`,
+`ALL_DEVICE_DOMAINS`) rather than from hand-written lists that used to be short
+by three profiles and eleven domains. Gate order in `src/view-filter.ts`:
+profiles → domains → integrations → areas → (legacy devices) → exclude_devices →
+entity_id_pattern. Two consequences worth knowing:
+
+- `areas` names rooms, and a device with no room is in none of them; add `''`
+  (the **No Room** pill) to include the unassigned bucket. The editor derives
+  its room pills from every discovered device, so that pill exists whenever
+  anything is unassigned.
+- The old `filter.devices` *include* list ANDed with the other gates, so a view
+  of every room plus two roomless devices matched nothing. It is gone from the
+  editor and stripped from saved configs.
+
+A view that filters to nothing renders an explanation — which gate removed the
+last devices, the No Room hint when it applies, and that filters AND — rather
+than a blank card.
+
+### Needs attention
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `show_attention` | boolean | `true` | The summary above the rooms; renders only when something qualifies. |
+| `attention_battery` | number | `20` | Battery percentage at or below which a device is flagged. |
+| `attention_muted_integrations` | string[] | — | Integration slugs whose rows are listed (collapsed, at the foot, with counts) but not counted, and left out of the firmware spread. Case-insensitive. |
+| `include_beta_updates` | boolean | `false` | Count a Shelly's `beta_firmware` entity as an available update. |
+| `show_firmware_summary` | boolean | `true` | The per-integration firmware spread inside the summary; only integrations running more than one version appear. |
 
 ### Layout
 
@@ -432,7 +504,7 @@ runtime defaults from `docs/card-reference.json` where applicable.
 |---|---|---|---|
 | `graph_sensors` | string[] | `[power, temperature, humidity, battery]` | device_class keys **or entity ids** to graph as sparklines. Setting the key replaces the default set. |
 | `graph_hours` | number | `24` | History window (1–168 h). |
-| `graph_style` | GraphStyle | — | `type` (line/area/bar), line_width, fill, height, show_dots, time_labels, tick_lines, bar_radius, per-sensor `sensor_ranges`. |
+| `graph_style` | GraphStyle | — | `type` (line/area/bar), line_width, fill, height, show_dots, time_labels, tick_lines, `axis_labels` (y-axis top/bottom printed either side, default true), bar_radius, per-sensor `sensor_ranges`, `gauge_gradients`. |
 | `graph_line_color` | string | — | Global fallback line colour. |
 | `graph_sensor_colors` | Record<key,color> | — | Per-sensor-class line colours. |
 | `sensors` | string[] | all | Which sensor chip keys **or entity ids** to show on tiles. |
@@ -503,27 +575,60 @@ passes in. `getAllDevices(hass)` in `helpers.ts`:
    it keeps only entities whose platform is `shelly` or `bthome` — the latter for
    Shelly BLU BLE sensors that report through HA's BTHome integration — and skips
    non-Shelly BTHome vendors (Tuya, generic BLE) via a `manufacturer`/platform
-   check. In **universal mode** it keeps every platform, then filters by
-   `universal_scope`, the `DEFAULT_EXCLUDE_INTEGRATIONS` deny-list plus the user's
-   `exclude_integrations` (with `include_integrations` as a force-include escape
-   hatch), and `include_domains` / `exclude_domains`. Those scoping sets are `null`
-   in Shelly mode, so the filters are true no-ops there rather than a second code
-   path. Entities with `hidden_by` set are skipped in both modes.
+   check. In **universal mode** it keeps every platform and applies, per entity,
+   the domain lists (`exclude_domains` drops, `include_domains` when set keeps
+   only those; excluded wins) and the integration deny-list — the built-in
+   `DEFAULT_EXCLUDE_INTEGRATIONS` (phones, browsers, the supervisor, system
+   monitors, weather, and the router platforms) plus `exclude_integrations`,
+   unless the platform is in `include_integrations`, which wins over both. Those
+   sets are `null` in Shelly mode, so the checks are true no-ops there rather
+   than a second code path. Entities with `hidden_by` set are skipped in both
+   modes. A Shelly entity always wins the device's `integration` field, since in
+   universal mode other integrations can attach entities to the same device.
 3. Groups entities under their device (`hass.devices`), resolving area name via
    `hass.areas`, and extracts the device IP from `configuration_url`.
 4. Attaches live state from `hass.states[entity_id]` (O(1) lookup).
-5. **Merges sub-devices** into their parent when they are the same physical unit
-   (via `via_device_id` + matching config-URL host, e.g. a Shelly 2.5 that
-   registers per-channel sub-devices).
+5. **Merges duplicate registry rows** in two passes. First, sub-devices fold into
+   their parent when they are the same physical unit — `via_device_id` plus a
+   matching config-URL host (a Shelly 2.5's per-channel sub-devices), or a
+   Shelly child with no config URL on the parent's integration (restricted to
+   Shelly so a Hue / ZHA bridge does not swallow every bulb behind it). Second,
+   *siblings* describing one unit — same MAC connection or an identical
+   `identifiers` entry — fold together, because some integrations register a
+   shadow device per real one; the survivor is the row with a config URL, then
+   the Shelly one, then the one with most entities.
+6. **Applies `universal_scope`** per merged device (`deviceInUniversalScope`):
+   `all` keeps everything, `controllable` keeps devices with a primary entity in
+   a controllable domain, and `devices` (default) also keeps devices with a
+   primary `sensor` / `binary_sensor` carrying a recognised `device_class`.
+   Skipped in Shelly mode.
+
+Every drop is counted per device into `DiscoveryStats` (`notShelly`,
+`byIntegration`, `byDomain`, `byScope`, and the integrations responsible,
+commonest first) — a device only counts as hidden when none of its entities
+survived. The card turns that into a dismissible notice at the top: *"165 devices
+are not shown: 93 by integration, 72 by scope (browser_mod, hassio, mobile_app…)"*,
+or in Shelly mode *"270 more devices are in Home Assistant but not on this
+card"*. In the edit dialog its link jumps to the Discovery section; on a
+dashboard it is plain text. The count is the entire fix — the defaults stay.
 
 ### Profiles, grouping and rendering
 
 - `getDeviceProfile()` derives a **profile** (relay/plug/dimmer/rgb/climate/cover/
   valve/energy/sensor/input/uni/wall_display/lock/media/generic) and **generation**
   from the device's entity domains and Shelly model, producing a badge label.
-  Profiles are cached per device.
+  It dispatches through the `PROFILE_PROVIDERS` registry, most-specific-first:
+  `ShellyProvider` claims any device whose manufacturer contains "shelly" or
+  whose platform is `shelly` and runs the model-string reclassification plus
+  `detectShellyGen`; `GenericProvider` claims everything else, classifies by
+  domain alone, reports gen `'other'` and uses vendor-neutral labels ("Switch",
+  "Climate"). `mode` gates discovery breadth, never provider routing — a Shelly
+  is detected identically in both modes. Profiles are cached per device.
 - Devices are grouped into collapsible **area** sections (plus any `name_groups`
   and a Favourites section), filtered/sorted per the config and active view.
+  The active view's `filter` goes through `applyViewFilter` (`src/view-filter.ts`)
+  with a trace of what each gate removed; if nothing survives, the card renders
+  the explanation described in §6 instead of an empty grid.
 - Each device renders as a tile in the resolved **tile style**. With
   `smart_tile_styles`, each profile maps to a default style (relay/plug/energy →
   `power-monitor`, dimmer/rgb → `light-control`, climate → `climate-control`,
@@ -538,15 +643,37 @@ passes in. `getAllDevices(hass)` in `helpers.ts`:
   `graph_hours`, downsampled and drawn as SVG sparklines, with fetch throttling and
   a manual refresh.
 
+### Needs attention
+
+`src/attention.ts` is pure (states come in as a plain map). `attentionItems`
+lists devices worst-first — offline, then firing alerts (faults like
+overtemp/overpower and alarms like smoke/water/gas), then batteries at or below
+`attention_battery`, then genuine updates (beta firmware excluded unless
+`include_beta_updates`); an offline device is reported as offline and nothing
+else. `groupAttention` splits the list by each device's `integration`, ordered
+by worst kind, then size, then name; with one group and nothing muted the list
+renders flat. `splitMuted` sets aside `attention_muted_integrations`: those
+groups stay at the foot of the block, collapsed and with their counts, and are
+left out of the header count — hiding them outright would hide the way back.
+Muting writes config, so the per-group 🔔/🔕 toggle only renders in the edit
+dialog's preview, where it fires `hdd-attention-mute` and the editor updates the
+list (the editor's own Needs attention section offers the same integrations with
+counts). Integrations whose friendly labels collide are shown by slug so a mute
+is unambiguous. The firmware spread (`firmwareByIntegration`) is computed per
+integration — one "newest" each, since version strings from different vendors
+are not comparable — omits integrations on a single version, and omits muted
+ones.
+
 ### Shelly specifics
 
-- Discovery is Shelly/BTHome only (above).
+- In Shelly mode discovery is Shelly/BTHome only (above); in universal mode
+  Shelly devices are still routed to `ShellyProvider` for detection.
 - Handles all Shelly device classes and generations, multi-channel relays,
   Shelly BLU sensors, TRV/valve, Wall Display, EM/3EM energy monitors, i3/i4
   inputs, UNI, and **virtual components** (select/number/button/text/boolean) via
   the `virtual_controls` tile block.
-- The header stat chips aggregate across the discovered Shelly fleet (online/
-  offline counts, summed power/energy, average temp/humidity/light/RSSI, alert and
+- The header stat chips aggregate across the discovered fleet (online/offline
+  counts, summed power/energy, average temp/humidity/light/RSSI, alert and
   firmware-update counts) and open drill-down lists.
 
 ---
@@ -566,7 +693,9 @@ passes in. `getAllDevices(hass)` in `helpers.ts`:
   - `npm run lint` — ESLint over `src`.
   - `npm test` — `check:docs` plus the four test scripts below.
   - `npm run test:card` — discovery, both merge passes, the cascades, the design
-    scope model, sensor selection, the room filter, update policy, i18n.
+    scope model, sensor selection, the room filter, the view filter (gate order,
+    the No Room trap, "All" equals no filter), needs-attention grouping and
+    muting, update policy, i18n.
   - `npm run test:detection` — `getDeviceProfile` + `detectShellyGen` over 215
     real registry rows in `scripts/fixtures/`, harvested from a live instance and
     scrubbed. The expected file records what the code does *today*; a diff means
@@ -620,9 +749,11 @@ reference/` contains Shelly API / HA-integration reference notes.
 - **Shelly-first defaults.** Universal mode exists and does discover ZHA / Hue /
   ESPHome / Matter, but `mode` defaults to `shelly`, so out of the box only
   Shelly/BTHome devices appear. Profile detection and tile styling remain far
-  richer for Shelly than for anything else. The card now says so on screen — a
-  dismissible notice counts what discovery dropped and links to the setting —
-  which was the single most common "my device is missing" report.
+  richer for Shelly than for anything else (`GenericProvider` classifies by
+  domain only). The card says so on screen — a dismissible notice counts what
+  discovery dropped and links to the setting — which was the single most common
+  "my device is missing" report. `include_integrations` and `include_domains`
+  still have no editor control.
 - **Detection is the fragile part.** Both bugs found in it came from real device
   data rather than from reading the code, which is why `npm run test:detection`
   exists and why the fixtures are harvested rather than invented. Hardware nobody
