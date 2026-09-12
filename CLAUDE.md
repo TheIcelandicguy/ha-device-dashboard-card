@@ -28,6 +28,11 @@ The repo went public on 2026-09-07 and HACS installs from its releases, so
   fails. This catches shipping yesterday's code, so do not work around it.
 - **Every PR must pass** `npm run typecheck`, `npm run lint`, `npm test` and the
   build. Run them locally first; they are the same four CI runs.
+- **A change to how the editor looks needs a before and an after.** Capture the
+  *before* first — after the edit it is gone — same viewport for both, then add
+  the pair to `docs/editor-changes.md` with a note on what to look at. The card
+  is screenshotted constantly and the editor was not, so its changes used to
+  ship on a description. `check:docs` gates the images.
 - **Releases:** see the "Cutting a release" section in `CONTRIBUTING.md`. The
   bundle is attached to the GitHub release automatically by
   `.github/workflows/release-asset.yml` — that asset is what makes installs
@@ -46,7 +51,9 @@ Before ending a session, run `python check_docs.py` and update this file.
 - `npm run lint` — ESLint over `src`.
 - `npm run check:docs` — cross-check `docs/` against `src/` (vocabularies, per-profile
   defaults, first-run rows, guide freshness, whether `dist` carries the current
-  BUILD_TAG). Most of `docs/` is hand-synced, so run this before claiming docs are current.
+  BUILD_TAG, and that every image `docs/editor-changes.md` cites exists and every
+  file in `docs/images/editor/` is cited). Most of `docs/` is hand-synced, so run
+  this before claiming docs are current.
 - `npm run docs:guide` — regenerate `docs/GUIDE.md` from `src/help.ts`.
 - `npm run test:builder` — smoke-test `docs/tools/config-builder.html`'s YAML output.
 - `npm run test:palette` — test `src/palette.ts`, including WCAG floors on 300
