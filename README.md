@@ -1000,6 +1000,10 @@ import as a JSON file so a setup can move between devices or survive a reset.
 Not every option has a control — see the YAML-only list in
 [`docs/tools/reference.html`](docs/tools/reference.html).
 
+**When the editor changes, [`docs/editor-changes.md`](docs/editor-changes.md)
+shows it** — before and after, with a note on what to look at. A dense form is
+easy to describe as "tidier" and hard to check; the pair is the check.
+
 ### Import from Shelly Cloud
 
 **Rooms & devices → Import from Shelly Cloud.** Paste your cloud server and
@@ -1061,6 +1065,8 @@ themes) and short recipes. The editor shows the same text under **? Help**.
   filterable page (open it straight from disk)
 - [`docs/tools/config-builder.html`](docs/tools/config-builder.html) — build a
   starting config and export minimal YAML
+- [`docs/editor-changes.md`](docs/editor-changes.md) — before/after shots of every
+  change to how the GUI editor looks, newest first
 - [`docs/tools/profile-tiles.html`](docs/tools/profile-tiles.html),
   [`style-presets.html`](docs/tools/style-presets.html),
   [`editor-layout.html`](docs/tools/editor-layout.html) — offline designers
