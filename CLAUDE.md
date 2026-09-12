@@ -6,6 +6,11 @@ Python backend). TypeScript + Lit 3, bundled by Rollup to a single committed fil
 `hass` object — Shelly/BTHome by default, or every HA device in universal mode —
 and renders a device-centric fleet dashboard.
 
+Current version **1.6.1** (`package.json`; `BUILD_TAG` in `src/index.ts` and the
+Lovelace resource's `?v=` follow it). Repo
+`TheIcelandicguy/ha-device-dashboard-card`, local folder
+`E:\shelly-dashboard-card`, trunk `master`.
+
 Full architecture tour lives in `OVERVIEW.md` (tracked). Read it when you need
 depth; this file is the fast orientation. Contributor workflow is in
 `CONTRIBUTING.md`.
