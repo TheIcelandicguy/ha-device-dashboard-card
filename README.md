@@ -5,6 +5,7 @@
 
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange)](https://github.com/hacs/integration)
 [![Release](https://img.shields.io/github/v/release/TheIcelandicguy/ha-device-dashboard-card)](https://github.com/TheIcelandicguy/ha-device-dashboard-card/releases)
+[![Downloads](https://img.shields.io/github/downloads/TheIcelandicguy/ha-device-dashboard-card/total?color=brightgreen)](https://github.com/TheIcelandicguy/ha-device-dashboard-card/releases)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 **▶ [Watch the walkthrough](https://www.youtube.com/watch?v=NpqrKhSGCB8)** — the
