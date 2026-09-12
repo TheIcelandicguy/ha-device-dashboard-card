@@ -269,6 +269,22 @@ for (const file of ['README.md', 'OVERVIEW.md']) {
   }
 }
 
+// ── the editor's before/after shots must all resolve ──
+// The page exists so an editor change can be checked rather than taken on
+// description. A pair with a broken <img> is worse than no pair: it reads as
+// evidence and shows nothing. Orphans are flagged too — the shots are large and
+// the only thing that gives one a reason to be in the repo is an entry citing it.
+{
+  const page = 'docs/editor-changes.md';
+  const dir = 'docs/images/editor';
+  const cited = [...read(page).matchAll(/!\[[^\]]*\]\(images\/editor\/([^)]+)\)/g)].map((m) => m[1]);
+  const onDisk = readdirSync(dir);
+  const broken = cited.filter((f) => !onDisk.includes(f));
+  if (broken.length) note(page, `references missing image(s): ${broken.join(', ')}`);
+  const orphans = onDisk.filter((f) => !cited.includes(f));
+  if (orphans.length) note(dir, `not referenced by ${page}: ${orphans.join(', ')}`);
+}
+
 if (problems.length) {
   console.log(`${problems.length} doc mismatch(es):\n`);
   for (const p of problems) console.log('  • ' + p);
