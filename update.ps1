@@ -8,8 +8,13 @@
 # Usage:
 #   .\update.ps1              # update from origin/master (default)
 #   .\update.ps1 -Branch foo  # update from a specific branch
+#   .\update.ps1 -Deployed <path>  # where rollup's autoDeploy copies the bundle,
+#                                  # if your HA config is not mapped to Z:
 
-param([string]$Branch = "master")
+param(
+    [string]$Branch = "master",
+    [string]$Deployed = "Z:\www\community\ha-device-dashboard\ha-device-dashboard.js"
+)
 
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
@@ -24,7 +29,7 @@ Write-Host "==> Building ..." -ForegroundColor Cyan
 npm run build
 if ($LASTEXITCODE -ne 0) { Write-Host "Build failed." -ForegroundColor Red; exit 1 }
 
-$dest = "Z:\www\community\ha-device-dashboard\ha-device-dashboard.js"
+$dest = $Deployed
 if (Test-Path $dest) {
     # Read the tag out of the console banner the bundle prints, so this keeps
     # working when BUILD_TAG changes prefix — it used to look for a literal

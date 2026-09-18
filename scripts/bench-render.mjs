@@ -40,11 +40,13 @@
 
 import { spawn } from 'node:child_process';
 import { readFileSync, rmSync, mkdirSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const HA_URL = process.env.HA_URL || 'http://homeassistant.local:8123';
 const CHROME = process.env.CHROME || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const PORT = 9240;
-const PROFILE = 'C:/Users/brave/AppData/Local/Temp/hddbench/profile';
+const PROFILE = join(tmpdir(), 'hddbench', 'profile');
 const FRAME_MS = 16.7;
 
 const arg = (name, dflt) => {
