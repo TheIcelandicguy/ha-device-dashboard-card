@@ -401,6 +401,7 @@ export const mainCss = css`
       transition:transform 0.15s, box-shadow 0.15s;
       display:flex; flex-direction:column; gap:6px; position:relative; overflow:hidden;
       isolation:isolate; box-shadow: var(--sc-tile-shadow, none);
+      container-type:inline-size; container-name:tile;
     }
 
     /* A tile_layout row holding two or more blocks side by side. Blocks share the
@@ -1127,6 +1128,25 @@ export const mainCss = css`
     .dim-slider:hover::-webkit-slider-thumb { transform:scale(1.15); }
 
     .dim-slider:hover::-moz-range-thumb { transform:scale(1.15); }
+
+    /* Narrow tile (2+ columns on a small screen): stand the brightness slider upright.
+       Keyed to the tile's own width, not the viewport's, so it also holds in a narrow
+       dashboard column. Needs the tile to be a size container. */
+    @container tile (max-width:170px) {
+      .tile-dim-row, .ts-light-dim { flex-direction:column-reverse; align-items:center; gap:4px; }
+      .ts-light-row { flex-direction:column; align-items:center; }
+      .ts-light-lbl { width:auto; }
+      .tile-dim-row .dim-slider, .ts-light-dim .dim-slider {
+        flex:none; writing-mode:vertical-lr; direction:rtl; width:24px; height:110px; touch-action:none;
+      }
+      .tile-dim-row .dim-slider::-webkit-slider-runnable-track,
+      .ts-light-dim .dim-slider::-webkit-slider-runnable-track { width:4px; height:100%; }
+      .tile-dim-row .dim-slider::-moz-range-track,
+      .ts-light-dim .dim-slider::-moz-range-track { width:4px; height:100%; }
+      .tile-dim-row .dim-slider::-webkit-slider-thumb,
+      .ts-light-dim .dim-slider::-webkit-slider-thumb { margin-top:0; margin-left:-5px; }
+      .dim-pct, .ts-light-pct { min-width:0; width:auto; text-align:center; }
+    }
 
     .dim-pct { font-size:var(--fs-sm); font-weight:600; color:var(--sc-text-secondary); min-width:30px; text-align:right; }
 

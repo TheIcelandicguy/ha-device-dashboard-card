@@ -121,7 +121,7 @@ export function renderLightControlTile(ctx: TileCtx): TemplateResult {
         </div>` : nothing}
       ${ctx.showEl('brightness') ? html`<div class="ts-light-row">
         <span class="ts-light-lbl">${t('tile.brightness')}</span>
-        <div style="display:flex;align-items:center;gap:6px;flex:1">
+        <div class="ts-light-dim">
           <input type="range" class="dim-slider ts-light-slider" min="1" max="100"
             .value=${String(isOn ? bPct : 1)} ?disabled=${!isOn}
             style="--sl-color:${isOn ? hexColor : 'var(--sc-text-muted)'}"
