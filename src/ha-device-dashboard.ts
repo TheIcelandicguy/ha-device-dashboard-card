@@ -133,6 +133,10 @@ export class HADeviceDashboard extends LitElement {
    *  not reactive — the overlay is painted straight into the tile, so a drag
    *  never triggers a card render. */
   private _dimHoldTimer: number | undefined;
+  /** What a mouse press on a dimmable tile would drag, kept so a click-and-drag can
+   *  start at once instead of waiting out the hold. Touch never uses it: there a
+   *  move before the hold is a scroll. */
+  private _dimPending: { tile: HTMLElement; entityId: string; startPct: number; startY: number; pointerId: number } | null = null;
   private _dimDrag: {
     entityId: string; tile: HTMLElement; startY: number; startPct: number; pct: number;
     lastSent: number; sentAt: number; overlay: HTMLElement; pointerId: number;
@@ -3316,6 +3320,9 @@ export class HADeviceDashboard extends LitElement {
     if (!tile) return;
     const { entityId, brightness } = sw;
     const { clientY, pointerId } = e;
+    if (e.pointerType === 'mouse') {
+      this._dimPending = { tile, entityId, startPct: Math.max(1, brightness ?? 1), startY: clientY, pointerId };
+    }
     this._dimHoldTimer = window.setTimeout(() => {
       this._dimHoldTimer = undefined;
       this._beginDimDrag(tile, entityId, Math.max(1, brightness ?? 1), clientY, pointerId);
@@ -3323,6 +3330,7 @@ export class HADeviceDashboard extends LitElement {
   }
 
   private _clearDimHoldTimer(): void {
+    this._dimPending = null;
     if (this._dimHoldTimer !== undefined) { clearTimeout(this._dimHoldTimer); this._dimHoldTimer = undefined; }
   }
 
@@ -3352,6 +3360,7 @@ export class HADeviceDashboard extends LitElement {
     // The click that follows the release would otherwise reach the tile's controls.
     window.addEventListener('click', swallowClick, { capture: true, once: true });
     tile.classList.add('dim-holding');
+    window.getSelection()?.removeAllRanges(); // a mouse press-and-drag may have started selecting text
 
     this._dimDrag = {
       entityId, tile, startY, startPct, pct: startPct, lastSent: startPct, sentAt: 0, overlay, pointerId,
@@ -3438,7 +3447,15 @@ export class HADeviceDashboard extends LitElement {
     const dy = e.clientY - this._lpStart.y;
     if (dx * dx + dy * dy > 100) {
       this._lpStart = null; // 10px threshold squared → cancel tap on drag
-      this._clearDimHoldTimer(); // moved before the hold matured: a scroll, not a dim
+      // A mouse drag is unambiguous (there is no scrolling to mistake it for), so it
+      // dims straight away, from where the press began. A touch move before the hold
+      // matured is a scroll, not a dim.
+      const pending = this._dimPending;
+      this._clearDimHoldTimer();
+      if (pending && e.buttons & 1) {
+        this._beginDimDrag(pending.tile, pending.entityId, pending.startPct, pending.startY, pending.pointerId);
+        this._dimDragMove(e.clientY);
+      }
     }
   }
 
