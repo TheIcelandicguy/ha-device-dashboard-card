@@ -1148,6 +1148,16 @@ export const mainCss = css`
       .dim-pct, .ts-light-pct { min-width:0; width:auto; text-align:center; }
     }
 
+    /* Hold-to-dim: the tile fills from the bottom to the level being set. Painted
+       into the tile by the card while the drag lasts, never part of a render. */
+    .tile.dim-holding { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; touch-action:none; }
+    .dim-hold-overlay { position:absolute; inset:0; z-index:5; pointer-events:none; border-radius:inherit;
+      display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.25); }
+    .dim-hold-fill { position:absolute; left:0; right:0; bottom:0; height:0;
+      background:var(--sc-accent,#ffb300); opacity:.45; }
+    .dim-hold-pct { position:relative; font-size:1.6em; font-weight:700; color:#fff;
+      text-shadow:0 1px 4px rgba(0,0,0,.6); }
+
     .dim-pct { font-size:var(--fs-sm); font-weight:600; color:var(--sc-text-secondary); min-width:30px; text-align:right; }
 
     .color-swatch { width:30px; height:20px; border-radius:5px; border:none; cursor:pointer; padding:1px; background:transparent; flex-shrink:0; }
