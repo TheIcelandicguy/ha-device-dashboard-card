@@ -210,6 +210,8 @@ export class HADeviceDashboard extends LitElement {
 
   setConfig(config: HADeviceDashboardConfig) {
     this._config = migrateConfig(config);
+    // The narrow-tile CSS hides the brightness slider when the hold gesture replaces it.
+    this.toggleAttribute('dim-hold', this._config.dimmer_hold === true);
     // Only fetch the CDN stylesheet if the user selected a CDN-only display font
     const ff = config.style?.font_family ?? '';
     if (usesCdnFont(ff)) ensureCdnFontsLoaded();
@@ -3306,6 +3308,7 @@ export class HADeviceDashboard extends LitElement {
 
   private _armDimHold(device: HADevice, e: PointerEvent): void {
     this._clearDimHoldTimer();
+    if (!this._config.dimmer_hold) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     const sw = this._getPrimarySwitch(device);
     if (!sw || !sw.entityId.startsWith('light.') || !sw.isOn || sw.brightness === undefined) return;

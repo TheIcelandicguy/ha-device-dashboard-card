@@ -415,6 +415,7 @@ runtime defaults from `docs/card-reference.json` where applicable.
 | `exclude_domains` | string[] | — | Universal only. Entity-domain deny-list (e.g. `['update','camera']`). Wins over `include_domains` on a clash. `device_tracker` is never discovered in any mode. |
 | `header_cards` / `footer_cards` | LovelaceCardConfig[] | — | Your own Lovelace cards rendered above / below the device grid. |
 | `area_cards` | Record<area, LovelaceCardConfig[]> | — | Cards rendered inside a specific room's section, above its tiles. |
+| `dimmer_hold` | boolean | `false` | Hold-and-drag to dim; replaces the narrow-tile brightness slider (never both). |
 | `delegate_controls` | boolean | `false` | Render native HA controls for long-tail domains via the `delegated_controls` block. |
 | `energy_period` | EnergyPeriod | lifetime total | What the Energy value shows: cumulative total, or current day/week/month from recorder statistics. Overridable per room/device. |
 | `areas` | string[] | all | Area-name filter (`[]` = none). `''` is the No Room bucket's key. |

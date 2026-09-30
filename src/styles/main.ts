@@ -1146,6 +1146,9 @@ export const mainCss = css`
       .tile-dim-row .dim-slider::-webkit-slider-thumb,
       .ts-light-dim .dim-slider::-webkit-slider-thumb { margin-top:0; margin-left:-5px; }
       .dim-pct, .ts-light-pct { min-width:0; width:auto; text-align:center; }
+      /* dimmer_hold: the gesture replaces the slider, so never both. */
+      :host([dim-hold]) .tile-dim-row .dim-slider,
+      :host([dim-hold]) .ts-light-dim .dim-slider { display:none; }
     }
 
     /* Hold-to-dim: the tile fills from the bottom to the level being set. Painted

@@ -693,6 +693,11 @@ export interface HADeviceDashboardConfig extends LovelaceCardConfig {
    *  the `delegated_controls` block. Off by default because each embeds a native
    *  tile element — real render cost on large media fleets. */
   delegate_controls?: boolean;
+  /** How a lit dimmable tile is dimmed on a narrow tile. Off (default): a small
+   *  upright brightness slider. On: the slider is hidden and you press-and-hold the
+   *  tile, then drag up/down instead. One or the other, never both — a slider too
+   *  small to hit is what the hold gesture exists to replace. */
+  dimmer_hold?: boolean;
 
   // ── Extra Lovelace cards (embed the user's own cards) ─────────
   /** Any Lovelace cards to render across the top of the dashboard, above the
