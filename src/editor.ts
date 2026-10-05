@@ -5190,7 +5190,7 @@ export class HADeviceDashboardEditor extends LitElement {
       </div>
       <div class="tog-row" data-ctl="dimmer_hold">
         <div class="tog-lbl">Hold to dim
-          <div class="hint">Dim lit lights by pressing and holding the tile, then dragging up or down. Replaces the small upright brightness slider on narrow tiles (2+ columns on a phone) — the slider and the gesture are never on together. Off by default.</div>
+          <div class="hint">Press and hold a dimmable tile, then drag up or down to set its brightness — turns the light on if it's off. Replaces the small upright brightness slider on narrow tiles (2+ columns on a phone) — the slider and the gesture are never on together. Off by default.</div>
         </div>
         <label class="sw"><input type="checkbox" .checked=${c.dimmer_hold === true}
           @change=${(e: Event) => this._set('dimmer_hold', (e.target as HTMLInputElement).checked || undefined)}>

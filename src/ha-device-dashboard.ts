@@ -3315,17 +3315,28 @@ export class HADeviceDashboard extends LitElement {
     if (!this._config.dimmer_hold) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     const sw = this._getPrimarySwitch(device);
-    if (!sw || !sw.entityId.startsWith('light.') || !sw.isOn || sw.brightness === undefined) return;
+    if (!sw || !sw.entityId.startsWith('light.')) return;
+    // Brightness support has to be read off the live state, not sw.colorModes
+    // (which only tracks color-capable modes, for the color-picker UI) —
+    // a plain dimmer reports supported_color_modes: ['brightness'] and would
+    // otherwise never match. Checked regardless of on/off: an 'onoff'-only
+    // light has nothing to dim either way.
+    const modes = (this.hass.states[sw.entityId]?.attributes.supported_color_modes as string[] | undefined) ?? [];
+    if (!modes.length || modes.every(m => m === 'onoff')) return;
     const tile = e.currentTarget as HTMLElement | null;
     if (!tile) return;
-    const { entityId, brightness } = sw;
+    const { entityId } = sw;
+    // A light that's off has no current level to continue from — start the
+    // drag at a nominal 1%, same as turning it on at the dimmest setting by
+    // hand. _setBrightness calls light.turn_on, so the drag turns it on.
+    const startPct = sw.isOn ? Math.max(1, sw.brightness ?? 1) : 1;
     const { clientY, pointerId } = e;
     if (e.pointerType === 'mouse') {
-      this._dimPending = { tile, entityId, startPct: Math.max(1, brightness ?? 1), startY: clientY, pointerId };
+      this._dimPending = { tile, entityId, startPct, startY: clientY, pointerId };
     }
     this._dimHoldTimer = window.setTimeout(() => {
       this._dimHoldTimer = undefined;
-      this._beginDimDrag(tile, entityId, Math.max(1, brightness ?? 1), clientY, pointerId);
+      this._beginDimDrag(tile, entityId, startPct, clientY, pointerId);
     }, HADeviceDashboard._DIM_HOLD_MS);
   }
 

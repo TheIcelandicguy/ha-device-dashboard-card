@@ -3,6 +3,30 @@
 All notable changes to HA Device Dashboard. Versions are git tags; HACS
 installs from them.
 
+## v1.7.0 — 2026-10-05
+
+### A narrow tile had nowhere good to put a brightness slider
+
+A dimmable light's tile shows its own small brightness slider. On a narrow
+tile — two-plus columns on a phone, or any tile ≤170px — the horizontal
+slider was squeezed to a sliver, barely wide enough to land a thumb on.
+
+**The slider now stands upright on a narrow tile**, trading width for the
+tile's full height — the same range, a much easier target.
+
+**A new opt-in replaces it with a gesture instead.** `dimmer_hold` (off by
+default, "Hold to dim" under Design > Tiles) hides the slider on narrow tiles
+and replaces it with press-and-hold: hold a dimmable tile for ~450ms, then
+drag up or down over the tile's height to set 1–100%, with a live percentage
+overlay. The hold exists so a touch scroll past the tile isn't mistaken for a
+dim — a mouse has no such ambiguity, so **a click-and-drag dims immediately**,
+no hold needed (past a 10px move, to still allow a plain click/tap).
+
+**The gesture turns a light on, not just down.** Holding and dragging an
+*off* light starts the drag from a nominal 1% and turns it on at whatever
+level the drag lands on — the same as the slider was always one-way (usable
+only while already on), fixed so the replacement isn't a step backward.
+
 ## v1.6.1 — 2026-09-11
 
 ### "All" in a view filter now means all

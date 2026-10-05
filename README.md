@@ -174,7 +174,7 @@ universal_scope: devices # devices | controllable | all
 | `exclude_integrations` | string[] | — | Universal only. Added to a built-in deny-list (phones, browsers, routers, system monitors …). |
 | `include_domains` | string[] | all | Universal only. When set, only these entity domains are discovered. |
 | `exclude_domains` | string[] | — | Universal only. Domains to drop entirely, e.g. `[update, device_tracker]`. |
-| `dimmer_hold` | boolean | `false` | Dim by pressing and holding a lit dimmable tile, then dragging up or down. Replaces the small upright brightness slider that narrow tiles (2+ columns on a phone) show — the slider and the gesture are never on together. |
+| `dimmer_hold` | boolean | `false` | Dim by pressing and holding a dimmable tile, then dragging up or down — turns the light on if it's off. Replaces the small upright brightness slider that narrow tiles (2+ columns on a phone) show — the slider and the gesture are never on together. |
 | `delegate_controls` | boolean | `false` | Render Home Assistant's own tile controls for domains this card doesn't draw itself (lock, media_player, fan, vacuum …). Off by default: each one embeds a native element, which costs render time on large media fleets. |
 
 **The card tells you when these have hidden something.** A dismissible line at the
