@@ -1783,7 +1783,7 @@ export function factoryLook(): Partial<HADeviceDashboardConfig> {
  *  to drift: `npm run check:docs` compares it against the interface. */
 export const CONFIG_KEYS: readonly string[] = [
   'type', 'views', 'default_view', 'mode', 'universal_scope', 'include_integrations',
-  'exclude_integrations', 'include_domains', 'exclude_domains', 'delegate_controls',
+  'exclude_integrations', 'include_domains', 'exclude_domains', 'delegate_controls', 'dimmer_hold',
   'header_cards', 'footer_cards', 'area_cards', 'areas', 'hidden_devices', 'favorites',
   'hidden_entities', 'show_offline', 'title', 'columns', 'tile_size', 'sort_by', 'tile_style',
   'smart_tile_styles', 'power_monitor_variant', 'show_graphs', 'tile_layout', 'tile_opacity',

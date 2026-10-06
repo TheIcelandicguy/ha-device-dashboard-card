@@ -162,6 +162,8 @@ export const tilesCss = css`
 
     .ts-light-slider { accent-color:var(--ts-accent,var(--sc-accent));flex:1 }
 
+    .ts-light-dim { display:flex;align-items:center;gap:6px;flex:1 }
+
     .ts-light-ct { background:linear-gradient(to right,#ff9a3c,white,#c9e8ff) }
 
 

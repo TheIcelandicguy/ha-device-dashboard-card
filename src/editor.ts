@@ -5188,6 +5188,14 @@ export class HADeviceDashboardEditor extends LitElement {
           @change=${(e: Event) => this._set('delegate_controls', (e.target as HTMLInputElement).checked || undefined)}>
           <span class="sw-t"></span><span class="sw-b"></span></label>
       </div>
+      <div class="tog-row" data-ctl="dimmer_hold">
+        <div class="tog-lbl">Hold to dim
+          <div class="hint">Press and hold a dimmable tile, then drag up or down to set its brightness — turns the light on if it's off. Replaces the small upright brightness slider on narrow tiles (2+ columns on a phone) — the slider and the gesture are never on together. Off by default.</div>
+        </div>
+        <label class="sw"><input type="checkbox" .checked=${c.dimmer_hold === true}
+          @change=${(e: Event) => this._set('dimmer_hold', (e.target as HTMLInputElement).checked || undefined)}>
+          <span class="sw-t"></span><span class="sw-b"></span></label>
+      </div>
       <div class="field">
         <div class="field-lbl">Tile size</div>
         <div class="pill-grp">
@@ -6292,7 +6300,7 @@ export class HADeviceDashboardEditor extends LitElement {
   private static readonly _CONTENT_KEYS = [
     'type', 'title', 'mode', 'universal_scope', 'include_integrations', 'exclude_integrations',
     'include_domains', 'exclude_domains', 'areas', 'devices', 'hidden_devices', 'favorites',
-    'hidden_entities', 'show_offline', 'views', 'default_view', 'delegate_controls',
+    'hidden_entities', 'show_offline', 'views', 'default_view', 'delegate_controls', 'dimmer_hold',
     // "What to show" content (the Chips & metrics section + Header/Graphs picks):
     // these describe content, not the visual look, so "Reset look" keeps them.
     'sensors', 'graph_sensors', 'energy_period', 'header_chips', 'area_header_chips',

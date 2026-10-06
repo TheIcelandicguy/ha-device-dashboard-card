@@ -129,6 +129,19 @@ export class HADeviceDashboard extends LitElement {
 
   // Tap-gesture tracking (not @state — no re-render needed)
   private _lpStart: { x: number; y: number } | null = null;
+  /** Hold-to-dim: the timer that arms it, and the drag once armed. Plain fields,
+   *  not reactive — the overlay is painted straight into the tile, so a drag
+   *  never triggers a card render. */
+  private _dimHoldTimer: number | undefined;
+  /** What a mouse press on a dimmable tile would drag, kept so a click-and-drag can
+   *  start at once instead of waiting out the hold. Touch never uses it: there a
+   *  move before the hold is a scroll. */
+  private _dimPending: { tile: HTMLElement; entityId: string; startPct: number; startY: number; pointerId: number } | null = null;
+  private _dimDrag: {
+    entityId: string; tile: HTMLElement; startY: number; startPct: number; pct: number;
+    lastSent: number; sentAt: number; overlay: HTMLElement; pointerId: number;
+    cleanup: () => void;
+  } | null = null;
 
   private readonly _graphFetching = new Set<string>();
   private readonly _graphFetchedAt = new Map<string, number>();
@@ -201,6 +214,8 @@ export class HADeviceDashboard extends LitElement {
 
   setConfig(config: HADeviceDashboardConfig) {
     this._config = migrateConfig(config);
+    // The narrow-tile CSS hides the brightness slider when the hold gesture replaces it.
+    this.toggleAttribute('dim-hold', this._config.dimmer_hold === true);
     // Only fetch the CDN stylesheet if the user selected a CDN-only display font
     const ff = config.style?.font_family ?? '';
     if (usesCdnFont(ff)) ensureCdnFontsLoaded();
@@ -309,6 +324,7 @@ export class HADeviceDashboard extends LitElement {
     // A hold in progress when the card is torn down would keep ramping, and a
     // pending single tap would fire into a dead element.
     this._endInputHold();
+    this._endDimDrag(false);
     this._clearTapTimers();
     this._graphFetching.clear();
     this._graphFetchedAt.clear();
@@ -3279,12 +3295,135 @@ export class HADeviceDashboard extends LitElement {
     return !!t?.closest?.(HADeviceDashboard._TILE_CONTROL_SEL);
   }
 
-  private _onTilePointerDown(_device: HADevice, e: PointerEvent): void {
+  private _onTilePointerDown(device: HADevice, e: PointerEvent): void {
     if (this._tileTapIsControl(e)) return;
     this._lpStart = { x: e.clientX, y: e.clientY };
+    this._armDimHold(device, e);
+  }
+
+  // ── Hold-to-dim ────────────────────────────────────────────────────────────
+  // Press and hold a lit, dimmable tile (~450ms, without moving), then drag up or
+  // down to set brightness — for a slider too small to hit on a narrow tile. A
+  // full tile height is the whole 1–100% range. Nothing here changes what a plain
+  // tap or a scroll does: moving before the timer fires is a scroll and disarms it.
+
+  private static readonly _DIM_HOLD_MS = 450;
+  private static readonly _DIM_SEND_MS = 120;
+
+  private _armDimHold(device: HADevice, e: PointerEvent): void {
+    this._clearDimHoldTimer();
+    if (!this._config.dimmer_hold) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    const sw = this._getPrimarySwitch(device);
+    if (!sw || !sw.entityId.startsWith('light.')) return;
+    // Brightness support has to be read off the live state, not sw.colorModes
+    // (which only tracks color-capable modes, for the color-picker UI) —
+    // a plain dimmer reports supported_color_modes: ['brightness'] and would
+    // otherwise never match. Checked regardless of on/off: an 'onoff'-only
+    // light has nothing to dim either way.
+    const modes = (this.hass.states[sw.entityId]?.attributes.supported_color_modes as string[] | undefined) ?? [];
+    if (!modes.length || modes.every(m => m === 'onoff')) return;
+    const tile = e.currentTarget as HTMLElement | null;
+    if (!tile) return;
+    const { entityId } = sw;
+    // A light that's off has no current level to continue from — start the
+    // drag at a nominal 1%, same as turning it on at the dimmest setting by
+    // hand. _setBrightness calls light.turn_on, so the drag turns it on.
+    const startPct = sw.isOn ? Math.max(1, sw.brightness ?? 1) : 1;
+    const { clientY, pointerId } = e;
+    if (e.pointerType === 'mouse') {
+      this._dimPending = { tile, entityId, startPct, startY: clientY, pointerId };
+    }
+    this._dimHoldTimer = window.setTimeout(() => {
+      this._dimHoldTimer = undefined;
+      this._beginDimDrag(tile, entityId, startPct, clientY, pointerId);
+    }, HADeviceDashboard._DIM_HOLD_MS);
+  }
+
+  private _clearDimHoldTimer(): void {
+    this._dimPending = null;
+    if (this._dimHoldTimer !== undefined) { clearTimeout(this._dimHoldTimer); this._dimHoldTimer = undefined; }
+  }
+
+  private _beginDimDrag(tile: HTMLElement, entityId: string, startPct: number, startY: number, pointerId: number): void {
+    // Armed means "this gesture is a dim, not a tap": drop the tap so the detail
+    // sheet does not open on release.
+    this._lpStart = null;
+    const overlay = document.createElement('div');
+    overlay.className = 'dim-hold-overlay';
+    overlay.innerHTML = '<div class="dim-hold-fill"></div><div class="dim-hold-pct"></div>';
+    tile.appendChild(overlay);
+    try { navigator.vibrate?.(15); } catch { /* not every browser has it */ }
+
+    // A touch that has not started scrolling can still be claimed, but only by a
+    // non-passive touchmove listener — touch-action is read at touchstart, too
+    // late by now.
+    const block = (ev: Event) => { if (ev.cancelable) ev.preventDefault(); };
+    const move = (ev: PointerEvent) => { if (ev.pointerId === pointerId) this._dimDragMove(ev.clientY); };
+    const up = (ev: PointerEvent) => { if (ev.pointerId === pointerId) this._endDimDrag(true); };
+    const cancel = (ev: PointerEvent) => { if (ev.pointerId === pointerId) this._endDimDrag(false); };
+    const swallowClick = (ev: Event) => { ev.stopPropagation(); ev.preventDefault(); };
+    tile.addEventListener('touchmove', block, { passive: false });
+    tile.addEventListener('contextmenu', block);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', cancel);
+    // The click that follows the release would otherwise reach the tile's controls.
+    window.addEventListener('click', swallowClick, { capture: true, once: true });
+    tile.classList.add('dim-holding');
+    window.getSelection()?.removeAllRanges(); // a mouse press-and-drag may have started selecting text
+
+    this._dimDrag = {
+      entityId, tile, startY, startPct, pct: startPct, lastSent: startPct, sentAt: 0, overlay, pointerId,
+      cleanup: () => {
+        tile.removeEventListener('touchmove', block);
+        tile.removeEventListener('contextmenu', block);
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        window.removeEventListener('pointercancel', cancel);
+        // Leave the click swallower a beat to catch the release's click, then drop it.
+        window.setTimeout(() => window.removeEventListener('click', swallowClick, true), 50);
+        tile.classList.remove('dim-holding');
+        overlay.remove();
+      },
+    };
+    this._paintDimDrag();
+  }
+
+  private _dimDragMove(clientY: number): void {
+    const d = this._dimDrag;
+    if (!d) return;
+    const h = Math.max(60, d.tile.getBoundingClientRect().height);
+    const pct = d.startPct + ((d.startY - clientY) / h) * 100;
+    d.pct = Math.max(1, Math.min(100, Math.round(pct)));
+    this._paintDimDrag();
+    // Live feedback while dragging, rate-limited so a fast drag does not flood the
+    // bus; the release always sends the final value.
+    const now = Date.now();
+    if (d.pct !== d.lastSent && now - d.sentAt >= HADeviceDashboard._DIM_SEND_MS) {
+      d.lastSent = d.pct; d.sentAt = now;
+      void this._setBrightness(d.entityId, d.pct);
+    }
+  }
+
+  private _paintDimDrag(): void {
+    const d = this._dimDrag;
+    if (!d) return;
+    (d.overlay.firstElementChild as HTMLElement).style.height = `${d.pct}%`;
+    (d.overlay.lastElementChild as HTMLElement).textContent = `${d.pct}%`;
+  }
+
+  private _endDimDrag(commit: boolean): void {
+    this._clearDimHoldTimer();
+    const d = this._dimDrag;
+    if (!d) return;
+    this._dimDrag = null;
+    d.cleanup();
+    if (commit && d.pct !== d.lastSent) void this._setBrightness(d.entityId, d.pct);
   }
 
   private _onTilePointerUp(device: HADevice, e: PointerEvent): void {
+    this._clearDimHoldTimer();
     if (this._tileTapIsControl(e)) return;
     const start = this._lpStart;
     this._lpStart = null;
@@ -3309,13 +3448,26 @@ export class HADeviceDashboard extends LitElement {
 
   private _onTilePointerCancel(): void {
     this._lpStart = null;
+    // A drag in progress owns its own pointercancel; this only disarms the wait.
+    this._clearDimHoldTimer();
   }
 
   private _onTilePointerMove(e: PointerEvent): void {
     if (!this._lpStart) return;
     const dx = e.clientX - this._lpStart.x;
     const dy = e.clientY - this._lpStart.y;
-    if (dx * dx + dy * dy > 100) this._lpStart = null; // 10px threshold squared → cancel tap on drag
+    if (dx * dx + dy * dy > 100) {
+      this._lpStart = null; // 10px threshold squared → cancel tap on drag
+      // A mouse drag is unambiguous (there is no scrolling to mistake it for), so it
+      // dims straight away, from where the press began. A touch move before the hold
+      // matured is a scroll, not a dim.
+      const pending = this._dimPending;
+      this._clearDimHoldTimer();
+      if (pending && e.buttons & 1) {
+        this._beginDimDrag(pending.tile, pending.entityId, pending.startPct, pending.startY, pending.pointerId);
+        this._dimDragMove(e.clientY);
+      }
+    }
   }
 
   // ── Favourites section ───────────────────────────────────────────────────

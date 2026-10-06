@@ -11,6 +11,27 @@ difference.
 
 ---
 
+## v1.7.0 — a new "Hold to dim" toggle under Design > Tiles
+
+Narrow tiles (two-plus columns on a phone, or any tile ≤170px) stand the
+brightness slider upright, but it is still a thin target to hit with a thumb.
+`dimmer_hold` (default off) replaces it with a press-and-hold gesture instead:
+hold a dimmable tile for ~450ms, then drag up or down over the tile's height
+to set 1–100%, with a percentage overlay while dragging — this turns the light
+on if it was off, starting the drag from a nominal 1%. A mouse skips the hold —
+clicking and dragging dims immediately. The slider and the gesture are never
+shown together.
+
+**What to look at:** the new **Hold to dim** row between **Native controls**
+and **Tile size** — same control style as its neighbours (a labelled toggle
+with a one-line hint), off by default.
+
+| Before | After |
+|---|---|
+| ![Hold to dim toggle off](images/editor/v1.7.0-hold-to-dim-before.png) | ![Hold to dim toggle on](images/editor/v1.7.0-hold-to-dim-after.png) |
+
+---
+
 ## v1.6.1 — "All" in a view filter now means all
 
 A view's **Filter** offers pills for profiles, entity domains, integrations and
