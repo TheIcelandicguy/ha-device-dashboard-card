@@ -4,7 +4,13 @@ node_modules/
 Thumbs.db
 .vscode/
 .idea/
-.claude/
+.claude/*
+**/.claude/*
+# ...but the Claude Code skills kept with the code are tracked
+!/.claude/skills/
+
+# Built by build_skill.py
+dist-skill/
 
 # personal HA config snapshots — never commit
 backups/

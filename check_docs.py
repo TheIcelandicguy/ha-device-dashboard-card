@@ -10,6 +10,8 @@ It reads CLAUDE.md and checks the claims that go stale fastest:
   tests       the test count the doc quotes is the number pytest / vitest would collect
   services    services.yaml and the doc name the same services
   lines       "N lines" claims are within 10% of the real length (warning only)
+  skill       .claude/skills/ha-device-dashboard-dev/SKILL.md quotes the current version; warns when
+              claude.ai's synced copy lags the repo
 
 Exit status 1 when anything fails, so it can gate a commit or a CI job.
 The script is deliberately conservative: it only checks what the doc actually
@@ -286,6 +288,62 @@ def check_lines(doc: str) -> None:
             warn(f"lines: `{path}` doc says {claimed:,} lines, file has {actual:,}")
 
 
+# ---- the Claude skill kept in the repo ---------------------------------------
+
+SKILL_NAME = "ha-device-dashboard-dev"
+SKILL = ROOT / ".claude" / "skills" / SKILL_NAME / "SKILL.md"
+
+
+def _norm_skill(text: str) -> str:
+    return text.replace("\r\n", "\n").strip()
+
+
+def check_skill() -> None:
+    """The skill must agree with the source, and claude.ai's copy should not lag it.
+
+    Claude Code loads the skill from the clone. claude.ai and Cowork read their
+    own library, which only an upload changes; the app syncs that library back
+    under ~/.claude/skills/synced/, so a difference there means an upload is due.
+    That one is a warning, because only a person can do the upload.
+    """
+    if not SKILL.exists():
+        fail(f"skill: {SKILL.relative_to(ROOT).as_posix()} is missing")
+        return
+    text = read(SKILL)
+    head = re.match(r"^---\r?\n(.*?)\r?\n---\r?\n", text, re.S)
+    if not head:
+        fail("skill: SKILL.md has no frontmatter")
+        return
+    front = re.sub(r"\s+", " ", head.group(1))
+    name = re.search(r"^name:\s*(\S+)", head.group(1), re.M)
+    if not name or name.group(1) != SKILL_NAME:
+        fail(f"skill: frontmatter name is {name.group(1) if name else 'missing'}, expected {SKILL_NAME}")
+    if "description:" not in front:
+        fail("skill: frontmatter has no description")
+    desc = re.search(r"^description:\s*(.*?)(?=^[A-Za-z_-]+:|\Z)", head.group(1), re.S | re.M)
+    if desc:
+        value = re.sub(r"\s+", " ", desc.group(1)).strip()
+        value = re.sub(r"^[>|][-+]?\s*", "", value)
+        if len(value) > 1024:
+            fail(f"skill: description is {len(value)} characters; claude.ai accepts at most 1024")
+
+    rv = repo_version()
+    quoted = re.search(r"\bv(\d+\.\d+\.\d+)\b", front)
+    if rv and quoted and quoted.group(1) != rv[0]:
+        fail(f"skill: description says v{quoted.group(1)}; {rv[1].name} says {rv[0]}")
+    elif rv and not quoted:
+        warn("skill: the description quotes no version (vX.Y.Z), so a release cannot be checked against it")
+
+    synced = sorted((Path.home() / ".claude" / "skills" / "synced").glob(f"*/{SKILL_NAME}/SKILL.md"))
+    for copy in synced:
+        if _norm_skill(read(copy)) != _norm_skill(text):
+            warn(
+                f"skill: the claude.ai copy of {SKILL_NAME} differs from the repo -- "
+                f"run `python build_skill.py --out \"E:\\skills for update claude_ai\"` and upload the file"
+            )
+            break
+
+
 # ---- main --------------------------------------------------------------------
 
 def main() -> int:
@@ -299,6 +357,7 @@ def main() -> int:
     check_tests(doc)
     check_services(doc)
     check_lines(doc)
+    check_skill()
     for w in warnings:
         print(f"WARN  {w}")
     for f in failures:
