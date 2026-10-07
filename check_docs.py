@@ -294,8 +294,22 @@ SKILL_NAME = "ha-device-dashboard-dev"
 SKILL = ROOT / ".claude" / "skills" / SKILL_NAME / "SKILL.md"
 
 
-def _norm_skill(text: str) -> str:
-    return text.replace("\r\n", "\n").strip()
+def _skill_signature(text: str) -> tuple[str, str]:
+    """(description, body) with line folding and whitespace removed.
+
+    claude.ai writes the description back on one line, so the same skill must compare
+    equal however its frontmatter was serialised (`description: >-` folded or not).
+    """
+    text = text.replace("\r\n", "\n")
+    parts = re.match(r"^---\n(.*?)\n---\n(.*)\Z", text, re.S)
+    if not parts:
+        return "", text.strip()
+    desc = re.search(r"^description:\s*(.*?)(?=^[A-Za-z_-]+:|\Z)", parts.group(1), re.S | re.M)
+    value = re.sub(r"\s+", " ", desc.group(1)).strip() if desc else ""
+    value = re.sub(r"^[>|][-+]?\s*", "", value)
+    if len(value) > 1 and value[0] == value[-1] and value[0] in "\"'":
+        value = value[1:-1]
+    return value, parts.group(2).strip()
 
 
 def check_skill() -> None:
@@ -336,7 +350,7 @@ def check_skill() -> None:
 
     synced = sorted((Path.home() / ".claude" / "skills" / "synced").glob(f"*/{SKILL_NAME}/SKILL.md"))
     for copy in synced:
-        if _norm_skill(read(copy)) != _norm_skill(text):
+        if _skill_signature(read(copy)) != _skill_signature(text):
             warn(
                 f"skill: the claude.ai copy of {SKILL_NAME} differs from the repo -- "
                 f"run `python build_skill.py --out \"E:\\skills for update claude_ai\"` and upload the file"
